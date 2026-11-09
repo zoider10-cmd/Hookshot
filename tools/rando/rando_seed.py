@@ -6,7 +6,7 @@ rando_seed, rando_chests, rando_keys) and writes changed map files and an update
 touched. The same seed and settings give the same shuffle.
 
     python -I tools/rando/rando_seed.py "F:\\Games\\OOT Remake Rando\\romfs"
-    python -I tools/rando/rando_seed.py <romfs> [--game <folder>] [--seed N] [--chests 0..3] [--keys 0..2] [--dry-run]
+    python -I tools/rando/rando_seed.py <romfs> [--game <folder>] [--seed N] [--chests 0..3] [--keys 0..2] [--event-chests] [--dry-run]
 
 Run it again after changing the seed or a setting. With the randomizer off (or Chests Off) it removes the files it
 wrote before, so the game is as shipped again.
@@ -17,8 +17,14 @@ Settings:
   Dungeon keys  Off: a dungeon's small keys, Boss Key, map and compass stay in their own chests. Own dungeon: they are
                 shuffled among that dungeon's chests. Anywhere is treated as Own dungeon for now: the game counts a
                 small key for the dungeon it is picked up in, so one from another dungeon would be miscounted.
-What it leaves alone, for now: a chest that starts a cutscene when opened (most of the big items), a mini-game's
-chests, and a chest whose item depends on what Link already has.
+What it leaves alone: a mini-game's chests, a chest whose item depends on what Link already has, and, unless
+--event-chests is given, a chest that starts an event when opened (most of the big items: the Kokiri Sword, the Fairy
+Bow, the Megaton Hammer...).
+  --event-chests  Those take part too. The event stays with its chest and the item is the chest's: the Kokiri Sword's
+                  chest with a purple Rupee in it gave the Rupee, then played its sword scene and left a sword in
+                  Link's hand that was gone after a reload; the sword from another chest was a whole sword (in the
+                  inventory, kept by a save, and Mido let Link pass). With the big items anywhere and no logic, most
+                  seeds cannot be finished: it is for trying things until the logic is there.
 No logic yet: nothing checks that a seed can be finished. mods\\rando-seed\\spoiler.txt says where everything went.
 
 How a map file is changed (each step shown to work in game by rando_poc.py and rando_poc2.py):
@@ -47,6 +53,20 @@ KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__Chec
 PLAIN_EVENTS = ("KokiriForest_TreasureBox_NaviChatOff",)
 DUNGEON_ITEMS = ("Item_Dungeon_SmallKey", "Item_Dungeon_BossKey", "Item_Dungeon_Map", "Item_Dungeon_Compass")
 Chest = collections.namedtuple("Chest", "hash gyaml dyn_where dyn_at item params pos event")
+
+
+def stays_why(c, events):
+    """Why a chest keeps its own item whatever the settings, or None. events: chests that start an event take part too."""
+    kept = [k for k in KEEP_IF if k in c.params]
+    if "GetEventName" in kept and (c.event in PLAIN_EVENTS or events and not c.event.startswith("MiniGame")):
+        kept.remove("GetEventName")
+    if kept == ["GetEventName"]:
+        return "starts an event (--event-chests lets them take part)"
+    if kept:
+        return "a mini-game's, or depends on what Link has"
+    if "MiniGame" in c.item:
+        return "a mini-game's item"
+    return None
 
 
 def table(d, at):
@@ -295,6 +315,7 @@ def main():
     p.add_argument("--seed", type=int, help="in place of the options file's rando_seed (and the randomizer counts as on)")
     p.add_argument("--chests", type=int, choices=(0, 1, 2, 3), help="in place of rando_chests: 1 overworld, 2 dungeons, 3 all")
     p.add_argument("--keys", type=int, choices=(0, 1, 2), help="in place of rando_keys: 0 off, 1 own dungeon, 2 anywhere (as 1)")
+    p.add_argument("--event-chests", action="store_true", help="chests that start an event take part too: most of the big items")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
     a = p.parse_args()
     romfs = os.path.abspath(a.romfs)
@@ -349,14 +370,10 @@ def main():
         for c in found:
             if c.hash is None or not c.gyaml.startswith("Obj_TBox"):
                 continue
-            why = None
-            if any(k in c.params for k in KEEP_IF if not (k == "GetEventName" and c.event in PLAIN_EVENTS)):
-                why = "starts an event, a mini-game's, or depends on what Link has"
-            elif "MiniGame" in c.item:
-                why = "a mini-game's item"
+            why = stays_why(c, a.event_chests)
             dungeon = "DefaultDungeonRoomIndex" in c.params
             if c.hash not in spots:
-                spots[c.hash] = [area, c.item, dungeon, why, c.gyaml, c.pos]
+                spots[c.hash] = [area, c.item, dungeon, why, c.gyaml, c.pos, c.event]
             else:
                 s = spots[c.hash]
                 if s[1] != c.item:
@@ -365,7 +382,8 @@ def main():
                     s[3] = s[3] or "is in two areas' files"
                 s[3] = s[3] or why
                 s[2] = s[2] or dungeon
-    rng = random.Random("stage2:%d:%d:%d" % (seed, which, min(keys_mode, 1)))   # (a string seed: the same on every Python 3)
+    # (a string seed: the same on every Python 3. The seeds made before --event-chests keep their shuffle without it)
+    rng = random.Random("stage2:%d:%d:%d%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else ""))
     gives, stays = place(rng, collections.OrderedDict((h, tuple(s[:4])) for h, s in spots.items()), which, keys_mode)
 
     # (the game's own count of each item is kept: every item given was some chest's)
@@ -403,12 +421,13 @@ def main():
     spoiler = []
     area_now = None
     for h in sorted(gives, key=lambda q: (spots[q][0], str(spots[q][5]), q)):
-        area, old, _, _, gyaml, pos = spots[h]
+        area, old, _, _, gyaml, pos, event = spots[h]
         if area != area_now:
             spoiler.append("")
             spoiler.append(area)
             area_now = area
-        spoiler.append("  %-22s %-26s %-26s -> %s" % (gyaml, str(pos), old, gives[h] if gives[h] != old else "(the same)"))
+        spoiler.append("  %-22s %-26s %-26s -> %s%s" % (gyaml, str(pos), old, gives[h] if gives[h] != old else "(the same)",
+                                                         "   [event: %s]" % event if event and event not in PLAIN_EVENTS else ""))
     if a.dry_run:
         print("\n".join(spoiler[:50]))
         print("(dry run: nothing written)")

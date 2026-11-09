@@ -129,6 +129,18 @@ def main():
     check([c.item for c in again] == ["TBox_Rupee_Blue", "Item_Hammer", "TBox_Rupee_Blue", "Item_Hammer", "TBox_Rupee_Blue", "TBox_Rupee_Blue"] and
           names.count("Item_Hammer") == 1, "two chests to one new name")
 
+    # ---- which chests keep their own item ----
+    def one(extra, item="TBox_Rupee_Red"):
+        return seed.chests(build({"Actors": [chest(1, item, extra=extra)]}))[0][0]
+    for events in (False, True):
+        check(seed.stays_why(one(None), events) is None and seed.stays_why(one(event), events) is None, "a plain chest takes part")
+        check(seed.stays_why(one({"GetEventName": "MiniGame_ChoiceTreasure_OpenHitTreasureBox"}), events), "a mini-game's event chest stays")
+        check(seed.stays_why(one({"GetEventName": "ForestTemple_GetBow", "Drop__CheckActor": "Item_Range_Bow"}), events) and
+              seed.stays_why(one({"SpawnType": 1}), events) and seed.stays_why(one(None, "Obj_MiniGame_SmallKey"), events),
+              "a chest that depends on what Link has, or a mini-game's, stays")
+    check(seed.stays_why(one({"GetEventName": "Get_StoneOfForest_GetSword"}), False) and
+          seed.stays_why(one({"GetEventName": "Get_StoneOfForest_GetSword"}), True) is None, "an event's chest takes part only when asked")
+
     # ---- the size table ----
     check(seed.size_entry(510884) == 511176 and seed.size_entry(516036) == 516328 and seed.size_entry(132068) == 132360 and
           seed.size_entry(266440) == 266728, "a map file's size entry: the four the game's own table has")

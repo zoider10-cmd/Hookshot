@@ -24,8 +24,10 @@ Run step 2 again after changing the seed or a setting. With Randomizer or Chests
 | Dungeon keys | Off: a dungeon's small keys, Boss Key, map and compass stay in their chests. Own dungeon: shuffled among that dungeon's chests. Anywhere: as Own dungeon for now. |
 | The others | Not placed yet. |
 
-Left alone for now: chests that start an event when opened (most of the big items), mini-game chests, and chests
-whose item depends on what Link already has. **There is no logic**: nothing checks that a seed can be finished.
+Left alone: mini-game chests, chests whose item depends on what Link already has, and, unless `--event-chests` is
+added to the command, chests that start an event when opened (most of the big items).
+**There is no logic**: nothing checks that a seed can be finished. With `--event-chests` the big items can be anywhere,
+so most seeds cannot be: it is for trying things until the logic is there.
 
 ## What was found, and how a map file is changed
 
@@ -40,10 +42,14 @@ whose item depends on what Link already has. **There is no logic**: nothing chec
   size rounded up to 32, plus 264. A file past its entry is skipped whole (Kokiri Forest lost Mido's house and its
   bridges that way), so the mod carries the table with those entries raised.
 - A file compressed again without a dictionary is accepted.
+- A chest's event (`Dynamic.GetEventName`) stays with the chest, and the item is the chest's. The Kokiri Sword's chest
+  with a purple Rupee in it gave the Rupee, then played its scene and left a sword in Link's hand that was gone after
+  a reload. The Kokiri Sword from a chest of Mido's house was a whole sword: the screen faded to black for a moment in
+  place of a scene, the sword was in the inventory and kept by a save, and Mido let Link pass.
 - Gold Skulltulas (`Enemy_Skulltula_Gold`) and Heart Pieces (`HeartPieceAnchor`) do not name an item in the map
   files; shops and gifts are in event flows and actor parameters. They need another way than this one.
 
-Tested in game so far: Kokiri Forest (Mido's house's chests). The other areas use the same files and steps.
+Tested in game so far: Kokiri Forest (Mido's house's chests and the Kokiri Sword's). The other areas use the same files and steps.
 
 ## The scripts
 
