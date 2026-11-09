@@ -176,7 +176,8 @@ def main():
             spots[n] = (area, item, dungeon, "an event's" if n % 11 == 0 else None)
     for which in (1, 2, 3):
         for keys_mode in (0, 1, 2):
-            gives, stays = seed.place(random.Random("t:%d:%d" % (which, keys_mode)), spots, which, keys_mode)
+            gives, stays, spheres = seed.place(random.Random("t:%d:%d" % (which, keys_mode)), spots, which, keys_mode)
+            check(spheres is None, "spheres without the logic")
             check(len(gives) + sum(stays.values()) == len(spots), "every chest takes part or stays, once")
             check(collections.Counter(gives.values()) == collections.Counter(spots[h][1] for h in gives), "the shuffle keeps every item")
             for h, item in gives.items():
@@ -188,11 +189,69 @@ def main():
                 check(collections.Counter(gives[h] for h in here if gives[h] in seed.DUNGEON_ITEMS) ==
                       collections.Counter(spots[h][1] for h in here if spots[h][1] in seed.DUNGEON_ITEMS), "a dungeon's keys left it")
             check(all(item not in seed.DUNGEON_ITEMS for h, item in gives.items() if spots[h][0] == "KokiriForest"), "a key in the overworld")
-    a, _ = seed.place(random.Random("same"), spots, 3, 1)
-    b, _ = seed.place(random.Random("same"), spots, 3, 1)
-    c, _ = seed.place(random.Random("other"), spots, 3, 1)
+    a, _, _ = seed.place(random.Random("same"), spots, 3, 1)
+    b, _, _ = seed.place(random.Random("same"), spots, 3, 1)
+    c, _, _ = seed.place(random.Random("other"), spots, 3, 1)
     check(a == b and a != c, "the same seed is the same shuffle, another seed another")
     check(sum(a[h] != spots[h][1] for h in a) > len(a) // 3, "a shuffle that moves little")
+
+    # ---- the logic ----
+    # a made-up game with the areas the rules name: each gating item in the chest the game has it in (known by its
+    # event), and plain chests around them
+    home = {seed.S: ("KokiriForest", "Get_StoneOfForest_GetSword"), seed.SL: ("InsideTheDekuTree", "InsideTheDekuTree_GetSlingShot"),
+            seed.BB: ("DodongoCavern", "Get_StoneOfFire_GetBombBag"), seed.BM: ("InsideJabuJabuBelly", "InsideJabuJabuBelly_TreasureBoxWithRuto09"),
+            seed.LENS: ("BottomOfTheWell", "BottomOfTheWell_GetGlassTruth"), seed.BOW: ("ForestTemple", "ForestTemple_GetBow"),
+            seed.HAM: ("FireTemple", "FireTemple_GetHammer"), seed.IRON: ("IceCavern", "SageOfWater_MelodyGet_Water"),
+            seed.LONG: ("WaterTemple", "WaterTemple_Room07_LongHook_FocusOnGimmick"), seed.HOVER: ("ShadowTemple", "SageOfShdawo_GetHoverBoots"),
+            seed.SG: ("DesertColossus", "SageOfSpirit_NaboorIsTakenAway"), seed.MS: ("DesertColossus", "SageOfSpirit_GetShield"),
+            seed.GG: ("InsideGanonCastle", "InsideGanonCastle_Get_Gauntlet_Gold")}
+    check(set(home) == set(seed.PROGRESSION), "the test's list of gating items is not the script's")
+    world, needs, n = collections.OrderedDict(), {}, 0
+    for item, (area, ev) in home.items():
+        n += 1
+        world[n], needs[n] = (area, item, area not in ("KokiriForest", "DesertColossus"), None), seed.rule(area, ev)
+    for area in list(seed.RULES) + ["DreamWorld"]:
+        for k in range(4):
+            n += 1
+            ev = "KokiriForest_TreasureBox_NaviChatOff" if area == "KokiriForest" and k < 3 else ""
+            world[n], needs[n] = (area, "TBox_Rupee_Red", area.endswith(("Temple", "Cavern", "Tree", "Belly", "Well", "Castle", "Ground")), None), seed.rule(area, ev)
+    check(seed.rule("DreamWorld", "") == seed.PROGRESSION and seed.rule("KokiriForest", "Get_StoneOfForest_GetSword") == frozenset(),
+          "an unknown area asks for everything, the Kokiri Sword's chest for nothing")
+    own = seed.collect([(needs[h], world[h][1]) for h in world])
+    check({i for sphere in own for i in sphere} == set(seed.PROGRESSION), "the game's own placement cannot be finished by the rules")
+    check(own[0] == [seed.S] and seed.GG in own[-1], "the game's own order: the Kokiri Sword first, the Golden Gauntlets last")
+
+    def playable(gives):   # (by hand, not with the script's collect: open every chest Link can, until nothing is new)
+        have = set()
+        while True:
+            got = {gives.get(h, world[h][1]) for h in world if needs[h] <= have} & seed.PROGRESSION
+            if got <= have:
+                return have == set(seed.PROGRESSION)
+            have |= got
+    check(playable({}), "the test's own check does not accept the game's placement")
+    moved_away = 0
+    for k in range(60):
+        gives, _, spheres = seed.place(random.Random("logic:%d" % k), world, 3, 0, needs)
+        check(collections.Counter(gives.values()) == collections.Counter(world[h][1] for h in gives), "the logic lost or made an item")
+        check(playable(gives), "a seed the logic made cannot be finished by its own rules")
+        check([i for sphere in spheres for i in sphere] and {i for sphere in spheres for i in sphere} == set(seed.PROGRESSION),
+              "the spheres do not hold every gating item")
+        check(all(needs[h] != seed.PROGRESSION for h, i in gives.items() if i in seed.PROGRESSION),
+              "a gating item in an area the rules do not know")
+        moved_away += sum(1 for h, i in gives.items() if i in seed.PROGRESSION and world[h][1] != i)
+    check(moved_away > 60 * 8, "the logic leaves the gating items where they were")
+    # (some gating items in chests that stay: they count where the game has them)
+    held = collections.OrderedDict((h, (a_, i, d, "stays" if i in (seed.BB, seed.HAM) else w)) for h, (a_, i, d, w) in world.items())
+    gives, _, spheres = seed.place(random.Random("held"), held, 3, 0, needs)
+    check(seed.BB not in gives.values() and playable(gives) and seed.BB in {i for sphere in spheres for i in sphere},
+          "a gating item that stays in its chest is not counted")
+    # (too few chests the logic can use: it says so instead of placing anything)
+    tiny = collections.OrderedDict((h, v) for h, v in world.items() if v[1] in seed.PROGRESSION and v[0] != "KokiriForest" or v[0] == "DreamWorld")
+    try:
+        seed.place(random.Random("tiny"), tiny, 3, 0, needs)
+        check(False, "an arrangement was made where none can be finished")
+    except ValueError:
+        pass
     print("PASS: the chest shuffle")
 
 

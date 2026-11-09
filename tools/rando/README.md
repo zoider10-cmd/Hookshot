@@ -26,8 +26,24 @@ Run step 2 again after changing the seed or a setting. With Randomizer or Chests
 
 Left alone: mini-game chests, chests whose item depends on what Link already has, and, unless `--event-chests` is
 added to the command, chests that start an event when opened (most of the big items).
-**There is no logic**: nothing checks that a seed can be finished. With `--event-chests` the big items can be anywhere,
-so most seeds cannot be: it is for trying things until the logic is there.
+
+### The logic
+
+Without `--event-chests` none of the items that gate the game moves, so the game's own order holds.
+With it, thirteen gating items are in the shuffle (Kokiri Sword, Slingshot, Bomb Bag, Boomerang, Lens of Truth, Bow,
+Megaton Hammer, Iron Boots, Hover Boots, Longshot, Silver and Golden Gauntlets, Mirror Shield), and the logic places
+them so that each can be reached with the ones before it. The spoiler log lists that order.
+
+- The rules (`RULES` in `rando_seed.py`) say what each area's chests ask for, with exceptions for chests known by
+  their event. What stays where the game has it (songs, the Hookshot from Dampe's race, tunics, magic, the stones and
+  medallions) is folded into them.
+- They are written from the original game and ask for too much where the remake is not known: a chest whose place is
+  not known asks for what its whole area can ask for, and an area the rules do not know (`DreamWorld`) asks for
+  everything, so it only gets items the game can be finished without.
+- **They have not been checked against the remake chest by chest**, and they do not look at a dungeon's keys: leave
+  Dungeon keys Off. A seed is meant to be finishable, not proven to be. A seed that is not is a rule to fix: note the
+  chest and what it needed.
+- `--no-logic` puts the big items anywhere.
 
 ## What was found, and how a map file is changed
 

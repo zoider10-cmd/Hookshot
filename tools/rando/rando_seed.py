@@ -6,7 +6,7 @@ rando_seed, rando_chests, rando_keys) and writes changed map files and an update
 touched. The same seed and settings give the same shuffle.
 
     python -I tools/rando/rando_seed.py "F:\\Games\\OOT Remake Rando\\romfs"
-    python -I tools/rando/rando_seed.py <romfs> [--game <folder>] [--seed N] [--chests 0..3] [--keys 0..2] [--event-chests] [--dry-run]
+    python -I tools/rando/rando_seed.py <romfs> [--game <folder>] [--seed N] [--chests 0..3] [--keys 0..2] [--event-chests] [--no-logic] [--dry-run]
 
 Run it again after changing the seed or a setting. With the randomizer off (or Chests Off) it removes the files it
 wrote before, so the game is as shipped again.
@@ -23,9 +23,13 @@ Bow, the Megaton Hammer...).
   --event-chests  Those take part too. The event stays with its chest and the item is the chest's: the Kokiri Sword's
                   chest with a purple Rupee in it gave the Rupee, then played its sword scene and left a sword in
                   Link's hand that was gone after a reload; the sword from another chest was a whole sword (in the
-                  inventory, kept by a save, and Mido let Link pass). With the big items anywhere and no logic, most
-                  seeds cannot be finished: it is for trying things until the logic is there.
-No logic yet: nothing checks that a seed can be finished. mods\\rando-seed\\spoiler.txt says where everything went.
+                  inventory, kept by a save, and Mido let Link pass).
+The logic (with --event-chests, unless --no-logic): the thirteen items that gate the game and come from chests are
+placed so that each can be reached with the ones before it, by rules of what every area's chests ask for (RULES,
+below). The rules are written from the original game and ask for too much where the remake is not known; they have not
+been checked against the remake chest by chest, and they do not look at a dungeon's keys (leave Dungeon keys Off).
+So a seed is meant to be finishable, not proven to be. Without --event-chests no gating item moves, and the game's own
+order holds. mods\\rando-seed\\spoiler.txt says where everything went and the order the rules found.
 
 How a map file is changed (each step shown to work in game by rando_poc.py and rando_poc2.py):
   - a changed chest gets a parameter block of its own at the end of the file (the files store equal blocks once, so
@@ -53,6 +57,78 @@ KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__Chec
 PLAIN_EVENTS = ("KokiriForest_TreasureBox_NaviChatOff",)
 DUNGEON_ITEMS = ("Item_Dungeon_SmallKey", "Item_Dungeon_BossKey", "Item_Dungeon_Map", "Item_Dungeon_Compass")
 Chest = collections.namedtuple("Chest", "hash gyaml dyn_where dyn_at item params pos event")
+
+# ---- the logic: what Link needs before a chest can be opened ----
+# Thirteen items gate the game and come from chests. Everything else that gates it (songs, the Ocarina, the Hookshot
+# from Dampe's race, tunics, magic, bottles, the stones and medallions) stays where the game has it, so it is folded
+# into the rules below: "ADULT" stands for all it takes to pull the Master Sword, and so on.
+# The rules are by area, with exceptions for chests known by their event. They are written from the original game's
+# layout and are meant to ask for too much, never too little: a chest whose place in the remake is not known asks for
+# what its whole area can ask for, and an area that is not known asks for everything, so it only ever gets items the
+# game can be finished without. They have NOT been checked against the remake chest by chest.
+S, SL, BB, BM = "Item_Sword_Kokiri", "Item_Range_SlingShot", "Item_BombBag_Small", "Item_Boomerang"
+LENS, BOW, HAM, IRON = "Item_GlassTruth", "Item_Range_Bow", "Item_Hammer", "Item_HeavyBoot"
+HOVER, LONG, SG, MS, GG = "Item_HoverBoot", "Item_Longshot", "Item_Gauntlet_Silver", "Item_Shield_Mirror", "Item_Gauntlet_Gold"
+PROGRESSION = frozenset((S, SL, BB, BM, LENS, BOW, HAM, IRON, HOVER, LONG, SG, MS, GG))
+NONE = frozenset()
+CHILD = frozenset((S, SL))                 # out of the forest: the Deku Tree done
+ADULT = frozenset((S, SL, BB, BM))         # the three stones: Dodongo's Cavern (bombs) and Jabu-Jabu (Boomerang) done
+MEDALS3 = ADULT | {BOW, HAM, IRON, LONG}   # the Forest, Fire and Water Temples done: the way to the Shadow Temple
+DESERT = ADULT | {LONG, HOVER, LENS}       # across the Haunted Wasteland
+# area (the Banc folder): (what its chests ask for, {a chest's event: what that chest asks for})
+RULES = {
+    "KokiriForest": (ADULT, {"KokiriForest_TreasureBox_NaviChatOff": NONE, "Get_StoneOfForest_GetSword": NONE}),
+    "InsideTheDekuTree": (frozenset((S,)), {}),
+    "DodongoCavern": (CHILD | {BB}, {"DodongoCavern_GetMap": CHILD, "DodongoCavern_GetCompass": CHILD, "Get_StoneOfFire_GetBombBag": CHILD}),
+    "InsideJabuJabuBelly": (ADULT, {"InsideJabuJabuBelly_TreasureBoxWithRuto09": CHILD | {BB}}),
+    "BottomOfTheWell": (ADULT | {LENS}, {"BottomOfTheWell_GetGlassTruth": ADULT, "BottomOfTheWell_GetCompass": ADULT}),
+    "ForestTemple": (ADULT | {BOW}, {"ForestTemple_GetBow": ADULT, "ForesetTemple_GetMap": ADULT}),
+    "FireTemple": (ADULT | {HAM, BOW}, {"FireTemple_GetHammer": ADULT}),
+    "IceCavern": (ADULT, {}),
+    "WaterTemple": (ADULT | {IRON, LONG, BOW}, {"WaterTemple_Room07_LongHook_FocusOnGimmick": ADULT | {IRON}}),
+    "ShadowTemple": (MEDALS3 | {LENS, HOVER}, {"SageOfShdawo_GetHoverBoots": MEDALS3 | {LENS}}),
+    "SpiritTemple": (DESERT | {SG, BOW, MS}, {}),
+    "DesertColossus": (DESERT | {SG, BOW, MS}, {"SageOfSpirit_NaboorIsTakenAway": DESERT, "SageOfSpirit_GetShield": DESERT | {SG}}),
+    "GerudoTrainingGround": (MEDALS3 | {LENS, HOVER, SG}, {}),
+    "InsideGanonCastle": (PROGRESSION, {"InsideGanonCastle_Get_Gauntlet_Gold": PROGRESSION - {GG}}),
+    # the overworld: where a chest is in the remake is not known, so each asks for what its area's hardest chest did
+    "HyruleField": (ADULT | {HAM}, {}), "KakarikoVillage": (ADULT, {}), "Graveyard": (ADULT, {}), "LostWood": (ADULT, {}),
+    "SacredForestMeadow": (ADULT, {}), "DeathMountainTrail": (ADULT, {}), "DeathMountainCrater": (ADULT | {HAM}, {}),
+    "GoronCity": (ADULT | {HAM, SG}, {}), "ZoraRiver": (ADULT, {}), "ZoraDomain": (ADULT, {}), "ZoraFountain": (ADULT | {IRON}, {}),
+    "GerudoValley": (ADULT | {HAM, LONG}, {}), "GerudoFortress": (ADULT | {HOVER, LONG, BOW}, {}),
+    "HountedWasteland": (DESERT | {BOW}, {}),
+}
+
+
+def rule(area, event):
+    """what a chest of this area with this event asks for; an area the rules do not know: everything"""
+    default, by_event = RULES.get(area, (PROGRESSION, {}))
+    return by_event.get(event, default)
+
+
+def collect(placed):
+    """What Link can get from nothing: placed is [(what the chest asks for, its item)]. Returns the spheres: the
+    items each round of opening every chest he can reach adds."""
+    have, spheres = set(), []
+    while True:
+        new = sorted({item for need, item in placed if item in PROGRESSION and item not in have and need <= have})
+        if not new:
+            return spheres
+        have.update(new)
+        spheres.append(new)
+
+
+def reach(have, placed):
+    """have, and every item that can then be got from the chests of placed"""
+    have = set(have)
+    grew = True
+    while grew:
+        grew = False
+        for need, item in placed:
+            if item not in have and need <= have:
+                have.add(item)
+                grew = True
+    return have
 
 
 def stays_why(c, events):
@@ -276,9 +352,12 @@ def remove_old(mod):
     return n
 
 
-def place(rng, spots, which, keys_mode):
+def place(rng, spots, which, keys_mode, needs=None):
     """What each chest holds. spots: {hash: (area, item, is a dungeon's chest, why it stays or None)}, in a fixed order.
-    Returns ({hash: item} for the chests that take part, how many chests stay for each reason)."""
+    needs: {hash: what the chest asks for} for the logic, or None: no logic.
+    Returns ({hash: item} for the chests that take part, how many chests stay for each reason, the spheres or None).
+    With the logic, the thirteen gating items are placed so that each can be reached with the others (an assumed
+    fill), counting the ones that stay in their own chests; then the rest goes where there is room."""
     stays = collections.Counter()
     pool = []
     for h, (area, item, dungeon, why) in spots.items():
@@ -299,13 +378,40 @@ def place(rng, spots, which, keys_mode):
         own = [spots[h][1] for h in here if spots[h][1] in DUNGEON_ITEMS]
         for h, item in zip(rng.sample(here, len(own)), own):
             gives[h] = item
-    # everything else among the chests that are left, wherever they are
     rest = [h for h in pool if h not in gives]
     items = [spots[h][1] for h in pool if spots[h][1] not in DUNGEON_ITEMS]
+    spheres = None
+    if needs is not None:
+        gating = sorted(i for i in items if i in PROGRESSION)
+        # (a gating item in a chest that stays is got there, as the game has it)
+        fixed = [(needs[h], spots[h][1]) for h in spots if h not in pool and spots[h][1] in PROGRESSION]
+        for attempt in range(400):
+            order = list(gating)
+            rng.shuffle(order)
+            placed, ok = {}, True
+            for k, item in enumerate(order):
+                # Link with every gating item still to be placed, and what the chests filled so far then give him
+                have = reach(order[k + 1:], fixed + [(needs[h], i) for h, i in placed.items()])
+                free = [h for h in rest if h not in placed and needs[h] <= have]
+                if not free:
+                    ok = False
+                    break
+                placed[rng.choice(free)] = item
+            if ok:
+                spheres = collect(fixed + [(needs[h], i) for h, i in placed.items()])
+                if {i for sphere in spheres for i in sphere} >= {i for _, i in fixed} | set(gating):
+                    break
+            spheres = None
+        if spheres is None:
+            raise ValueError("no arrangement the logic accepts was found: fewer chests take part than it needs")
+        gives.update(placed)
+        rest = [h for h in rest if h not in placed]
+        items = [i for i in items if i not in PROGRESSION]
+    # everything else among the chests that are left, wherever they are
     rng.shuffle(items)
     for h, item in zip(rest, items):
         gives[h] = item
-    return gives, stays
+    return gives, stays, spheres
 
 
 def main():
@@ -315,7 +421,8 @@ def main():
     p.add_argument("--seed", type=int, help="in place of the options file's rando_seed (and the randomizer counts as on)")
     p.add_argument("--chests", type=int, choices=(0, 1, 2, 3), help="in place of rando_chests: 1 overworld, 2 dungeons, 3 all")
     p.add_argument("--keys", type=int, choices=(0, 1, 2), help="in place of rando_keys: 0 off, 1 own dungeon, 2 anywhere (as 1)")
-    p.add_argument("--event-chests", action="store_true", help="chests that start an event take part too: most of the big items")
+    p.add_argument("--event-chests", action="store_true", help="chests that start an event take part too: most of the big items, placed by the logic")
+    p.add_argument("--no-logic", action="store_true", help="with --event-chests: the big items anywhere, whether the seed can be finished or not")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
     a = p.parse_args()
     romfs = os.path.abspath(a.romfs)
@@ -383,8 +490,15 @@ def main():
                 s[3] = s[3] or why
                 s[2] = s[2] or dungeon
     # (a string seed: the same on every Python 3. The seeds made before --event-chests keep their shuffle without it)
-    rng = random.Random("stage2:%d:%d:%d%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else ""))
-    gives, stays = place(rng, collections.OrderedDict((h, tuple(s[:4])) for h, s in spots.items()), which, keys_mode)
+    logic = a.event_chests and not a.no_logic   # (without the event chests no gating item moves: nothing to ask)
+    rng = random.Random("stage2:%d:%d:%d%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else ""))
+    needs = {h: rule(s[0], s[6]) for h, s in spots.items()}
+    try:
+        gives, stays, spheres = place(rng, collections.OrderedDict((h, tuple(s[:4])) for h, s in spots.items()), which, keys_mode,
+                                      needs if logic else None)
+    except ValueError as e:
+        sys.exit("%s. Nothing written. Try Chests: All, or --no-logic." % e)
+    unknown = sorted({s[0] for s in spots.values() if s[0] not in RULES})
 
     # (the game's own count of each item is kept: every item given was some chest's)
     before = collections.Counter(spots[h][1] for h in gives)
@@ -405,6 +519,16 @@ def main():
     print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives), moved, len(changed)))
     for why, n in stays.most_common():
         print("  left alone: %d (%s)" % (n, why))
+    if logic:
+        print("logic: on. The %d gating items can be got in this order by the rules (%d rounds):" % (sum(map(len, spheres)), len(spheres)))
+        for k, sphere in enumerate(spheres):
+            print("  %d. %s" % (k + 1, ", ".join(sphere)))
+        if unknown:
+            print("  areas the rules do not know (their chests only get items the game can be finished without): " + ", ".join(unknown))
+        if keys_mode:
+            print("  NOTE: the logic does not look at a dungeon's keys: with Dungeon keys on Own dungeon a key can still be behind its door")
+    elif a.event_chests:
+        print("logic: OFF (--no-logic): the gating items are anywhere, and most seeds cannot be finished")
 
     # ---- the size table ----
     folder = os.path.join(romfs, "System", "Resource")
@@ -419,6 +543,10 @@ def main():
             sys.exit("the size table %s could not be updated (%s). Nothing written." % (n, e))
 
     spoiler = []
+    if logic:
+        spoiler += ["", "the gating items, in the order the rules say they can be got:"] + [
+            "  %d. %s" % (k + 1, ", ".join("%s (%s)" % (i, next(spots[h][0] for h in gives if gives[h] == i) if i in gives.values() else "its own chest")
+                                           for i in sphere)) for k, sphere in enumerate(spheres)]
     area_now = None
     for h in sorted(gives, key=lambda q: (spots[q][0], str(spots[q][5]), q)):
         area, old, _, _, gyaml, pos, event = spots[h]
