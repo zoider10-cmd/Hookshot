@@ -5,7 +5,8 @@
 namespace mkwvk::menu_hit {
 
 // ---- the options page, at a scale of 1 (the window 720 pixels high; 1440 and up: 2, and so on) ----
-constexpr int kWidth = 480;
+constexpr int kWidth = 480;              // the Cheats page and its lists
+constexpr int kOptionsWidth = 600;       // the options page: room for its four tabs' titles
 constexpr int kTabY = 44, kTabH = 32;     // the tab strip
 constexpr int kTabSide = 85;              // either side of the tab titles: [Q / LB] and [E / RB], the previous and next tab
 constexpr int kRowGap = 8, kRowH = 28;    // the rows, from kTabY + kTabH + kRowGap
@@ -52,7 +53,7 @@ inline void origin(int img_w, int img_h, int menu_w, int menu_h, int* x0, int* y
     *y0 = (img_h - menu_h) / 2;
 }
 inline int rows_top(int s) { return (kTabY + kTabH + kRowGap) * s; }
-inline int tab_slot_w(int s, int w) { return (w - 2 * kTabSide * s) / 3; }
+inline int tab_slot_w(int s, int w, int tabs) { return tabs > 0 ? (w - 2 * kTabSide * s) / tabs : 0; }
 /// A slider's value for a point along its track (lo to hi in steps of step), nearest step, held to its ends
 inline int slider_value(int permille, int lo, int hi, int step) {
     if (step <= 0 || hi <= lo) return lo;
@@ -67,14 +68,14 @@ inline int slider_permille(int v, int lo, int hi) {
     return p < 0 ? 0 : p > 1000 ? 1000 : p;
 }
 
-/// The options page: (x, y) in the menu's own pixels (0, 0 its top left), w x h its size, s its scale; rows the shown
-/// tab's row count; value_l[i] the left edge of row i's value as last drawn; slider[i] whether row i has a track.
+/// The options page: (x, y) in the menu's own pixels (0, 0 its top left), w x h its size, s its scale; tabs how many
+/// tabs the strip has; rows the shown tab's row count; value_l[i] the left edge of row i's value as last drawn; slider[i] whether row i has a track.
 /// A drag (dragging) keeps to the track whatever the point's height: slider_drag
 inline Hit options(int x, int y, int s, int w, int h, int tabs, int rows, const int* value_l, const bool* slider) {
     Hit hit;
     if (x < 0 || y < 0 || x >= w || y >= h) return hit.part = kOutside, hit;
     if (y >= kTabY * s && y < (kTabY + kTabH) * s) {
-        const int side = kTabSide * s, slot = tab_slot_w(s, w);
+        const int side = kTabSide * s, slot = tab_slot_w(s, w, tabs);
         if (x < side) hit.part = kTabPrev;
         else if (x >= w - side) hit.part = kTabNext;
         else if (slot > 0) {

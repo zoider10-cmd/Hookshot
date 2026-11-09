@@ -9,36 +9,42 @@
 using namespace mkwvk::menu_hit;
 
 int main() {
-    // the Graphics tab: 11 rows, the Sharpness row (7) a slider; values from x 380 at scale 1
+    // the Graphics tab: 11 rows, the Sharpness row (7) a slider; values from x 500 at scale 1; four tabs
     int value_l[11];
     bool slider[11] = {};
-    for (int& v : value_l) v = 380;
+    for (int& v : value_l) v = 500;
     slider[7] = true;
-    const int w1 = kWidth, h1 = 520;
+    const int w1 = kOptionsWidth, h1 = 520;
     auto at = [&](int x, int y, int s) {
         int vl[11];
         for (int i = 0; i < 11; i++) vl[i] = value_l[i] * s;
-        return options(x, y, s, kWidth * s, h1 * s, 3, 11, vl, slider);
+        return options(x, y, s, kOptionsWidth * s, h1 * s, 4, 11, vl, slider);
     };
     Hit h;
 
-    // ---- scale 1: the tabs (side 85, slots of 103 from 85) ----
+    // ---- scale 1: the tabs (side 85, four slots of 107 from 85) ----
     h = at(100, 60, 1);
     CHECK("tab 0", h.part == kTab && h.index == 0);
     h = at(240, 60, 1);
     CHECK("tab 1", h.part == kTab && h.index == 1);
     h = at(300, 60, 1);
     CHECK("tab 2", h.part == kTab && h.index == 2);
+    h = at(450, 60, 1);
+    CHECK("tab 3", h.part == kTab && h.index == 3);
+    h = at(514, 60, 1);
+    CHECK("the slots' rounding is the last tab's", h.part == kTab && h.index == 3);
     CHECK("[Q / LB] is the previous tab", at(40, 60, 1).part == kTabPrev);
-    CHECK("[E / RB] is the next tab", at(450, 60, 1).part == kTabNext);
+    CHECK("[E / RB] is the next tab", at(560, 60, 1).part == kTabNext);
+    CHECK("three tabs: wider slots", options(300, 60, 1, w1, h1, 3, 11, value_l, slider).index == 1);
+    CHECK("no tabs: no slot", tab_slot_w(1, w1, 0) == 0 && options(300, 60, 1, w1, h1, 0, 11, value_l, slider).part == kNone);
     CHECK("the title is no control", at(100, 20, 1).part == kNone);
 
     // ---- scale 1: the rows (from 84, 28 high) ----
     h = at(30, 84 + 3 * 28 + 10, 1);
     CHECK("row 3 by its name", h.part == kRow && h.index == 3 && h.side == 0);
-    h = at(390, 84 + 3 * 28 + 10, 1);
+    h = at(510, 84 + 3 * 28 + 10, 1);
     CHECK("row 3's value, left half", h.part == kRow && h.index == 3 && h.side == -1);
-    h = at(450, 84 + 3 * 28 + 10, 1);
+    h = at(560, 84 + 3 * 28 + 10, 1);
     CHECK("row 3's value, right half", h.part == kRow && h.index == 3 && h.side == 1);
     h = at(30, 84, 1);
     CHECK("row 0's top line", h.part == kRow && h.index == 0);
@@ -46,7 +52,7 @@ int main() {
     CHECK("above the rows", h.part == kNone);
     CHECK("the row band's left margin", at(7, 84 + 10, 1).part == kNone);
     CHECK("past the last row", at(30, 84 + 11 * 28 + 2, 1).part == kNone);
-    CHECK("a tab with fewer rows", options(30, 84 + 5 * 28 + 2, 1, w1, h1, 3, 3, value_l, nullptr).part == kNone);
+    CHECK("a tab with fewer rows", options(30, 84 + 5 * 28 + 2, 1, w1, h1, 4, 3, value_l, nullptr).part == kNone);
 
     // ---- scale 1: the slider's track, 200 to 330 ----
     const int sy = 84 + 7 * 28 + 14;
@@ -78,7 +84,7 @@ int main() {
     CHECK("scale 2: [Q / LB]", at(100, 120, 2).part == kTabPrev);
     h = at(60, 168 + 2 * 56 + 5, 2);
     CHECK("scale 2: row 2", h.part == kRow && h.index == 2 && h.side == 0);
-    h = at(900, 168 + 2 * 56 + 5, 2);
+    h = at(1100, 168 + 2 * 56 + 5, 2);
     CHECK("scale 2: row 2's value, right half", h.part == kRow && h.side == 1);
     h = at(530, 168 + 7 * 56 + 28, 2);
     CHECK("scale 2: the track's middle", h.part == kSlider && h.permille == 500);
@@ -91,24 +97,24 @@ int main() {
     // ---- the window's pixels to the menu's: a 1280x720 window, the menu centred ----
     {
         int ix, iy, x0, y0;
-        to_image(400 + 300, 100 + 60, 1280, 720, 1280, 720, &ix, &iy);
+        to_image(340 + 300, 100 + 60, 1280, 720, 1280, 720, &ix, &iy);
         origin(1280, 720, w1, h1, &x0, &y0);
-        CHECK("centred at 1280x720", x0 == 400 && y0 == 100);
-        h = options(ix - x0, iy - y0, 1, w1, h1, 3, 11, value_l, slider);
+        CHECK("centred at 1280x720", x0 == 340 && y0 == 100);
+        h = options(ix - x0, iy - y0, 1, w1, h1, 4, 11, value_l, slider);
         CHECK("1280x720: tab 2", h.part == kTab && h.index == 2);
     }
     {   // (the swapchain at 2560x1440 while the window still says 1280x720 pixels: a resize on its way)
         int ix, iy, x0, y0;
         to_image(640, 160, 1280, 720, 2560, 1440, &ix, &iy);
         CHECK("window to image", ix == 1280 && iy == 320);
-        origin(2560, 1440, kWidth * 2, h1 * 2, &x0, &y0);
+        origin(2560, 1440, w1 * 2, h1 * 2, &x0, &y0);
         h = at(ix - x0, iy - y0, 2);
-        CHECK("2560x1440: tab 1", h.part == kTab && h.index == 1);
+        CHECK("2560x1440: tab 2", h.part == kTab && h.index == 2);
     }
     {   // (a 1920x1080 window: still scale 1, centred)
         int x0, y0;
         origin(1920, 1080, w1, h1, &x0, &y0);
-        h = options(960 - x0, (y0 + 84 + 28 + 5) - y0, 1, w1, h1, 3, 11, value_l, slider);
+        h = options(960 - x0, (y0 + 84 + 28 + 5) - y0, 1, w1, h1, 4, 11, value_l, slider);
         CHECK("1920x1080: row 1", h.part == kRow && h.index == 1);
     }
 

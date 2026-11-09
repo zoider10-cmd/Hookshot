@@ -323,6 +323,8 @@ class LauncherForm : Form {
     PointF mouse = new PointF(-1, -1);
     Widget pressed;
     bool loading;
+    int randoSeed;          // (rando_seed: the randomizer seed's random part, 0 none yet)
+    bool randoDropImport;   // (a randomizer setting was changed here: a rando_import line still in the file would undo it at the game's start)
     // (update card)
     Color updDot = Theme.Faint; string updTitle = "Checking for updates…", updLine = "";
     float updProgress = -1;  // (-1: none; else 0..1)
@@ -367,6 +369,30 @@ class LauncherForm : Form {
             "How fast the dialogue text appears." },
         new object[] { "controller_in_background", "Controller in background", new[] { "Off", "On" }, new[] { 0, 1 },
             "Keeps the controller working when the game window is not in front." },
+    };
+    // (the randomizer: the rows of the Insert menu's Randomizer tab, gpu/vk/oot_rando.h. The same keys, choices and order:
+    // tests/test_rando_settings.py checks them against that file. The seed's random part, rando_seed, is the New seed button's)
+    static readonly object[][] RandoRows = {
+        new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
+            "Plays the seed in place of the game as shipped. Settings only for now: item placement is not in this build yet." },
+        new object[] { "rando_chests", "Chests", new[] { "Off", "Overworld", "Dungeons", "All" }, new[] { 0, 1, 2, 3 },
+            "Which treasure chests hold a shuffled item. All is every chest in the game." },
+        new object[] { "rando_skulltulas", "Gold Skulltulas", new[] { "Off", "Dungeons", "Overworld", "All" }, new[] { 0, 1, 2, 3 },
+            "Which Gold Skulltulas drop a shuffled item instead of a token. The tokens join the item pool." },
+        new object[] { "rando_quests", "Quest rewards", new[] { "Off", "On" }, new[] { 0, 1 },
+            "What characters give you is shuffled: gifts, side quests, mini-games and the Gold Skulltula family's rewards." },
+        new object[] { "rando_songs", "Songs", new[] { "Off", "Song spots", "Anywhere" }, new[] { 0, 1, 2 },
+            "Song spots: the songs are shuffled among the places that teach one. Anywhere: a song can be any item's place." },
+        new object[] { "rando_heart_pieces", "Heart Pieces", new[] { "Off", "On" }, new[] { 0, 1 },
+            "Heart Pieces and the other items lying in the world are shuffled." },
+        new object[] { "rando_shops", "Shops", new[] { "Off", "On", "Random prices" }, new[] { 0, 1, 2 },
+            "Shop shelves sell shuffled items. Random prices also rolls what each one costs." },
+        new object[] { "rando_scrubs", "Deku Scrubs", new[] { "Off", "On" }, new[] { 0, 1 },
+            "What the Business Scrubs sell is shuffled." },
+        new object[] { "rando_dungeon_rewards", "Dungeon rewards", new[] { "Off", "Dungeons", "Anywhere" }, new[] { 0, 1, 2 },
+            "The Spiritual Stones and Medallions. Dungeons: shuffled among the dungeons' ends. Anywhere: any item's place." },
+        new object[] { "rando_keys", "Dungeon keys", new[] { "Off", "Own dungeon", "Anywhere" }, new[] { 0, 1, 2 },
+            "Small keys and Boss Keys. Own dungeon: shuffled inside their dungeon. Anywhere: they can be in any place of the game." },
     };
     static readonly string[] PresetKeys = { "resolution", "upscaling", "sharpness", "frame_generation", "frame_pacing", "game_speed", "handheld_profile" };
     static readonly string[][] Languages = {
@@ -424,7 +450,7 @@ class LauncherForm : Form {
                               Click = () => OpenUrl(Fork.Home) });
 
         // (tabs)
-        string[] names = { "Graphics", "Game", "AMD fixes", "About" };
+        string[] names = { "Graphics", "Game", "Randomizer", "AMD fixes", "About" };
         float tx = LeftW + 36;
         using (var g = CreateGraphics())
             for (int i = 0; i < names.Length; i++) {
@@ -437,6 +463,8 @@ class LauncherForm : Form {
         float cx = LeftW + 36, cw = W - LeftW - 72, colW = (cw - 14) / 2;
         AddSelectors(GraphicsRows, 0, cx, colW);
         AddSelectors(GameRows, 1, cx, colW);
+        AddSelectors(RandoRows, 2, cx, colW);
+        widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx, 468, 130, 40), Page = 2, Click = OnNewSeed });
         var langItems = new string[Languages.Length]; var langValues = new int[Languages.Length];
         for (int i = 0; i < Languages.Length; i++) { langItems[i] = Languages[i][1]; langValues[i] = i; }
         langSel = new Selector { Key = "language", Label = "Language", Items = langItems, Values = langValues, Page = 1, Index = 0,
@@ -445,12 +473,12 @@ class LauncherForm : Form {
         langSel.Changed = s => { if (!loading) SaveLanguage(); };
         widgets.Add(langSel);
         for (int i = 0; i < Fixes.Length; i++) {
-            var tg = new Toggle { Key = Fixes[i][0], Label = Fixes[i][2], HelpText = Fixes[i][3], Page = 2, R = new RectangleF(cx, 112 + i * 112, cw, 100) };
+            var tg = new Toggle { Key = Fixes[i][0], Label = Fixes[i][2], HelpText = Fixes[i][3], Page = 3, R = new RectangleF(cx, 112 + i * 112, cw, 100) };
             tg.Changed = t => { if (!loading) SaveEnv(); };
             fixes[tg.Key] = tg; widgets.Add(tg);
         }
-        widgets.Add(new Btn { Text = "Project page on GitHub", R = new RectangleF(cx, 470, 220, 40), Page = 3, Click = () => OpenUrl(Fork.Home) });
-        widgets.Add(new Btn { Text = "Licence (GPL-3)", R = new RectangleF(cx + 232, 470, 170, 40), Page = 3, Click = () => OpenUrl(Fork.Home + "/blob/HEAD/LICENSE") });
+        widgets.Add(new Btn { Text = "Project page on GitHub", R = new RectangleF(cx, 470, 220, 40), Page = 4, Click = () => OpenUrl(Fork.Home) });
+        widgets.Add(new Btn { Text = "Licence (GPL-3)", R = new RectangleF(cx + 232, 470, 170, 40), Page = 4, Click = () => OpenUrl(Fork.Home + "/blob/HEAD/LICENSE") });
 
         // (bottom row: folders)
         widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 130, 42), Click = () => OpenFolder(Path.Combine(dir, "user", "save")) });
@@ -665,10 +693,17 @@ class LauncherForm : Form {
         if (PageNow == 1)
             Theme.Text_(g, "Controls are set in game: press Insert for the menu.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + 2 * 70 + 6, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
-        if (PageNow == 2)
+        if (PageNow == 2) {   // (the randomizer: the seed beside its button, and what the page does not do yet)
+            string seed = randoSeed != 0 ? "Seed " + randoSeed + "  ·  its ID, to share it, is on the game's Randomizer tab (Insert)"
+                                         : "No seed yet: turn the randomizer on, or press New seed.";
+            Theme.Text_(g, seed, Theme.Small, Theme.Dim, new RectangleF(x + 144, 468, W - LeftW - 72 - 144, 40), StringAlignment.Near, StringAlignment.Center);
+            Theme.Text_(g, "Settings only for now: item placement is not in this build yet, so the game still plays as shipped. Read by the game when it starts.",
+                        Theme.Small, Theme.Faint, new RectangleF(x, 516, W - LeftW - 72, 20), StringAlignment.Near, StringAlignment.Near);
+        }
+        if (PageNow == 3)
             Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + Fixes.Length * 112, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
-        if (PageNow == 3) {
+        if (PageNow == 4) {
             var r = new RectangleF(x, 112, W - LeftW - 72, 340);
             using (var p = Theme.Round(r, 14)) {
                 using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, p);
@@ -754,7 +789,9 @@ class LauncherForm : Form {
         var defaults = new Dictionary<string, int> { { "quality_preset", 0 }, { "output_res", 0 }, { "resolution", 0 }, { "upscaling", 2 }, { "sharpness", 30 },
             { "frame_generation", 2 }, { "frame_pacing", 1 }, { "fullscreen", 1 }, { "ultrawide", 0 }, { "handheld_profile", 0 },
             { "fps_counter", 0 }, { "game_speed", 1 }, { "text_speed", 0 }, { "controller_in_background", 0 } };
+        foreach (var row in RandoRows) defaults[(string)row[0]] = 0;   // (the randomizer: off, every setting the game's own)
         foreach (var kv in defaults) SetSetting(kv.Key, o.ContainsKey(kv.Key) ? o[kv.Key] : kv.Value);
+        randoSeed = o.ContainsKey("rando_seed") ? Math.Max(0, o["rando_seed"]) : 0;
         var env = ReadEnv();
         foreach (var f in Fixes) {
             string v;
@@ -771,7 +808,20 @@ class LauncherForm : Form {
         loading = true;
         if (s.Key == "quality_preset") ApplyPreset(s.Value);
         else if (Array.IndexOf(PresetKeys, s.Key) >= 0) SetSetting("quality_preset", 0);   // (changed by hand: Custom)
+        if (s.Key.StartsWith("rando_")) {
+            randoDropImport = true;
+            if (s.Key == "rando_on" && s.Value != 0 && randoSeed == 0) randoSeed = NewSeed();   // (turned on before any seed was made)
+        }
         loading = false;
+        SaveOptions();
+    }
+
+    // (a seed's random part, 1 to 2^31 - 2: 0 is "none yet", as in the Insert menu)
+    static int NewSeed() { return new Random(Environment.TickCount ^ Guid.NewGuid().GetHashCode()).Next(1, int.MaxValue); }
+
+    void OnNewSeed() {
+        randoSeed = NewSeed();
+        randoDropImport = true;
         SaveOptions();
     }
 
@@ -793,17 +843,21 @@ class LauncherForm : Form {
         try {
             var lines = File.Exists(optionsPath) ? new List<string>(File.ReadAllLines(optionsPath)) : new List<string>();
             var done = new HashSet<string>();
+            if (randoDropImport) lines.RemoveAll(l => l.StartsWith("rando_import="));
+            randoDropImport = false;
             for (int i = 0; i < lines.Count; i++) {
                 int eq = lines[i].IndexOf('=');
                 if (eq <= 0) continue;
                 string k = lines[i].Substring(0, eq).Trim();
                 if (settings.ContainsKey(k)) { lines[i] = k + "=" + settings[k].Value; done.Add(k); }
+                else if (k == "rando_seed") { lines[i] = k + "=" + randoSeed; done.Add(k); }
             }
             // (new keys go before the controls, as the game writes them)
             int at = lines.FindIndex(l => l.StartsWith("options_version=") || l.StartsWith("pad_"));
             if (at < 0) at = lines.Count;
             foreach (var k in settings.Keys)
                 if (!done.Contains(k)) lines.Insert(at++, k + "=" + settings[k].Value);
+            if (!done.Contains("rando_seed") && randoSeed != 0) lines.Insert(at++, "rando_seed=" + randoSeed);
             if (!lines.Exists(l => l.StartsWith("options_version="))) lines.Insert(at, "options_version=2");
             File.WriteAllLines(optionsPath, lines.ToArray(), new UTF8Encoding(false));
         } catch (Exception ex) {

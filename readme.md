@@ -61,6 +61,10 @@ The **Mako** shortcut opens the launcher:
 - **Graphics**: quality preset, output resolution (2048x1152, 2560x1440, 3840x2160), 3D resolution, upscaling, sharpness,
   frame generation, frame pacing, window or full screen, FPS counter.
 - **Game**: language and game options. **AMD fixes**: switches for AMD-specific problems.
+- **Randomizer**: the settings of a randomizer seed (chests, Gold Skulltulas, quest rewards, songs, Heart Pieces, shops,
+  Deku Scrubs, dungeon rewards and keys) and **New seed**. They are also on the **Randomizer** tab of the game's menu
+  (<kbd>Insert</kbd>), which shows the seed's ID to share it. **Settings only for now**: nothing places the items yet, so a
+  seed still plays as the game shipped.
 - **Saves**, **Import saves** (from Eden, Lichii, Ryujinx, a Switch or another Hookshot) and **Game folder**.
 
 ## What's in Mako

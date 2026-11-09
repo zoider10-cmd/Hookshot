@@ -9,12 +9,14 @@
 // half changes it down or up, on a toggle flips it, on a slider's track sets it (or drag it); the wheel changes the value
 // under the cursor, else moves the selection; a right click is Esc. On the Cheats page and its lists a click is Enter (on a
 // choice's or an amount's left or right half, Left or Right) and a right click goes back. vk_menu_hit.h has the layout.
+// Its Randomizer tab holds a seed's settings (oot_rando.h): the game reads them at its next start (host/oot_rando.c).
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -39,7 +41,8 @@ enum MenuTab {
     TAB_GRAPHICS = 0,
     TAB_GAMEPLAY = 1,
     TAB_CONTROLS = 2,
-    TAB_COUNT = 3
+    TAB_RANDO = 3,
+    TAB_COUNT = 4
 };
 
 struct Row {
@@ -169,6 +172,83 @@ void apply_preset(int p) {
     sync_preset_budgets(p);
 }
 
+// ---- the Randomizer tab (oot_rando.h): the seed's settings, kept as the rando_ lines of the options file ----
+OotRando rando_now() {
+    OotRando r{};
+    r.on = opts.rando_on, r.seed = opts.rando_seed;
+    for (int i = 0; i < OOT_RANDO_N; i++) r.v[i] = opts.rando[i];
+    return r;
+}
+void rando_set(const OotRando& r) {
+    opts.rando_on = r.on, opts.rando_seed = r.seed;
+    for (int i = 0; i < OOT_RANDO_N; i++) opts.rando[i] = r.v[i];
+}
+/// A seed's random part: never 0, which is "none made yet"
+int rando_new_seed() {
+    std::random_device device;
+    const uint64_t mixed = ((uint64_t)device() << 32 | device()) ^
+                           (uint64_t)std::chrono::steady_clock::now().time_since_epoch().count() * 0x9E3779B97F4A7C15ull;
+    const int seed = (int)((mixed ^ mixed >> 31) & OOT_RANDO_SEED_MAX);
+    return seed ? seed : 1;
+}
+// (what the Seed row and the Paste seed ID row say after Enter, until the next key or click: menu_tick)
+const char* rando_seed_note = nullptr;
+const char* rando_paste_note = nullptr;
+const char* tx_rando_on(int v) { return v ? "On (restart)" : "Off (restart)"; }
+const char* tx_rando_seed(int) {
+    static char b[OOT_RANDO_ID_TEXT + 16];
+    if (!opts.rando_seed && !opts.rando_on) return "None yet";   // (made when the randomizer is turned on: set_row)
+    const OotRando r = rando_now();
+    oot_rando_id(&r, b);
+    if (rando_seed_note) strncat(b, rando_seed_note, sizeof b - strlen(b) - 1);
+    return b;
+}
+#define OOT_RANDO_TEXT(NAME, label, key, help, ...) \
+    const char* tx_rando_##NAME(int v) { \
+        const OotRandoSetting& s = oot_rando_settings[OOT_RANDO_##NAME]; \
+        return s.choices[v > 0 && v < s.count ? v : 0]; \
+    }
+OOT_RANDO_SETTINGS(OOT_RANDO_TEXT)
+#undef OOT_RANDO_TEXT
+#ifdef _WIN32
+const char* tx_rando_paste(int) { return rando_paste_note ? rando_paste_note : ">"; }
+/// The seed's ID to the clipboard, as text
+bool rando_copy_id() {
+    const OotRando r = rando_now();
+    char id[OOT_RANDO_ID_TEXT];
+    oot_rando_id(&r, id);
+    if (!OpenClipboard(app_window())) return false;
+    bool done = false;
+    if (HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, sizeof id)) {
+        if (void* to = GlobalLock(mem)) {
+            memcpy(to, id, sizeof id);
+            GlobalUnlock(mem);
+            EmptyClipboard();
+            done = SetClipboardData(CF_TEXT, mem) != nullptr;   // (the clipboard's from here)
+        }
+        if (!done) GlobalFree(mem);
+    }
+    CloseClipboard();
+    return done;
+}
+/// The clipboard's text as a seed ID: the seed and its settings, the randomizer on. What is wrong with it otherwise
+const char* rando_paste_id() {
+    if (!OpenClipboard(app_window())) return "The clipboard is busy";
+    char text[64] = "";
+    if (HANDLE mem = GetClipboardData(CF_TEXT)) {
+        if (const char* from = (const char*)GlobalLock(mem)) {
+            snprintf(text, sizeof text, "%s", from);
+            GlobalUnlock(mem);
+        }
+    }
+    CloseClipboard();
+    OotRando r{};
+    if (const char* bad = oot_rando_from_id(text, &r)) return text[0] ? bad : "No text in the clipboard";
+    rando_set(r);
+    return nullptr;
+}
+#endif
+
 Row rows[] = {
     // Graphics (11 rows)
     {TAB_GRAPHICS, "Quality preset", &opts.preset, 0, 5, 1, tx_preset,
@@ -230,6 +310,29 @@ Row rows[] = {
      "Nintendo (default Switch order), Xbox / PC (A for action/talk), or Swap Face. Individual bindings switch this to Custom."},
     {TAB_CONTROLS, "Controls", nullptr, 0, 0, 0, nullptr,   // (hookshot: opens its page)
      "Which gamepad button and which keys press each of the Switch's buttons."},
+
+    // Randomizer: the seed and its settings (oot_rando.h). No more rows than the Graphics tab: the menu is as tall as
+    // its longest tab, and a menu taller than the window is not shown
+    {TAB_RANDO, "Randomizer", &opts.rando_on, 0, 1, 1, tx_rando_on,
+     "Plays the seed below in place of the game as shipped. Settings only so far: item placement is not in this build, so "
+     "the game still plays as shipped. Applies after a restart."},
+    {TAB_RANDO, "Seed", &opts.rando_seed, 0, OOT_RANDO_SEED_MAX, 1, tx_rando_seed,
+#ifdef _WIN32
+     "The seed's ID: its random part and every setting below. The same ID is the same seed. Left or Right makes a new "
+     "seed, Enter copies the ID to share it."},
+#else
+     "The seed's ID: its random part and every setting below. The same ID is the same seed. Left or Right makes a new "
+     "seed. A rando_import=<ID> line in hookshot_options.ini loads someone else's."},
+#endif
+#ifdef _WIN32
+    {TAB_RANDO, "Paste seed ID", nullptr, 0, 0, 0, tx_rando_paste,
+     "Enter loads the seed ID in the clipboard: its seed and all of its settings, and turns the randomizer on."},
+#endif
+#define OOT_RANDO_MENU_ROW(NAME, label, key, help, ...) \
+    {TAB_RANDO, label, &opts.rando[OOT_RANDO_##NAME], 0, oot_rando_settings[OOT_RANDO_##NAME].count - 1, 1, tx_rando_##NAME, help},
+    OOT_RANDO_SETTINGS(OOT_RANDO_MENU_ROW)
+#undef OOT_RANDO_MENU_ROW
+
     {TAB_GAMEPLAY, "Cheats", nullptr, 0, 0, 0, nullptr,
      "Open the private gameplay tools."},
 };
@@ -319,10 +422,11 @@ std::atomic<int> item_counts[kItems];   // (-1 until the game side reports: OOT_
 int item_choice = 0, item_scroll = 0;
 constexpr int kCheatRows = 11;
 constexpr int kRows = sizeof rows / sizeof rows[0];
-constexpr int kMenuWidth = menu_hit::kWidth;   // (at a scale of 1: 720 lines)
+constexpr int kMenuWidth = menu_hit::kWidth;   // (at a scale of 1: 720 lines; the Cheats page and its lists)
+constexpr int kOptionsWidth = menu_hit::kOptionsWidth;   // (the options page)
 
 int cur_tab = TAB_GRAPHICS;
-int tab_selected[TAB_COUNT] = {0, 0, 0};
+int tab_selected[TAB_COUNT] = {};
 
 int tab_row_count(int t) {
     int c = 0;
@@ -354,8 +458,8 @@ bool menu_refresh = false;
 int marquee_pos = 0, marquee_max = 0;
 int64_t marquee_next = 0;
 constexpr int64_t kMarqueeStep = 150000000LL, kMarqueeRest = 1200000000LL;   // (ns)
-// (hookshot) the mouse (menu_tick): the tab strip's part under the cursor (a tab 0 to 2, 3 the previous, 4 the next; -1
-// none); paint_menu's record of each shown row's value's left edge (as with its arrows, whether shown or not) and of the
+// (hookshot) the mouse (menu_tick): the tab strip's part under the cursor (a tab, TAB_COUNT the previous, TAB_COUNT + 1
+// the next; -1 none); paint_menu's record of each shown row's value's left edge (as with its arrows, whether shown or not) and of the
 // rows a slider's track was drawn on; the slider held with the left button (its row in the tab, -1 none)
 int hover_tab = -1;
 int row_value_l[kRows];
@@ -374,6 +478,10 @@ std::string ini_path() {
 }
 const char* ini_key(const Row& r) {
     if (r.value == &opts.output_res) return "output_res";   // (host/nn_applet.c reads it at the start)
+    if (r.value == &opts.rando_on) return "rando_on";       // (the randomizer's lines: oot_rando.h)
+    if (r.value == &opts.rando_seed) return "rando_seed";
+    for (int i = 0; i < OOT_RANDO_N; i++)
+        if (r.value == &opts.rando[i]) return oot_rando_settings[i].key;
     static char k[32];
     size_t n = 0;
     for (const char* p = r.name; *p && n + 1 < sizeof k; p++) k[n++] = *p == ' ' ? '_' : (char)tolower(*p);
@@ -456,6 +564,10 @@ void set_row(Row& r, int v, int dir, bool keep = true) {
     } else if (r.value == &opts.preset) {
         *r.value = v > r.hi ? r.lo : v < r.lo ? r.hi : v;
         apply_preset(*r.value);
+    } else if (r.tab == TAB_RANDO) {   // (the randomizer's: not the preset's)
+        if (r.value == &opts.rando_seed) v = rando_new_seed();   // (either arrow: another seed)
+        *r.value = v > r.hi ? r.lo : v < r.lo ? r.hi : v;
+        if (opts.rando_on && !opts.rando_seed) opts.rando_seed = rando_new_seed();   // (turned on before any seed was made)
     } else {
         *r.value = v > r.hi ? r.lo : v < r.lo ? r.hi : v;
         if (r.value != &opts.fullscreen && r.value != &opts.show_fps && r.value != &opts.gpu_device &&
@@ -846,24 +958,24 @@ void paint_menu(HDC dc, uint32_t w, uint32_t h, int s) {
         DeleteObject(body);
         return;
     }
-    // the tab strip: Graphics, Gameplay, Controls (Q and E, the bumpers or Tab change it: menu_tick)
+    // the tab strip: Graphics, Gameplay, Controls, Randomizer (Q and E, the bumpers or Tab change it: menu_tick)
     const int tab_y = menu_hit::kTabY * s;
     const int tab_h = menu_hit::kTabH * s;
     fill(dc, 0, tab_y, (int)w, tab_h, RGB(22, 28, 25));
     HFONT small_font = font(12 * s, FW_SEMIBOLD);
     SelectObject(dc, small_font);
-    SetTextColor(dc, hover_tab == 3 ? RGB(210, 225, 215) : RGB(110, 135, 120));   // (lighter under the cursor: a click goes there)
+    SetTextColor(dc, hover_tab == TAB_COUNT ? RGB(210, 225, 215) : RGB(110, 135, 120));   // (lighter under the cursor: a click goes there)
     TextOutA(dc, 16 * s, tab_y + 8 * s, "[Q / LB]", 8);
     const char* rb_hint = "[E / RB]";
     SIZE rbsz{};
     GetTextExtentPoint32A(dc, rb_hint, (int)strlen(rb_hint), &rbsz);
-    SetTextColor(dc, hover_tab == 4 ? RGB(210, 225, 215) : RGB(110, 135, 120));
+    SetTextColor(dc, hover_tab == TAB_COUNT + 1 ? RGB(210, 225, 215) : RGB(110, 135, 120));
     TextOutA(dc, (int)w - 16 * s - rbsz.cx, tab_y + 8 * s, rb_hint, (int)strlen(rb_hint));
     HFONT tab_font = font(13 * s, FW_BOLD);
     SelectObject(dc, tab_font);
-    const char* const tab_titles[TAB_COUNT] = {"GRAPHICS", "GAMEPLAY", "CONTROLS"};
+    const char* const tab_titles[TAB_COUNT] = {"GRAPHICS", "GAMEPLAY", "CONTROLS", "RANDOMIZER"};
     const int center_start = menu_hit::kTabSide * s;
-    const int tab_slot_w = menu_hit::tab_slot_w(s, (int)w);
+    const int tab_slot_w = menu_hit::tab_slot_w(s, (int)w, TAB_COUNT);
     for (int t = 0; t < TAB_COUNT; t++) {
         const bool active = (t == cur_tab);
         int slot_x = center_start + t * tab_slot_w;
@@ -905,7 +1017,7 @@ void paint_menu(HDC dc, uint32_t w, uint32_t h, int s) {
         SIZE nsz{};
         GetTextExtentPoint32A(dc, r.name, (int)strlen(r.name), &nsz);
         const int room = (int)w - 18 * s - (18 * s + (int)nsz.cx + 12 * s);
-        const std::string label = r.value ? r.text(*r.value) : ">";   // (">": a page)
+        const std::string label = r.value ? r.text(*r.value) : r.text ? r.text(0) : ">";   // (">": a page, or what Enter does)
         const bool arrows = r.value && sel;
         auto width = [&](const std::string& t) {
             SIZE z{};
@@ -954,7 +1066,7 @@ void paint_menu(HDC dc, uint32_t w, uint32_t h, int s) {
     wrap_help(dc, rows[tab_row_to_global(cur_tab, tab_selected[cur_tab])].help, (int)w - 32 * s, 16 * s, help_top + 4 * s, true);
     SelectObject(dc, body);
     SetTextColor(dc, RGB(140, 150, 144));
-    const char* hint = "Arrows change   Q/E or LB/RB: tabs   Insert, F1 or Home closes";   // (fits 448 px at 16 px)
+    const char* hint = "Arrows change   Q/E or LB/RB: tabs   Insert, F1 or Home closes";   // (fits 448 px at 16 px: the menu's width before its fourth tab)
     TextOutA(dc, 16 * s, help_top + 4 * s + help_px + 10 * s, hint, (int)strlen(hint));
     SelectObject(dc, old);
     DeleteObject(title);
@@ -1002,7 +1114,7 @@ int measure_help(int s) {
     HFONT f = font(14 * s, FW_NORMAL);
     HGDIOBJ old = SelectObject(dc, f);
     int most = 0;
-    for (const Row& r : rows) most = std::max(most, wrap_help(dc, r.help, (kMenuWidth - 32) * s, 0, 0, false));
+    for (const Row& r : rows) most = std::max(most, wrap_help(dc, r.help, (kOptionsWidth - 32) * s, 0, 0, false));
     SelectObject(dc, old);
     DeleteObject(f);
     DeleteDC(dc);
@@ -1024,7 +1136,7 @@ void redraw_menu(int s) {
     static int measured_at = 0;
     if (measured_at != s) help_px = measure_help(s), measured_at = s;
     // (title, the tab strip, the most rows a tab has, the rule and the help text, the hint line)
-    gdi_draw(menu_bmp, (uint32_t)(kMenuWidth * s), (uint32_t)((44 + 32 + 8 + max_tab_rows() * 28 + 8 + 10 + 30) * s + help_px),
+    gdi_draw(menu_bmp, (uint32_t)(kOptionsWidth * s), (uint32_t)((44 + 32 + 8 + max_tab_rows() * 28 + 8 + 10 + 30) * s + help_px),
              paint_menu, s);
 }
 
@@ -1123,6 +1235,15 @@ void menu_init() {
         // (Game speed is Real time by default now: Per frame played at half speed at 30 fps, the "slow motion" players
         // reported. An options file from before kept the old default whether chosen or not: Real time for it too)
         if (!v2) opts.realtime = 1;
+    }
+    // (the randomizer's lines, as the game side reads them: oot_rando.h. A rando_import line, a seed ID to load, is
+    // taken once: save() writes the lines it stands for and leaves it out)
+    if (FILE* f = fopen(ini_path().c_str(), "r")) {
+        OotRando r;
+        const int imported = oot_rando_read(f, &r, nullptr);
+        fclose(f);
+        rando_set(r);
+        if (imported) save();
     }
     // An opt-in profile for 4 GB cards: keep existing options authoritative, but make a first run usable on
     // low-VRAM hardware without requiring the menu to render first.
@@ -1561,8 +1682,8 @@ void menu_tick() {
         if (mouse) {   // (the mouse: see the top of this file)
             const int count = tab_row_count(cur_tab);
             const menu_hit::Hit hit = menu_hit::options(mx, my, scale, mw, mh, TAB_COUNT, count, row_value_l, row_slider);
-            const int ht = hit.part == menu_hit::kTab ? hit.index : hit.part == menu_hit::kTabPrev ? 3
-                         : hit.part == menu_hit::kTabNext ? 4 : -1;
+            const int ht = hit.part == menu_hit::kTab ? hit.index : hit.part == menu_hit::kTabPrev ? TAB_COUNT
+                         : hit.part == menu_hit::kTabNext ? TAB_COUNT + 1 : -1;
             if (ht != hover_tab) hover_tab = ht, changed = true;
             int& sel = tab_selected[cur_tab];
             const bool on_row = hit.part == menu_hit::kRow || hit.part == menu_hit::kSlider;
@@ -1625,6 +1746,22 @@ void menu_tick() {
         if (press[1]) selected = (selected + tab_count - 1) % tab_count, changed = true;
         if (press[2]) selected = (selected + 1) % tab_count, changed = true;
         Row& r = rows[tab_row_to_global(cur_tab, selected)];
+        if ((rando_seed_note || rando_paste_note) &&
+            (press[1] || press[2] || press[3] || press[4] || press[7] || tab_left || tab_right))
+            rando_seed_note = rando_paste_note = nullptr, changed = true;   // (what the last Enter said)
+#ifdef _WIN32
+        if (press[7] && r.tab == TAB_RANDO && (!r.value || r.value == &opts.rando_seed)) {
+            // (Enter on the Seed row copies its ID, on Paste seed ID loads the clipboard's; neither is the row's Right)
+            if (!r.value) {
+                const char* bad = rando_paste_id();
+                rando_paste_note = bad ? bad : "Loaded";
+                if (!bad) save();
+            } else if (opts.rando_seed || opts.rando_on) {
+                rando_seed_note = rando_copy_id() ? "  (copied)" : "  (not copied)";
+            }
+            press[7] = false, changed = true;
+        }
+#endif
         if (press[7] && &r == &rows[kCheatsRow]) page = 2, changed = true;
         else if (press[7] && !r.value && can_bind()) page = 1, csel = 0, ccol = 0, changed = true;
         if ((press[3] || press[4] || press[7]) && r.value) {   // (Enter, or the bottom face button, as Right)
@@ -1649,6 +1786,7 @@ void menu_tick() {
         if (!now_open) {
             if (drag_row >= 0) save();   // (a slider let go off the window: kept now)
             hover_tab = -1, drag_row = -1, mouse_read = false;
+            rando_seed_note = rando_paste_note = nullptr;
         }
         if (now_open != told && app_window()) {
             told = now_open;
