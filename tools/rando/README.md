@@ -62,6 +62,12 @@ them so that each can be reached with the ones before it. The spoiler log lists 
   with a purple Rupee in it gave the Rupee, then played its scene and left a sword in Link's hand that was gone after
   a reload. The Kokiri Sword from a chest of Mido's house was a whole sword: the screen faded to black for a moment in
   place of a scene, the sword was in the inventory and kept by a save, and Mido let Link pass.
+- Open, from the first logic seed played (Slingshot, Lens of Truth, Hover Boots and Kokiri Sword in Mido's house):
+  - **A chest's autosave can lose an item.** Loading the autosave made as one of those chests was opened: the
+    Slingshot was gone and its chest open, while the Lens, the boots and the sword were kept. The autosave after the
+    Kokiri Sword's own chest (its event) had everything. Until this is understood, save by hand after a big item.
+  - The item slots of the HUD did not appear, though the items could be used (the Lens too, which came with a magic
+    meter). Probably switched on by an item's own event, which is skipped when the item comes from another chest.
 - Gold Skulltulas (`Enemy_Skulltula_Gold`) and Heart Pieces (`HeartPieceAnchor`) do not name an item in the map
   files; shops and gifts are in event flows and actor parameters. They need another way than this one.
 
@@ -74,6 +80,7 @@ Tested in game so far: Kokiri Forest (Mido's house's chests and the Kokiri Sword
 | `rando_seed.py` | Makes the seed's mod from the settings: the chest shuffle. |
 | `rando_inventory.py` | A report of where the game's files name items: how the data is laid out. |
 | `rando_locations.py` | A report of every chest, Gold Skulltula, Heart Piece and item actor in the maps, with its parameters. |
+| `rando_actors.py` | A report of the parameter files in the item actors' packs, to compare items that behave differently. |
 | `rando_sizetable.py` | Finds the size table and shows how much room a map file's entry has. |
 | `rando_poc.py` | The first test: one chest's item swapped in place. |
 | `rando_poc2.py` | The second test: one chest given any item (its own block, a new name, the size table). Its mod, `rando-zz-test2`, must be deleted before a seed is played: it carries a size table of its own. |
