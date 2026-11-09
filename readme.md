@@ -63,8 +63,10 @@ The **Mako** shortcut opens the launcher:
 - **Game**: language and game options. **AMD fixes**: switches for AMD-specific problems.
 - **Randomizer**: the settings of a randomizer seed (chests, Gold Skulltulas, quest rewards, songs, Heart Pieces, shops,
   Deku Scrubs, dungeon rewards and keys) and **New seed**. They are also on the **Randomizer** tab of the game's menu
-  (<kbd>Insert</kbd>), which shows the seed's ID to share it. **Settings only for now**: nothing places the items yet, so a
-  seed still plays as the game shipped.
+  (<kbd>Insert</kbd>), which shows the seed's ID to share it. **Chests work**: after a change, run
+  `python -I tools/rando/rando_seed.py "<game folder>\romfs"` and the chests are shuffled as a mod
+  ([tools/rando](tools/rando/README.md)). No logic yet, so a seed is not guaranteed to be finishable, and the other
+  settings are not placed yet.
 - **Saves**, **Import saves** (from Eden, Lichii, Ryujinx, a Switch or another Hookshot) and **Game folder**.
 
 ## What's in Mako

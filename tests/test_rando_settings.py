@@ -80,8 +80,9 @@ def sources(rows):
     check("hos_rando_init();" in main, "the game does not read the randomizer's settings at its start")
     check("oot_rando_read(f, &r, &bad)" in side and '"hookshot_options.ini"' in side and "const OotRando *hos_rando(void)" in side,
           "host/oot_rando.c does not read the options file")
-    check("item placement is not in this build" in side and "item placement is not in this build" in menu,
-          "the log and the menu no longer say that a seed changes nothing yet (remove this check with the placement)")
+    check("rando_seed.py" in side and "rando_seed.py" in menu and "not placed yet" in side and "not placed yet" in menu,
+          "the log and the menu no longer say what places the chests and that the other settings do nothing yet")
+    check((ROOT / "tools" / "rando" / "rando_seed.py").is_file(), "tools/rando/rando_seed.py, which the menu names, is gone")
 
 
 def main():

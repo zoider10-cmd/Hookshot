@@ -18,8 +18,8 @@
    Modelled on LAS Recomp's randomizer settings and seed IDs (peiikai/LASRecomp, runtime/ui/rando_tab.mm, MIT). Nothing
    is copied from it.
 
-   What is not here: the item placement. Nothing reads these settings to move an item yet (host/oot_rando.c says what
-   that takes), so a seed plays as the game shipped. */
+   What is not here: the item placement. tools/rando/rando_seed.py reads rando_on, rando_seed, rando_chests and
+   rando_keys and shuffles the chests as a mod; the other settings are not placed yet (host/oot_rando.c). */
 #ifndef OOT_RANDO_H
 #define OOT_RANDO_H
 

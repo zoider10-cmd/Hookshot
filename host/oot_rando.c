@@ -4,13 +4,14 @@
    runs) is used in place of the file's seed. The log names the seed ID, so a report's log is enough to play the same
    seed.
 
-   Only the settings so far: nothing moves an item. hos_rando() is where the game side asks what the seed shuffles.
-   What the placement itself still takes, none of it in this repository:
-   - the game's list of places an item comes from (each chest, Gold Skulltula, gift and so on) and what each holds,
-     read from the player's own game files;
+   Nothing here moves an item. Chests are placed outside the game: tools/rando/rando_seed.py reads the same settings
+   and writes the seed as a RomFS mod (mods\rando-seed: changed map files and the size table), which mods.c loads.
+   tools/rando/README.md says how that works and what it showed. hos_rando() is where the game side can ask what the
+   seed shuffles, for what a mod file cannot do. Still to come:
    - the rules for which places can be reached with which items, so that every seed can be finished;
-   - the hooks that hand over the placed item: the game gives items through its event flows and the pouch
-     (OneShotAddOrRemovePouchContent, f_828d4a70: host/hos_main.c oot_pouch_change calls it for the Cheats page). */
+   - Gold Skulltulas, Heart Pieces, shops, songs and what characters give: none of them names its item in a map
+     file. The game gives those through its event flows and the pouch (OneShotAddOrRemovePouchContent, f_828d4a70:
+     host/hos_main.c oot_pouch_change calls it for the Cheats page). */
 #include "hos.h"
 #include "hos_paths.h"
 #include "../gpu/vk/oot_rando.h"
@@ -51,7 +52,7 @@ void hos_rando_init(void) {
     rando_active = 1;
     char id[OOT_RANDO_ID_TEXT];
     oot_rando_id(&r, id);
-    hos_log("rando: seed ID %s (settings only: item placement is not in this build, the game plays as shipped)", id);
+    hos_log("rando: seed ID %s (chests are placed by the mod tools/rando/rando_seed.py makes, mods\\rando-seed; the other settings are not placed yet)", id);
     char line[256];
     size_t used = 0;
     for (int i = 0; i < OOT_RANDO_N; i++) {   /* (several short lines: the log cuts long ones) */

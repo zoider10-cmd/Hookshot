@@ -34,3 +34,7 @@ __pycache__/
 # ---- Linux builds ----
 build-linux/
 *.so
+
+# ---- randomizer tools (tools/rando): their reports name the game's files and items ----
+rando_inventory.txt
+rando_locations.txt

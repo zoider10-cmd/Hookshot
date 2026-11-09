@@ -314,8 +314,8 @@ Row rows[] = {
     // Randomizer: the seed and its settings (oot_rando.h). No more rows than the Graphics tab: the menu is as tall as
     // its longest tab, and a menu taller than the window is not shown
     {TAB_RANDO, "Randomizer", &opts.rando_on, 0, 1, 1, tx_rando_on,
-     "Plays the seed below in place of the game as shipped. Settings only so far: item placement is not in this build, so "
-     "the game still plays as shipped. Applies after a restart."},
+     "Turns the seed below on. Chests and Dungeon keys are placed by tools/rando/rando_seed.py, run after a change here; "
+     "the other rows are not placed yet. Applies after a restart."},
     {TAB_RANDO, "Seed", &opts.rando_seed, 0, OOT_RANDO_SEED_MAX, 1, tx_rando_seed,
 #ifdef _WIN32
      "The seed's ID: its random part and every setting below. The same ID is the same seed. Left or Right makes a new "

@@ -374,7 +374,7 @@ class LauncherForm : Form {
     // tests/test_rando_settings.py checks them against that file. The seed's random part, rando_seed, is the New seed button's)
     static readonly object[][] RandoRows = {
         new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
-            "Plays the seed in place of the game as shipped. Settings only for now: item placement is not in this build yet." },
+            "Turns the seed on. Chests and Dungeon keys are placed by tools/rando/rando_seed.py; the other settings are not placed yet." },
         new object[] { "rando_chests", "Chests", new[] { "Off", "Overworld", "Dungeons", "All" }, new[] { 0, 1, 2, 3 },
             "Which treasure chests hold a shuffled item. All is every chest in the game." },
         new object[] { "rando_skulltulas", "Gold Skulltulas", new[] { "Off", "Dungeons", "Overworld", "All" }, new[] { 0, 1, 2, 3 },
@@ -697,7 +697,7 @@ class LauncherForm : Form {
             string seed = randoSeed != 0 ? "Seed " + randoSeed + "  ·  its ID, to share it, is on the game's Randomizer tab (Insert)"
                                          : "No seed yet: turn the randomizer on, or press New seed.";
             Theme.Text_(g, seed, Theme.Small, Theme.Dim, new RectangleF(x + 144, 468, W - LeftW - 72 - 144, 40), StringAlignment.Near, StringAlignment.Center);
-            Theme.Text_(g, "Settings only for now: item placement is not in this build yet, so the game still plays as shipped. Read by the game when it starts.",
+            Theme.Text_(g, "Chests and Dungeon keys: run tools/rando/rando_seed.py after a change. The other settings are not placed yet.",
                         Theme.Small, Theme.Faint, new RectangleF(x, 516, W - LeftW - 72, 20), StringAlignment.Near, StringAlignment.Near);
         }
         if (PageNow == 3)
