@@ -696,7 +696,7 @@ class LauncherForm : Form {
     void PaintPageExtras(Graphics g) {
         float x = LeftW + 36;
         if (PageNow == 1)
-            Theme.Text_(g, "Controls are set in game: press Insert for the menu.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + 2 * 70 + 6, 500, 20),
+            Theme.Text_(g, "Controls are set in game: press Insert or F1 for the menu.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + 3 * 70 + 6, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 2) {   // (the randomizer: the seed beside its button, and what the page does not do yet)
             float half = (W - LeftW - 72 - 12) / 2f;   // (a selector's width: the button is in the right half of the sixth line)
