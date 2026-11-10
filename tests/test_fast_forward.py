@@ -19,7 +19,7 @@ def main():
     read = lambda *p: ROOT.joinpath(*p).read_text(encoding="utf-8")
     menu, option, vi, launcher = (read("gpu", "vk", "vk_menu.cpp"), read("gpu", "vk", "vk_replay.cpp"),
                                   read("host", "nn_vi.c"), read("launcher", "Launcher.cs"))
-    check('"Fast forward", &opts.fast_forward, 0, 1, 1' in menu, "the Insert menu has no row for it")
+    check('"Fast forward", &opts.fast_forward, 0, 2, 1' in menu, "the Insert menu has no row for it")
     check("id == 18 ? opts.fast_forward" in option, "the host cannot see the menu's row (option 18)")
     check("rx_option(18, 0)" in vi, "the host does not read option 18")
     held = vi.index("if (fast_forward_held())")

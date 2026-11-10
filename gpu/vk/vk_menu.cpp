@@ -111,6 +111,7 @@ const char* tx_text_speed(int v) {
     if ((unsigned)v >= sizeof t / sizeof t[0]) return t[0];
     return t[v];
 }
+const char* tx_fast_forward(int v) { return v == 1 ? "Hold" : v == 2 ? "Toggle" : "Off"; }
 const char* tx_handheld(int v) { return v ? "On (restart)" : "Off (restart)"; }
 const char* tx_ultrawide(int v) { return v ? "Monitor's shape (restart)" : "16:9 (restart)"; }
 int gpu_device_at_start = 0;   // (the row's value the game started with: menu_set_gpu_count)
@@ -289,9 +290,9 @@ Row rows[] = {
     {TAB_GAMEPLAY, "Text speed", &opts.text_speed, 0, 3, 1, tx_text_speed,
      "How fast the letters of dialogue and other messages appear. Normal is the game's own pace, with its pauses. Instant shows "
      "each page at once, as pressing A does."},
-    {TAB_GAMEPLAY, "Fast forward", &opts.fast_forward, 0, 1, 1, tx_onoff,
-     "On: while you hold the ` key (under Esc) or click both sticks in together, the game runs four times as fast. Made for "
-     "sitting through cutscenes; let go and it is back to normal."},
+    {TAB_GAMEPLAY, "Fast forward", &opts.fast_forward, 0, 2, 1, tx_fast_forward,
+     "The ` key (under Esc), or both sticks clicked in together, makes the game run four times as fast: made for sitting "
+     "through cutscenes. Toggle: one press turns it on, the next one off. Hold: only while held."},
 
     // Controls (8 rows)
     {TAB_CONTROLS, "Controller in background", &opts.pad_background, 0, 1, 1, tx_onoff,

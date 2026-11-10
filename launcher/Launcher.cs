@@ -367,8 +367,8 @@ class LauncherForm : Form {
             "Real time keeps the game at its normal speed even when the frame rate drops." },
         new object[] { "text_speed", "Text speed", new[] { "Normal", "2x", "4x", "Instant" }, new[] { 0, 1, 2, 3 },
             "How fast the dialogue text appears." },
-        new object[] { "fast_forward", "Fast forward", new[] { "Off", "On" }, new[] { 0, 1 },
-            "Hold the ` key (under Esc) or click both sticks in: the game runs 4x, to get through cutscenes." },
+        new object[] { "fast_forward", "Fast forward", new[] { "Off", "Hold", "Toggle" }, new[] { 0, 1, 2 },
+            "The ` key (under Esc) or both sticks clicked in: the game runs 4x, to get through cutscenes. Toggle: press once for on, again for off." },
         new object[] { "controller_in_background", "Controller in background", new[] { "Off", "On" }, new[] { 0, 1 },
             "Keeps the controller working when the game window is not in front." },
     };

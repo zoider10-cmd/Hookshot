@@ -193,7 +193,8 @@ static float text_scale(const char *env, int menu) {
     const int v = env && *env ? atoi(env) : menu;
     return v == 1 ? 2.0f : v == 2 ? 4.0f : v >= 3 ? 1e6f : 1.0f;
 }
-/* The Insert menu's Fast forward (option 18), HOS_FAST_FORWARD=1 over it: while the ` key or both stick clicks are held
+/* The Insert menu's Fast forward (option 18: 1 Hold, 2 Toggle), HOS_FAST_FORWARD=<1|2> over it: while the ` key or both
+   stick clicks are held (Hold), or from one press of them to the next (Toggle),
    with the game in front and the menu closed, the game takes its 15-a-second step on every frame (realtime_step): a
    cutscene goes by four times as fast. Nothing of the game is skipped, so its events still happen in order */
 static int fast_forward_was, fast_forward_reset;
@@ -201,14 +202,22 @@ static int fast_forward_held(void) {
     int rx_option(int id, int otherwise);
     uint32_t hos_pad_raw(void);   /* nn_hid.c */
     static int env = -1;
-    if (env < 0) env = getenv("HOS_FAST_FORWARD") ? atoi(getenv("HOS_FAST_FORWARD")) != 0 : 0;
-    if (!env && !rx_option(18, 0)) return 0;
-    if (rx_option(1, 0)) return 0;   /* (the menu is open) */
+    if (env < 0) env = getenv("HOS_FAST_FORWARD") ? atoi(getenv("HOS_FAST_FORWARD")) : 0;
+    static int toggled, was_down;
+    const int mode = env > 0 ? env : rx_option(18, 0);   /* (1: while held, 2: a press turns it on, the next one off) */
+    if (mode <= 0) return toggled = was_down = 0;
     DWORD pid = 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &pid);
-    if (pid != GetCurrentProcessId()) return 0;
+    const int mine = pid == GetCurrentProcessId() && !rx_option(1, 0);   /* (in front, and the menu closed) */
     const uint32_t sticks = 1u << HOS_PAD_LSTICK | 1u << HOS_PAD_RSTICK;
-    return (GetAsyncKeyState(VK_OEM_3) & 0x8000) != 0 || (hos_pad_raw() & sticks) == sticks;
+    const int down = mine && ((GetAsyncKeyState(VK_OEM_3) & 0x8000) != 0 || (hos_pad_raw() & sticks) == sticks);
+    if (mode == 1) return toggled = was_down = 0, down;
+    if (down && !was_down) {
+        toggled = !toggled;
+        hos_log("vi: fast forward %s", toggled ? "on" : "off");
+    }
+    was_down = down;
+    return toggled;
 }
 volatile uint64_t hos_res_module = 0;   /* (f_831f3200's object, whose +0xe5c is the 3D's scale: nx2/oot_patches.py) */
 static void realtime_step(int64_t now) {
