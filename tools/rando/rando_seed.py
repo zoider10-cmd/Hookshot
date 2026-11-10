@@ -53,12 +53,16 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 1
+PLACEMENT = 2   # 2: the chests of LOCKED_ROOMS keep their items
 # (a chest with one of these parameters is left as it is: see the top of this file)
 KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__CheckActor", "Drop__DropActor_Substitute",
            "DropViewActor", "IsEnableRepeatOpen", "SpawnType")
 # (a chest's GetEventName that is known not to care what the chest holds: Mido's house's chests, whose event only
 # quiets Navi. They gave other items in the tests and played as usual)
+# Chests whose room cannot be left without the item they hold (by their event), found in play: with anything else in
+# them the player is shut in. They keep their items. The Forest Temple's Stalfos room: no way out without the Bow or
+# a key, and the warp songs do not work in it.
+LOCKED_ROOMS = ("ForestTemple_GetBow",)
 PLAIN_EVENTS = ("KokiriForest_TreasureBox_NaviChatOff",)
 DUNGEON_ITEMS = ("Item_Dungeon_SmallKey", "Item_Dungeon_BossKey", "Item_Dungeon_Map", "Item_Dungeon_Compass")
 Chest = collections.namedtuple("Chest", "hash gyaml dyn_where dyn_at item params pos event")
@@ -140,8 +144,11 @@ def reach(have, placed):
     return have
 
 
-def stays_why(c, events):
-    """Why a chest keeps its own item whatever the settings, or None. events: chests that start an event take part too."""
+def stays_why(c, events, placement=PLACEMENT):
+    """Why a chest keeps its own item whatever the settings, or None. events: chests that start an event take part too.
+    placement: the version of the rules (a seed made by an earlier one is made again as it was)."""
+    if placement >= 2 and c.event in LOCKED_ROOMS:
+        return "its room cannot be left without the item it holds"
     kept = [k for k in KEEP_IF if k in c.params]
     if "GetEventName" in kept and (c.event in PLAIN_EVENTS or events and not c.event.startswith("MiniGame")):
         kept.remove("GetEventName")
@@ -471,7 +478,17 @@ def main():
         print("this seed was made with the big items shuffled: Major items is now On in the options, to keep it as it is")
     a.event_chests = a.event_chests or ini["rando_major"] != 0
     logic_now = a.event_chests and not a.no_logic
-    stamp = "placement %d seed %d chests %d keys %d major %d logic %d\n" % (PLACEMENT, seed, which, min(keys_mode, 1), a.event_chests, logic_now)
+    rest = " seed %d chests %d keys %d major %d logic %d\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now)
+    # (the seed in the game folder, made by an earlier version of the rules: made again as it was, not another one
+    # under its save. A new seed, or other settings, take the rules of today)
+    placement = PLACEMENT
+    try:
+        was = open(stamp_path, encoding="utf-8").read()
+        if was.startswith("placement ") and was.split(" ", 2)[2:] == [rest[1:]] and 1 <= int(was.split()[1]) < PLACEMENT:
+            placement = int(was.split()[1])
+    except (OSError, ValueError):
+        pass
+    stamp = "placement %d%s" % (placement, rest)
     print("randomizer %s, seed %d, chests %s, dungeon keys %s, major items %s" % (
         "on" if on else "off", seed, ("off", "overworld", "dungeons", "all")[which],
         ("off", "own dungeon", "anywhere (as own dungeon for now)")[keys_mode], "on" if a.event_chests else "off"))
@@ -479,6 +496,8 @@ def main():
         try:
             if open(stamp_path, encoding="utf-8").read() == stamp:
                 print("the mod is already this seed's: nothing to do")
+                if placement < PLACEMENT:
+                    print("(made by an earlier version of the randomizer, and kept as it is: New seed makes one with today's fixes)")
                 return
         except OSError:
             pass
@@ -522,7 +541,7 @@ def main():
         for c in found:
             if c.hash is None or not c.gyaml.startswith("Obj_TBox"):
                 continue
-            why = stays_why(c, a.event_chests)
+            why = stays_why(c, a.event_chests, placement)
             dungeon = "DefaultDungeonRoomIndex" in c.params
             if c.hash not in spots:
                 spots[c.hash] = [area, c.item, dungeon, why, c.gyaml, c.pos, c.event]

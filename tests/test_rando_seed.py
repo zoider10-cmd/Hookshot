@@ -138,6 +138,9 @@ def main():
         check(seed.stays_why(one({"GetEventName": "ForestTemple_GetBow", "Drop__CheckActor": "Item_Range_Bow"}), events) and
               seed.stays_why(one({"SpawnType": 1}), events) and seed.stays_why(one(None, "Obj_MiniGame_SmallKey"), events),
               "a chest that depends on what Link has, or a mini-game's, stays")
+    bow = one({"GetEventName": "ForestTemple_GetBow"})
+    check(seed.stays_why(bow, True) and seed.stays_why(bow, True, 1) is None,
+          "the chest of a room that cannot be left without its item stays (and takes part in a seed of the first rules)")
     check(seed.stays_why(one({"GetEventName": "Get_StoneOfForest_GetSword"}), False) and
           seed.stays_why(one({"GetEventName": "Get_StoneOfForest_GetSword"}), True) is None, "an event's chest takes part only when asked")
 
