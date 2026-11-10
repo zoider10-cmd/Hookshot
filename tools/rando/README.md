@@ -11,26 +11,34 @@ All need Python 3 with `zstandard` (the build's own requirement). Run them with 
 
 ## Playing a seed
 
-1. In the game's menu (Insert or F1), **Randomizer** tab: turn Randomizer on, set **Chests** and **Dungeon keys**.
-   The launcher's Randomizer page has the same settings. Close the game.
-2. `python -I tools/rando/rando_seed.py "<game folder>\romfs"`
-3. Start the game. `mods\rando-seed\spoiler.txt` says what every chest held and holds now.
+1. In the launcher's **Randomizer** page (or the game's menu, Insert or F1, **Randomizer** tab): turn Randomizer on,
+   set **Chests**, and **Major items** and **Dungeon keys** as wanted.
+2. Press **Play** in the launcher. It runs `<game folder>\rando\rando_seed.py` (a copy the build puts there) with
+   `--if-changed`, then starts the game. `mods\rando-seed\spoiler.txt` says what every chest held and holds now;
+   `rando\last_run.txt` is what the script said.
 
-Run step 2 again after changing the seed or a setting. With Randomizer or Chests off it removes what it wrote.
+The launcher needs Python 3 on the PATH with `zstandard` for this. With the randomizer or Chests off, Play removes the
+seed's mod. A setting changed in the game's menu takes effect at the next Play from the launcher: starting
+`hookshot.exe` directly does not place anything.
+
+By hand, for trying things: `python -I tools/rando/rando_seed.py "<game folder>\romfs"`.
+
+**A seed being played changes under its save when the seed or a setting is changed.** Finish it, or keep its settings.
 
 | Setting | What `rando_seed.py` does with it |
 |---|---|
 | Chests | Overworld / Dungeons / All: which chests take part. Their items are shuffled among them, across areas. |
 | Dungeon keys | Off: a dungeon's small keys, Boss Key, map and compass stay in their chests. Own dungeon: shuffled among that dungeon's chests. Anywhere: as Own dungeon for now. |
+| Major items | On: the chests that start an event take part too (most of the big items), placed by the logic. The same as `--event-chests`. |
 | The others | Not placed yet. |
 
-Left alone: mini-game chests, chests whose item depends on what Link already has, and, unless `--event-chests` is
-added to the command, chests that start an event when opened (most of the big items).
+Left alone: mini-game chests, chests whose item depends on what Link already has, and, unless Major items is On,
+chests that start an event when opened (most of the big items).
 
 ### The logic
 
-Without `--event-chests` none of the items that gate the game moves, so the game's own order holds.
-With it, thirteen gating items are in the shuffle (Kokiri Sword, Slingshot, Bomb Bag, Boomerang, Lens of Truth, Bow,
+With Major items Off none of the items that gate the game moves, so the game's own order holds.
+With it On, thirteen gating items are in the shuffle (Kokiri Sword, Slingshot, Bomb Bag, Boomerang, Lens of Truth, Bow,
 Megaton Hammer, Iron Boots, Hover Boots, Longshot, Silver and Golden Gauntlets, Mirror Shield), and the logic places
 them so that each can be reached with the ones before it. The spoiler log lists that order.
 

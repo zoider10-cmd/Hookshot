@@ -52,7 +52,7 @@ void hos_rando_init(void) {
     rando_active = 1;
     char id[OOT_RANDO_ID_TEXT];
     oot_rando_id(&r, id);
-    hos_log("rando: seed ID %s (chests are placed by the mod tools/rando/rando_seed.py makes, mods\\rando-seed; the other settings are not placed yet)", id);
+    hos_log("rando: seed ID %s (chests are placed by the mod rando_seed.py makes at the launcher's Play, mods\\rando-seed; the other settings are not placed yet)", id);
     char line[256];
     size_t used = 0;
     for (int i = 0; i < OOT_RANDO_N; i++) {   /* (several short lines: the log cuts long ones) */

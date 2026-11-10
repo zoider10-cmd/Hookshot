@@ -1,15 +1,16 @@
 """Randomizer, stage 2: shuffles what the chests hold across the whole game, as a mod.
 
 Reads the Randomizer settings the game's menu and the launcher keep in <game folder>\\hookshot_options.ini (rando_on,
-rando_seed, rando_chests, rando_keys) and writes changed map files and an updated size table to
+rando_seed, rando_chests, rando_keys, rando_major) and writes changed map files and an updated size table to
 <game folder>\\mods\\rando-seed\\romfs\\..., which Mako loads in place of the game's own. The game's files are not
 touched. The same seed and settings give the same shuffle.
 
     python -I tools/rando/rando_seed.py "F:\\Games\\OOT Remake Rando\\romfs"
     python -I tools/rando/rando_seed.py <romfs> [--game <folder>] [--seed N] [--chests 0..3] [--keys 0..2] [--event-chests] [--no-logic] [--dry-run]
 
-Run it again after changing the seed or a setting. With the randomizer off (or Chests Off) it removes the files it
-wrote before, so the game is as shipped again.
+The launcher runs it at Play (the copy the build puts in <game folder>\\rando, with --if-changed), so it only needs
+running by hand to try something. With the randomizer off (or Chests Off) it removes the files it wrote before, so
+the game is as shipped again.
 
 Settings:
   Chests        1 the overworld's chests take part, 2 the dungeons', 3 all. Their items are shuffled among them, across
@@ -17,8 +18,9 @@ Settings:
   Dungeon keys  Off: a dungeon's small keys, Boss Key, map and compass stay in their own chests. Own dungeon: they are
                 shuffled among that dungeon's chests. Anywhere is treated as Own dungeon for now: the game counts a
                 small key for the dungeon it is picked up in, so one from another dungeon would be miscounted.
+  Major items   On: the same as --event-chests, below.
 What it leaves alone: a mini-game's chests, a chest whose item depends on what Link already has, and, unless
---event-chests is given, a chest that starts an event when opened (most of the big items: the Kokiri Sword, the Fairy
+Major items is On or --event-chests is given, a chest that starts an event when opened (most of the big items: the Kokiri Sword, the Fairy
 Bow, the Megaton Hammer...).
   --event-chests  Those take part too. The event stays with its chest and the item is the chest's: the Kokiri Sword's
                   chest with a purple Rupee in it gave the Rupee, then played its sword scene and left a sword in
@@ -49,6 +51,9 @@ import zlib
 
 ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
+# (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
+# then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
+PLACEMENT = 1
 # (a chest with one of these parameters is left as it is: see the top of this file)
 KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__CheckActor", "Drop__DropActor_Substitute",
            "DropViewActor", "IsEnableRepeatOpen", "SpawnType")
@@ -318,7 +323,7 @@ def dictionaries(romfs, zs):
 
 def settings(game):
     """the randomizer's lines of the options file (0 where it does not say)"""
-    got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0}
+    got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -333,6 +338,19 @@ def settings(game):
     return got
 
 
+def set_option(game, key, value):
+    """one line of the options file set (the others kept as they are)"""
+    path = os.path.join(game, "hookshot_options.ini")
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        lines = []
+    lines = [x for x in lines if x.partition("=")[0].strip() != key] + ["%s=%d" % (key, value)]
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 def remove_old(mod):
     """the files a run before this one wrote (its list: rando_manifest.txt), and the folders they leave empty"""
     listing = os.path.join(mod, "rando_manifest.txt")
@@ -341,7 +359,7 @@ def remove_old(mod):
     n = 0
     with open(listing, encoding="utf-8") as f:
         rels = [line.strip() for line in f if line.strip()]
-    for rel in rels + ["spoiler.txt", "rando_manifest.txt"]:
+    for rel in rels + ["spoiler.txt", "rando_stamp.txt", "rando_manifest.txt"]:
         path = os.path.normpath(os.path.join(mod, rel))
         if not path.startswith(os.path.normpath(mod) + os.sep) or not os.path.isfile(path):   # (only inside the mod's folder)
             continue
@@ -427,6 +445,7 @@ def main():
     p.add_argument("--keys", type=int, choices=(0, 1, 2), help="in place of rando_keys: 0 off, 1 own dungeon, 2 anywhere (as 1)")
     p.add_argument("--event-chests", action="store_true", help="chests that start an event take part too: most of the big items, placed by the logic")
     p.add_argument("--no-logic", action="store_true", help="with --event-chests: the big items anywhere, whether the seed can be finished or not")
+    p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already this seed's (the launcher, at Play)")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
     a = p.parse_args()
     romfs = os.path.abspath(a.romfs)
@@ -439,8 +458,30 @@ def main():
     keys_mode = a.keys if a.keys is not None else ini["rando_keys"]
     which = which if 0 <= which <= 3 else 0
     keys_mode = keys_mode if 0 <= keys_mode <= 2 else 0
-    print("randomizer %s, seed %d, chests %s, dungeon keys %s" % ("on" if on else "off", seed, ("off", "overworld", "dungeons", "all")[which],
-                                                                   ("off", "own dungeon", "anywhere (as own dungeon for now)")[keys_mode]))
+    stamp_path = os.path.join(mod, "rando_stamp.txt")
+    # A seed made before the Major items setting, with --event-chests (its spoiler lists the gating items; it has no
+    # stamp): the setting is turned on for it, so that the same seed is made again and not another under its save.
+    try:
+        old = "" if os.path.isfile(stamp_path) else open(os.path.join(mod, "spoiler.txt"), encoding="utf-8").read()
+    except OSError:
+        old = ""
+    if on and "the gating items" in old and not ini["rando_major"] and not a.event_chests and not a.dry_run:
+        set_option(game, "rando_major", 1)
+        ini["rando_major"] = 1
+        print("this seed was made with the big items shuffled: Major items is now On in the options, to keep it as it is")
+    a.event_chests = a.event_chests or ini["rando_major"] != 0
+    logic_now = a.event_chests and not a.no_logic
+    stamp = "placement %d seed %d chests %d keys %d major %d logic %d\n" % (PLACEMENT, seed, which, min(keys_mode, 1), a.event_chests, logic_now)
+    print("randomizer %s, seed %d, chests %s, dungeon keys %s, major items %s" % (
+        "on" if on else "off", seed, ("off", "overworld", "dungeons", "all")[which],
+        ("off", "own dungeon", "anywhere (as own dungeon for now)")[keys_mode], "on" if a.event_chests else "off"))
+    if a.if_changed and on and which:
+        try:
+            if open(stamp_path, encoding="utf-8").read() == stamp:
+                print("the mod is already this seed's: nothing to do")
+                return
+        except OSError:
+            pass
     # (the test mods change the same files, and one carries a size table of its own that would win over this one's)
     tests = [os.path.join(game, "mods", n) for n in ("rando-poc", "rando-zz-test2") if os.path.isdir(os.path.join(game, "mods", n))]
     if tests and not a.dry_run:
@@ -577,6 +618,8 @@ def main():
             seed, which, keys_mode) + "\n".join(spoiler) + "\n")
     with open(os.path.join(mod, "rando_manifest.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(written)) + "\n")
+    with open(stamp_path, "w", encoding="utf-8") as f:   # (last: a run that stopped half way is made again)
+        f.write(stamp)
     print("wrote %s: %d map files and the size table%s" % (mod, len(changed), " (%d files of the last seed replaced)" % removed if removed else ""))
     print("where everything went: %s" % os.path.join(mod, "spoiler.txt"))
 

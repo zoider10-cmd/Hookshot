@@ -374,7 +374,7 @@ class LauncherForm : Form {
     // tests/test_rando_settings.py checks them against that file. The seed's random part, rando_seed, is the New seed button's)
     static readonly object[][] RandoRows = {
         new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
-            "Turns the seed on. Chests and Dungeon keys are placed by tools/rando/rando_seed.py; the other settings are not placed yet." },
+            "Turns the seed on. Chests, Dungeon keys and Major items are placed when Play is pressed; the other settings are not placed yet." },
         new object[] { "rando_chests", "Chests", new[] { "Off", "Overworld", "Dungeons", "All" }, new[] { 0, 1, 2, 3 },
             "Which treasure chests hold a shuffled item. All is every chest in the game." },
         new object[] { "rando_skulltulas", "Gold Skulltulas", new[] { "Off", "Dungeons", "Overworld", "All" }, new[] { 0, 1, 2, 3 },
@@ -393,6 +393,8 @@ class LauncherForm : Form {
             "The Spiritual Stones and Medallions. Dungeons: shuffled among the dungeons' ends. Anywhere: any item's place." },
         new object[] { "rando_keys", "Dungeon keys", new[] { "Off", "Own dungeon", "Anywhere" }, new[] { 0, 1, 2 },
             "Small keys and Boss Keys. Own dungeon: shuffled inside their dungeon. Anywhere: they can be in any place of the game." },
+        new object[] { "rando_major", "Major items", new[] { "Off", "On" }, new[] { 0, 1 },
+            "The big items in chests (Kokiri Sword, Bow, Megaton Hammer and the like) are shuffled too, placed so the game can be finished. Needs Chests." },
     };
     static readonly string[] PresetKeys = { "resolution", "upscaling", "sharpness", "frame_generation", "frame_pacing", "game_speed", "handheld_profile" };
     static readonly string[][] Languages = {
@@ -464,7 +466,8 @@ class LauncherForm : Form {
         AddSelectors(GraphicsRows, 0, cx, colW);
         AddSelectors(GameRows, 1, cx, colW);
         AddSelectors(RandoRows, 2, cx, colW);
-        widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx, 468, 130, 40), Page = 2, Click = OnNewSeed });
+        // (beside the eleventh selector, in the sixth line's right half)
+        widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx + colW + 12, 112 + 5 * 70 + 11, 130, 40), Page = 2, Click = OnNewSeed });
         var langItems = new string[Languages.Length]; var langValues = new int[Languages.Length];
         for (int i = 0; i < Languages.Length; i++) { langItems[i] = Languages[i][1]; langValues[i] = i; }
         langSel = new Selector { Key = "language", Label = "Language", Items = langItems, Values = langValues, Page = 1, Index = 0,
@@ -694,11 +697,11 @@ class LauncherForm : Form {
             Theme.Text_(g, "Controls are set in game: press Insert for the menu.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + 2 * 70 + 6, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 2) {   // (the randomizer: the seed beside its button, and what the page does not do yet)
-            string seed = randoSeed != 0 ? "Seed " + randoSeed + "  ·  its ID, to share it, is on the game's Randomizer tab (Insert)"
-                                         : "No seed yet: turn the randomizer on, or press New seed.";
-            Theme.Text_(g, seed, Theme.Small, Theme.Dim, new RectangleF(x + 144, 468, W - LeftW - 72 - 144, 40), StringAlignment.Near, StringAlignment.Center);
-            Theme.Text_(g, "Chests and Dungeon keys: run tools/rando/rando_seed.py after a change. The other settings are not placed yet.",
-                        Theme.Small, Theme.Faint, new RectangleF(x, 516, W - LeftW - 72, 20), StringAlignment.Near, StringAlignment.Near);
+            float half = (W - LeftW - 72 - 12) / 2f;   // (a selector's width: the button is in the right half of the sixth line)
+            string seed = randoSeed != 0 ? "Seed " + randoSeed : "No seed yet";
+            Theme.Text_(g, seed, Theme.Small, Theme.Dim, new RectangleF(x + half + 12 + 142, 112 + 5 * 70 + 11, half - 142, 40), StringAlignment.Near, StringAlignment.Center);
+            Theme.Text_(g, "Placed when Play is pressed. The seed's ID, to share it, is on the game's Randomizer tab (Insert or F1).",
+                        Theme.Small, Theme.Faint, new RectangleF(x, 528, W - LeftW - 72, 18), StringAlignment.Near, StringAlignment.Near);
         }
         if (PageNow == 3)
             Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + Fixes.Length * 112, 500, 20),
@@ -1168,12 +1171,54 @@ class LauncherForm : Form {
             return;
         }
         if (GameRunning()) { MessageBox.Show(this, "The game is already running.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (!RunRandomizer()) return;
         try {
             var psi = new ProcessStartInfo(exe) { WorkingDirectory = dir, UseShellExecute = false };
             psi.EnvironmentVariables["HOOKSHOT_NO_UPDATE_CHECK"] = "1";   // (the launcher did it)
             Process.Start(psi);
             Close();
         } catch (Exception ex) { MessageBox.Show(this, "The game could not start:\n" + ex.Message, Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Error); }
+    }
+
+    // (the randomizer: a seed's chests are placed by <game folder>\rando\rando_seed.py (tools/rando in the source: the build puts
+    // it there), run with the player's Python before the game starts. It writes mods\rando-seed, does nothing when that is
+    // already this seed's, and takes it away when the randomizer is off. What it said is kept in rando\last_run.txt.
+    // false: it failed and the player chose not to start the game)
+    bool RunRandomizer() {
+        string script = Path.Combine(dir, "rando", "rando_seed.py"), romfs = Path.Combine(dir, "romfs");
+        if (!File.Exists(script) || !Directory.Exists(romfs)) return true;   // (a game folder without it: as before)
+        bool on = settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0;
+        if (!on && !Directory.Exists(Path.Combine(dir, "mods", "rando-seed"))) return true;   // (nothing to place, nothing to take away)
+        string said = "", problem = null;
+        Cursor = Cursors.WaitCursor;
+        try {
+            foreach (string python in new[] { "python", "py" }) {
+                try {
+                    var psi = new ProcessStartInfo(python, "-I \"" + script + "\" \"" + romfs + "\" --if-changed") {
+                        WorkingDirectory = dir, UseShellExecute = false, CreateNoWindow = true,
+                        RedirectStandardOutput = true, RedirectStandardError = true };
+                    var errors = new System.Text.StringBuilder();
+                    using (var p = new Process { StartInfo = psi }) {
+                        p.ErrorDataReceived += (s, e) => { if (e.Data != null) lock (errors) errors.AppendLine(e.Data); };
+                        p.Start();
+                        p.BeginErrorReadLine();
+                        said = p.StandardOutput.ReadToEnd();
+                        p.WaitForExit();
+                        lock (errors) said += errors.ToString();
+                        problem = p.ExitCode == 0 ? null : said.Trim();
+                    }
+                    break;   // (it ran: what it said is the answer, whichever Python it was)
+                } catch (System.ComponentModel.Win32Exception) {
+                    problem = "Python was not found. The randomizer needs Python 3 (python.org) with the zstandard package:\n    python -m pip install zstandard";
+                }
+            }
+        } catch (Exception ex) { problem = ex.Message; }
+        finally { Cursor = Cursors.Default; }
+        try { File.WriteAllText(Path.Combine(dir, "rando", "last_run.txt"), said); } catch { }
+        if (problem == null) return true;
+        if (problem.Length > 900) problem = problem.Substring(problem.Length - 900);
+        return MessageBox.Show(this, "The randomizer seed could not be made:\n\n" + problem + "\n\nStart the game anyway?", Fork.Name,
+                               MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
     }
 
     [STAThread]

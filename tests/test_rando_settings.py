@@ -55,11 +55,12 @@ def sources(rows):
     setter = menu[menu.index("void set_row(Row& r"):]
     setter = setter[:setter.index("\n}")]
     check(setter.index("r.tab == TAB_RANDO") < setter.index("opts.preset = 0;"), "a randomizer row changes the quality preset to Custom")
-    # (the menu is as tall as its longest tab, and one taller than the window is not shown: no more rows than Graphics)
+    # (the menu is as tall as its longest tab, and one taller than the window is not shown: one row more than Graphics
+    # at most, which at the options page's width is as tall as the menu was before this tab)
     rows_text = menu[menu.index("Row rows[] = {"):menu.index("constexpr int kCheatsRow")]
     graphics = rows_text.count("{TAB_GRAPHICS,")
     rando = rows_text.count("{TAB_RANDO,") - 1 + len(rows)   # (the macro's row is one for each setting)
-    check(rando <= graphics, "the Randomizer tab has %d rows, the Graphics tab %d: the menu would be taller" % (rando, graphics))
+    check(rando <= graphics + 1, "the Randomizer tab has %d rows, the Graphics tab %d: the menu would be taller than it was" % (rando, graphics))
     check("menu_hit::tab_slot_w(s, (int)w, TAB_COUNT)" in menu and
           "menu_hit::options(mx, my, scale, mw, mh, TAB_COUNT," in menu, "the tab strip is not drawn and hit-tested for every tab")
     check("hover_tab == 3" not in menu and "kTabPrev ? 3" not in menu, "the previous-tab arrow's hover is a tab's number")
@@ -77,6 +78,14 @@ def sources(rows):
     check('lines[i] = k + "=" + randoSeed;' in launcher and 'lines.RemoveAll(l => l.StartsWith("rando_import="))' in launcher,
           "the launcher does not keep the seed, or leaves an import that would undo its settings")
     # ---- the game side ----
+    check("if (!RunRandomizer()) return;" in launcher and '"rando", "rando_seed.py"' in launcher and "--if-changed" in launcher,
+          "the launcher does not place the seed at Play")
+    make = read("nx2", "make_game.py")
+    check('os.path.join(ROOT, "tools", "rando", "rando_seed.py")' in make and 'os.path.join(out, "rando", "rando_seed.py")' in make,
+          "the build does not put the randomizer's script beside the game, where the launcher runs it")
+    script = read("tools", "rando", "rando_seed.py")
+    check(all('"%s"' % key in script for key in ("rando_on", "rando_seed", "rando_chests", "rando_keys", "rando_major")),
+          "rando_seed.py does not read the settings the menu keeps")
     check("hos_rando_init();" in main, "the game does not read the randomizer's settings at its start")
     check("oot_rando_read(f, &r, &bad)" in side and '"hookshot_options.ini"' in side and "const OotRando *hos_rando(void)" in side,
           "host/oot_rando.c does not read the options file")

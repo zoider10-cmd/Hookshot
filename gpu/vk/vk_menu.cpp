@@ -311,11 +311,12 @@ Row rows[] = {
     {TAB_CONTROLS, "Controls", nullptr, 0, 0, 0, nullptr,   // (hookshot: opens its page)
      "Which gamepad button and which keys press each of the Switch's buttons."},
 
-    // Randomizer: the seed and its settings (oot_rando.h). No more rows than the Graphics tab: the menu is as tall as
-    // its longest tab, and a menu taller than the window is not shown
+    // Randomizer: the seed and its settings (oot_rando.h). One row more than the Graphics tab at most (13): the menu is as
+    // tall as its longest tab and one taller than the window is not shown, and with 13 rows it is as tall as it was
+    // before this tab (its help text takes fewer lines at the options page's width)
     {TAB_RANDO, "Randomizer", &opts.rando_on, 0, 1, 1, tx_rando_on,
-     "Turns the seed below on. Chests and Dungeon keys are placed by tools/rando/rando_seed.py, run after a change here; "
-     "the other rows are not placed yet. Applies after a restart."},
+     "Turns the seed below on. Chests, Dungeon keys and Major items are placed when the launcher starts the game (by "
+     "rando_seed.py); the other rows are not placed yet. Applies after a restart from the launcher."},
     {TAB_RANDO, "Seed", &opts.rando_seed, 0, OOT_RANDO_SEED_MAX, 1, tx_rando_seed,
 #ifdef _WIN32
      "The seed's ID: its random part and every setting below. The same ID is the same seed. Left or Right makes a new "

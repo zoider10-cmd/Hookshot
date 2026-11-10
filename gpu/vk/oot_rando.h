@@ -18,8 +18,9 @@
    Modelled on LAS Recomp's randomizer settings and seed IDs (peiikai/LASRecomp, runtime/ui/rando_tab.mm, MIT). Nothing
    is copied from it.
 
-   What is not here: the item placement. tools/rando/rando_seed.py reads rando_on, rando_seed, rando_chests and
-   rando_keys and shuffles the chests as a mod; the other settings are not placed yet (host/oot_rando.c). */
+   What is not here: the item placement. tools/rando/rando_seed.py reads rando_on, rando_seed, rando_chests,
+   rando_keys and rando_major and shuffles the chests as a mod (the launcher runs it at Play); the other settings are
+   not placed yet (host/oot_rando.c). */
 #ifndef OOT_RANDO_H
 #define OOT_RANDO_H
 
@@ -30,7 +31,7 @@
 
 /* X(NAME, label, ini key, help, choices...): choice 0 is the game's own; 4 choices at most (2 bits in a seed ID).
    Append only: a setting's place is its place in a seed ID. Each is a row of the Insert menu's Randomizer tab, which
-   has room for 12 rows (gpu/vk/vk_menu.cpp), and a selector of the launcher's Randomizer page (launcher/Launcher.cs
+   has room for 13 rows (gpu/vk/vk_menu.cpp), and a selector of the launcher's Randomizer page (launcher/Launcher.cs
    RandoRows: the same keys and choices, kept in step by tests/test_rando_settings.py). */
 #define OOT_RANDO_SETTINGS(X) \
     X(CHESTS, "Chests", "rando_chests", \
@@ -59,7 +60,10 @@
       "Off", "Dungeons", "Anywhere") \
     X(KEYS, "Dungeon keys", "rando_keys", \
       "Small keys and Boss Keys. Own dungeon: shuffled inside their dungeon. Anywhere: they can be in any place of the game.", \
-      "Off", "Own dungeon", "Anywhere")
+      "Off", "Own dungeon", "Anywhere") \
+    X(MAJOR, "Major items", "rando_major", \
+      "The big items in chests (Kokiri Sword, Bow, Megaton Hammer and the like) are shuffled too, placed so the game can be finished. Needs Chests.", \
+      "Off", "On")
 
 enum {
 #define OOT_RANDO_ENUM(NAME, label, key, help, ...) OOT_RANDO_##NAME,
