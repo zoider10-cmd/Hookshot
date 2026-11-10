@@ -71,6 +71,10 @@ LENS, BOW, HAM, IRON = "Item_GlassTruth", "Item_Range_Bow", "Item_Hammer", "Item
 HOVER, LONG, SG, MS, GG = "Item_HoverBoot", "Item_Longshot", "Item_Gauntlet_Silver", "Item_Shield_Mirror", "Item_Gauntlet_Gold"
 PROGRESSION = frozenset((S, SL, BB, BM, LENS, BOW, HAM, IRON, HOVER, LONG, SG, MS, GG))
 NONE = frozenset()
+# Found in play: bombs cannot be used before Darunia gives the Goron's Bracelet (the original game has no such tie).
+# No rule asks for bombs alone: each that names BB also names the sword and the Slingshot, with which Link is out of
+# the forest and can get the bracelet (Zelda's Lullaby, Saria's Song, Darunia). A rule that asks for BB below that
+# would have to ask for those too.
 CHILD = frozenset((S, SL))                 # out of the forest: the Deku Tree done
 ADULT = frozenset((S, SL, BB, BM))         # the three stones: Dodongo's Cavern (bombs) and Jabu-Jabu (Boomerang) done
 MEDALS3 = ADULT | {BOW, HAM, IRON, LONG}   # the Forest, Fire and Water Temples done: the way to the Shadow Temple

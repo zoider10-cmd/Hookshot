@@ -68,6 +68,16 @@ them so that each can be reached with the ones before it. The spoiler log lists 
     Kokiri Sword's own chest (its event) had everything. Until this is understood, save by hand after a big item.
   - The item slots of the HUD did not appear, though the items could be used (the Lens too, which came with a magic
     meter). Probably switched on by an item's own event, which is skipped when the item comes from another chest.
+  - Since then, in the same seed: a chest's autosave in the Deku Tree, after the Kokiri Sword's own chest had been
+    opened, kept every item, and so did saves made by hand. The loss has only been seen in the autosaves of Mido's
+    house before that chest's event. Open the Kokiri Sword's chest early.
+  - The item slots appeared with the first item; only the D-pad part waited for the game's own Navi prompt.
+- Where the remake differs from the original, found in play:
+  - **Bombs cannot be used before the Goron's Bracelet.** The Bomb Bag from a Deku Tree chest was in the inventory
+    with bombs, and they could be used once Darunia had given the bracelet. The rules allow for it (see `RULES`).
+  - The Lens of Truth comes with a magic meter.
+- Chests whose item depends on what Link has (the Hylian Shield's in the graveyard, the Deku Shield ones) are left
+  alone: the game decides there between the item and a substitute.
 - Gold Skulltulas (`Enemy_Skulltula_Gold`) and Heart Pieces (`HeartPieceAnchor`) do not name an item in the map
   files; shops and gifts are in event flows and actor parameters. They need another way than this one.
 

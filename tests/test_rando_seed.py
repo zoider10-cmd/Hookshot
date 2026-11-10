@@ -217,6 +217,10 @@ def main():
             world[n], needs[n] = (area, "TBox_Rupee_Red", area.endswith(("Temple", "Cavern", "Tree", "Belly", "Well", "Castle", "Ground")), None), seed.rule(area, ev)
     check(seed.rule("DreamWorld", "") == seed.PROGRESSION and seed.rule("KokiriForest", "Get_StoneOfForest_GetSword") == frozenset(),
           "an unknown area asks for everything, the Kokiri Sword's chest for nothing")
+    # (bombs are no use before the Goron's Bracelet, which takes leaving the forest: no rule may ask for bombs without that)
+    for area, (default, by_event) in seed.RULES.items():
+        for need in [default] + list(by_event.values()):
+            check(seed.BB not in need or seed.CHILD <= need, "%s asks for bombs before Link can have the Goron's Bracelet" % area)
     own = seed.collect([(needs[h], world[h][1]) for h in world])
     check({i for sphere in own for i in sphere} == set(seed.PROGRESSION), "the game's own placement cannot be finished by the rules")
     check(own[0] == [seed.S] and seed.GG in own[-1], "the game's own order: the Kokiri Sword first, the Golden Gauntlets last")
