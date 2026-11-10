@@ -100,6 +100,14 @@ them so that each can be reached with the ones before it. The spoiler log lists 
     those rooms can be left: it says where a switch is close enough to be the reason.
   - Not known: whether the Deku Tree's Slingshot room can be left without the Slingshot (its ladder is dropped by
     the eye switch, and a child has no warp song). Every seed played so far had the Slingshot before that room.
+  - The Fire Temple's Megaton Hammer room cannot be left without the Hammer, but the warp songs work in it (seen in
+    play, seed 2068101879, with a Red Rupee in the chest): it is left by a warp song, as the Stalfos room is with its
+    fix. Nothing is changed for it. Sheik teaches the Bolero of Fire on the way to the temple, so Link has a warp
+    song by then; the rules do not check that.
+  - The Fire Temple has 8 small keys and 8 doors that take one (the map files), as the original. The first key
+    (Darunia's room) also opens the door off the entrance hall to the Boss Key's room; spent there, none is left for
+    the big lava room's door, and the rest of the temple stays shut. With the Hammer and the Hover Boots from other
+    chests that is a way to the boss that shuts Link out of the temple's other chests. Not tried in play.
   - **Bombs cannot be used before the Goron's Bracelet.** The Bomb Bag from a Deku Tree chest was in the inventory
     with bombs, and they could be used once Darunia had given the bracelet. The rules allow for it (see `RULES`).
   - Dodongo's Cavern's entrance opens to a bomb flower only (so to the Goron's Bracelet), not to a bomb of Link's own.
@@ -111,9 +119,10 @@ them so that each can be reached with the ones before it. The spoiler log lists 
   files; shops and gifts are in event flows and actor parameters. They need another way than this one.
 
 Tested in game so far: Kokiri Forest (Mido's house's chests and the Kokiri Sword's), and seed 2068101879 (Chests: All,
-Major items: On, Dungeon keys: Off) played through the Forest Temple and the Water Temple (Iron Boots and Longshot
-shuffled) without a chest that could not be reached. The Fire, Shadow and Spirit Temples and Ganon's Castle have not
-been played with their rules yet.
+Major items: On, Dungeon keys: Off) played through the Forest Temple, the Water Temple (Iron Boots and Longshot
+shuffled) and the Fire Temple (the Megaton Hammer and the Hover Boots from other chests, had before it) without a
+chest that could not be reached. The Shadow and Spirit Temples and Ganon's Castle have not been played with their
+rules yet.
 
 ## The scripts
 
