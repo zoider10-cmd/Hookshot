@@ -198,6 +198,7 @@ static float text_scale(const char *env, int menu) {
    with the game in front and the menu closed, the game takes its 15-a-second step on every frame (realtime_step): a
    cutscene goes by four times as fast. Nothing of the game is skipped, so its events still happen in order */
 static int fast_forward_was, fast_forward_reset;
+volatile int hos_fast_forward_now;   /* (nn_audio.c: the sounds four times as fast too) */
 static int fast_forward_held(void) {
     int rx_option(int id, int otherwise);
     uint32_t hos_pad_raw(void);   /* nn_hid.c */
@@ -262,9 +263,10 @@ static void realtime_step(int64_t now) {
     }
     const uint64_t mod = hos_gfx_module;
     if (!mod) return;
+    hos_fast_forward_now = 0;
     if (fast_forward_held()) {   /* (the game's longest step on every frame: four times the speed at 60 frames a second) */
         int *slot = (int *)GP(mod + 0x2c8);
-        if (*slot >= 15 && *slot <= 60) *slot = 15;
+        if (*slot >= 15 && *slot <= 60) *slot = 15, hos_fast_forward_now = 1;
         fast_forward_was = 1;
         return;
     }
