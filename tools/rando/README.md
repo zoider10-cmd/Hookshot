@@ -87,6 +87,19 @@ them so that each can be reached with the ones before it. The spoiler log lists 
     say), and the shutter's `IsDisableSaveAndWarp` is what turns the warp songs off. Every seed's mod sets it to
     false (`FIXES`): the room is left by a warp song, and the game can be saved in it (seen in play). Only the mod has it: with the
     randomizer off the game's own file is used.
+  - Leaving that room by a warp song with the Stalfos dead and the eye not shot, then coming back into the temple
+    with the Bow: the game showed the room's shutter and opened it, as if the eye had been shot. Seen once (seed
+    2068101879); the temple was finished after it. Not known whether it is the Stalfos being dead, the Bow, or both.
+  - Looked for more rooms like it in the map files (`rando_shutters.py`), not in play: 45 shutters of the game have
+    `IsDisableSaveAndWarp`, most of them opened by the room's enemies being dead. A chest within 30 of one is marked
+    when a switch beside the shutter takes an item (eye: Bow, or Slingshot where Link is a child; hammer switch;
+    solar switch) that the chest's rule does not ask for. Marked: the Stalfos room's Bow chest (so the check finds
+    the known room), and the Deku Tree's map chest, whose eye switch belongs to the Slingshot room next door and
+    drops its ladder (`InsideTheDekuTree_Gimmick_FallingLadder`). None in the Fire, Shadow and Spirit Temples, the
+    Gerudo Training Ground or Ganon's Castle. What opens a shutter is not in the map files, so this does not prove
+    those rooms can be left: it says where a switch is close enough to be the reason.
+  - Not known: whether the Deku Tree's Slingshot room can be left without the Slingshot (its ladder is dropped by
+    the eye switch, and a child has no warp song). Every seed played so far had the Slingshot before that room.
   - **Bombs cannot be used before the Goron's Bracelet.** The Bomb Bag from a Deku Tree chest was in the inventory
     with bombs, and they could be used once Darunia had given the bracelet. The rules allow for it (see `RULES`).
   - Dodongo's Cavern's entrance opens to a bomb flower only (so to the Goron's Bracelet), not to a bomb of Link's own.
@@ -97,7 +110,10 @@ them so that each can be reached with the ones before it. The spoiler log lists 
 - Gold Skulltulas (`Enemy_Skulltula_Gold`) and Heart Pieces (`HeartPieceAnchor`) do not name an item in the map
   files; shops and gifts are in event flows and actor parameters. They need another way than this one.
 
-Tested in game so far: Kokiri Forest (Mido's house's chests and the Kokiri Sword's). The other areas use the same files and steps.
+Tested in game so far: Kokiri Forest (Mido's house's chests and the Kokiri Sword's), and seed 2068101879 (Chests: All,
+Major items: On, Dungeon keys: Off) played through the Forest Temple and the Water Temple (Iron Boots and Longshot
+shuffled) without a chest that could not be reached. The Fire, Shadow and Spirit Temples and Ganon's Castle have not
+been played with their rules yet.
 
 ## The scripts
 
@@ -107,8 +123,11 @@ Tested in game so far: Kokiri Forest (Mido's house's chests and the Kokiri Sword
 | `rando_inventory.py` | A report of where the game's files name items: how the data is laid out. |
 | `rando_locations.py` | A report of every chest, Gold Skulltula, Heart Piece and item actor in the maps, with its parameters. |
 | `rando_actors.py` | A report of the parameter files in the item actors' packs, to compare items that behave differently. |
+| `rando_room.py` | A report of every actor around one chest, with the links between them: how a room is wired. |
+| `rando_shutters.py` | Lists every shutter that turns saving and the warp songs off, with the chests and switches near it, and marks the chests to look at in play. |
 | `rando_sizetable.py` | Finds the size table and shows how much room a map file's entry has. |
 | `rando_poc.py` | The first test: one chest's item swapped in place. |
 | `rando_poc2.py` | The second test: one chest given any item (its own block, a new name, the size table). Its mod, `rando-zz-test2`, must be deleted before a seed is played: it carries a size table of its own. |
 
-`tests/test_rando_seed.py` checks `rando_seed.py`'s file changes and its shuffle on made-up map files.
+`tests/test_rando_seed.py` checks `rando_seed.py`'s file changes and its shuffle on made-up map files;
+`tests/test_rando_shutters.py` checks which chests `rando_shutters.py` marks, on made-up actors.
