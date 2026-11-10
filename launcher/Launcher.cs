@@ -325,6 +325,8 @@ class LauncherForm : Form {
     bool loading;
     int randoSeed;          // (rando_seed: the randomizer seed's random part, 0 none yet)
     bool randoDropImport;   // (a randomizer setting was changed here: a rando_import line still in the file would undo it at the game's start)
+    readonly Dictionary<string, Selector> cosmetics = new Dictionary<string, Selector>();   // (the Cosmetics page's selectors, by their line)
+    readonly string cosmeticsPath;
     // (update card)
     Color updDot = Theme.Faint; string updTitle = "Checking for updates…", updLine = "";
     float updProgress = -1;  // (-1: none; else 0..1)
@@ -398,6 +400,23 @@ class LauncherForm : Form {
         new object[] { "rando_major", "Major items", new[] { "Off", "On" }, new[] { 0, 1 },
             "The big items in chests (Kokiri Sword, Bow, Megaton Hammer and the like) are shuffled too, placed so the game can be finished. Needs Chests." },
     };
+    // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
+    // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and
+    // the colours of its COLOURS in the same order (tests/test_rando_cosmetics.py))
+    static readonly string[] TunicColours = { "The game's", "Green", "Red", "Blue", "Purple", "Pink", "Orange", "Yellow", "Teal", "White", "Black" };
+    static readonly int[] TunicValues = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+    static readonly object[][] CosmeticRows = {
+        new object[] { "cosmetic_tunic_kokiri", "Kokiri Tunic", TunicColours, TunicValues,
+            "The colour of the green tunic's cloth, vest and hat. Young Link's tunic and Mido's clothes are the same cloth and change with it." },
+        new object[] { "cosmetic_tunic_goron", "Goron Tunic", TunicColours, TunicValues,
+            "The colour of the red tunic's cloth and hat. Its gold trim and leather keep their own." },
+        new object[] { "cosmetic_tunic_zora", "Zora Tunic", TunicColours, TunicValues,
+            "The colour of the blue tunic's cloth and hat. Its trim and leather keep their own." },
+        new object[] { "cosmetic_hearts", "Hearts", TunicColours, TunicValues,
+            "The colour of the hearts in the corner of the screen." },
+        new object[] { "cosmetic_magic", "Magic meter", TunicColours, TunicValues,
+            "The colour of the magic meter under the hearts." },
+    };
     static readonly string[] PresetKeys = { "resolution", "upscaling", "sharpness", "frame_generation", "frame_pacing", "game_speed", "handheld_profile" };
     static readonly string[][] Languages = {
         new[] { "en-US", "English (US)" }, new[] { "en-GB", "English (UK)" }, new[] { "fr", "Français (France)" }, new[] { "fr-CA", "Français (Canada)" },
@@ -422,6 +441,7 @@ class LauncherForm : Form {
     public LauncherForm(string dir) {
         this.dir = dir;
         optionsPath = Path.Combine(dir, "hookshot_options.ini");
+        cosmeticsPath = Path.Combine(dir, "hookshot_cosmetics.ini");
         envPath = Path.Combine(dir, "hookshot_env.txt");
         langPath = Path.Combine(dir, "language.txt");
 
@@ -454,7 +474,7 @@ class LauncherForm : Form {
                               Click = () => OpenUrl(Fork.Home) });
 
         // (tabs)
-        string[] names = { "Graphics", "Game", "Randomizer", "AMD fixes", "About" };
+        string[] names = { "Graphics", "Game", "Randomizer", "Cosmetics", "AMD fixes", "About" };
         float tx = LeftW + 36;
         using (var g = CreateGraphics())
             for (int i = 0; i < names.Length; i++) {
@@ -468,6 +488,9 @@ class LauncherForm : Form {
         AddSelectors(GraphicsRows, 0, cx, colW);
         AddSelectors(GameRows, 1, cx, colW);
         AddSelectors(RandoRows, 2, cx, colW);
+        AddSelectors(CosmeticRows, 3, cx, colW, cosmetics);
+        // (beside the fifth selector, in the third line's right half)
+        widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx + colW + 14, 112 + 2 * 70 + 11, 160, 40), Page = 3, Click = OnRandomCosmetics });
         // (beside the eleventh selector, in the sixth line's right half)
         widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx + colW + 12, 112 + 5 * 70 + 11, 130, 40), Page = 2, Click = OnNewSeed });
         var langItems = new string[Languages.Length]; var langValues = new int[Languages.Length];
@@ -478,12 +501,12 @@ class LauncherForm : Form {
         langSel.Changed = s => { if (!loading) SaveLanguage(); };
         widgets.Add(langSel);
         for (int i = 0; i < Fixes.Length; i++) {
-            var tg = new Toggle { Key = Fixes[i][0], Label = Fixes[i][2], HelpText = Fixes[i][3], Page = 3, R = new RectangleF(cx, 112 + i * 112, cw, 100) };
+            var tg = new Toggle { Key = Fixes[i][0], Label = Fixes[i][2], HelpText = Fixes[i][3], Page = 4, R = new RectangleF(cx, 112 + i * 112, cw, 100) };
             tg.Changed = t => { if (!loading) SaveEnv(); };
             fixes[tg.Key] = tg; widgets.Add(tg);
         }
-        widgets.Add(new Btn { Text = "Project page on GitHub", R = new RectangleF(cx, 470, 220, 40), Page = 4, Click = () => OpenUrl(Fork.Home) });
-        widgets.Add(new Btn { Text = "Licence (GPL-3)", R = new RectangleF(cx + 232, 470, 170, 40), Page = 4, Click = () => OpenUrl(Fork.Home + "/blob/HEAD/LICENSE") });
+        widgets.Add(new Btn { Text = "Project page on GitHub", R = new RectangleF(cx, 470, 220, 40), Page = 5, Click = () => OpenUrl(Fork.Home) });
+        widgets.Add(new Btn { Text = "Licence (GPL-3)", R = new RectangleF(cx + 232, 470, 170, 40), Page = 5, Click = () => OpenUrl(Fork.Home + "/blob/HEAD/LICENSE") });
 
         // (bottom row: folders)
         widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 130, 42), Click = () => OpenFolder(Path.Combine(dir, "user", "save")) });
@@ -507,14 +530,15 @@ class LauncherForm : Form {
         try { int round = 2; DwmSetWindowAttribute(Handle, 33, ref round, 4); } catch { }   // (Windows 11: rounded corners)
     }
 
-    void AddSelectors(object[][] rows, int page, float x0, float colW) {
+    void AddSelectors(object[][] rows, int page, float x0, float colW, Dictionary<string, Selector> into = null) {
         for (int i = 0; i < rows.Length; i++) {
             var row = rows[i];
             int col = i % 2, line = i / 2;
             var s = new Selector { Key = (string)row[0], Label = (string)row[1], Items = (string[])row[2], Values = (int[])row[3], HelpText = (string)row[4],
                                    Page = page, R = new RectangleF(x0 + col * (colW + 14), 112 + line * 70, colW, 62) };
-            s.Changed = OnSetting;
-            settings[s.Key] = s; widgets.Add(s);
+            if (into == null) { s.Changed = OnSetting; settings[s.Key] = s; }
+            else { s.Changed = OnCosmetic; into[s.Key] = s; }
+            widgets.Add(s);
         }
     }
 
@@ -706,9 +730,13 @@ class LauncherForm : Form {
                         Theme.Small, Theme.Faint, new RectangleF(x, 528, W - LeftW - 72, 18), StringAlignment.Near, StringAlignment.Near);
         }
         if (PageNow == 3)
+            Theme.Text_(g, "Written when Play is pressed: about half a minute after a colour is changed, nothing after that. " +
+                        "The equipment menu's pictures of the tunics keep the game's colours.",
+                        Theme.Small, Theme.Faint, new RectangleF(x, 112 + 3 * 70 + 6, W - LeftW - 72, 40), StringAlignment.Near, StringAlignment.Near);
+        if (PageNow == 4)
             Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + Fixes.Length * 112, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
-        if (PageNow == 4) {
+        if (PageNow == 5) {
             var r = new RectangleF(x, 112, W - LeftW - 72, 340);
             using (var p = Theme.Round(r, 14)) {
                 using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, p);
@@ -767,10 +795,13 @@ class LauncherForm : Form {
     }
 
     // ---- settings ----
-    Dictionary<string, int> ReadOptions() {
+    Dictionary<string, int> ReadOptions() { return ReadNumbers(optionsPath); }
+
+    // (a file of key=number lines)
+    static Dictionary<string, int> ReadNumbers(string path) {
         var d = new Dictionary<string, int>();
-        if (!File.Exists(optionsPath)) return d;
-        foreach (var raw in File.ReadAllLines(optionsPath)) {
+        if (!File.Exists(path)) return d;
+        foreach (var raw in File.ReadAllLines(path)) {
             int eq = raw.IndexOf('=');
             int v;
             if (eq > 0 && int.TryParse(raw.Substring(eq + 1).Trim(), out v)) d[raw.Substring(0, eq).Trim()] = v;
@@ -797,6 +828,11 @@ class LauncherForm : Form {
         foreach (var row in RandoRows) defaults[(string)row[0]] = 0;   // (the randomizer: off, every setting the game's own)
         foreach (var kv in defaults) SetSetting(kv.Key, o.ContainsKey(kv.Key) ? o[kv.Key] : kv.Value);
         randoSeed = o.ContainsKey("rando_seed") ? Math.Max(0, o["rando_seed"]) : 0;
+        var c = ReadNumbers(cosmeticsPath);
+        foreach (var kv in cosmetics) {   // (a colour this launcher does not have: the game's own)
+            int v = c.ContainsKey(kv.Key) ? c[kv.Key] : 0;
+            kv.Value.Index = Math.Max(0, Array.IndexOf(kv.Value.Values, v));
+        }
         var env = ReadEnv();
         foreach (var f in Fixes) {
             string v;
@@ -819,6 +855,36 @@ class LauncherForm : Form {
         }
         loading = false;
         SaveOptions();
+    }
+
+    void OnCosmetic(Selector s) { if (!loading) SaveCosmetics(); }
+
+    // (Randomize all: each of the page's selectors gets one of its colours, never the game's own, the first choice)
+    void OnRandomCosmetics() {
+        var r = new Random(Environment.TickCount ^ Guid.NewGuid().GetHashCode());
+        loading = true;
+        foreach (var s in cosmetics.Values) s.Set(r.Next(1, s.Items.Length), false);
+        loading = false;
+        SaveCosmetics();
+    }
+
+    // (the Cosmetics page's lines; the file's other lines are kept)
+    void SaveCosmetics() {
+        try {
+            var lines = File.Exists(cosmeticsPath) ? new List<string>(File.ReadAllLines(cosmeticsPath)) : new List<string>();
+            var done = new HashSet<string>();
+            for (int i = 0; i < lines.Count; i++) {
+                int eq = lines[i].IndexOf('=');
+                if (eq <= 0) continue;
+                string k = lines[i].Substring(0, eq).Trim();
+                if (cosmetics.ContainsKey(k)) { lines[i] = k + "=" + cosmetics[k].Value; done.Add(k); }
+            }
+            foreach (var k in cosmetics.Keys)
+                if (!done.Contains(k)) lines.Add(k + "=" + cosmetics[k].Value);
+            File.WriteAllLines(cosmeticsPath, lines.ToArray(), new UTF8Encoding(false));
+        } catch (Exception ex) {
+            MessageBox.Show(this, "The cosmetic settings could not be saved:\n" + ex.Message, Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     // (a seed's random part, 1 to 2^31 - 2: 0 is "none yet", as in the Insert menu)
@@ -1174,6 +1240,7 @@ class LauncherForm : Form {
         }
         if (GameRunning()) { MessageBox.Show(this, "The game is already running.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (!RunRandomizer()) return;
+        if (!RunCosmetics()) return;
         try {
             var psi = new ProcessStartInfo(exe) { WorkingDirectory = dir, UseShellExecute = false };
             psi.EnvironmentVariables["HOOKSHOT_NO_UPDATE_CHECK"] = "1";   // (the launcher did it)
@@ -1187,10 +1254,25 @@ class LauncherForm : Form {
     // already this seed's, and takes it away when the randomizer is off. What it said is kept in rando\last_run.txt.
     // false: it failed and the player chose not to start the game)
     bool RunRandomizer() {
-        string script = Path.Combine(dir, "rando", "rando_seed.py"), romfs = Path.Combine(dir, "romfs");
-        if (!File.Exists(script) || !Directory.Exists(romfs)) return true;   // (a game folder without it: as before)
         bool on = settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0;
-        if (!on && !Directory.Exists(Path.Combine(dir, "mods", "rando-seed"))) return true;   // (nothing to place, nothing to take away)
+        return RunAtPlay("rando_seed.py", "rando-seed", on, "last_run.txt", "The randomizer seed could not be made");
+    }
+
+    // (cosmetics: the tunics' colours are written by <game folder>\rando\rando_cosmetics.py (tools/rando in the source), as the
+    // seed is: mods\cosmetics, nothing done when it is already these colours', taken away when every colour is the game's own.
+    // What it said is kept in rando\last_cosmetics.txt)
+    bool RunCosmetics() {
+        bool on = false;
+        foreach (var s in cosmetics.Values) on |= s.Value != 0;
+        return RunAtPlay("rando_cosmetics.py", "cosmetics", on, "last_cosmetics.txt", "The cosmetic colours could not be written");
+    }
+
+    // (a script of <game folder>\rando run with the player's Python before the game starts: it makes mods\<mod> when `on`, and
+    // takes it away when not. false: it failed and the player chose not to start the game)
+    bool RunAtPlay(string name, string mod, bool on, string log, string failed) {
+        string script = Path.Combine(dir, "rando", name), romfs = Path.Combine(dir, "romfs");
+        if (!File.Exists(script) || !Directory.Exists(romfs)) return true;   // (a game folder without it: as before)
+        if (!on && !Directory.Exists(Path.Combine(dir, "mods", mod))) return true;   // (nothing to place, nothing to take away)
         string said = "", problem = null;
         Cursor = Cursors.WaitCursor;
         try {
@@ -1211,15 +1293,15 @@ class LauncherForm : Form {
                     }
                     break;   // (it ran: what it said is the answer, whichever Python it was)
                 } catch (System.ComponentModel.Win32Exception) {
-                    problem = "Python was not found. The randomizer needs Python 3 (python.org) with the zstandard package:\n    python -m pip install zstandard";
+                    problem = "Python was not found. This needs Python 3 (python.org) with the zstandard package:\n    python -m pip install zstandard";
                 }
             }
         } catch (Exception ex) { problem = ex.Message; }
         finally { Cursor = Cursors.Default; }
-        try { File.WriteAllText(Path.Combine(dir, "rando", "last_run.txt"), said); } catch { }
+        try { File.WriteAllText(Path.Combine(dir, "rando", log), said); } catch { }
         if (problem == null) return true;
         if (problem.Length > 900) problem = problem.Substring(problem.Length - 900);
-        return MessageBox.Show(this, "The randomizer seed could not be made:\n\n" + problem + "\n\nStart the game anyway?", Fork.Name,
+        return MessageBox.Show(this, failed + ":\n\n" + problem + "\n\nStart the game anyway?", Fork.Name,
                                MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
     }
 

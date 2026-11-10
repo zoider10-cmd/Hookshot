@@ -53,6 +53,36 @@ them so that each can be reached with the ones before it. The spoiler log lists 
   chest and what it needed.
 - `--no-logic` puts the big items anywhere.
 
+## Cosmetics
+
+The launcher's **Cosmetics** page sets a colour for each of adult Link's three tunics, for the hearts and for the
+magic meter; **Randomize all** gives each one a colour by chance. They are kept in
+`<game folder>\hookshot_cosmetics.ini` (not the options file: the game's menu writes that one whole and would drop
+them), and Play runs `<game folder>\rando\rando_cosmetics.py`, which writes their colour textures, changed, to
+`mods\cosmetics`. That takes about half a minute after a colour is changed and nothing after that; with everything on
+the game's own colour the mod is removed. It has nothing to do with the seed: no item moves.
+
+- The textures are ASTC (the Kokiri Tunic's cloth BC3) and are neither decoded nor compressed again: a block stores
+  two colours for each of its parts and how far each pixel lies between them, and only the stored colours are changed.
+  The file keeps its size, so there is no size table entry to raise.
+- Only the hues that are the tunic's own are changed (the Goron Tunic's reds, not its gold trim or leather).
+- Seen in game, through the launcher's page: the Zora Tunic white and the Goron Tunic teal, whole, with their trim,
+  belt and leather kept. The Kokiri Tunic pink had only its vest and hat band changed: its cloth was missing from the
+  list. With the cloth added it was pink but for its olive stitching and fringe (`Mt_Angin_Acs_Player_Adult_Alb`, BC1),
+  added since: seen in game in blue, stitching and fringe with it.
+- The Kokiri Tunic is not a model of its own. Its vest is `Mt_Vest_Player_Adult_Alb`, on Link's own model, and its
+  cloth is `Angin_Tile_A_Alb`, a picture nine models share: young Link's tunic, Mido's clothes, a Kokiri bed and the
+  Fairy Ocarina's strap change colour with it. Giving adult Link a cloth of his own would take a new texture file, so
+  a size table entry beside the seed's.
+- The hearts and the magic meter are pictures of `UI/Layout2Archive/Common...bntx.zs`, the file of every picture of
+  the game's screens (878 of them, a quarter of a gigabyte unpacked): the mod carries that file whole (75 MB) with 17
+  heart pictures and 8 of the meter changed. The hearts run from red to orange, and both are taken as their colour;
+  their gold frame is left. Seen in game: both show the colour picked (green hearts, on the load screen's saves too; a red meter).
+- Not changed: the tunics' pictures in the equipment menu (files of their own), and the Insert menu has no Cosmetics
+  tab (the colours are written before the game starts).
+
+By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron purple`.
+
 ## What was found, and how a map file is changed
 
 - An area's actors are in `Banc/<area>/*.bcett.byml.zs` (BYML version 7, zstd, some with the dictionaries of
@@ -138,5 +168,9 @@ rules yet.
 | `rando_poc.py` | The first test: one chest's item swapped in place. |
 | `rando_poc2.py` | The second test: one chest given any item (its own block, a new name, the size table). Its mod, `rando-zz-test2`, must be deleted before a seed is played: it carries a size table of its own. |
 
+| `rando_cosmetics.py` | Cosmetics: writes the colours of the tunics, the hearts and the magic meter as a mod of its own, `cosmetics`, from the launcher's Cosmetics page. |
+
+`tests/test_rando_cosmetics.py` checks its block reading and writing on made-up blocks, its colours, and that the
+launcher's page and the build match it.
 `tests/test_rando_seed.py` checks `rando_seed.py`'s file changes and its shuffle on made-up map files;
 `tests/test_rando_shutters.py` checks which chests `rando_shutters.py` marks, on made-up actors.

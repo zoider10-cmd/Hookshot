@@ -1135,6 +1135,15 @@ def main(a=None):
             shutil.copy2(rando, os.path.join(out, "rando", "rando_seed.py"))
         except OSError as e:
             print("the randomizer's script was not copied (%s): run tools/rando/rando_seed.py by hand" % e, flush=True)
+    # (cosmetics: the launcher runs <game folder>/rando/rando_cosmetics.py at Play too; it reads the game's files with
+    # rando_seed.py, beside it)
+    cosmetics = os.path.join(ROOT, "tools", "rando", "rando_cosmetics.py")
+    if os.path.isfile(cosmetics):
+        try:
+            os.makedirs(os.path.join(out, "rando"), exist_ok=True)
+            shutil.copy2(cosmetics, os.path.join(out, "rando", "rando_cosmetics.py"))
+        except OSError as e:
+            print("the cosmetics script was not copied (%s): run tools/rando/rando_cosmetics.py by hand" % e, flush=True)
     ship_state_list(out)
     language = os.path.join(out, "language.txt")   # (the same text as host/nn_applet.c writes)
     with open(language, "w", encoding="utf-8", newline="\n") as f:

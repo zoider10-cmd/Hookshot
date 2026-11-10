@@ -73,12 +73,12 @@ def sources(rows):
     got = [(key, label, re.findall(r'"([^"]*)"', choices), [int(v) for v in values.split(",")], help_)
            for key, label, choices, values, help_ in found[1:]]
     check(got == want, "the launcher's Randomizer page and gpu/vk/oot_rando.h differ:\n  %r\n  %r" % (got, want))
-    check("AddSelectors(RandoRows, 2, cx, colW);" in launcher and '"Game", "Randomizer", "AMD fixes", "About"' in launcher,
+    check("AddSelectors(RandoRows, 2, cx, colW);" in launcher and '"Game", "Randomizer", "Cosmetics", "AMD fixes", "About"' in launcher,
           "the launcher does not show its Randomizer page")
     check('lines[i] = k + "=" + randoSeed;' in launcher and 'lines.RemoveAll(l => l.StartsWith("rando_import="))' in launcher,
           "the launcher does not keep the seed, or leaves an import that would undo its settings")
     # ---- the game side ----
-    check("if (!RunRandomizer()) return;" in launcher and '"rando", "rando_seed.py"' in launcher and "--if-changed" in launcher,
+    check("if (!RunRandomizer()) return;" in launcher and 'RunAtPlay("rando_seed.py", "rando-seed", on,' in launcher and 'Path.Combine(dir, "rando", name)' in launcher and "--if-changed" in launcher,
           "the launcher does not place the seed at Play")
     make = read("nx2", "make_game.py")
     check('os.path.join(ROOT, "tools", "rando", "rando_seed.py")' in make and 'os.path.join(out, "rando", "rando_seed.py")' in make,
