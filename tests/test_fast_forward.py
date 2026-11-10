@@ -24,10 +24,8 @@ def main():
     check("rx_option(18, 0)" in vi, "the host does not read option 18")
     held = vi.index("if (fast_forward_held())")
     check(held < vi.index("if (!rx_option(0, 1))"), "Game speed: Per frame returns before the fast forward is looked at")
-    check("*slot = 15" in vi[held:held + 300], "the held key does not ask for the game's longest step")
+    check("*slot = 15;" in vi[held:held + 300], "the held key does not ask for the game's longest step")
     check('"fast_forward", "Fast forward"' in launcher and '{ "fast_forward", 0 }' in launcher, "the launcher has no selector for it")
-    audio = read("host", "nn_audio.c")
-    check("hos_fast_forward_now ? 4.0 : 1.0" in audio, "the sounds do not keep pace with the fast forward")
     for f in failed:
         print("FAIL:", f)
     print("fast forward: %s" % ("FAILED" if failed else "ok"))

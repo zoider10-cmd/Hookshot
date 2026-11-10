@@ -358,7 +358,6 @@ static void effects_frame(int mix) {
         if (reverbs[e].used && reverbs[e].mix == mix) reverb_frame(&reverbs[e], &mixes[mix]);
 }
 
-extern volatile int hos_fast_forward_now;   /* nn_vi.c */
 /* ---- the mixer ------------------------------------------------------------------------------------------------- */
 static void render_voice(Voice *v) {
     /* (a started voice without a destination still plays, as on the DSP: its buffers run out and are released) */
@@ -370,8 +369,7 @@ static void render_voice(Voice *v) {
         if (v->dest_kind == DEST_SPLITTER && splitters[v->dest].used)
             memcpy(splitters[v->dest].ramp, splitters[v->dest].vol, sizeof splitters[v->dest].ramp);
     }
-    /* (the fast forward, nn_vi.c: the sounds keep pace with the game, so a cutscene's voice lines end before the next begin) */
-    const double step = (double)v->rate * (v->pitch > 0 ? v->pitch : 1.0) / RATE * (hos_fast_forward_now ? 4.0 : 1.0);
+    const double step = (double)v->rate * (v->pitch > 0 ? v->pitch : 1.0) / RATE;
     float out[MAX_CH][FRAME];
     int any = 0;
     /* volumes ramp from the last frame's to the new ones over the frame, as the console's DSP does (a jump clicks) */
@@ -477,12 +475,7 @@ static void render_frame(int16_t *pcm) {   /* 240 stereo frames */
     if (sink_mix >= 0 && mixes[sink_mix].used) {
         effects_frame(sink_mix);
         Mix *f = &mixes[sink_mix];
-        /* (the fast forward: two octaves up is shrill, so it plays quieter; the gain moves a step a frame, a jump clicks) */
-        static float forward_gain = 1.0f;
-        const float forward_to = hos_fast_forward_now ? 0.3f : 1.0f;
-        const float forward_d = forward_to - forward_gain;
-        forward_gain += forward_d > 0.05f ? 0.05f : forward_d < -0.05f ? -0.05f : forward_d;
-        const float g = f->volume * forward_gain;
+        const float g = f->volume;
         for (int k = 0; k < sink_n && k < 6; k++) {
             const int b = sink_in[k];
             if (b < 0 || b >= f->buffers) continue;
