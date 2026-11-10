@@ -75,6 +75,8 @@ them so that each can be reached with the ones before it. The spoiler log lists 
 - Where the remake differs from the original, found in play:
   - **Bombs cannot be used before the Goron's Bracelet.** The Bomb Bag from a Deku Tree chest was in the inventory
     with bombs, and they could be used once Darunia had given the bracelet. The rules allow for it (see `RULES`).
+  - Dodongo's Cavern's entrance opens to a bomb flower only (so to the Goron's Bracelet), not to a bomb of Link's own.
+    The rules already have its chests ask for leaving the forest, where the bracelet can be got.
   - The Lens of Truth comes with a magic meter.
 - Chests whose item depends on what Link has (the Hylian Shield's in the graveyard, the Deku Shield ones) are left
   alone: the game decides there between the item and a substitute.
