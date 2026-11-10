@@ -139,8 +139,31 @@ def main():
               seed.stays_why(one({"SpawnType": 1}), events) and seed.stays_why(one(None, "Obj_MiniGame_SmallKey"), events),
               "a chest that depends on what Link has, or a mini-game's, stays")
     bow = one({"GetEventName": "ForestTemple_GetBow"})
-    check(seed.stays_why(bow, True) and seed.stays_why(bow, True, 1) is None,
-          "the chest of a room that cannot be left without its item stays (and takes part in a seed of the first rules)")
+    check(seed.stays_why(bow, True) is None and seed.stays_why(bow, True, 1) is None and seed.stays_why(bow, True, 2),
+          "the chest of a room that FIXES opens takes part (and stayed in a seed of the second rules)")
+    # ---- the map fixes: a truth value of one actor's Dynamic block, the others' left alone ----
+    eye = {"DefaultDungeonRoomIndex": 17, "isHitHookShot": False}
+    fmap = build({"Actors": [chest(1, "TBox_Rupee_Green", room=17),
+                             {"Gyaml": "Obj_EyeSwitch_A_02", "Hash": 0x690a9040fab11585, "Dynamic": dict(eye)},
+                             {"Gyaml": "Obj_EyeSwitch_A_02", "Hash": 0x690a9040fab11586, "Dynamic": dict(eye)}], "FilePath": "x"})
+    fixed = seed.fix(fmap)
+    check(fixed is not None and seed.fix(fixed) is None, "the fix was not made, or is made twice")
+
+    def hook(d):
+        key_at, _, root = struct.unpack_from("<III", d, 4)
+        keys = seed.table(d, key_at)
+        out = {}
+        for name, kind, value, _ in seed.entries(d, root, keys):
+            if name == "Actors":
+                n = int.from_bytes(d[value + 1:value + 4], "little")
+                for i in range(n):
+                    actor = dict((k, (t, v)) for k, t, v, _ in seed.entries(d, struct.unpack_from("<I", d, value + 4 + (n + 3 & ~3) + 4 * i)[0], keys))
+                    dyn = dict((k, v) for k, t, v, _ in seed.entries(d, actor["Dynamic"][1], keys))
+                    out[struct.unpack_from("<Q", d, actor["Hash"][1])[0]] = dyn.get("isHitHookShot")
+        return out
+    check(hook(fmap)[0x690a9040fab11585] == 0 and hook(fixed) == {0x1000000000000001: None, 0x690a9040fab11585: 1, 0x690a9040fab11586: 0},
+          "the fix changed another actor that shares the block, or not its own")
+    check(seed.fix(data) is None, "a map without the actor was changed")
     check(seed.stays_why(one({"GetEventName": "Get_StoneOfForest_GetSword"}), False) and
           seed.stays_why(one({"GetEventName": "Get_StoneOfForest_GetSword"}), True) is None, "an event's chest takes part only when asked")
 

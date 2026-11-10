@@ -53,16 +53,22 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 2   # 2: the chests of LOCKED_ROOMS keep their items
+PLACEMENT = 3   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES
 # (a chest with one of these parameters is left as it is: see the top of this file)
 KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__CheckActor", "Drop__DropActor_Substitute",
            "DropViewActor", "IsEnableRepeatOpen", "SpawnType")
 # (a chest's GetEventName that is known not to care what the chest holds: Mido's house's chests, whose event only
 # quiets Navi. They gave other items in the tests and played as usual)
 # Chests whose room cannot be left without the item they hold (by their event), found in play: with anything else in
-# them the player is shut in. They keep their items. The Forest Temple's Stalfos room: no way out without the Bow or
-# a key, and the warp songs do not work in it.
+# them the player is shut in. The Forest Temple's Stalfos room: no way out without the Bow or a key, and the warp
+# songs do not work in it. Placement 2 kept their items; since then FIXES opens their rooms another way.
 LOCKED_ROOMS = ("ForestTemple_GetBow",)
+# Changes to the map that a shuffled game needs, written with every seed (and so only with the randomizer on):
+# {an actor's hash: {a key of its Dynamic block: the truth value it gets}}.
+# The eye switch over the Stalfos room's shutter (its event: ForestTemple_Room17_ShutterOpen) takes the Hookshot too,
+# which the way into the temple already asks for: the room can be left without the Bow.
+FIXES = {0x690a9040fab11585: {"isHitHookShot": True}}
+FIXES_VERSION = 1
 PLAIN_EVENTS = ("KokiriForest_TreasureBox_NaviChatOff",)
 DUNGEON_ITEMS = ("Item_Dungeon_SmallKey", "Item_Dungeon_BossKey", "Item_Dungeon_Map", "Item_Dungeon_Compass")
 Chest = collections.namedtuple("Chest", "hash gyaml dyn_where dyn_at item params pos event")
@@ -147,7 +153,7 @@ def reach(have, placed):
 def stays_why(c, events, placement=PLACEMENT):
     """Why a chest keeps its own item whatever the settings, or None. events: chests that start an event take part too.
     placement: the version of the rules (a seed made by an earlier one is made again as it was)."""
-    if placement >= 2 and c.event in LOCKED_ROOMS:
+    if placement == 2 and c.event in LOCKED_ROOMS:
         return "its room cannot be left without the item it holds"
     kept = [k for k in KEEP_IF if k in c.params]
     if "GetEventName" in kept and (c.event in PLAIN_EVENTS or events and not c.event.startswith("MiniGame")):
@@ -270,6 +276,66 @@ def rewrite(data, gives):
         if now.item != expect or now.hash != was.hash or now.params != was.params or now.event != was.event:
             raise ValueError("did not read back as written (%r: %s, expected %s)" % (now.hash, now.item, expect))
     return bytes(out)
+
+
+def fix(data, fixes=None):
+    """data (a BYML map file) with the truth values of `fixes` ({hash: {Dynamic key: value}}) set: the new bytes, or
+    None when the file has none of those actors or they already say so. Each actor gets a Dynamic block of its own
+    (an equal block is stored once for several actors). Read back before it is returned."""
+    fixes = FIXES if fixes is None else fixes
+    if data[:2] != b"YB":
+        raise ValueError("not a little-endian BYML")
+    key_at, _, root = struct.unpack_from("<III", data, 4)
+    keys = table(data, key_at)
+
+    def actors(d):
+        """(hash, where the Dynamic block's offset is, the block) of the actors of `fixes`"""
+        for name, kind, value, _ in entries(d, root, keys):
+            if name != "Actors" or kind != 0xC0:
+                continue
+            n = int.from_bytes(d[value + 1:value + 4], "little")
+            vals = value + 4 + (n + 3 & ~3)
+            for i in range(n):
+                if d[value + 4 + i] != 0xC1:
+                    continue
+                ident, dyn = None, None
+                for k, t, v, where in entries(d, struct.unpack_from("<I", d, vals + 4 * i)[0], keys):
+                    if k == "Hash" and t == 0xD5:
+                        ident = struct.unpack_from("<Q", d, v)[0]
+                    elif k == "Dynamic" and t == 0xC1:
+                        dyn = (where, v)
+                if ident in fixes and dyn:
+                    yield ident, dyn[0], dyn[1]
+
+    def values(d, block):
+        return {k: v != 0 for k, t, v, _ in entries(d, block, keys) if t == 0xD0}
+
+    todo = [(h, where, block) for h, where, block in actors(data)
+            if any(values(data, block).get(k) != v for k, v in fixes[h].items())]
+    if not todo:
+        return None
+    before, _, _ = chests(data)
+    out = bytearray(data)
+    out += b"\0" * (-len(out) % 4)
+    for h, where, block in todo:
+        n = int.from_bytes(data[block + 1:block + 4], "little")
+        new = bytearray(data[block:block + 4 + 8 * n])
+        for k, (dk, dt, _, _) in enumerate(entries(data, block, keys)):
+            if dk in fixes[h]:
+                if dt != 0xD0:
+                    raise ValueError("%s of %#x is not a truth value" % (dk, h))
+                struct.pack_into("<I", new, 4 + 8 * k + 4, int(fixes[h][dk]))
+        at = len(out)
+        out += new
+        struct.pack_into("<I", out, where, at)
+    out = bytes(out)
+    for h, _, block in actors(out):
+        if any(values(out, block).get(k) != v for k, v in fixes[h].items()):
+            raise ValueError("the fix of %#x did not read back as written (has it that key?)" % h)
+    after, _, _ = chests(out)
+    if [(c.hash, c.item, c.params, c.event) for c in after] != [(c.hash, c.item, c.params, c.event) for c in before]:
+        raise ValueError("a fix changed a chest")
+    return out
 
 
 def size_entry(size):
@@ -484,11 +550,12 @@ def main():
     placement = PLACEMENT
     try:
         was = open(stamp_path, encoding="utf-8").read()
+        was = was.split("\n")[0] + "\n"   # (the first line: the settings. The second, later: the fixes)
         if was.startswith("placement ") and was.split(" ", 2)[2:] == [rest[1:]] and 1 <= int(was.split()[1]) < PLACEMENT:
             placement = int(was.split()[1])
     except (OSError, ValueError):
         pass
-    stamp = "placement %d%s" % (placement, rest)
+    stamp = "placement %d%sfixes %d\n" % (placement, rest, FIXES_VERSION)   # (the fixes: the same items, written again)
     print("randomizer %s, seed %d, chests %s, dungeon keys %s, major items %s" % (
         "on" if on else "off", seed, ("off", "overworld", "dungeons", "all")[which],
         ("off", "own dungeon", "anywhere (as own dungeon for now)")[keys_mode], "on" if a.event_chests else "off"))
@@ -496,8 +563,6 @@ def main():
         try:
             if open(stamp_path, encoding="utf-8").read() == stamp:
                 print("the mod is already this seed's: nothing to do")
-                if placement < PLACEMENT:
-                    print("(made by an earlier version of the randomizer, and kept as it is: New seed makes one with today's fixes)")
                 return
         except OSError:
             pass
@@ -570,12 +635,15 @@ def main():
         sys.exit("the shuffle lost or made an item: nothing written")
 
     # ---- the map files ----
-    changed, sizes = collections.OrderedDict(), {}
+    changed, sizes, fixes_done = collections.OrderedDict(), {}, 0
     for rel, (data, found) in files.items():
         try:
             new = rewrite(data, gives)
+            fixed = fix(new if new is not None else data)
         except Exception as e:
             sys.exit("%s: %s. Nothing was written to the mod." % (rel, e))
+        if fixed is not None:
+            new, fixes_done = fixed, fixes_done + 1
         if new is not None:
             changed[rel] = new
             sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
@@ -583,6 +651,8 @@ def main():
     print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives), moved, len(changed)))
     for why, n in stays.most_common():
         print("  left alone: %d (%s)" % (n, why))
+    print("map fixes for a shuffled game: %d file%s (the Forest Temple's Stalfos room opens to the Hookshot too)%s" % (
+        fixes_done, "" if fixes_done == 1 else "s", "" if fixes_done else ": NOT FOUND, that room can shut Link in without the Bow"))
     if logic:
         print("logic: on. The %d gating items can be got in this order by the rules (%d rounds):" % (sum(map(len, spheres)), len(spheres)))
         for k, sphere in enumerate(spheres):

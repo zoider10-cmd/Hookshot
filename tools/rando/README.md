@@ -82,8 +82,10 @@ them so that each can be reached with the ones before it. The spoiler log lists 
   - The item slots appeared with the first item; only the D-pad part waited for the game's own Navi prompt.
 - Where the remake differs from the original, found in play:
   - The Forest Temple's Stalfos room (the Bow's chest) cannot be left without the Bow or a key, and the warp
-    songs do not work in it: with another item in the chest the player is shut in. The chest keeps the Bow
-    (`LOCKED_ROOMS`; seeds made before that are left as they were).
+    songs do not work in it: with another item in the chest the player is shut in. The room's shutter is
+    opened by an eye switch (a logic module's doing, `ForestTemple_Room17_ShutterOpen`: not something the map links
+    say), and every seed's mod sets that switch's `isHitHookShot` (`FIXES`), so the Hookshot opens it too. Not yet
+    seen in play. Only the mod has it: with the randomizer off the game's own file is used.
   - **Bombs cannot be used before the Goron's Bracelet.** The Bomb Bag from a Deku Tree chest was in the inventory
     with bombs, and they could be used once Darunia had given the bracelet. The rules allow for it (see `RULES`).
   - Dodongo's Cavern's entrance opens to a bomb flower only (so to the Goron's Bracelet), not to a bomb of Link's own.
