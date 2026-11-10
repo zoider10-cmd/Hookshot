@@ -367,6 +367,8 @@ class LauncherForm : Form {
             "Real time keeps the game at its normal speed even when the frame rate drops." },
         new object[] { "text_speed", "Text speed", new[] { "Normal", "2x", "4x", "Instant" }, new[] { 0, 1, 2, 3 },
             "How fast the dialogue text appears." },
+        new object[] { "fast_forward", "Fast forward", new[] { "Off", "On" }, new[] { 0, 1 },
+            "Hold the ` key (under Esc) or click both sticks in: the game runs 4x, to get through cutscenes." },
         new object[] { "controller_in_background", "Controller in background", new[] { "Off", "On" }, new[] { 0, 1 },
             "Keeps the controller working when the game window is not in front." },
     };
@@ -472,7 +474,7 @@ class LauncherForm : Form {
         for (int i = 0; i < Languages.Length; i++) { langItems[i] = Languages[i][1]; langValues[i] = i; }
         langSel = new Selector { Key = "language", Label = "Language", Items = langItems, Values = langValues, Page = 1, Index = 0,
                                  HelpText = "The game's language: text and voices.",
-                                 R = new RectangleF(cx + colW + 14, 112 + 70, colW, 62) };
+                                 R = new RectangleF(cx, 112 + 2 * 70, colW, 62) };   // (the third line: the four game selectors fill the first two)
         langSel.Changed = s => { if (!loading) SaveLanguage(); };
         widgets.Add(langSel);
         for (int i = 0; i < Fixes.Length; i++) {
@@ -791,7 +793,7 @@ class LauncherForm : Form {
         // (the game's own defaults where the file has nothing yet: options.ini is written by the game's Insert menu)
         var defaults = new Dictionary<string, int> { { "quality_preset", 0 }, { "output_res", 0 }, { "resolution", 0 }, { "upscaling", 2 }, { "sharpness", 30 },
             { "frame_generation", 2 }, { "frame_pacing", 1 }, { "fullscreen", 1 }, { "ultrawide", 0 }, { "handheld_profile", 0 },
-            { "fps_counter", 0 }, { "game_speed", 1 }, { "text_speed", 0 }, { "controller_in_background", 0 } };
+            { "fps_counter", 0 }, { "game_speed", 1 }, { "text_speed", 0 }, { "fast_forward", 0 }, { "controller_in_background", 0 } };
         foreach (var row in RandoRows) defaults[(string)row[0]] = 0;   // (the randomizer: off, every setting the game's own)
         foreach (var kv in defaults) SetSetting(kv.Key, o.ContainsKey(kv.Key) ? o[kv.Key] : kv.Value);
         randoSeed = o.ContainsKey("rando_seed") ? Math.Max(0, o["rando_seed"]) : 0;

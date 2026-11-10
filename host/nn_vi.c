@@ -2,6 +2,7 @@
    layer, and the display's vsync event, signaled at 60 Hz by a host thread. HDR and VRR are reported unsupported,
    so the game takes its SDR path. Frames are paced at the native NVN layer's window acquire (the end of this file). */
 #include "hos.h"
+#include "../gpu/vk/vk_api.h"   /* (HOS_PAD_*: the fast forward's stick clicks) */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdio.h>
@@ -192,6 +193,23 @@ static float text_scale(const char *env, int menu) {
     const int v = env && *env ? atoi(env) : menu;
     return v == 1 ? 2.0f : v == 2 ? 4.0f : v >= 3 ? 1e6f : 1.0f;
 }
+/* The Insert menu's Fast forward (option 18), HOS_FAST_FORWARD=1 over it: while the ` key or both stick clicks are held
+   with the game in front and the menu closed, the game takes its 15-a-second step on every frame (realtime_step): a
+   cutscene goes by four times as fast. Nothing of the game is skipped, so its events still happen in order */
+static int fast_forward_was, fast_forward_reset;
+static int fast_forward_held(void) {
+    int rx_option(int id, int otherwise);
+    uint32_t hos_pad_raw(void);   /* nn_hid.c */
+    static int env = -1;
+    if (env < 0) env = getenv("HOS_FAST_FORWARD") ? atoi(getenv("HOS_FAST_FORWARD")) != 0 : 0;
+    if (!env && !rx_option(18, 0)) return 0;
+    if (rx_option(1, 0)) return 0;   /* (the menu is open) */
+    DWORD pid = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    if (pid != GetCurrentProcessId()) return 0;
+    const uint32_t sticks = 1u << HOS_PAD_LSTICK | 1u << HOS_PAD_RSTICK;
+    return (GetAsyncKeyState(VK_OEM_3) & 0x8000) != 0 || (hos_pad_raw() & sticks) == sticks;
+}
 volatile uint64_t hos_res_module = 0;   /* (f_831f3200's object, whose +0xe5c is the 3D's scale: nx2/oot_patches.py) */
 static void realtime_step(int64_t now) {
     int rx_option(int id, int otherwise);
@@ -235,6 +253,18 @@ static void realtime_step(int64_t now) {
     }
     const uint64_t mod = hos_gfx_module;
     if (!mod) return;
+    if (fast_forward_held()) {   /* (the game's longest step on every frame: four times the speed at 60 frames a second) */
+        int *slot = (int *)GP(mod + 0x2c8);
+        if (*slot >= 15 && *slot <= 60) *slot = 15;
+        fast_forward_was = 1;
+        return;
+    }
+    if (fast_forward_was) {   /* (let go: the real-time average starts again, as after a load) */
+        int *slot = (int *)GP(mod + 0x2c8);
+        if (*slot >= 15 && *slot <= 60) *slot = 60;
+        fast_forward_was = 0;
+        fast_forward_reset = 1;
+    }
     {   /* (hookshot) The frame limiter (f_8042cd20 sleeps to 1 / +0xfc). The engine's adaptive controller writes +0xfc when
            variable refresh is on (+0x231, f_804fc0f0), any rate from 40 up. HOS_FPS_TARGET=<fps>: that rate kept, 0: left alone;
            HOS_FPS_LOG=1: what the game asks for, every 300 presents */
@@ -259,6 +289,7 @@ static void realtime_step(int64_t now) {
     static long long steps;
     const double dt = (now - last) / 1e9;
     last = now;
+    if (fast_forward_reset) { fast_forward_reset = 0; count = next = 0; carry = 0; return; }
     if (dt <= 0 || dt > 0.25) { count = next = 0; carry = 0; return; }   /* (a load: the average starts again) */
     /* (HOS_REALTIME_WINDOW=<1-5>: frames averaged for the step; 1: each step the last frame's own time) */
     static int window = -1;
