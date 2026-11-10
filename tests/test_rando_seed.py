@@ -146,8 +146,9 @@ def main():
     fmap = build({"Actors": [chest(1, "TBox_Rupee_Green", room=17),
                              {"Gyaml": "Obj_EyeSwitch_A_02", "Hash": 0x690a9040fab11585, "Dynamic": dict(eye)},
                              {"Gyaml": "Obj_EyeSwitch_A_02", "Hash": 0x690a9040fab11586, "Dynamic": dict(eye)}], "FilePath": "x"})
-    fixed = seed.fix(fmap)
-    check(fixed is not None and seed.fix(fixed) is None, "the fix was not made, or is made twice")
+    one_fix = {0x690a9040fab11585: {"isHitHookShot": True}}
+    fixed = seed.fix(fmap, one_fix)
+    check(fixed is not None and seed.fix(fixed, one_fix) is None, "the fix was not made, or is made twice")
 
     def hook(d):
         key_at, _, root = struct.unpack_from("<III", d, 4)
@@ -163,7 +164,10 @@ def main():
         return out
     check(hook(fmap)[0x690a9040fab11585] == 0 and hook(fixed) == {0x1000000000000001: None, 0x690a9040fab11585: 1, 0x690a9040fab11586: 0},
           "the fix changed another actor that shares the block, or not its own")
-    check(seed.fix(data) is None, "a map without the actor was changed")
+    check(seed.fix(data) is None and seed.fix(fmap) is None, "a map without the actor was changed")
+    shut = build({"Actors": [chest(1, "TBox_Rupee_Green", room=17), {"Gyaml": "Obj_ForestTemple_SwitchShutter_A_03", "Hash": 0x74fb0489585fe0e2,
+                                                                  "Dynamic": {"IsDisableSaveAndWarp": True, "ShutterEvent": "x"}}], "FilePath": "x"})
+    check(seed.fix(shut) is not None and seed.fix(seed.fix(shut)) is None, "the Stalfos room's shutter still turns the warp songs off")
     check(seed.stays_why(one({"GetEventName": "Get_StoneOfForest_GetSword"}), False) and
           seed.stays_why(one({"GetEventName": "Get_StoneOfForest_GetSword"}), True) is None, "an event's chest takes part only when asked")
 

@@ -61,14 +61,14 @@ KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__Chec
 # quiets Navi. They gave other items in the tests and played as usual)
 # Chests whose room cannot be left without the item they hold (by their event), found in play: with anything else in
 # them the player is shut in. The Forest Temple's Stalfos room: no way out without the Bow or a key, and the warp
-# songs do not work in it. Placement 2 kept their items; since then FIXES opens their rooms another way.
+# songs do not work in it. Placement 2 kept their items; since then FIXES gives their rooms a way out.
 LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # Changes to the map that a shuffled game needs, written with every seed (and so only with the randomizer on):
 # {an actor's hash: {a key of its Dynamic block: the truth value it gets}}.
-# The eye switch over the Stalfos room's shutter (its event: ForestTemple_Room17_ShutterOpen) takes the Hookshot too,
-# which the way into the temple already asks for: the room can be left without the Bow.
-FIXES = {0x690a9040fab11585: {"isHitHookShot": True}}
-FIXES_VERSION = 1
+# The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
+# while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
+FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
+FIXES_VERSION = 2   # (1: the eye switch took the Hookshot)
 PLAIN_EVENTS = ("KokiriForest_TreasureBox_NaviChatOff",)
 DUNGEON_ITEMS = ("Item_Dungeon_SmallKey", "Item_Dungeon_BossKey", "Item_Dungeon_Map", "Item_Dungeon_Compass")
 Chest = collections.namedtuple("Chest", "hash gyaml dyn_where dyn_at item params pos event")
@@ -651,7 +651,7 @@ def main():
     print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives), moved, len(changed)))
     for why, n in stays.most_common():
         print("  left alone: %d (%s)" % (n, why))
-    print("map fixes for a shuffled game: %d file%s (the Forest Temple's Stalfos room opens to the Hookshot too)%s" % (
+    print("map fixes for a shuffled game: %d file%s (the warp songs work in the Forest Temple's Stalfos room)%s" % (
         fixes_done, "" if fixes_done == 1 else "s", "" if fixes_done else ": NOT FOUND, that room can shut Link in without the Bow"))
     if logic:
         print("logic: on. The %d gating items can be got in this order by the rules (%d rounds):" % (sum(map(len, spheres)), len(spheres)))
