@@ -281,7 +281,15 @@ not known without reading that format.
   Megaton Hammer, with all its area can ask for); `SKULLTULA_RULES` is for the ones known better, by hash, and
   `<game folder>/rando/skulltulas_to_check.txt` lists all 100 to be filled in. Only a Skulltula a child's map has is
   given one (`_Child_` in the overworld map's name, or one of the child's four dungeons): its drop is brought in by
-  the Boomerang, seen in play, and the Hookshot bringing an item in has not been seen. Not seen in play yet.
+  the Boomerang, seen in play, and the Hookshot bringing an item in has not been seen.
+- **Seen in play, end to end:** the Lens of Truth, put by the logic on the Zora's River Skulltula in the soft soil in
+  front of the bean seller (past the boulders: bombs, bugs), was got there. On the way the Goron's Bracelet
+  (`Item_Gauntlet_Goron`, not in the pool) was made a pick-up and dropped by the Kokiri Forest night Skulltula
+  (`rando	est_drops.txt`, `rando	est_pickups.txt`): got with its text, and bombs could be used after it, so it is
+  the item that lets Link use them, not the talk with Darunia. The Lens of Truth and the bracelet are small as they
+  hang and a little hard to see.
+- `rando	est_chests.txt` (lines of `<a chest's hash> <an item>`) makes a chest give an item whatever the seed put
+  there: for trying what comes after a gating item without playing up to it.
 - **What each Skulltula asks for** (`SKULLTULA_RULES`, 73 of the 100 by hash) is written from the original game's
   randomizer logic (track-oot.net's `logic/vanilla.min.json`, without tricks; its `database/world.json` has who can
   get each and when). The two games' lists are the same length area by area, Lake Hylia's five and Lon Lon Ranch's

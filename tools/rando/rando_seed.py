@@ -1428,6 +1428,18 @@ def main():
                     drops[int(parts[0], 16)] = parts[1]
     except (OSError, ValueError):
         pass
+    # Another: <game folder>\rando\test_chests.txt, lines of "<a chest's hash> <an item>": that chest gives the item,
+    # whatever the seed put there (a gating item within reach, to try what comes after it). The seed's own count of
+    # each item is not kept by it, and the spoiler's order of the gating items does not know of it.
+    test_chests = {}
+    try:
+        with open(os.path.join(game, "rando", "test_chests.txt"), encoding="utf-8") as f:
+            for line in f:
+                parts = line.split("#")[0].split()
+                if len(parts) == 2:
+                    test_chests[int(parts[0], 16)] = parts[1]
+    except (OSError, ValueError):
+        pass
     # Another: <game folder>\rando\test_pickups.txt, an item's actor on each line (Item_Boomerang): its pack is made a
     # pick-up's (pickup_pack), so that it can be collected where a Skulltula drops it.
     pickups = []
@@ -1444,7 +1456,8 @@ def main():
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + ((" skulltulas %d" + " gated" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
-                                                               (" test pickups " + ",".join(pickups) if pickups else ""))
+                                                               (" test pickups " + ",".join(pickups) if pickups else "") +
+                                                               (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else ""))
     # (the seed in the game folder, made by an earlier version of the rules: made again as it was, not another one
     # under its save. A new seed, or other settings, take the rules of today)
     placement = PLACEMENT
@@ -1566,6 +1579,14 @@ def main():
               "chest's item, %d chests hold a token" % (("", "dungeons", "overworld", "all")[a.skulltulas], len(able),
                                                         len(mine) - len(able), len(skulls), len(skull_drops),
                                           sum(1 for i in gives.values() if i == TOKEN)))
+
+    if test_chests:   # (a test: these chests give what the file says)
+        strangers = sorted(h for h in test_chests if h not in gives)
+        if strangers:
+            sys.exit("rando\\test_chests.txt: no chest that takes part has the hash %s. Nothing written." % ", ".join("%#x" % h for h in strangers))
+        gives.update(test_chests)
+        print("TEST: %d chest%s given an item (rando\\test_chests.txt): %s" % (
+            len(test_chests), "" if len(test_chests) == 1 else "s", ", ".join("%s in %s" % (i, spots[h][0]) for h, i in sorted(test_chests.items()))))
 
     # ---- the map files ----
     changed, sizes, fixes_done, drops_done = collections.OrderedDict(), {}, 0, 0
