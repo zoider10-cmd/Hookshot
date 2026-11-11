@@ -283,6 +283,13 @@ not known without reading that format.
   Hookshot, both seen in play (the Hookshot on the House of Twins' Skulltula, an adult's at night, its Deku Scrub's
   seed pulled in and got with its text, the Skulltula dead afterwards), so the adult's Skulltulas are given gating
   items as the child's are.
+- **Worth watching: the adult's temples' Skulltulas are not known one by one.** The 27 of the Fire, Forest, Water,
+  Shadow and Spirit Temples are not in `SKULLTULA_RULES`: each asks for all its temple can and all a Skulltula's
+  place can (`SKULLTULA_ASKS`), so a gating item only goes to one late. That is safe, never too little, but it is a
+  guess that has not been checked against the remake, and three of the Spirit Temple's are in the child's half
+  and take less. To do: match each to the original's by its room (`skulltulas_to_check.txt` has the rooms), as
+  the others were. Also to watch: the 19 matched as "probably" there, and that the original's surroundings still
+  hold (the bean seller on Zora's River was past the boulders, not before them).
 - **Seen in play, end to end:** the Lens of Truth, put by the logic on the Zora's River Skulltula in the soft soil in
   front of the bean seller (past the boulders: bombs, bugs), was got there. On the way the Goron's Bracelet
   (`Item_Gauntlet_Goron`, not in the pool) was made a pick-up and dropped by the Kokiri Forest night Skulltula
