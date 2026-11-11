@@ -135,6 +135,18 @@ the game's own colour the mod is removed. It has nothing to do with the seed: no
 
 By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron purple`.
 
+**Navi's colour: looked for, not done.** Her textures (`Tex/Npc_Navi_*`, in two states, `.00` and `.01`) hold almost
+no colour, so there is nothing for the textures' way to change. Her model's material animation
+(`Model/Npc_Navi.anim.bfres.zs`: `Npc_Navi_Color` swaps those textures, `Status_Default` and `Status_Red` hold
+colour constants, a warm white and a red) changes nothing that shows: with every colour constant of
+`Status_Default` made green she was as white as before (run without a window). What shows is her glow, a particle
+effect. `Effect/Dm_Npc_Navi` and `Effect/Npc_Fairy` are not read while she flies beside Link (a mod with copies of
+them is not asked for them); her emitter sets (`Npc_Navi_Wait_00`, `_Trail_00`, `_Talk_00`, `_Attention_*`,
+`_LockOn_*`) are in `Effect/static.Nin_Ounce_NVN2.vsetb.byml.zs`, 52 MB, a BYML whose `PtclBin` is one binary of
+Nintendo's Vfx3 (`BFFH`, "Nintendo.Vfx3.ResourceModel") holding all 569 of the game's always-loaded emitter sets.
+Its `Esets` list has each one's name and guid and no place in the binary, so which numbers are Navi's colours is
+not known without reading that format.
+
 ## What was found, and how a map file is changed
 
 - An area's actors are in `Banc/<area>/*.bcett.byml.zs` (BYML version 7, zstd, some with the dictionaries of
