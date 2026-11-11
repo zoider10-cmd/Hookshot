@@ -222,6 +222,11 @@ By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron
   item's pack, and its copy was the one used: the Boomerang, alone of the three, had to be picked up with A until
   the copies were changed too (`DefaultAutoGet`). Leaving the weapon's parts (`Boomerang`,
   `gamebalance_AttackParam`) out of the item's table changed nothing, and was taken back.
+- **All thirteen gating items load made pick-ups** (run without a window, each in a chest of the Great Deku Tree: a
+  chest's item's pack is read as its room loads, a Skulltula's drop's only when it dies). The copies of their pouch
+  files are in `Pouch_*`, `Weapon_*`, `Armor_*` and other `Item_*` packs. Seen collected in play: the three above
+  only. The gold skull's outline around an item is gone since the token's effects files in its pack name the Deku
+  Shield's (`PICKUP_EFFECTS`). Checks: `tests/test_rando_pickups.py`.
 - Seen in play with `Item_Boomerang` made a pick-up: its own chest still gives it, with its scene. Dropped by a Gold
   Skulltula it fell to the ground and Link picked it up, with a short animation over his head and no scene. A world
   rupee (`Obj_Rupee_Purple`) flew out, fell, and was collected with its text. A Heart Piece dropped by a Skulltula on

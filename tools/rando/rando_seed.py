@@ -1189,11 +1189,13 @@ def main():
                 pouch.update((name, data) for name, data in sarc_read(new).items()
                              if "/PouchContentParam/" in name and data != old_parts.get(name, base_parts.get(name)))
             # (A TRY, not seen in play. What an item is in the pouch is a file other packs carry a copy of, under the
-            # same name: the item in the menu's (Pouch_*) and the weapon in the hand's (Weapon_*). The Boomerang,
+            # same name: the item in the menu's (Pouch_*), the weapon in the hand's (Weapon_*) and more. The Boomerang,
             # made a pick-up just as the Megaton Hammer was, was not collected by touching it and the Hammer was:
             # a child has the Boomerang's weapon, not the Hammer's. So the copies are changed with it.)
             for n in sorted(os.listdir(os.path.join(romfs, "Pack", "Actor"))) if pouch else []:
-                if n.startswith(("Pouch_", "Weapon_")) and n.endswith(".pack.zs"):
+                # (every pack found with such a copy has one of these names: Armor_* is boots and gauntlets worn)
+                if (n.startswith(("Pouch_", "Weapon_", "Armor_", "Item_")) and n.endswith(".pack.zs")
+                        and "Pack/Actor/" + n not in pack_files):
                     parts = sarc_read(pack(n[:-len(".pack.zs")]))
                     same = [name for name in pouch if name in parts and parts[name] != pouch[name]]
                     if same:
