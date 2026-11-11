@@ -274,8 +274,13 @@ By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron
   made the item and put on the vines above him (a heart once taken, and a prop, are not made), and the stick pushed
   by `HOS_INPUT_LIVE` once the room is in: a real token and a first seed were got with their text as he climbed, a
   green rupee and a bomb bundle were passed by (that save has no Bomb Bag: see above).
-- **Open: the Kokiri Sword's chest holding another item** still plays Link putting the sword on his back, and he can
-  use the sword until the next load; it is not in the inventory.
+- **The Kokiri Sword's chest holding another item** played Link putting the sword on his back all the same, and he
+  could use a sword until the next load, with none in the inventory (seen in play). The chest starts an event of its
+  own, `GetSword` of `Get_StoneOfForest.bfevfl`: the chest's opening (`Dm_SY_Treasurebox`), then the sword's cutscene
+  (`Dm_Kokiri_0063`), then Navi if Mido is still in the way. Where the chest holds another item the first now goes on
+  to what follows the second (`sword_chest_plain`, one number changed; `tests/test_rando_swordchest.py`). Seen in
+  play: the chest gives its item, and Link has no sword after it. The other chests that start an event have not been looked at for the same: most of their events are not
+  in a flow of their own name.
 - Seen in play with `Item_Boomerang` made a pick-up: its own chest still gives it, with its scene. Dropped by a Gold
   Skulltula it fell to the ground and Link picked it up, with a short animation over his head and no scene. A world
   rupee (`Obj_Rupee_Purple`) flew out, fell, and was collected with its text. A Heart Piece dropped by a Skulltula on

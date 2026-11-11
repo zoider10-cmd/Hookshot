@@ -73,7 +73,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 2   # (1: the eye switch took the Hookshot)
+FIXES_VERSION = 3   # (1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -94,6 +94,13 @@ FLAG_LIST = "GameData"   # (the folder of the romfs: GameDataList.Product.<n>.by
 # --skip-intro starts the first at 14 and sends 23 on to 19: what the flow does after each cutscene, without it.
 OPENING = "Event/EventFlow/OpeningEvent.bfevfl.zs"
 PLAIN_EVENTS = ("KokiriForest_TreasureBox_NaviChatOff",)
+# The Kokiri Sword's chest starts an event of its own (GetSword, of the flow below): the chest is opened
+# (Dm_SY_Treasurebox, as every chest's), then Link puts the sword on his back (Dm_Kokiri_0063), then Navi speaks if
+# Mido is still in the way. With another item in the chest the second still played: Link put a sword on his back
+# that he did not have, and could use it until the next load, with none in the inventory (seen in play). So where
+# the chest holds another item the event goes from the first cutscene to what follows the second (sword_chest_plain).
+SWORD_EVENT = "Get_StoneOfForest_GetSword"
+SWORD_FLOW = "Event/EventFlow/Get_StoneOfForest.bfevfl.zs"
 DUNGEON_ITEMS = ("Item_Dungeon_SmallKey", "Item_Dungeon_BossKey", "Item_Dungeon_Map", "Item_Dungeon_Compass")
 Chest = collections.namedtuple("Chest", "hash gyaml dyn_where dyn_at item params pos event")
 
@@ -980,6 +987,41 @@ def opening_skip(data):
     return bytes(out)
 
 
+def sword_chest_plain(data):
+    """Get_StoneOfForest (a BFEVFL file) with the Kokiri Sword's chest's own cutscene passed over: the new bytes, of the
+    same size. Every step it relies on is checked first (see SWORD_EVENT, above): a flow that is not the one this
+    was written for is an error."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+    if data[:6] != b"BFEVFL" or u16(0x20) != 1:
+        raise ValueError("not an event flow file of one flowchart")
+    chart = u64(u64(0x28))
+    if data[chart:chart + 4] != b"EVFL" or u16(chart + 0x16) != 227 or u16(chart + 0x18) != 27:
+        raise ValueError("the flowchart is not the one of 227 events and 27 entry points")
+    events, entries = u64(chart + 0x30), u64(chart + 0x40)
+    event = lambda i: events + 0x30 * i
+
+    def text(ptr):
+        return bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if ptr else ""
+
+    def plays(i):
+        """the cutscene an EventTransition step plays: the string of its parameters that names a Dm_ flow"""
+        at = u64(event(i) + 0x10)
+        for k in range(u16(at + 2) if at else 0):
+            item = u64(at + 0x10 + 8 * k)
+            if data[item] in (0, 5) and u16(item + 2) == 1 and text(u64(item + 0x10)).startswith("Dm_"):
+                return text(u64(item + 0x10))
+        return ""
+
+    step = lambda i: (data[event(i) + 8], u16(event(i) + 0x0a))   # (its kind: 0 an action, 1 a switch; its next step)
+    if (u16(entries + 0x20 * 7 + 0x1c) != 48 or step(48) != (0, 47) or step(47) != (0, 88) or plays(47) != "Dm_SY_Treasurebox" or
+            step(88) != (0, 211) or plays(88) != "Dm_Kokiri_0063" or data[event(211) + 8] != 1):
+        raise ValueError("the sword chest's steps are not the ones this was written for")
+    out = bytearray(data)
+    struct.pack_into("<H", out, event(47) + 0x0a, 211)     # (the chest's opening goes on to what follows the sword's cutscene)
+    return bytes(out)
+
+
 def size_entry(size, extra=264):
     """what the game's size table holds for a file of `size` bytes unpacked: the size rounded up to 32, and 264 for a
     map file (every one looked at had exactly that), 312 for an actor's pack (PACK_EXTRA: six looked at)"""
@@ -1507,6 +1549,13 @@ def main():
         except (OSError, ValueError, struct.error) as e:
             sys.exit("%s: %s. Nothing written." % (OPENING, e))
         print("a new game starts without its two opening cutscenes")
+    # (the Kokiri Sword's chest with another item in it: without the cutscene of the sword put on Link's back)
+    if any(spots[h][6] == SWORD_EVENT and item != S for h, item in gives.items()):
+        try:
+            flag_files[SWORD_FLOW] = sword_chest_plain(unpack(open(os.path.join(romfs, *SWORD_FLOW.split("/")), "rb").read(), zs, dicts))
+        except (OSError, ValueError, struct.error) as e:
+            sys.exit("%s: %s. Nothing written." % (SWORD_FLOW, e))
+        print("the Kokiri Sword's chest holds another item: it opens without the cutscene of the sword")
     for rel, data in list(changed.items()) + list(new_tables.items()) + list(flag_files.items()) + list(pack_files.items()):
         out = os.path.join(mod, "romfs", *rel.split("/"))
         os.makedirs(os.path.dirname(out), exist_ok=True)
