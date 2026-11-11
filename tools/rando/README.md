@@ -247,11 +247,26 @@ By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron
   one's actor changed, in its own pack's copy, and the other's pack is made a pick-up with it (`pickup_family`). What
   is got by touching it already (a rupee, arrows, a magic jar: `DefaultAutoGet` in its pouch file or that one's
   parent) keeps its pouch file. Checks: `tests/test_rando_skulltulas.py`.
-- **Seen in play, Gold Skulltulas: All.** A chest gave a gold token with its text, and the count went up. A Skulltula
-  dropped a Deku Scrub's seed: it stayed in place, turned, and was collected by touch. A red rupee and a bomb bundle
-  (both `IsBundle` in their pouch file) were collected by touch too, but did not turn, and their model stayed where
-  it was afterwards, not to be touched again. **Open.** Not the pick-up itself: a red rupee put in the map in front
-  of Link and walked into without a window was collected with its text and was gone.
+- **A Skulltula is done with by its drop's get event, and the game runs that only the first time an item is got.**
+  Seen in play, Gold Skulltulas: All: a chest gave a gold token with its text, and the count went up. The first Deku
+  Scrub's seed dropped by a Skulltula stayed in place, turned, and was collected by touch with its text; the next
+  ones were put in the pouch without it, stayed where they were, and their Skulltulas were back when the Great Deku
+  Tree was entered again, for another seed each time. So were a rupee and a bomb bundle, which the save had had
+  before. With the event each time (`PlayGetEventManyTimes`, and `GetType` "Large" where the pouch file names none:
+  every item of the game's own that is got each time has both; `pickup_pack`'s `each_time`) four seeds in a row
+  were each got with their text, and their Skulltulas stayed dead.
+- **Only the Deku Scrub's seed goes to a Skulltula for now** (`SKULLTULA_ITEMS`; the others in
+  `SKULLTULA_ITEMS_NOT_YET`). A rupee's pouch file is one every world rupee's pack has a copy of, and the first one
+  loaded is the one used; the bundles (bombs, arrows, nuts, sticks) have not been seen got each time. Tried on the
+  way, and no answer: getting a bundle as a token is got (`GetType` "Medium") with the event each time (still passed
+  by on vines), the token's animations (`ASRef`), what a world rupee thinks with (`AIInfoRef` DropItem: it fell),
+  making it from `Obj_Item_Base` (not there when its Skulltula died), and dropping a world rupee (`Obj_Rupee_*`) in a
+  chest rupee's place (it fell into water, and its Skulltula was back each time).
+- **Testing a pick-up without the player.** A save made with Link at the foot of the Great Deku Tree's first vines
+  (his place is three floats at 0x1b4b0 of `progress.sav`), a map file with an `Enemy_Skulltula` of its Dynamic file
+  made the item and put on the vines above him (a heart once taken, and a prop, are not made), and the stick pushed
+  by `HOS_INPUT_LIVE` once the room is in: a real token and a first seed were got with their text as he climbed, a
+  green rupee and a bomb bundle were passed by.
 - **Open: the Kokiri Sword's chest holding another item** still plays Link putting the sword on his back, and he can
   use the sword until the next load; it is not in the inventory.
 - Seen in play with `Item_Boomerang` made a pick-up: its own chest still gives it, with its scene. Dropped by a Gold

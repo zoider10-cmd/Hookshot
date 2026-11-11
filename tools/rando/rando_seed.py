@@ -494,9 +494,22 @@ TOKEN = "Item_Token_Gold"
 # reached yet. No gating item and no dungeon's key (the rules know no Skulltula's place: many ask for the Boomerang,
 # the Hookshot or the night), and no Heart Piece (it hangs where it is put and is taken with A from beside it: one
 # dropped on a wall could not be reached, seen in play).
-SKULLTULA_ITEMS = ("TBox_Rupee_Green", "TBox_Rupee_Blue", "TBox_Rupee_Red", "TBox_Rupee_Purple", "TBox_Rupee_Gold",
-                   "Item_ScrubBusinessSeed", "Item_BombBundle_Small", "Item_BombchuBundle_Small", "TBox_ArrowBundle_Medium",
-                   "TBox_ArrowBundle_Large", "TBox_DekuNutBundle", "Item_DekuStickBundle_Small", "Tbox_MagicJar_Large")
+# And for now only the Deku Scrub's seed, of the chests' rupees and supplies. A Skulltula is done with when its drop
+# is got as a token is: the drop's get event runs, and the drop is gone. The game runs an item's get event the first
+# time it is got and not again, so the second seed of a game was put in the pouch and stayed where it was, and its
+# Skulltula was back when the room was entered again, for another seed. With the event each time (pickup_pack's
+# each_time) four seeds in a row were each got with their text and their Skulltulas stayed dead (seen in play).
+# The others are kept from the Skulltulas until they are seen to do the same: a rupee's pouch file is one every
+# world rupee has a copy of, and a bomb bundle with the event each time and got as a token is ("Medium") was still
+# passed by on vines (without a window). What was tried on the way and did not help, or was no answer: the token's
+# animations; what a world rupee thinks with (AIInfoRef DropItem: it fell); made from Obj_Item_Base, a bomb bundle
+# was not there when its Skulltula died; a world rupee (Obj_Rupee_*) dropped in a chest rupee's place fell into
+# water, and its Skulltula was back each time.
+SKULLTULA_ITEMS = ("Item_ScrubBusinessSeed",)
+# (the others a Skulltula was given at first)
+SKULLTULA_ITEMS_NOT_YET = ("TBox_Rupee_Green", "TBox_Rupee_Blue", "TBox_Rupee_Red", "TBox_Rupee_Purple", "TBox_Rupee_Gold",
+                           "Item_BombBundle_Small", "Item_BombchuBundle_Small", "TBox_ArrowBundle_Medium", "TBox_ArrowBundle_Large",
+                           "TBox_DekuNutBundle", "Item_DekuStickBundle_Small", "Tbox_MagicJar_Large")
 
 
 def skulltulas(data):
@@ -758,7 +771,11 @@ def pickup_family(item, item_pack):
     return [name.split("/")[1].split(".")[0] for name, _, _ in actor_chain(item, sarc_read(item_pack)) if name != chest]
 
 
-def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=PICKUP_EFFECTS):
+# How an item is got, in its pouch file: "Large" is Link holding it up (the hash of the word, as the game's files have it)
+GET_LARGE = 1746592023
+
+
+def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=PICKUP_EFFECTS, each_time=False):
     """An item's pack (a SARC archive) made into a pick-up's. Its actor takes the base's as its parent in place of
     Item_EventObject_Base (the model a chest's get scene shows, with nothing to touch), and the pack gets the files
     of the base's that it lacks. An item made from another item (a red rupee from a green one) has that one's
@@ -769,16 +786,40 @@ def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=
         missing one as the actor was made (a rupee's table has the base's as its parent);
       - what it is in the pouch is got by touching it (DefaultAutoGet, as a token's and a rupee's are), not by
         standing beside it and pressing A. One that says so already, itself or by its parent, is left as it is.
+    each_time: its get event runs each time it is got, not only the first (PlayGetEventManyTimes, and how it is got
+    where its pouch file does not say: every item of the game's own that is got each time says both). A pick-up made
+    from the token is done with by its get event: the second Deku Scrub's seed of a game was put in the pouch and
+    stayed where it was, and its Skulltula was back when the room was entered again (seen in play).
     Seen in play with the Boomerang, the Megaton Hammer and the small Bomb Bag: the chest still gives the item with
     its scene, and dropped by a Gold Skulltula it stays there and is collected by touching it, with its text."""
     files, base = sarc_read(item_pack), sarc_read(base_pack)
     own = "Actor/%s.engine__actor__ActorParam.bgyml" % item
+    chest_actor = "Actor/%s.engine__actor__ActorParam.bgyml" % CHEST_BASE
+    if own not in files:
+        raise ValueError("%s: its pack has no actor of that name" % item)
+    chain = actor_chain(item, files)
+
+    def pouch_says(key):
+        """what the item's pouch file says of `key`, itself or the nearest parent that does: True, False or None"""
+        name, seen = "", []
+        for _, tree, _ in chain:
+            ref = tree[1].get("Components", ("dict", {}))[1].get("PouchContentRef")
+            if ref and ref[0] == "string" and ref[1]:
+                name = ref_file(ref[1])
+                break
+        while name in files and name not in seen:
+            seen.append(name)
+            sub, _ = byml_parse(files[name])
+            if key in sub[1]:
+                return any(sub[1][key][1])
+            parent = sub[1].get("$parent")
+            name = ref_file(parent[1]) if parent and parent[0] == "string" else ""
+        return None
+
     base_actor = "Actor/%s.engine__actor__ActorParam.bgyml" % base_name
     base_table = "GameParameter/GameParameterTable/%s.engine__actor__GameParameterTable.bgyml" % base_name
-    chest_actor = "Actor/%s.engine__actor__ActorParam.bgyml" % CHEST_BASE
-    if own not in files or base_actor not in base or base_table not in base:
-        raise ValueError("%s: its pack, or the base's, has no actor or no table of game parameters of that name" % item)
-    chain = actor_chain(item, files)
+    if base_actor not in base or base_table not in base:
+        raise ValueError("%s: the base's pack has no actor or no table of game parameters of %s" % (item, base_name))
     top = next((k for k, (_, tree, _) in enumerate(chain)
                 if tree[1].get("$parent", ("", ""))[0] == "string" and ref_file(tree[1]["$parent"][1]) == chest_actor), None)
     if top is None:
@@ -803,19 +844,16 @@ def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=
         if "$parent" not in sub[1]:
             sub[1]["$parent"] = ("string", "Work/" + base_table.replace(".bgyml", ".gyml"))
             files[name] = byml_build(sub, sub_version)
-    first = name = part("PouchContentRef")
-    said, seen = None, []
-    while name in files and name not in seen:   # (what it says of touching, itself or the nearest parent that does)
-        seen.append(name)
-        sub, _ = byml_parse(files[name])
-        if "DefaultAutoGet" in sub[1]:
-            said = any(sub[1]["DefaultAutoGet"][1])
-            break
-        parent = sub[1].get("$parent")
-        name = ref_file(parent[1]) if parent and parent[0] == "string" else ""
-    if first and not said:
+    first = part("PouchContentRef")
+    if first and not pouch_says("DefaultAutoGet"):
         sub, sub_version = byml_parse(files[first])
         sub[1]["DefaultAutoGet"] = (0xD0, struct.pack("<I", 1))
+        files[first] = byml_build(sub, sub_version)
+    if first and each_time and not pouch_says("PlayGetEventManyTimes"):
+        sub, sub_version = byml_parse(files[first])
+        sub[1]["PlayGetEventManyTimes"] = (0xD0, struct.pack("<I", 1))
+        if pouch_says("GetType") is None:
+            sub[1]["GetType"] = (0xD3, struct.pack("<I", GET_LARGE))
         files[first] = byml_build(sub, sub_version)
     for name, data in base.items():
         files.setdefault(name, data)
@@ -1390,7 +1428,7 @@ def main():
                             if n not in pickups and os.path.isfile(os.path.join(romfs, "Pack", "Actor", n + ".pack.zs"))]
             for item in pickups:
                 old = pack(item)
-                new = pickup_pack(item, old, base)
+                new = pickup_pack(item, old, base, each_time=item in SKULLTULA_ITEMS)
                 old_parts = sarc_read(old)
                 pack_parts.update(name for name, data in sarc_read(new).items()   # (the files changed in it)
                                   if data != old_parts.get(name, base_parts.get(name)))
@@ -1452,7 +1490,7 @@ def main():
         spoiler += ["", "Gold Skulltulas (area, position -> what it drops)"]
         for h in sorted(skulls, key=lambda q: (skulls[q][0], str(skulls[q][1]), q)):
             area, pos, can, _ = skulls[h]
-            spoiler.append("  %-22s %-26s -> %s" % (area, str(pos), drops.get(h, "(its token)" if can else "(its token: cannot be given a drop)")))
+            spoiler.append("  %-22s %-26s -> %s" % (area, str(pos), skull_drops.get(h) or drops.get(h, "(its token)" if can else "(its token: cannot be given a drop)")))
     if a.dry_run:
         print("\n".join(spoiler[:50]))
         print("(dry run: nothing written)")

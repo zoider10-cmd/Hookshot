@@ -86,7 +86,7 @@ def main():
 
     # ---- the tokens and the chests' rupees and supplies change places ----
     gives = collections.OrderedDict()
-    kinds = list(seed.SKULLTULA_ITEMS) + ["Item_Hammer", "Item_Dungeon_SmallKey", "Obj_Heart_Piece", "TBox_Shield_Deku", "Item_Hookshot"]
+    kinds = list(seed.SKULLTULA_ITEMS) * 6 + list(seed.SKULLTULA_ITEMS_NOT_YET) + ["Item_Hammer", "Item_Dungeon_SmallKey", "Obj_Heart_Piece", "TBox_Shield_Deku", "Item_Hookshot"]
     for k in range(120):
         gives[k] = kinds[k % len(kinds)]
     skulls = [1000 + k for k in range(100)]
@@ -103,7 +103,7 @@ def main():
         tokens_in_chests += tokens
         again = seed.mix_skulltulas(random.Random("t%d" % n), gives, skulls)
         check(again == (new, drops), "the same seed is not the same mix")
-    check(tokens_in_chests > 30 * 20, "the mix moves few tokens into chests")
+    check(tokens_in_chests > 30 * 10, "the mix moves few tokens into chests")
     check(seed.mix_skulltulas(random.Random("x"), gives, []) == (dict(gives), {}), "no Skulltula: nothing changes")
     check(not set(seed.SKULLTULA_ITEMS) & (set(seed.PROGRESSION) | set(seed.DUNGEON_ITEMS) | {"Obj_Heart_Piece"}),
           "a gating item, a dungeon's key or a Heart Piece may be given to a Skulltula")
@@ -116,7 +116,7 @@ def main():
                                           "Components": {"PouchContentRef": "?" + pouch % "Red"}})
     item[actor % "TBox_Green"] = packs.byml({"$parent": chest_base, "Components": {"PouchContentRef": "?" + pouch % "Default"}})
     item[actor % seed.CHEST_BASE] = packs.byml({"Components": {"PouchContentRef": "?" + pouch % "None"}})
-    item[pouch % "Red"] = packs.byml({"$parent": "Work/" + (pouch % "Default").replace(".bgyml", ".gyml"), "IsBundle": True})
+    item[pouch % "Red"] = packs.byml({"$parent": "Work/" + (pouch % "Default").replace(".bgyml", ".gyml"), "EnableStock": False})
     item[pouch % "Default"] = packs.byml({"DefaultAutoGet": True})
     _, base = packs.packs()
     check(seed.pickup_family("TBox_Red", seed.sarc_write(item)) == ["TBox_Red", "TBox_Green"], "the items an item is made from")
@@ -130,6 +130,7 @@ def main():
     new = seed.sarc_read(seed.pickup_pack("TBox_Red", seed.sarc_write(item), seed.sarc_write(base)))
     check(packs.read(new[pouch % "Red"]).get("DefaultAutoGet") is True and new[pouch % "Default"] == item[pouch % "Default"],
           "what is not got by touching it: the item's own file says so now, not its parent's")
+    check(not set(seed.SKULLTULA_ITEMS) & set(seed.SKULLTULA_ITEMS_NOT_YET), "an item kept from the Skulltulas is given to them")
     stray = collections.OrderedDict([(actor % "Obj_Thing", packs.byml({"$parent": "Work/Actor/Other.engine__actor__ActorParam.gyml"}))])
     try:
         seed.pickup_pack("Obj_Thing", seed.sarc_write(stray), seed.sarc_write(base))

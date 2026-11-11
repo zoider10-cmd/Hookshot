@@ -123,6 +123,17 @@ def main():
         check(read(new[LINK % (kind, BASE, kind)]) == {"UserName": seed.PICKUP_EFFECTS}, "the base's %s still names the base" % kind)
     check(new["Component/ModelInfo/Item_Thing.bgyml"] == item["Component/ModelInfo/Item_Thing.bgyml"], "the item's model changed")
 
+    # (got each time, for what a Skulltula drops: the get event each time, and how it is got where the file does not say)
+    check("PlayGetEventManyTimes" not in pouch and "GetType" not in pouch, "an item not asked to be got each time was made so")
+    each = seed.sarc_read(seed.pickup_pack("Item_Thing", packed, seed.sarc_write(base), each_time=True))
+    pouch = read(each[POUCH % "Thing"])
+    check(pouch["PlayGetEventManyTimes"] is True and pouch["GetType"] == seed.GET_LARGE and pouch["DefaultAutoGet"] is True,
+          "an item got each time: its get event each time, and got as the game's own such items are")
+    said = collections.OrderedDict(item)
+    said[POUCH % "Thing"] = byml({"GetType": 7, "IsOpenActionGuide": True})
+    pouch = read(seed.sarc_read(seed.pickup_pack("Item_Thing", seed.sarc_write(said), seed.sarc_write(base), each_time=True))[POUCH % "Thing"])
+    check(pouch["PlayGetEventManyTimes"] is True and pouch["GetType"] == 7, "how an item is got was changed where its file says it")
+
     # (a table that has a parent keeps it; a pack without the actor is not taken)
     kept = collections.OrderedDict(item)
     kept[TABLE % "Item_Thing"] = byml({"$parent": "Work/Other.gyml"})
