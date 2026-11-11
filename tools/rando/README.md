@@ -34,7 +34,8 @@ By hand, for trying things: `python -I tools/rando/rando_seed.py "<game folder>\
 in a seed is not loaded into a game whose chests are the game's own, nor the other way round. The launcher's **Saves**
 button opens the one the next Play uses, and a save dropped in `SAVE FOLDER` is imported into that one. Every seed
 shares the one randomizer folder. Saves made with the randomizer on before this (Mako 3.0.1 and the first 3.3 merge)
-are in `user/save`: copy that folder to `user/save_rando` once to go on with them.
+are in `user/save`: copy that folder to `user/save_rando` once to go on with them. Seen in play: a save made with the randomizer on
+is not listed with it off, and is there again with it on.
 
 | Setting | What `rando_seed.py` does with it |
 |---|---|
