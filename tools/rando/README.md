@@ -279,7 +279,7 @@ By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron
   it is, and the original's name for it. The remake's own, from the player and the guides: the Hyrule Field
   southern grotto's crate (the adult's, after the child breaks the rock and kills the Skullwalltula; the grotto by
   the Gerudo Valley entrance has none), the tunnel on Lake Hylia's south-west shore, the vines inside Lon Lon
-  Ranch's south-west tower, soft soil in front of the bean seller on Zora's River, and the Great Deku Tree's fourth,
+  Ranch's south-west tower, soft soil in front of the bean seller on Zora's River (past the boulders here: bombs), and the Great Deku Tree's fourth,
   which takes no bombs. The adult's temples' are not in the table: each asks for all its temple can.
 - **Kept from the Skulltulas** (`SKULLTULA_ITEMS_NOT_YET`): rupees, arrows and the magic jar. Their pouch file is one
   the game's own pick-up of the same thing has a copy of, and the first one loaded is the one used. Tried on the way,

@@ -666,7 +666,7 @@ SKULLTULA_RULES = {
     # ZoraRiver
     0x97824c2ffeaa877c: ADULT,                 # adult, hookshot, night
     0x8325fea55edfbe97: ADULT,                 # adult, hookshot, night
-    0xabad0e9f0d471156: CHILD,                 # child, bugs
+    0xabad0e9f0d471156: CHILD | {BB},          # child, bugs, bombs: past the boulders (seen in play)
     0x78ae4fd90b3cfaaa: CHILD | {BB},          # child, night, sword or slingshot, bombs (past the boulders)
 }
 SKULLTULA_GATING_SHARE = 0.35   # (of the gating items, how many are tried on a Skulltula)
