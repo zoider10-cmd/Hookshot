@@ -274,8 +274,8 @@ not known without reading that format.
   before. With the event each time (`PlayGetEventManyTimes`, and `GetType` "Large" where the pouch file names none:
   every item of the game's own that is got each time has both; `pickup_pack`'s `each_time`) four seeds in a row
   were each got with their text, and their Skulltulas stayed dead.
-- **What goes to a Skulltula** (`SKULLTULA_ITEMS`): the Deku Scrub's seed and the bomb, Bombchu, Deku Nut and Deku
-  Stick bundles. Seen in play with the event each time: Deku Nut bundles were each got with their text, and their
+- **What goes to a Skulltula** (`SKULLTULA_ITEMS`): the Deku Scrub's seed, the bomb, Bombchu, Deku Nut and Deku
+  Stick bundles, the arrow bundles and the magic jar. Seen in play with the event each time: Deku Nut bundles were each got with their text, and their
   Skulltulas stayed dead. **A bundle Link has nothing to carry in is not got at all**: a bomb bundle without a Bomb
   Bag, and a Deku Nut bundle in a game that had had no nuts yet, stayed where they were with nothing given, and
   their Skulltulas were back when the room was entered again; the nuts were got once some had been bought. It is
@@ -325,8 +325,7 @@ not known without reading that format.
   the Gerudo Valley entrance has none), the tunnel on Lake Hylia's south-west shore, the vines inside Lon Lon
   Ranch's south-west tower, soft soil in front of the bean seller on Zora's River (past the boulders here: bombs), and the Great Deku Tree's fourth,
   which takes no bombs.
-- **Kept from the Skulltulas** (`SKULLTULA_ITEMS_NOT_YET`): rupees, arrows and the magic jar. Their pouch file is one
-  the game's own pick-up of the same thing has a copy of, and the first one loaded is the one used. Tried on the way,
+- **Kept from the Skulltulas** (`SKULLTULA_ITEMS_NOT_YET`): rupees (below). Tried on the way with the bundles,
   and no answer: getting a bundle as a token is got (`GetType` "Medium") with the event each time, the token's
   animations (`ASRef`), what a world rupee thinks with (`AIInfoRef` DropItem: it fell), making it from
   `Obj_Item_Base` (not there when its Skulltula died), and dropping a world rupee (`Obj_Rupee_*`) in a chest rupee's
@@ -341,9 +340,13 @@ not known without reading that format.
   stayed, with the game's own pouch file unchanged, with one of its own, and with one of its own that asks for its
   get event each time (all without a window, on a save that had picked up rupees before). The red one taken with its
   text earlier was the first of its colour in its save. So a rupee's get event is not run a second time even when
-  its pouch file asks for it, and a pick-up made from the token waits for it. Arrows and the magic jar were not
-  tried: the save with open ground has no bow and no magic meter, and they are not taken without. All three stay in
-  `SKULLTULA_ITEMS_NOT_YET`; `PICKUP_OWN_POUCH` is there for when they are.
+  its pouch file asks for it, and a pick-up made from the token waits for it. Rupees stay in
+  `SKULLTULA_ITEMS_NOT_YET`.
+- **A chest's arrows and magic jar go to the Skulltulas**, each with a pouch file of its own (`PICKUP_OWN_POUCH`) and
+  its get event each time. On a save with a bow and a magic meter that had had both before, two medium arrow bundles
+  in a line were each got with their text, and two large magic jars (without a window). The large arrow bundle is
+  given on the strength of the medium one. Without a bow, or without magic, they are not taken, as bombs are not
+  without a bag.
 - **Testing a pick-up without the player.** A save made with Link at the foot of the Great Deku Tree's first vines
   (his place is three floats at 0x1b4b0 of `progress.sav`), a map file with an `Enemy_Skulltula` of its Dynamic file
   made the item and put on the vines above him (a heart once taken, and a prop, are not made), and the stick pushed

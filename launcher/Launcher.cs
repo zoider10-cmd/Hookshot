@@ -663,7 +663,7 @@ class LauncherForm : Form {
         new object[] { "rando_chests", "Chests", new[] { "Off", "Overworld", "Dungeons", "All" }, new[] { 0, 1, 2, 3 },
             "Which treasure chests hold a shuffled item. All is every chest in the game." },
         new object[] { "rando_skulltulas", "Gold Skulltulas", new[] { "Off", "Dungeons", "Overworld", "All" }, new[] { 0, 1, 2, 3 },
-            "Which Gold Skulltulas take part: their tokens change places with the chests' supplies (seeds, bombs, nuts, sticks). Needs Chests." },
+            "Which Gold Skulltulas take part: their tokens change places with the chests' supplies (all but rupees). Needs Chests." },
         new object[] { "rando_quests", "Quest rewards", new[] { "Off", "On" }, new[] { 0, 1 },
             "What characters give you is shuffled: gifts, side quests, mini-games and the Gold Skulltula family's rewards." },
         new object[] { "rando_songs", "Songs", new[] { "Off", "Song spots", "Anywhere" }, new[] { 0, 1, 2 },

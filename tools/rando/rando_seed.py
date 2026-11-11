@@ -510,16 +510,19 @@ TOKEN = "Item_Token_Gold"
 # a game that had had no nuts yet, stayed where they were with nothing given, and their Skulltulas were back when
 # the room was entered again (seen in play; the nuts were got once some had been bought). It is there for later, as
 # a token out of reach is. The stick and Bombchu bundles are given on the strength of the nuts: not seen yet.
+# A chest's arrows and magic jar have the pouch file of the world's own (a world arrow bundle's, a jar's), so each is
+# given one of its own (PICKUP_OWN_POUCH) with the event each time: two arrow bundles in a line, and two jars, were
+# each got with their text (without a window, on a save that had had both before). The large arrow bundle is given on
+# the strength of the medium one.
 SKULLTULA_ITEMS = ("Item_ScrubBusinessSeed", "Item_BombBundle_Small", "Item_BombchuBundle_Small", "TBox_DekuNutBundle",
-                   "Item_DekuStickBundle_Small")
-# The others a Skulltula was given at first, kept from it: their pouch file is one the game's own pick-up of the same
-# thing has a copy of (a world rupee's, a world arrow bundle's, a magic jar's), and the first one loaded is the one
-# used, so the event each time may not be theirs, or would be every world rupee's too. What was tried on the way
-# with them and did not help, or was no answer: the token's animations; what a world rupee thinks with (AIInfoRef
-# DropItem: it fell); made from Obj_Item_Base, a bomb bundle was not there when its Skulltula died; a world rupee
-# (Obj_Rupee_*) dropped in a chest rupee's place fell into water, and its Skulltula was back each time.
-SKULLTULA_ITEMS_NOT_YET = ("TBox_Rupee_Green", "TBox_Rupee_Blue", "TBox_Rupee_Red", "TBox_Rupee_Purple", "TBox_Rupee_Gold",
-                           "TBox_ArrowBundle_Medium", "TBox_ArrowBundle_Large", "Tbox_MagicJar_Large")
+                   "Item_DekuStickBundle_Small", "TBox_ArrowBundle_Medium", "TBox_ArrowBundle_Large", "Tbox_MagicJar_Large")
+# Kept from the Skulltulas: the rupees. A chest's green rupee made a pick-up was walked through and stayed, with the
+# game's own pouch file, with one of its own, and with one of its own that asks for its get event each time (without
+# a window, on a save that had picked up rupees before): a rupee's get event is not run a second time whatever its
+# pouch file says, and a pick-up made from the token waits for it. What else was tried with them on the way: what a
+# world rupee thinks with (AIInfoRef DropItem: it fell); a world rupee (Obj_Rupee_*) dropped in a chest rupee's place
+# (it fell into water, and its Skulltula was back each time).
+SKULLTULA_ITEMS_NOT_YET = ("TBox_Rupee_Green", "TBox_Rupee_Blue", "TBox_Rupee_Red", "TBox_Rupee_Purple", "TBox_Rupee_Gold")
 
 
 def skulltulas(data):
