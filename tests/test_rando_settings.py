@@ -72,7 +72,7 @@ def sources(rows):
     check('os.path.join(ROOT, "tools", "rando", "rando_seed.py")' in make and 'os.path.join(out, "rando", "rando_seed.py")' in make,
           "the build does not put the randomizer's script beside the game, where the launcher runs it")
     script = read("tools", "rando", "rando_seed.py")
-    check(all('"%s"' % key in script for key in ("rando_on", "rando_seed", "rando_chests", "rando_keys", "rando_major", "rando_open_deku",
+    check(all('"%s"' % key in script for key in ("rando_on", "rando_seed", "rando_chests", "rando_skulltulas", "rando_keys", "rando_major", "rando_open_deku",
                                                     "rando_open_forest", "rando_skip_intro")),
           "rando_seed.py does not read the settings the menu keeps")
     check("hos_rando_init();" in main, "the game does not read the randomizer's settings at its start")

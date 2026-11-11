@@ -20,8 +20,8 @@
    is copied from it.
 
    What is not here: the item placement. tools/rando/rando_seed.py reads rando_on, rando_seed, rando_chests,
-   rando_keys, rando_major, rando_open_deku, rando_open_forest and rando_skip_intro, shuffles the chests and makes the
-   last three's changes as a mod (the launcher runs it at Play); the other settings are not placed yet
+   rando_skulltulas, rando_keys, rando_major, rando_open_deku, rando_open_forest and rando_skip_intro, shuffles the
+   chests and the Gold Skulltulas' drops and makes the last three's changes as a mod (the launcher runs it at Play); the other settings are not placed yet
    (host/oot_rando.c). */
 #ifndef OOT_RANDO_H
 #define OOT_RANDO_H
@@ -39,7 +39,7 @@
       "Which treasure chests hold a shuffled item. All is every chest in the game.", \
       "Off", "Overworld", "Dungeons", "All") \
     X(SKULLTULAS, "Gold Skulltulas", "rando_skulltulas", \
-      "Which Gold Skulltulas drop a shuffled item instead of a token. The tokens join the item pool.", \
+      "Which Gold Skulltulas take part: their tokens change places with the chests' rupees and supplies. Needs Chests.", \
       "Off", "Dungeons", "Overworld", "All") \
     X(QUESTS, "Quest rewards", "rando_quests", \
       "What characters give you is shuffled: gifts, side quests, mini-games and the Gold Skulltula family's rewards.", \

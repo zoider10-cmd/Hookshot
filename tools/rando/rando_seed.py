@@ -362,12 +362,70 @@ def fix(data, fixes=None):
     return out
 
 
-def add_drop(data, drops):
+class NotInPlace(ValueError):
+    """a drop that add_drop_in_place does not write: the file is written anew for it (add_drop_anew)"""
+
+
+def add_drop(data, drops, anew=False):
     """data (a BYML map file) with each actor of `drops` ({hash: item}) given that item as what it drops: its Dynamic
     block gets a Drop__DropActor (the key a chest names its item by; an enemy has the same one), or has the one it had
-    changed. The new bytes, or None when the file has none of those actors. The actor gets a Dynamic block of its own
-    at the end of the file, and an item name the file does not have goes into a copy of its string table there. An
-    actor without a Dynamic block, or a file that has no Drop__DropActor key, is an error: not written for yet."""
+    changed. The new bytes, or None when the file has none of those actors. Written into the file as it is where
+    that can be done (add_drop_in_place), and the whole file anew where an actor has no Dynamic block or the file no
+    such key (add_drop_anew; anew: that way whatever the file has, for a test)."""
+    if not drops or not any(struct.pack("<Q", h) in data for h in drops):
+        return None
+    if not anew:
+        try:
+            return add_drop_in_place(data, drops)
+        except NotInPlace:
+            pass
+    return add_drop_anew(data, drops)
+
+
+def add_drop_anew(data, drops):
+    """add_drop by reading the whole file and writing it again (byml_parse, byml_build): an actor without a Dynamic
+    block gets one, and the key table gets Drop__DropActor in its place. The file grows: the game's stores equal
+    dictionaries once, and this does not. Everything else reads back as it was, or it is an error."""
+    tree, version = byml_parse(data)
+    actors = tree[1].get("Actors") if tree and tree[0] == "dict" else None
+    done = set()
+    for actor in actors[1] if actors and actors[0] == "array" else []:
+        ident = actor[1].get("Hash") if actor[0] == "dict" else None
+        if not ident or ident[0] not in (0xD3, 0xD5):
+            continue
+        h = int.from_bytes(ident[1], "little")
+        if h in drops:
+            dyn = actor[1].get("Dynamic")
+            if dyn is None or dyn[0] != "dict":
+                dyn = actor[1]["Dynamic"] = ("dict", collections.OrderedDict())
+            dyn[1]["Drop__DropActor"] = ("string", drops[h])
+            done.add(h)
+    if not done:
+        return None
+    out = byml_build(tree, version)
+
+    def plain(node):   # (a dictionary's keys in any order: the file has them in its key table's)
+        if node[0] == "dict":
+            return {k: plain(v) for k, v in node[1].items()}
+        return [plain(v) for v in node[1]] if node[0] == "array" else node
+    if plain(byml_parse(out)[0]) != plain(tree):
+        raise ValueError("the file written anew does not read back as it was made")
+    before, _, _ = chests(data)
+    after, _, _ = chests(out)
+    got = {c.hash: c.item for c in after}
+    if any(got.get(h) != drops[h] for h in done):
+        raise ValueError("a drop did not read back as written")
+    was = {c.hash: (c.item, c.event, c.gyaml, c.params, c.pos) for c in before}
+    now = {c.hash: (c.item, c.event, c.gyaml, c.params, c.pos) for c in after}
+    if any(now.get(h) != v for h, v in was.items() if h not in done) or set(now) - set(was) - done:
+        raise ValueError("giving a drop changed another actor's")
+    return out
+
+
+def add_drop_in_place(data, drops):
+    """add_drop without writing the file anew: the actor gets a Dynamic block of its own at the end of the file, and
+    an item name the file does not have goes into a copy of its string table there. An actor without a Dynamic
+    block, or a file that has no Drop__DropActor key, is NotInPlace."""
     if not drops:
         return None
     found, keys, strings = chests(data)
@@ -389,12 +447,12 @@ def add_drop(data, drops):
                     dyn = (where, v)
             if ident in drops:
                 if not dyn:
-                    raise ValueError("%#x has no Dynamic block to put a drop in" % ident)
+                    raise NotInPlace("%#x has no Dynamic block to put a drop in" % ident)
                 todo.append((ident, dyn[0], dyn[1]))
     if not todo:
         return None
     if "Drop__DropActor" not in keys:
-        raise ValueError("the file has no Drop__DropActor key")
+        raise NotInPlace("the file has no Drop__DropActor key")
     drop_key = keys.index("Drop__DropActor")
     out = bytearray(data)
     out += b"\0" * (-len(out) % 4)
@@ -427,6 +485,71 @@ def add_drop(data, drops):
 
 
 # ---- an actor's pack (Pack/Actor/<name>.pack.zs): a SARC archive of its parameter files ----
+# The Gold Skulltulas setting. A Gold Skulltula drops what its map file names (Drop__DropActor, the key a chest names
+# its item by; without one, its token), so its token and a chest's item can change places: the chest gives the token
+# as an item (TOKEN), the Skulltula drops the chest's, made a pick-up (pickup_pack).
+SKULLTULA = "Enemy_Skulltula_Gold"
+TOKEN = "Item_Token_Gold"
+# What a Skulltula may be given: what the game can be finished without, and is no loss where a Skulltula cannot be
+# reached yet. No gating item and no dungeon's key (the rules know no Skulltula's place: many ask for the Boomerang,
+# the Hookshot or the night), and no Heart Piece (it hangs where it is put and is taken with A from beside it: one
+# dropped on a wall could not be reached, seen in play).
+SKULLTULA_ITEMS = ("TBox_Rupee_Green", "TBox_Rupee_Blue", "TBox_Rupee_Red", "TBox_Rupee_Purple", "TBox_Rupee_Gold",
+                   "Item_ScrubBusinessSeed", "Item_BombBundle_Small", "Item_BombchuBundle_Small", "TBox_ArrowBundle_Medium",
+                   "TBox_ArrowBundle_Large", "TBox_DekuNutBundle", "Item_DekuStickBundle_Small", "Tbox_MagicJar_Large")
+
+
+def skulltulas(data):
+    """A map file's Gold Skulltulas: [(hash, position, can be given a drop in place, is a dungeon's)]. In place: it has
+    a Dynamic block and the file has the Drop__DropActor key (add_drop_in_place; the file is written anew for the
+    others). A dungeon's has its room's number there, as a dungeon's chest has."""
+    if data[:2] != b"YB":
+        raise ValueError("not a little-endian BYML")
+    key_at, str_at, root = struct.unpack_from("<III", data, 4)
+    keys, strings = table(data, key_at), table(data, str_at)
+    out = []
+    for name, kind, value, _ in entries(data, root, keys):
+        if name != "Actors" or kind != 0xC0:
+            continue
+        n = int.from_bytes(data[value + 1:value + 4], "little")
+        vals = value + 4 + (n + 3 & ~3)
+        for i in range(n):
+            if data[value + 4 + i] != 0xC1:
+                continue
+            ident, gyaml, dyn, pos, dungeon = None, "", False, (), False
+            for k, t, v, _ in entries(data, struct.unpack_from("<I", data, vals + 4 * i)[0], keys):
+                if k == "Hash" and t == 0xD5:
+                    ident = struct.unpack_from("<Q", data, v)[0]
+                elif k == "Gyaml" and t == 0xA0:
+                    gyaml = strings[v] if v < len(strings) else ""
+                elif k == "Translate" and t == 0xC0 and int.from_bytes(data[v + 1:v + 4], "little") == 3:
+                    pos = tuple(round(x, 1) for x in struct.unpack_from("<3f", data, v + 8))
+                elif k == "Dynamic" and t == 0xC1:
+                    dyn = True
+                    dungeon = any(dk == "DefaultDungeonRoomIndex" for dk, _, _, _ in entries(data, v, keys))
+            if gyaml == SKULLTULA and ident is not None:
+                out.append((ident, pos, dyn and "Drop__DropActor" in keys, dungeon))
+    return out
+
+
+def mix_skulltulas(rng, gives, skulls):
+    """The tokens of `skulls` (Skulltulas' hashes, in a fixed order) and the chests' items a Skulltula may be given
+    (SKULLTULA_ITEMS) shuffled among those chests and those Skulltulas. Returns (what the chests give now, {a
+    Skulltula's hash: the item it drops} for the ones that do not drop their token)."""
+    if not skulls:
+        return dict(gives), {}
+    chests_in = [h for h in gives if gives[h] in SKULLTULA_ITEMS]
+    items = [gives[h] for h in chests_in] + [TOKEN] * len(skulls)
+    rng.shuffle(items)
+    new, drops = dict(gives), {}
+    for h, item in zip(chests_in + list(skulls), items):
+        if h in gives:
+            new[h] = item
+        elif item != TOKEN:
+            drops[h] = item
+    return new, drops
+
+
 def sarc_hash(name, mult=101):
     h = 0
     for c in name.encode():
@@ -602,33 +725,77 @@ PICKUP_BASE = "Obj_Token_Gold"
 PICKUP_EFFECTS = "Obj_Shield_Deku"
 
 
+# (what a chest's item is made from: the model a chest's get scene shows, with nothing to touch)
+CHEST_BASE = "Item_EventObject_Base"
+
+
+def ref_file(ref):
+    """the pack's file a parameter file names: "?X.bgyml" is X.bgyml, "Work/X.gyml" is X.bgyml"""
+    name = ref.lstrip("?")
+    if name.startswith("Work/"):
+        name = name[len("Work/"):]
+    return name[:-len(".gyml")] + ".bgyml" if name.endswith(".gyml") else name
+
+
+def actor_chain(item, files):
+    """An item's actor and the actors it is made from, as far as its pack has them: [[file, tree, version]], the
+    item's own first (a red rupee's: TBox_Rupee_Red, TBox_Rupee_Green, Item_EventObject_Base)."""
+    chain, name = [], "Actor/%s.engine__actor__ActorParam.bgyml" % item
+    while name in files and name not in [c[0] for c in chain]:
+        tree, version = byml_parse(files[name])
+        chain.append([name, tree, version])
+        parent = tree[1].get("$parent")
+        if not parent or parent[0] != "string":
+            break
+        name = ref_file(parent[1])
+    return chain
+
+
+def pickup_family(item, item_pack):
+    """the actors an item is made from that are chests' items themselves, by name, the item's own first: each has a
+    pack of its own with a copy of the same file, and is made a pick-up with the item"""
+    chest = "Actor/%s.engine__actor__ActorParam.bgyml" % CHEST_BASE
+    return [name.split("/")[1].split(".")[0] for name, _, _ in actor_chain(item, sarc_read(item_pack)) if name != chest]
+
+
 def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=PICKUP_EFFECTS):
     """An item's pack (a SARC archive) made into a pick-up's. Its actor takes the base's as its parent in place of
     Item_EventObject_Base (the model a chest's get scene shows, with nothing to touch), and the pack gets the files
-    of the base's that it lacks. What the item has of its own (its model, its animation, what it is in the pouch)
-    stays over the base's, with two changes:
+    of the base's that it lacks. An item made from another item (a red rupee from a green one) has that one's
+    parent changed: the one whose parent Item_EventObject_Base is. What the item has of its own (its model, its
+    animation, what it is in the pouch) stays over the base's, with two changes:
       - its table of game parameters names the base's as its parent. An item's own table took the base's place
         whole and left the pick-up without DropBoundParam and GamePhysicsControllerParam: the game stopped at the
         missing one as the actor was made (a rupee's table has the base's as its parent);
       - what it is in the pouch is got by touching it (DefaultAutoGet, as a token's and a rupee's are), not by
-        standing beside it and pressing A.
-    Seen in play with the Boomerang on Obj_Item_Base: its chest still gives it with its scene, and dropped by a Gold
-    Skulltula it fell and was picked up, with its text."""
+        standing beside it and pressing A. One that says so already, itself or by its parent, is left as it is.
+    Seen in play with the Boomerang, the Megaton Hammer and the small Bomb Bag: the chest still gives the item with
+    its scene, and dropped by a Gold Skulltula it stays there and is collected by touching it, with its text."""
     files, base = sarc_read(item_pack), sarc_read(base_pack)
     own = "Actor/%s.engine__actor__ActorParam.bgyml" % item
     base_actor = "Actor/%s.engine__actor__ActorParam.bgyml" % base_name
     base_table = "GameParameter/GameParameterTable/%s.engine__actor__GameParameterTable.bgyml" % base_name
+    chest_actor = "Actor/%s.engine__actor__ActorParam.bgyml" % CHEST_BASE
     if own not in files or base_actor not in base or base_table not in base:
         raise ValueError("%s: its pack, or the base's, has no actor or no table of game parameters of that name" % item)
-    tree, version = byml_parse(files[own])
+    chain = actor_chain(item, files)
+    top = next((k for k, (_, tree, _) in enumerate(chain)
+                if tree[1].get("$parent", ("", ""))[0] == "string" and ref_file(tree[1]["$parent"][1]) == chest_actor), None)
+    if top is None:
+        raise ValueError("%s is not made from %s: not a chest's item" % (item, CHEST_BASE))
+    chain = chain[:top + 1]
+    name, tree, version = chain[top]
     tree[1]["$parent"] = ("string", "Work/" + base_actor.replace(".bgyml", ".gyml"))
-    files[own] = byml_build(tree, version)
+    files[name] = byml_build(tree, version)
 
     def part(key):
-        """the pack's file an entry of the actor's Components names, or "" """
-        ref = tree[1].get("Components", ("dict", {}))[1].get(key)
-        name = ref[1].lstrip("?") if ref and ref[0] == "string" else ""
-        return name if name in files else ""
+        """the pack's file an entry of the actor's Components names (the item's own, or the nearest it is made
+        from), or "" """
+        for _, tree, _ in chain:
+            ref = tree[1].get("Components", ("dict", {}))[1].get(key)
+            if ref and ref[0] == "string" and ref[1]:
+                return ref_file(ref[1]) if ref_file(ref[1]) in files else ""
+        return ""
 
     name = part("GameParameterTableRef")
     if name and name != base_table:
@@ -636,11 +803,20 @@ def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=
         if "$parent" not in sub[1]:
             sub[1]["$parent"] = ("string", "Work/" + base_table.replace(".bgyml", ".gyml"))
             files[name] = byml_build(sub, sub_version)
-    name = part("PouchContentRef")
-    if name:
-        sub, sub_version = byml_parse(files[name])
+    first = name = part("PouchContentRef")
+    said, seen = None, []
+    while name in files and name not in seen:   # (what it says of touching, itself or the nearest parent that does)
+        seen.append(name)
+        sub, _ = byml_parse(files[name])
+        if "DefaultAutoGet" in sub[1]:
+            said = any(sub[1]["DefaultAutoGet"][1])
+            break
+        parent = sub[1].get("$parent")
+        name = ref_file(parent[1]) if parent and parent[0] == "string" else ""
+    if first and not said:
+        sub, sub_version = byml_parse(files[first])
         sub[1]["DefaultAutoGet"] = (0xD0, struct.pack("<I", 1))
-        files[name] = byml_build(sub, sub_version)
+        files[first] = byml_build(sub, sub_version)
     for name, data in base.items():
         files.setdefault(name, data)
     for kind in ("ELink", "SLink"):   # (the base's effects and sounds: another's, PICKUP_EFFECTS above)
@@ -845,7 +1021,7 @@ def dictionaries(romfs, zs):
 def settings(game):
     """the randomizer's lines of the options file (0 where it does not say)"""
     got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
-           "rando_skip_intro": 0}
+           "rando_skip_intro": 0, "rando_skulltulas": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -970,6 +1146,8 @@ def main():
     p.add_argument("--open-deku", action="store_true", help="as rando_open_deku=1: in a new game the way to the Deku Tree is open without a sword and a shield")
     p.add_argument("--open-forest", action="store_true", help="as rando_open_forest=1: in a new game the forest can be left before the Deku Tree is done")
     p.add_argument("--skip-intro", action="store_true", help="as rando_skip_intro=1: a new game starts in Link's house, without the two opening cutscenes")
+    p.add_argument("--skulltulas", type=int, choices=(0, 1, 2, 3), help="in place of rando_skulltulas: the Gold Skulltulas whose tokens change places "
+                                                                        "with the chests' rupees and supplies. 1 dungeons, 2 overworld, 3 all")
     p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already this seed's (the launcher, at Play)")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
     a = p.parse_args()
@@ -1000,6 +1178,8 @@ def main():
     a.open_deku = a.open_deku or ini["rando_open_deku"] != 0
     a.open_forest = a.open_forest or ini["rando_open_forest"] != 0
     a.skip_intro = a.skip_intro or ini["rando_skip_intro"] != 0
+    a.skulltulas = a.skulltulas if a.skulltulas is not None else ini["rando_skulltulas"]
+    a.skulltulas = a.skulltulas if 0 <= a.skulltulas <= 3 else 0
     # A test: <game folder>\rando\test_drops.txt, lines of "<an actor's hash> <an item>": that actor (a Gold Skulltula,
     # say) drops the item. For finding how the other kinds of check hold what they give; not a setting.
     drops = {}
@@ -1025,7 +1205,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" skulltulas %d" % a.skulltulas if a.skulltulas else "") +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else ""))
     # (the seed in the game folder, made by an earlier version of the rules: made again as it was, not another one
@@ -1066,6 +1246,7 @@ def main():
 
     # ---- every map file with chests ----
     files = collections.OrderedDict()   # rel -> (bytes, [Chest])
+    skulls = collections.OrderedDict()  # hash -> [area, position, can be given a drop (in every file it is in), a dungeon's]
     paths = []
     for top, dirs, names in os.walk(os.path.join(romfs, "Banc")):
         dirs.sort()
@@ -1078,7 +1259,18 @@ def main():
         except Exception as e:
             print("skipped %s: %s" % (rel, e))
             continue
-        if found or any(struct.pack("<Q", h) in data for h in drops):
+        here = skulltulas(data) if a.skulltulas else []
+        if any(not can for _, _, can, _ in here):
+            try:   # (a file that has to be written anew for its Skulltulas: can it be read whole?)
+                byml_parse(data)
+                here = [(h, pos, True, dungeon) for h, pos, _, dungeon in here]
+            except (ValueError, struct.error, IndexError):
+                pass
+        for h, pos, can, dungeon in here:
+            parts = rel.split("/")
+            entry = skulls.setdefault(h, [parts[1] if len(parts) > 2 else "(Banc)", pos, True, False])
+            entry[2], entry[3] = entry[2] and can, entry[3] or dungeon
+        if found or here or any(struct.pack("<Q", h) in data for h in drops):
             files[rel] = (data, found)
 
     # ---- the chests: one per hash (the same chest is in several files: child and adult, static and dynamic) ----
@@ -1117,13 +1309,28 @@ def main():
     if before != collections.Counter(gives.values()):
         sys.exit("the shuffle lost or made an item: nothing written")
 
+    # ---- the Gold Skulltulas: their tokens and the chests' rupees and supplies change places ----
+    skull_drops = {}
+    if a.skulltulas:
+        mine = [h for h, s in skulls.items() if a.skulltulas == 3 or s[3] == (a.skulltulas == 1)]   # (this setting's)
+        able = [h for h in mine if skulls[h][2]]
+        gives, skull_drops = mix_skulltulas(random.Random("skulltulas:%d:%d:%d" % (seed, a.skulltulas, len(able))), gives, able)
+        for h, item in skull_drops.items():
+            drops.setdefault(h, item)   # (a test's drop for the same Skulltula stays)
+        pickups = sorted(set(pickups) | set(skull_drops.values()))
+        print("Gold Skulltulas %s: %d take part (%d more cannot be given a drop: their map file is not read whole; the map files have %d), %d now drop a "
+              "chest's item, %d chests hold a token" % (("", "dungeons", "overworld", "all")[a.skulltulas], len(able),
+                                                        len(mine) - len(able), len(skulls), len(skull_drops),
+                                          sum(1 for i in gives.values() if i == TOKEN)))
+
     # ---- the map files ----
     changed, sizes, fixes_done, drops_done = collections.OrderedDict(), {}, 0, 0
     for rel, (data, found) in files.items():
         try:
             new = rewrite(data, gives)
             fixed = fix(new if new is not None else data)
-            dropped = add_drop(fixed if fixed is not None else new if new is not None else data, drops)
+            dropped = add_drop(fixed if fixed is not None else new if new is not None else data, drops,
+                               anew=bool(os.environ.get("RANDO_DROPS_ANEW")))   # (a test: every file with a drop written anew)
         except Exception as e:
             sys.exit("%s: %s. Nothing was written to the mod." % (rel, e))
         if fixed is not None:
@@ -1137,9 +1344,9 @@ def main():
     print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives), moved, len(changed)))
     for why, n in stays.most_common():
         print("  left alone: %d (%s)" % (n, why))
-    if drops:
-        print("TEST: %d actor%s given an item to drop (rando\\test_drops.txt), in %d map file%s" % (
-            len(drops), "" if len(drops) == 1 else "s", drops_done, "" if drops_done == 1 else "s"))
+    if len(drops) > len(skull_drops):
+        print("TEST: %d actor%s given an item to drop (rando\\test_drops.txt)" % (
+            len(drops) - len(skull_drops), "" if len(drops) - len(skull_drops) == 1 else "s"))
     # ---- the open ways: the game's list of flags, with theirs starting put out ----
     flag_files = {}
     if flags:
@@ -1178,6 +1385,9 @@ def main():
             base = pack(PICKUP_BASE)
             base_parts = sarc_read(base)
             pouch = {}
+            for item in list(pickups):   # (an item made from another: that one's pack has a copy of the same actor)
+                pickups += [n for n in pickup_family(item, pack(item))
+                            if n not in pickups and os.path.isfile(os.path.join(romfs, "Pack", "Actor", n + ".pack.zs"))]
             for item in pickups:
                 old = pack(item)
                 new = pickup_pack(item, old, base)
@@ -1188,15 +1398,17 @@ def main():
                 pack_sizes["Pack/Actor/%s.pack" % item] = len(new)
                 pouch.update((name, data) for name, data in sarc_read(new).items()
                              if "/PouchContentParam/" in name and data != old_parts.get(name, base_parts.get(name)))
-            # (A TRY, not seen in play. What an item is in the pouch is a file other packs carry a copy of, under the
-            # same name: the item in the menu's (Pouch_*), the weapon in the hand's (Weapon_*) and more. The Boomerang,
-            # made a pick-up just as the Megaton Hammer was, was not collected by touching it and the Hammer was:
-            # a child has the Boomerang's weapon, not the Hammer's. So the copies are changed with it.)
+            # What an item is in the pouch is a file other packs carry a copy of, under the same name: the item in
+            # the menu's (Pouch_*), the weapon in the hand's (Weapon_*), boots and gauntlets worn (Armor_*). The
+            # Boomerang, made a pick-up just as the Megaton Hammer was, was not collected by touching it and the
+            # Hammer was: a child's game loads the Boomerang's weapon first, with its copy. So the copies are
+            # changed with it, in every pack that has one (seen in play: the Boomerang is collected by touch).
             for n in sorted(os.listdir(os.path.join(romfs, "Pack", "Actor"))) if pouch else []:
-                # (every pack found with such a copy has one of these names: Armor_* is boots and gauntlets worn)
-                if (n.startswith(("Pouch_", "Weapon_", "Armor_", "Item_")) and n.endswith(".pack.zs")
-                        and "Pack/Actor/" + n not in pack_files):
-                    parts = sarc_read(pack(n[:-len(".pack.zs")]))
+                if n.endswith(".pack.zs") and "Pack/Actor/" + n not in pack_files:
+                    try:
+                        parts = sarc_read(pack(n[:-len(".pack.zs")]))
+                    except (ValueError, struct.error):
+                        continue   # (not an archive of parameter files)
                     same = [name for name in pouch if name in parts and parts[name] != pouch[name]]
                     if same:
                         parts.update((name, pouch[name]) for name in same)
@@ -1204,8 +1416,9 @@ def main():
                         pack_files["Pack/Actor/" + n] = new
                         pack_sizes["Pack/Actor/" + n[:-len(".zs")]] = len(new)
         except (OSError, ValueError, struct.error) as e:
-            sys.exit("rando\\test_pickups.txt: %s. Nothing written." % e)
-        print("TEST: %d item%s made a pick-up (rando\\test_pickups.txt): %s" % (len(pickups), "" if len(pickups) == 1 else "s", ", ".join(pickups)))
+            sys.exit("an item's pack could not be made a pick-up's: %s. Nothing written." % e)
+        print("%d item%s made a pick-up (what a Skulltula drops, and rando\\test_pickups.txt): %s" % (
+            len(pickups), "" if len(pickups) == 1 else "s", ", ".join(pickups)))
 
     # ---- the size table ----
     folder = os.path.join(romfs, "System", "Resource")
@@ -1235,6 +1448,11 @@ def main():
             area_now = area
         spoiler.append("  %-22s %-26s %-26s -> %s%s" % (gyaml, str(pos), old, gives[h] if gives[h] != old else "(the same)",
                                                          "   [event: %s]" % event if event and event not in PLAIN_EVENTS else ""))
+    if a.skulltulas:
+        spoiler += ["", "Gold Skulltulas (area, position -> what it drops)"]
+        for h in sorted(skulls, key=lambda q: (skulls[q][0], str(skulls[q][1]), q)):
+            area, pos, can, _ = skulls[h]
+            spoiler.append("  %-22s %-26s -> %s" % (area, str(pos), drops.get(h, "(its token)" if can else "(its token: cannot be given a drop)")))
     if a.dry_run:
         print("\n".join(spoiler[:50]))
         print("(dry run: nothing written)")

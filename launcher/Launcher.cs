@@ -449,11 +449,11 @@ class LauncherForm : Form {
     // seed's ID is copied and pasted)
     static readonly object[][] RandoRows = {
         new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
-            "Turns the seed on. Chests, Dungeon keys, Major items, the forest's two ways and the opening are made when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
+            "Turns the seed on. Chests, Gold Skulltulas, Dungeon keys, Major items, the forest's two ways and the opening are made when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
         new object[] { "rando_chests", "Chests", new[] { "Off", "Overworld", "Dungeons", "All" }, new[] { 0, 1, 2, 3 },
             "Which treasure chests hold a shuffled item. All is every chest in the game." },
         new object[] { "rando_skulltulas", "Gold Skulltulas", new[] { "Off", "Dungeons", "Overworld", "All" }, new[] { 0, 1, 2, 3 },
-            "Which Gold Skulltulas drop a shuffled item instead of a token. The tokens join the item pool." },
+            "Which Gold Skulltulas take part: their tokens change places with the chests' rupees and supplies. Needs Chests." },
         new object[] { "rando_quests", "Quest rewards", new[] { "Off", "On" }, new[] { 0, 1 },
             "What characters give you is shuffled: gifts, side quests, mini-games and the Gold Skulltula family's rewards." },
         new object[] { "rando_songs", "Songs", new[] { "Off", "Song spots", "Anywhere" }, new[] { 0, 1, 2 },

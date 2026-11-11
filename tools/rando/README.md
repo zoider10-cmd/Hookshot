@@ -40,6 +40,7 @@ is not listed with it off, and is there again with it on.
 | Setting | What `rando_seed.py` does with it |
 |---|---|
 | Chests | Overworld / Dungeons / All: which chests take part. Their items are shuffled among them, across areas. |
+| Gold Skulltulas | Dungeons / Overworld / All: which Gold Skulltulas take part. Their tokens change places with the chests' rupees and supplies (`SKULLTULA_ITEMS`): a chest gives a token, a Skulltula drops the chest's item, made a pick-up. No gating item, key or Heart Piece goes to a Skulltula: the rules do not know their places yet. Needs Chests. |
 | Dungeon keys | Off: a dungeon's small keys, Boss Key, map and compass stay in their chests. Own dungeon: shuffled among that dungeon's chests. Anywhere: as Own dungeon for now. |
 | Major items | On: the chests that start an event take part too (most of the big items), placed by the logic. The same as `--event-chests`. |
 | Open Deku Tree | On: in a new game Mido lets Link by to the Great Deku Tree without a sword and a shield. |
@@ -227,6 +228,19 @@ By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron
   files are in `Pouch_*`, `Weapon_*`, `Armor_*` and other `Item_*` packs. Seen collected in play: the three above
   only. The gold skull's outline around an item is gone since the token's effects files in its pack name the Deku
   Shield's (`PICKUP_EFFECTS`). Checks: `tests/test_rando_pickups.py`.
+- **The Gold Skulltulas setting** (`rando_skulltulas`, `mix_skulltulas`): the map files have 100 Gold Skulltulas
+  (`Enemy_Skulltula_Gold`, by hash; 44 in dungeons, told by `DefaultDungeonRoomIndex` as a chest is). Their tokens and
+  the chests' rupees and supplies (`SKULLTULA_ITEMS`) are shuffled among those chests and the Skulltulas: a chest gives
+  the token as an item (`Item_Token_Gold`), a Skulltula drops the chest's item, made a pick-up. The chest shuffle and
+  the logic run first and are not changed by it: no gating item, key or Heart Piece goes to a Skulltula, as the rules
+  know no Skulltula's place (many ask for the Boomerang, the Hookshot or the night).
+- 74 Skulltulas take a drop in place. The other 26, all in the overworld, have no `Dynamic` block or are in a file
+  without the `Drop__DropActor` key: their file is read whole and written again (`add_drop_anew`), which stores equal
+  dictionaries each time and so grows the file.
+- An item made from another item (a red rupee from a green one, `TBox_Rupee_Red` from `TBox_Rupee_Green`) has that
+  one's actor changed, in its own pack's copy, and the other's pack is made a pick-up with it (`pickup_family`). What
+  is got by touching it already (a rupee, arrows, a magic jar: `DefaultAutoGet` in its pouch file or that one's
+  parent) keeps its pouch file. Checks: `tests/test_rando_skulltulas.py`.
 - Seen in play with `Item_Boomerang` made a pick-up: its own chest still gives it, with its scene. Dropped by a Gold
   Skulltula it fell to the ground and Link picked it up, with a short animation over his head and no scene. A world
   rupee (`Obj_Rupee_Purple`) flew out, fell, and was collected with its text. A Heart Piece dropped by a Skulltula on

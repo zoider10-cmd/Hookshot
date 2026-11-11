@@ -55,7 +55,7 @@ def plain(node):
         return bool(struct.unpack("<I", node[1])[0])
     if node[0] == 0xD2:
         return struct.unpack("<f", node[1])[0]
-    return struct.unpack("<i", node[1])[0]
+    return int.from_bytes(node[1], "little", signed=node[0] in (0xD1, 0xD4))   # (4 bytes, or the 8 of a 64-bit value)
 
 
 def read(data):
