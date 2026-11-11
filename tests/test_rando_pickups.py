@@ -144,6 +144,19 @@ def main():
           "a small item's model is not made larger, or lost what it had")
     check(all(1.0 < k <= 2.0 for k in seed.PICKUP_SCALES.values()), "an item is made smaller, or so large that it hangs far from where it is taken")
 
+    # (a pouch file of its own, for an item whose pouch file is another thing's too: a copy under a new name, the
+    # item's actor naming it, the item's own file as it was; and the size table given an entry for the new file)
+    mine = seed.sarc_read(seed.pickup_pack("Item_Thing", packed, seed.sarc_write(base), each_time=True, own_pouch=frozenset(("Item_Thing",))))
+    new_name = seed.OWN_POUCH % "Item_Thing"
+    check(mine[POUCH % "Thing"] == item[POUCH % "Thing"], "the item's pouch file, another thing's too, was changed")
+    own = read(mine[new_name])
+    check(own["DefaultAutoGet"] is True and own["PlayGetEventManyTimes"] is True and own["GetType"] == seed.GET_LARGE and
+          own["IsOpenActionGuide"] is True and abs(own["GetDemoOffsetPos"]["Y"] - 0.25) < 1e-6, "the pouch file of its own is not the item's with the pick-up's changes")
+    check(read(mine[ACTOR % "Item_Thing"])["Components"]["PouchContentRef"] == "?" + new_name, "the item's actor does not name the pouch file of its own")
+    check(set(mine) == set(item) | set(base) | {new_name}, "more than one file was added for it")
+    check(new_name not in new, "an item not asked to have a pouch file of its own was given one")
+    check(all(i not in seed.PROGRESSION for i in seed.PICKUP_OWN_POUCH), "a gating item is given a pouch file of its own")
+
     # (a table that has a parent keeps it; a pack without the actor is not taken)
     kept = collections.OrderedDict(item)
     kept[TABLE % "Item_Thing"] = byml({"$parent": "Work/Other.gyml"})
@@ -173,6 +186,21 @@ def main():
     for p in paths[1:3]:
         check(entry(raised, p) == entry(tbl, p) + seed.PART_GROWTH, "a changed file's entry was not raised once by PART_GROWTH")
     check(entry(raised, paths[3]) == entry(tbl, paths[3]) and entry(raised, paths[0]) == 5336, "an entry not asked for changed")
+    # (an entry for a file the table does not have: in its place among the sorted CRC32s, the count raised, the rest as it was)
+    tail = b"the names' table, after the entries"
+    added = seed.size_table_add(tbl + tail, ["A/New/File.bgyml", paths[1], "A/New/File.bgyml", "Another.bgyml"])
+    n = struct.unpack_from("<I", added, 14)[0]
+    crcs = [struct.unpack_from("<I", added, 22 + 8 * k)[0] for k in range(n)]
+    check(n == len(rows) + 2 and crcs == sorted(crcs) and len(set(crcs)) == n, "the new entries are not in their places, once each")
+    check(added[:14] == tbl[:14] and added[18:22] == tbl[18:22] and added.endswith(tail) and len(added) == len(tbl) + len(tail) + 16,
+          "adding an entry changed the header, or what follows the entries")
+    for path in ("A/New/File.bgyml", "Another.bgyml"):
+        k = crcs.index(zlib.crc32(path.encode()) & 0xffffffff)
+        check(struct.unpack_from("<I", added, 26 + 8 * k)[0] == seed.PART_NEW, "a new entry does not have the size given")
+    for path in paths:
+        k = crcs.index(zlib.crc32(path.encode()) & 0xffffffff)
+        check(struct.unpack_from("<I", added, 26 + 8 * k)[0] == entry(tbl, path), "an entry the table had was changed by adding another")
+    check(seed.size_table_add(tbl, [paths[0]]) == tbl, "a path the table has was added again")
     print("PASS: an item made a pick-up")
 
 

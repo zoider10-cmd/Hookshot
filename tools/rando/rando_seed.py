@@ -984,7 +984,17 @@ PICKUP_SCALES = {"Item_GlassTruth": 1.5, "Item_Gauntlet_Goron": 1.5}
 GET_LARGE = 1746592023
 
 
-def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=PICKUP_EFFECTS, each_time=False):
+# An item whose pouch file is another thing's too: a chest's rupee has the world rupee's, a chest's arrows the world's
+# arrow bundle's, a chest's magic jar the world's jar's. Changed in place it would change every world rupee (its get
+# event each time one is picked up), and of the copies of one name the game uses the first it loaded. These are given
+# a pouch file of their own, under a name of its own (OWN_POUCH), with the item's as its parent.
+PICKUP_OWN_POUCH = frozenset(("TBox_Rupee_Green", "TBox_Rupee_Blue", "TBox_Rupee_Red", "TBox_Rupee_Purple", "TBox_Rupee_Gold",
+                              "TBox_ArrowBundle_Medium", "TBox_ArrowBundle_Large", "Tbox_MagicJar_Large"))
+OWN_POUCH = "Component/PouchContentParam/Rando_%s.game__component__PouchContentParam.bgyml"
+
+
+def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=PICKUP_EFFECTS, each_time=False,
+                own_pouch=PICKUP_OWN_POUCH):
     """An item's pack (a SARC archive) made into a pick-up's. Its actor takes the base's as its parent in place of
     Item_EventObject_Base (the model a chest's get scene shows, with nothing to touch), and the pack gets the files
     of the base's that it lacks. An item made from another item (a red rupee from a green one) has that one's
@@ -1008,10 +1018,11 @@ def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=
         raise ValueError("%s: its pack has no actor of that name" % item)
     chain = actor_chain(item, files)
 
-    def pouch_says(key):
-        """what the item's pouch file says of `key`, itself or the nearest parent that does: True, False or None"""
-        name, seen = "", []
-        for _, tree, _ in chain:
+    def pouch_says(key, name=None):
+        """what the item's pouch file (or the pouch file `name`) says of `key`, itself or the nearest parent that
+        does: True, False or None"""
+        seen = []
+        for _, tree, _ in chain if name is None else ():
             ref = tree[1].get("Components", ("dict", {}))[1].get("PouchContentRef")
             if ref and ref[0] == "string" and ref[1]:
                 name = ref_file(ref[1])
@@ -1053,6 +1064,28 @@ def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=
         if "$parent" not in sub[1]:
             sub[1]["$parent"] = ("string", "Work/" + base_table.replace(".bgyml", ".gyml"))
             files[name] = byml_build(sub, sub_version)
+    # (a pouch file of its own for each actor of the item's that names one and is in own_pouch: the item's, and the item
+    # it is made from, whose actor this pack has a copy of and whose own pack is changed the same way)
+    for name, tree, version in chain:
+        actor = name.split("/")[1].split(".")[0]
+        ref = tree[1].get("Components", ("dict", {}))[1].get("PouchContentRef")
+        if actor not in own_pouch or not ref or ref[0] != "string" or ref_file(ref[1]) not in files:
+            continue
+        was = ref_file(ref[1])
+        was_tree, was_version = byml_parse(files[was])
+        new = OWN_POUCH % actor
+        # (a copy of the item's, with all it says and its parent: a file that only named the item's as its parent was
+        # not taken by touching it, seen without a window. And what the item's own would be given below, given here to
+        # each: the same file in every pack that has it)
+        own = collections.OrderedDict(was_tree[1])
+        own["DefaultAutoGet"] = (0xD0, struct.pack("<I", 1))
+        if each_time and not pouch_says("PlayGetEventManyTimes", was):
+            own["PlayGetEventManyTimes"] = (0xD0, struct.pack("<I", 1))
+            if pouch_says("GetType", was) is None:
+                own["GetType"] = (0xD3, struct.pack("<I", GET_LARGE))
+        files[new] = byml_build(("dict", own), was_version)
+        tree[1]["Components"][1]["PouchContentRef"] = ("string", "?" + new)
+        files[name] = byml_build(tree, version)
     first = part("PouchContentRef")
     if first and not pouch_says("DefaultAutoGet"):
         sub, sub_version = byml_parse(files[first])
@@ -1278,6 +1311,25 @@ def size_table_raise(tbl, paths, by=PART_GROWTH):
         if at is not None:
             struct.pack_into("<I", out, at + 4, struct.unpack_from("<I", tbl, at + 4)[0] + by)
     return bytes(out)
+
+
+# What a new parameter file's entry is given: more than any of the game's own of its kind has (5288 to 5984 for a pouch
+# file, of 152 to 740 bytes).
+PART_NEW = 8192
+
+
+def size_table_add(tbl, paths, size=PART_NEW):
+    """the size table with an entry of `size` for each of `paths` that it does not have: put in its place among the
+    CRC32s, which are sorted, and the count raised. A path whose CRC32 the table has is left as it is."""
+    count = struct.unpack_from("<I", tbl, 14)[0]
+    end = 22 + count * 8
+    have = {struct.unpack_from("<I", tbl, 22 + k * 8)[0] for k in range(count)}
+    new = sorted({zlib.crc32(path.encode()) & 0xffffffff for path in paths} - have)
+    if not new:
+        return tbl
+    rows = [bytes(tbl[22 + k * 8:30 + k * 8]) for k in range(count)] + [struct.pack("<II", crc, size) for crc in new]
+    rows.sort(key=lambda r: struct.unpack_from("<I", r)[0])
+    return bytes(tbl[:14]) + struct.pack("<I", len(rows)) + bytes(tbl[18:22]) + b"".join(rows) + bytes(tbl[end:])
 
 
 def unpack(data, zs, dicts):
@@ -1692,7 +1744,7 @@ def main():
         print("logic: OFF (--no-logic): the gating items are anywhere, and most seeds cannot be finished")
 
     # ---- TEST: items' packs made pick-ups' ----
-    pack_files, pack_sizes, pack_parts = {}, {}, set()
+    pack_files, pack_sizes, pack_parts, pack_new = {}, {}, set(), set()
     if pickups:
         def pack(name):
             return unpack(open(os.path.join(romfs, "Pack", "Actor", name + ".pack.zs"), "rb").read(), zs, dicts)
@@ -1710,6 +1762,7 @@ def main():
                 old_parts = sarc_read(old)
                 pack_parts.update(name for name, data in sarc_read(new).items()   # (the files changed in it)
                                   if data != old_parts.get(name, base_parts.get(name)))
+                pack_new.update(name for name in sarc_read(new) if name not in old_parts and name not in base_parts)
                 pack_files["Pack/Actor/%s.pack.zs" % item] = new
                 pack_sizes["Pack/Actor/%s.pack" % item] = len(new)
                 pouch.update((name, data) for name, data in sarc_read(new).items()
@@ -1744,9 +1797,9 @@ def main():
     new_tables = {}
     for n in tables:
         try:
-            new_tables["System/Resource/" + n] = size_table_raise(size_table_update(
+            new_tables["System/Resource/" + n] = size_table_add(size_table_raise(size_table_update(
                 size_table_update(unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts), sizes), pack_sizes, PACK_EXTRA),
-                pack_parts)
+                pack_parts - pack_new), pack_new)
         except Exception as e:
             sys.exit("the size table %s could not be updated (%s). Nothing written." % (n, e))
 

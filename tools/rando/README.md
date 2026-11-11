@@ -325,10 +325,23 @@ not known without reading that format.
   `Obj_Item_Base` (not there when its Skulltula died), and dropping a world rupee (`Obj_Rupee_*`) in a chest rupee's
   place (it fell into water, and its Skulltula was back each time). The runs without a window of a bomb bundle on
   vines, passed by whatever was changed, were on a save without a Bomb Bag: they showed nothing of those changes.
+- **A parameter file under a new name is used**, once the size table has an entry for it (`size_table_add`: put in its
+  place among the sorted CRC32s, the count raised). A Deku Scrub's seed with a pouch file of its own, a copy under
+  another name (`pickup_pack`'s `own_pouch`, `OWN_POUCH`), was taken by touch with its text, and a second after it
+  (without a window, two put in a line on open ground). A file that only named the item's as its `$parent` was not
+  tried apart from a rupee, so a copy with all the item's says is what is written.
+- **A rupee is not done with, whatever its pouch file.** A chest's green rupee made a pick-up was walked through and
+  stayed, with the game's own pouch file unchanged, with one of its own, and with one of its own that asks for its
+  get event each time (all without a window, on a save that had picked up rupees before). The red one taken with its
+  text earlier was the first of its colour in its save. So a rupee's get event is not run a second time even when
+  its pouch file asks for it, and a pick-up made from the token waits for it. Arrows and the magic jar were not
+  tried: the save with open ground has no bow and no magic meter, and they are not taken without. All three stay in
+  `SKULLTULA_ITEMS_NOT_YET`; `PICKUP_OWN_POUCH` is there for when they are.
 - **Testing a pick-up without the player.** A save made with Link at the foot of the Great Deku Tree's first vines
   (his place is three floats at 0x1b4b0 of `progress.sav`), a map file with an `Enemy_Skulltula` of its Dynamic file
   made the item and put on the vines above him (a heart once taken, and a prop, are not made), and the stick pushed
-  by `HOS_INPUT_LIVE` once the room is in: a real token and a first seed were got with their text as he climbed, a
+  by `HOS_INPUT_LIVE` once the room is in: a second save has him on open ground on the Great Deku Tree's 3F, facing down the room, for walking into an
+  item put on the floor and for the scene of his holding it up. From the vines: a real token and a first seed were got with their text as he climbed, a
   green rupee and a bomb bundle were passed by (that save has no Bomb Bag: see above).
 - **The Kokiri Sword's chest holding another item** played Link putting the sword on his back all the same, and he
   could use a sword until the next load, with none in the inventory (seen in play). The chest starts an event of its
