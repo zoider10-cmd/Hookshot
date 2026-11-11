@@ -165,8 +165,10 @@ By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron
 Tested in game so far: Kokiri Forest (Mido's house's chests and the Kokiri Sword's), and seed 2068101879 (Chests: All,
 Major items: On, Dungeon keys: Off) played through the Forest Temple, the Water Temple (Iron Boots and Longshot
 shuffled) and the Fire Temple (the Megaton Hammer and the Hover Boots from other chests, had before it) without a
-chest that could not be reached. The Shadow and Spirit Temples and Ganon's Castle have not been played with their
-rules yet.
+chest that could not be reached. That run was ended there with all thirteen gating items collected, each got where
+the logic had put it: nothing the rules asked for was out of reach. The Shadow and Spirit Temples and Ganon's Castle
+were not played, so the rules of the chests inside them (which held no gating item in this seed) are still unchecked,
+and the seed was not finished.
 
 ## The scripts
 
