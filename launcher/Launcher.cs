@@ -94,6 +94,20 @@ public static class SaveCopies {
 
     public static string Root(string dir, string saveFolder) { return Path.Combine(dir, "user", Folder, saveFolder); }
 
+    // Whether a restore keeps the saves that were there as a "Before restore" copy first: the window's tick box, kept in
+    // <game folder>\user\save_copies\keep_before_restore.txt ("0" off; no file, or anything else: on, so that nothing is
+    // lost by one who never looked at the box).
+    static string KeepFile(string dir) { return Path.Combine(dir, "user", Folder, "keep_before_restore.txt"); }
+    public static bool KeepBefore(string dir) {
+        try { return File.ReadAllText(KeepFile(dir)).Trim() != "0"; } catch { return true; }
+    }
+    public static void SetKeepBefore(string dir, bool on) {
+        try {
+            Directory.CreateDirectory(Path.Combine(dir, "user", Folder));
+            File.WriteAllText(KeepFile(dir), on ? "1" : "0");
+        } catch { }
+    }
+
     // (a name that can be a folder's: no path, no character Windows refuses, no dot or space at its end)
     public static string Clean(string name) {
         var sb = new StringBuilder();
@@ -165,12 +179,13 @@ public static class SaveCopies {
         }
     }
 
-    // Puts the copy named `name` in the save folder's place. What was there is kept first, as "Before restore <date and
-    // time>", unless it is empty. Returns null, or what went wrong (then the saves are as they were).
-    public static string Restore(string dir, string saveFolder, string name, DateTime now) {
+    // Puts the copy named `name` in the save folder's place. With keepFirst, what was there is kept first, as "Before
+    // restore <date and time>", unless it is empty; without, it is replaced. Returns null, or what went wrong (then the
+    // saves are as they were).
+    public static string Restore(string dir, string saveFolder, string name, DateTime now, bool keepFirst = true) {
         string from = Path.Combine(Root(dir, saveFolder), name), to = Path.Combine(dir, "user", saveFolder);
         if (name != Clean(name) || !HasFiles(from)) return "That copy is not there any more.";
-        if (HasFiles(to)) {
+        if (keepFirst && HasFiles(to)) {
             string stem = BeforeRestore + now.ToString("yyyy-MM-dd HH.mm.ss"), kept = stem;
             for (int i = 2; Directory.Exists(Path.Combine(Root(dir, saveFolder), kept)); i++) kept = stem + " (" + i + ")";
             string error = Keep(dir, saveFolder, kept);
@@ -204,6 +219,7 @@ class SaveCopiesForm : Form {
     readonly TextBox name = new TextBox();
     readonly ListBox list = new ListBox();
     readonly Button keep = new Button(), restore = new Button(), update = new Button(), delete = new Button(), close = new Button();
+    readonly CheckBox keepFirst = new CheckBox();
 
     public SaveCopiesForm(string dir, string saveFolder) {
         this.dir = dir; this.saveFolder = saveFolder;
@@ -211,7 +227,7 @@ class SaveCopiesForm : Form {
         Text = "Save copies: " + (rando ? "the randomizer's saves" : "the normal game's saves");
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(520, 430);
+        ClientSize = new Size(520, 458);
         BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
         var top = new Label { Text = "Keep the saves you have now under a name:", AutoSize = true, Location = new Point(16, 14) };
         name.SetBounds(16, 40, 368, 26); name.MaxLength = 80;
@@ -219,12 +235,16 @@ class SaveCopiesForm : Form {
         Style(keep, "Keep a copy", 394, 38, 110);
         var mid = new Label { Text = "Kept copies, the newest first:", AutoSize = true, Location = new Point(16, 84) };
         list.SetBounds(16, 110, 488, 232); list.IntegralHeight = false;
+        keepFirst.Text = "Before a restore, keep the saves I have now as a \"Before restore\" copy";
+        keepFirst.SetBounds(16, 394, 488, 24); keepFirst.ForeColor = Theme.Text; keepFirst.FlatStyle = FlatStyle.Flat;
+        keepFirst.Checked = SaveCopies.KeepBefore(dir);
+        keepFirst.CheckedChanged += (o, e) => SaveCopies.SetKeepBefore(dir, keepFirst.Checked);
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         Style(restore, "Restore", 16, 354, 110); Style(update, "Update", 136, 354, 110); Style(delete, "Delete", 256, 354, 110);
         Style(close, "Close", 394, 354, 110);
-        var foot = new Label { Text = "Update: the copy becomes the saves you have now. Restore keeps them as a copy first; close the game for it.",
-                               AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 396), Size = new Size(488, 24), Font = new Font("Segoe UI", 8.5f) };
-        Controls.AddRange(new Control[] { top, name, keep, mid, list, restore, update, delete, close, foot });
+        var foot = new Label { Text = "Update: the copy becomes the saves you have now. Close the game before a restore.",
+                               AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 426), Size = new Size(488, 24), Font = new Font("Segoe UI", 8.5f) };
+        Controls.AddRange(new Control[] { top, name, keep, mid, list, restore, update, delete, close, keepFirst, foot });
         AcceptButton = keep; CancelButton = close;
         keep.Click += (o, e) => OnKeep();
         restore.Click += (o, e) => OnRestore();
@@ -264,9 +284,12 @@ class SaveCopiesForm : Form {
         if (list.SelectedIndex < 0) return;
         string n = (string)list.SelectedItem;
         if (LauncherForm.GameRunning()) { Say("Close the game first: it would write its own saves over the restored ones.", MessageBoxIcon.Information); return; }
-        if (MessageBox.Show(this, "Restore \"" + n + "\"?\n\nThe saves you have now are kept as a copy first.", "Save copies",
-                            MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
-        string error = SaveCopies.Restore(dir, saveFolder, n, DateTime.Now);
+        bool first = keepFirst.Checked;
+        if (MessageBox.Show(this, "Restore \"" + n + "\"?\n\n" + (first ? "The saves you have now are kept as a copy first."
+                                : "The saves you have now are replaced and NOT kept: the box below is off."), "Save copies",
+                            MessageBoxButtons.OKCancel, first ? MessageBoxIcon.Question : MessageBoxIcon.Warning,
+                            first ? MessageBoxDefaultButton.Button1 : MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
+        string error = SaveCopies.Restore(dir, saveFolder, n, DateTime.Now, first);
         if (error != null) { Say(error, MessageBoxIcon.Warning); Fill(n); return; }
         Fill(n);
         Say("\"" + n + "\" is restored. It is in the game's load menu at the next start.", MessageBoxIcon.Information);

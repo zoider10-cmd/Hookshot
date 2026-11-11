@@ -66,6 +66,16 @@ Say "updategone" ([SaveCopies]::Update($dir, "save_rando", "nothing"))
 Say "updateoutside" ([SaveCopies]::Update($dir, "save_rando", "..\..\save"))
 Say "updateleft" ((Test-Path (Join-Path $dir "user\save_copies\save_rando\second.part")) -or (Test-Path (Join-Path $dir "user\save_copies\save_rando\second.old")))
 Say "list4" (([SaveCopies]::List($dir, "save_rando")) -join ",")
+Say "keepdefault" ([SaveCopies]::KeepBefore($dir))
+[SaveCopies]::SetKeepBefore($dir, $false)
+Say "keepoff" ([SaveCopies]::KeepBefore($dir))
+Slot "save_rando" "five"
+$count = ([SaveCopies]::List($dir, "save_rando")).Count
+Say "restoreplain" ([SaveCopies]::Restore($dir, "save_rando", "first", $now, $false))
+Say "nowplain" (Read "save_rando")
+Say "noextra" (([SaveCopies]::List($dir, "save_rando")).Count -eq $count)
+[SaveCopies]::SetKeepBefore($dir, $true)
+Say "keepon" ([SaveCopies]::KeepBefore($dir))
 Say "delete" ([SaveCopies]::Delete($dir, "save_rando", "second"))
 Say "deleteoutside" ([SaveCopies]::Delete($dir, "save_rando", "..\..\save"))
 Say "list3" (([SaveCopies]::List($dir, "save_rando")) -join ",")
@@ -79,6 +89,8 @@ def main():
           "the launcher has no Save copies button for the save folder the Randomizer setting names")
     check('return Path.Combine(dir, "user", Folder, saveFolder);' in src and 'public const string Folder = "save_copies";' in src,
           "the copies are not kept under the game folder's user folder, apart for each save folder")
+    check('keepFirst.Checked = SaveCopies.KeepBefore(dir);' in src and "SaveCopies.Restore(dir, saveFolder, n, DateTime.Now, first);" in src and
+          "if (keepFirst && HasFiles(to)) {" in src, "the window has no tick box for keeping the saves before a restore, or does not use it")
     check('if (LauncherForm.GameRunning())' in src and "string error = Keep(dir, saveFolder, kept);" in src,
           "a restore is not refused while the game runs, or does not keep what was there first")
     csc = Path(os.environ.get("WINDIR", "")) / "Microsoft.NET" / "Framework64" / "v4.0.30319" / "csc.exe"
@@ -111,6 +123,10 @@ def main():
     check(got["update"] == "" and got["updated"] == "four" and got["updateleft"] == "False" and len(got["list4"].split(",")) == 3,
           "an update does not make the copy the saves as they are now, or leaves a half-made folder: %r" % got)
     check(got["updategone"] != "" and got["updateoutside"] != "", "a copy that is not there, or a path out of the copies, was updated")
+    check(got["keepdefault"] == "True" and got["keepoff"] == "False" and got["keepon"] == "True",
+          "a restore's keeping of the saves first is not on until turned off, or is not kept as set")
+    check(got["restoreplain"] == "" and got["nowplain"] == "one" and got["noextra"] == "True",
+          "a restore asked not to keep the saves first kept them, or did not put the copy in their place")
     check(got["delete"] == "" and got["deleteoutside"] != "" and got["list3"] == "Before restore 2026-11-11 09.08.07,first",
           "a copy is not deleted, or a path out of the copies was")
     check(got["normal"] == "normal" and got["normal2"] == "normal", "the normal game's saves were touched by the randomizer's copies")
