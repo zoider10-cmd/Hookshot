@@ -1262,6 +1262,59 @@ def sword_chest_plain(data):
     return bytes(out)
 
 
+# ---- a gift: what a character hands Link ----
+# Nearly every item given by a character, a fairy or a scene goes through one flow of the game's, Dm_SY_GetInEvent (and
+# GetPouchContent): the scene's own flow calls it as a sub-flow and names the item in the call's parameters, a string
+# (Darunia's, Dm_Goron_0030: GetInEvent_Goron with ActorName "Item_Gauntlet_Goron"). 209 such calls were counted.
+# So a gift is changed by changing that string. The item's name is the scene's actor's name too (the bracelet Darunia
+# holds out), from the same file's strings, so the string itself is left: the new name is put at the file's end and
+# the parameter made to point at it. The scene is as it was: Darunia still holds out a bracelet.
+GIFT_FLOWS = "Event/EventFlow"
+FLOW_EXTRA = 288   # (a flow's entry in the size table: its size rounded up to 32 and 272 or 280 in the three looked at)
+
+
+def gift_item(data, old, new):
+    """An event flow (a BFEVFL file) with every sub-flow call's parameter that is the string `old` made the string
+    `new`: the new bytes (longer by the new string, the file's size in its header raised), or None when no call has
+    it. The other strings and every other pointer are as they were."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+    if data[:6] != b"BFEVFL" or u16(0x20) != 1 or struct.unpack_from("<I", data, 0x1c)[0] != len(data):
+        raise ValueError("not an event flow file of one flowchart")
+    chart = u64(u64(0x28))
+    if data[chart:chart + 4] != b"EVFL":
+        raise ValueError("the flowchart is not where the file says")
+    events, count = u64(chart + 0x30), u16(chart + 0x16)
+
+    def text(ptr):
+        return bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if 0 < ptr < len(data) - 2 else ""
+
+    where = []
+    for i in range(count):
+        e = events + 0x30 * i
+        if data[e + 8] != 4:   # (4: a call of a sub-flow)
+            continue
+        params = u64(e + 0x10)
+        if not params or data[params] != 1:   # (1: a container of named parameters)
+            continue
+        for k in range(u16(params + 2)):
+            item = u64(params + 0x10 + 8 * k)
+            if data[item] == 5 and u16(item + 2) == 1 and text(u64(item + 0x10)) == old:   # (5: a string of its own, not a name passed on)
+                where.append(item + 0x10)
+    if not where:
+        return None
+    out = bytearray(data)
+    out += b"\0" * (-len(out) % 8)
+    at = len(out)
+    name = new.encode("utf-8")
+    out += struct.pack("<H", len(name)) + name + b"\0"
+    out += b"\0" * (-len(out) % 8)
+    for pointer in where:
+        struct.pack_into("<Q", out, pointer, at)
+    struct.pack_into("<I", out, 0x1c, len(out))
+    return bytes(out)
+
+
 def size_entry(size, extra=264):
     """what the game's size table holds for a file of `size` bytes unpacked: the size rounded up to 32, and 264 for a
     map file (every one looked at had exactly that), 312 for an actor's pack (PACK_EXTRA: six looked at)"""
@@ -1582,6 +1635,14 @@ def main():
                     test_chests[int(parts[0], 16)] = parts[1]
     except (OSError, ValueError):
         pass
+    # Another: <game folder>\rando\test_gifts.txt, lines of "<a flow's name> <the item it gives> <another item>": that
+    # scene gives the other item (gift_item). For finding how a character's gift can be changed; not a setting.
+    test_gifts = []
+    try:
+        with open(os.path.join(game, "rando", "test_gifts.txt"), encoding="utf-8") as f:
+            test_gifts = [tuple(line.split("#")[0].split()) for line in f if len(line.split("#")[0].split()) == 3]
+    except OSError:
+        pass
     # Another: <game folder>\rando\test_pickups.txt, an item's actor on each line (Item_Boomerang): its pack is made a
     # pick-up's (pickup_pack), so that it can be collected where a Skulltula drops it.
     pickups = []
@@ -1599,7 +1660,8 @@ def main():
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
-                                                               (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else ""))
+                                                               (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
+                                                               (" test gifts %08x" % (zlib.crc32(repr(sorted(test_gifts)).encode()) & 0xffffffff) if test_gifts else ""))
     # (the seed in the game folder, made by an earlier version of the rules: made again as it was, not another one
     # under its save. A new seed, or other settings, take the rules of today)
     placement = PLACEMENT
@@ -1829,6 +1891,20 @@ def main():
         print("%d item%s made a pick-up (what a Skulltula drops, and rando\\test_pickups.txt): %s" % (
             len(pickups), "" if len(pickups) == 1 else "s", ", ".join(pickups)))
 
+    # ---- TEST: a character's gift made another item ----
+    gift_files, gift_sizes = {}, {}
+    for flow, old, new in test_gifts:
+        rel = "%s/%s.bfevfl.zs" % (GIFT_FLOWS, flow)
+        try:
+            was = gift_files.get(rel) or unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
+            now = gift_item(was, old, new)
+        except (OSError, ValueError, struct.error) as e:
+            sys.exit("rando\\test_gifts.txt: %s: %s. Nothing written." % (flow, e))
+        if now is None:
+            sys.exit("rando\\test_gifts.txt: %s gives no %s. Nothing written." % (flow, old))
+        gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
+        print("TEST: %s gives %s in place of %s (rando\\test_gifts.txt)" % (flow, new, old))
+
     # ---- the size table ----
     folder = os.path.join(romfs, "System", "Resource")
     tables = sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if "rsizetable" in n.lower())
@@ -1837,9 +1913,9 @@ def main():
     new_tables = {}
     for n in tables:
         try:
-            new_tables["System/Resource/" + n] = size_table_add(size_table_raise(size_table_update(
+            new_tables["System/Resource/" + n] = size_table_update(size_table_add(size_table_raise(size_table_update(
                 size_table_update(unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts), sizes), pack_sizes, PACK_EXTRA),
-                pack_parts - pack_new), pack_new)
+                pack_parts - pack_new), pack_new), gift_sizes, FLOW_EXTRA)
         except Exception as e:
             sys.exit("the size table %s could not be updated (%s). Nothing written." % (n, e))
 
@@ -1883,7 +1959,7 @@ def main():
         except (OSError, ValueError, struct.error) as e:
             sys.exit("%s: %s. Nothing written." % (SWORD_FLOW, e))
         print("the Kokiri Sword's chest holds another item: it opens without the cutscene of the sword")
-    for rel, data in list(changed.items()) + list(new_tables.items()) + list(flag_files.items()) + list(pack_files.items()):
+    for rel, data in list(changed.items()) + list(new_tables.items()) + list(flag_files.items()) + list(pack_files.items()) + list(gift_files.items()):
         out = os.path.join(mod, "romfs", *rel.split("/"))
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, "wb") as f:

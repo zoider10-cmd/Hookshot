@@ -347,6 +347,16 @@ not known without reading that format.
   in a line were each got with their text, and two large magic jars (without a window). The large arrow bundle is
   given on the strength of the medium one. Without a bow, or without magic, they are not taken, as bombs are not
   without a bag.
+- **A character's gift is a name in a scene's flow, and can be made another item** (`gift_item`, and
+  `rando	est_gifts.txt`: `<flow> <the item it gives> <another>`). Nearly every item handed to Link goes through one
+  flow of the game's, `Dm_SY_GetInEvent` (and `GetPouchContent`): the scene's own flow calls it as a sub-flow with the
+  item's name as a parameter, a string. 209 such calls were counted in the 640 flows read (the Goron's Bracelet,
+  Zelda's Letter, the stones and medallions, the Great Fairies' gifts, every song, the trading sequence, bottles,
+  scales, quivers). The new name is put at the file's end and the parameter made to point at it: the old string is
+  the scene's actor's name too. Seen in play with Darunia (`Dm_Goron_0030`) made to give a Piece of Heart: the
+  scene ran to its end, Link got the Piece of Heart with its text and no bracelet (he could not lift a Bomb Flower),
+  and Darunia was as ever after. Link still went through putting a bracelet on, with nothing in his hand. Not a
+  setting yet: Quest rewards is not placed. `tests/test_rando_gifts.py`.
 - **Testing a pick-up without the player.** A save made with Link at the foot of the Great Deku Tree's first vines
   (his place is three floats at 0x1b4b0 of `progress.sav`), a map file with an `Enemy_Skulltula` of its Dynamic file
   made the item and put on the vines above him (a heart once taken, and a prop, are not made), and the stick pushed
