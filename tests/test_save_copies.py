@@ -1,7 +1,7 @@
 """The launcher's kept copies of the saves (launcher/Launcher.cs: SaveCopies, the Save copies button).
 
 The source is read on every platform: the button is there, opens the copies of the save folder the Randomizer setting
-names, and a restore keeps what was there first and is refused while the game runs. On Windows the launcher's source
+names, and a restore keeps what was there first and is refused while the game runs; a copy can be updated to the saves as they are. On Windows the launcher's source
 is compiled with the .NET Framework's own compiler, as launcher/build.ps1 does, and SaveCopies is run on a made-up
 save folder: a copy is whole and under its name, a name is made safe, a copy is not replaced, a restore puts the
 copy in the save folder's place and keeps what was there, the randomizer's copies and the normal game's are apart,
@@ -59,6 +59,13 @@ Say "leftover" ((Test-Path (Join-Path $dir "user\save_rando.old")) -or (Test-Pat
 Say "gone" ([SaveCopies]::Restore($dir, "save_rando", "nothing", $now))
 Say "outside" ([SaveCopies]::Restore($dir, "save_rando", "..\..\save", $now))
 Say "now2" (Read "save_rando")
+Slot "save_rando" "four"
+Say "update" ([SaveCopies]::Update($dir, "save_rando", "second"))
+Say "updated" (Get-Content -Raw (Join-Path $dir "user\save_copies\save_rando\second\0001\slot_00\progress.sav"))
+Say "updategone" ([SaveCopies]::Update($dir, "save_rando", "nothing"))
+Say "updateoutside" ([SaveCopies]::Update($dir, "save_rando", "..\..\save"))
+Say "updateleft" ((Test-Path (Join-Path $dir "user\save_copies\save_rando\second.part")) -or (Test-Path (Join-Path $dir "user\save_copies\save_rando\second.old")))
+Say "list4" (([SaveCopies]::List($dir, "save_rando")) -join ",")
 Say "delete" ([SaveCopies]::Delete($dir, "save_rando", "second"))
 Say "deleteoutside" ([SaveCopies]::Delete($dir, "save_rando", "..\..\save"))
 Say "list3" (([SaveCopies]::List($dir, "save_rando")) -join ",")
@@ -101,6 +108,9 @@ def main():
           "a restore does not keep the saves that were there first: %r" % got["list2"])
     check(got["leftover"] == "False", "a restore leaves a half-made folder behind")
     check(got["gone"] != "" and got["outside"] != "" and got["now2"] == "one", "a copy that is not there, or a path out of the copies, was restored")
+    check(got["update"] == "" and got["updated"] == "four" and got["updateleft"] == "False" and len(got["list4"].split(",")) == 3,
+          "an update does not make the copy the saves as they are now, or leaves a half-made folder: %r" % got)
+    check(got["updategone"] != "" and got["updateoutside"] != "", "a copy that is not there, or a path out of the copies, was updated")
     check(got["delete"] == "" and got["deleteoutside"] != "" and got["list3"] == "Before restore 2026-11-11 09.08.07,first",
           "a copy is not deleted, or a path out of the copies was")
     check(got["normal"] == "normal" and got["normal2"] == "normal", "the normal game's saves were touched by the randomizer's copies")

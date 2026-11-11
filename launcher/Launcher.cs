@@ -143,6 +143,28 @@ public static class SaveCopies {
         }
     }
 
+    // Makes the copy named `name` the saves as they are now, in place of what it held. Returns null, or what went wrong
+    // (then the copy is as it was): the new one is made whole beside it before the old one goes.
+    public static string Update(string dir, string saveFolder, string name) {
+        string from = Path.Combine(dir, "user", saveFolder), to = Path.Combine(Root(dir, saveFolder), name);
+        if (name != Clean(name) || name.Length == 0 || !Directory.Exists(to)) return "That copy is not there any more.";
+        if (!HasFiles(from)) return "There are no saves to copy yet.";
+        string part = to + ".part", old = to + ".old";
+        try {
+            if (Directory.Exists(part)) Directory.Delete(part, true);
+            if (Directory.Exists(old)) Directory.Delete(old, true);
+            CopyTree(from, part);
+            Directory.Move(to, old);
+            try { Directory.Move(part, to); }
+            catch { Directory.Move(old, to); throw; }   // (as it was)
+            Directory.Delete(old, true);
+            return null;
+        } catch (Exception ex) {
+            try { if (Directory.Exists(part)) Directory.Delete(part, true); } catch { }
+            return ex.Message;
+        }
+    }
+
     // Puts the copy named `name` in the save folder's place. What was there is kept first, as "Before restore <date and
     // time>", unless it is empty. Returns null, or what went wrong (then the saves are as they were).
     public static string Restore(string dir, string saveFolder, string name, DateTime now) {
@@ -181,7 +203,7 @@ class SaveCopiesForm : Form {
     readonly string dir, saveFolder;
     readonly TextBox name = new TextBox();
     readonly ListBox list = new ListBox();
-    readonly Button keep = new Button(), restore = new Button(), delete = new Button(), close = new Button();
+    readonly Button keep = new Button(), restore = new Button(), update = new Button(), delete = new Button(), close = new Button();
 
     public SaveCopiesForm(string dir, string saveFolder) {
         this.dir = dir; this.saveFolder = saveFolder;
@@ -198,13 +220,15 @@ class SaveCopiesForm : Form {
         var mid = new Label { Text = "Kept copies, the newest first:", AutoSize = true, Location = new Point(16, 84) };
         list.SetBounds(16, 110, 488, 232); list.IntegralHeight = false;
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
-        Style(restore, "Restore", 16, 354, 110); Style(delete, "Delete", 136, 354, 110); Style(close, "Close", 394, 354, 110);
-        var foot = new Label { Text = "Restoring keeps the saves you have now as a copy first. Close the game before restoring.",
+        Style(restore, "Restore", 16, 354, 110); Style(update, "Update", 136, 354, 110); Style(delete, "Delete", 256, 354, 110);
+        Style(close, "Close", 394, 354, 110);
+        var foot = new Label { Text = "Update: the copy becomes the saves you have now. Restore keeps them as a copy first; close the game for it.",
                                AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 396), Size = new Size(488, 24), Font = new Font("Segoe UI", 8.5f) };
-        Controls.AddRange(new Control[] { top, name, keep, mid, list, restore, delete, close, foot });
+        Controls.AddRange(new Control[] { top, name, keep, mid, list, restore, update, delete, close, foot });
         AcceptButton = keep; CancelButton = close;
         keep.Click += (o, e) => OnKeep();
         restore.Click += (o, e) => OnRestore();
+        update.Click += (o, e) => OnUpdate();
         delete.Click += (o, e) => OnDelete();
         close.Click += (o, e) => Close();
         list.SelectedIndexChanged += (o, e) => Buttons();
@@ -217,7 +241,7 @@ class SaveCopiesForm : Form {
         b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
     }
 
-    void Buttons() { restore.Enabled = delete.Enabled = list.SelectedIndex >= 0; }
+    void Buttons() { restore.Enabled = update.Enabled = delete.Enabled = list.SelectedIndex >= 0; }
 
     void Fill(string select) {
         list.Items.Clear();
@@ -246,6 +270,16 @@ class SaveCopiesForm : Form {
         if (error != null) { Say(error, MessageBoxIcon.Warning); Fill(n); return; }
         Fill(n);
         Say("\"" + n + "\" is restored. It is in the game's load menu at the next start.", MessageBoxIcon.Information);
+    }
+
+    void OnUpdate() {
+        if (list.SelectedIndex < 0) return;
+        string n = (string)list.SelectedItem;
+        if (MessageBox.Show(this, "Update \"" + n + "\" to the saves you have now?\n\nWhat the copy held is replaced.", "Save copies",
+                            MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+        string error = SaveCopies.Update(dir, saveFolder, n);
+        if (error != null) Say(error, MessageBoxIcon.Warning);
+        Fill(n);
     }
 
     void OnDelete() {
