@@ -569,8 +569,7 @@ SKULLTULA_CHILD_DUNGEONS = ("InsideTheDekuTree", "DodongoCavern", "InsideJabuJab
 # remake's new places from the player (<game folder>/rando/skulltulas_to_check.txt has every line and how sure
 # it is). In the rules' own words: CHILD is out of the forest (night, a bottle of bugs, a Deku Stick), ADULT is the
 # three stones done (the Hookshot, the songs an adult learns). Where the original gives a choice (the Boomerang or
-# the Hookshot) the child's is asked for; where two could not be told apart both ask for the most either does. The
-# adult's temples' are not here: each asks for all its temple and a Skulltula's place can.
+# the Hookshot) the child's is asked for; where two could not be told apart both ask for the most either does.
 SKULLTULA_RULES = {
     # Bottom of the Well
     0x6789388e9fb9c92c: ADULT | {LENS},        # boomerang, lens, adult first (Song of Storms)
@@ -668,6 +667,42 @@ SKULLTULA_RULES = {
     0x8325fea55edfbe97: ADULT,                 # adult, hookshot, night
     0xabad0e9f0d471156: CHILD | {BB},          # child, bugs, bombs: past the boulders (seen in play)
     0x78ae4fd90b3cfaaa: CHILD | {BB},          # child, night, sword or slingshot, bombs (past the boulders)
+    # The adult's temples. A temple's keys may lie behind anything the temple takes (Dungeon keys: Own dungeon), so each
+    # asks for what its temple's chests can (RULES) and no less, but for the Forest Temple's first, by the door; and no
+    # more: not the Megaton Hammer or the Longshot of SKULLTULA_ASKS where its temple does not take them.
+    # FireTemple
+    0xcc175a90e0014905: ADULT | {HAM, BOW},            # adult; hammer, bow
+    0x7f498ada1c2e9c7a: ADULT | {HAM, BOW},            # adult; hammer, bow
+    0x4d1b7e35ca0c6484: ADULT | {HAM, BOW},            # adult; hammer, bow
+    0xb0f77b17cfb37458: ADULT | {HAM, BOW},            # adult; hammer, bow
+    0x5e3ae6a7cf3ac292: ADULT | {HAM, BOW},            # adult; hammer, bow
+    # ForestTemple
+    0x984021bc20419ebe: ADULT | {BOW, LONG},           # adult, longshot; bow (probably)
+    0x2aa39f00aaa2d331: ADULT | {BOW},                 # adult, hookshot or boomerang; bow
+    0xf46b1710ed0620d1: ADULT | {BOW},                 # adult, hookshot or boomerang; bow (probably)
+    0x99ca89963485df11: ADULT,                         # adult, hookshot or bow or bombs
+    0x1bf5f0176ef03bda: ADULT | {BOW},                 # adult, hookshot; bow (probably)
+    # GerudoFortress
+    0x81ed4ed76699e3d8: ADULT | {HOVER, LONG, BOW},    # adult, night; hover boots, longshot, bow (what the fortress 
+    0xb4ece769e6f3a206: ADULT | {HOVER, LONG, BOW},    # adult, night; hover boots, longshot, bow (what the fortress 
+    # ShadowTemple
+    0x8e87908cb035e950: MEDALS3 | {LENS, HOVER},       # adult; lens, hover boots, and the three temples before it
+    0xd23a7a2c9eced9ce: MEDALS3 | {LENS, HOVER},       # adult; lens, hover boots, and the three temples before it
+    0xd7ffbe169189e50d: MEDALS3 | {LENS, HOVER},       # adult; lens, hover boots, and the three temples before it
+    0x7a74bc651f9fe024: MEDALS3 | {LENS, HOVER},       # adult; lens, hover boots, and the three temples before it
+    0xeafe60e592e9a3fb: MEDALS3 | {LENS, HOVER},       # adult; lens, hover boots, and the three temples before it
+    # SpiritTemple
+    0x8c8bb95471d20d02: DESERT | {SG, BOW, MS},        # the desert crossed; silver gauntlets, bow, mirror shield
+    0x4696b2730de0516c: DESERT | {SG, BOW, MS},        # the desert crossed; silver gauntlets, bow, mirror shield
+    0x9222e742b73d3d2c: DESERT | {SG, BOW, MS},        # the desert crossed; silver gauntlets, bow, mirror shield
+    0xb3d9f353599eea53: DESERT | {SG, BOW, MS},        # the desert crossed; silver gauntlets, bow, mirror shield
+    0x70b0fca66ca4808a: DESERT | {SG, BOW, MS},        # the desert crossed; silver gauntlets, bow, mirror shield
+    # WaterTemple
+    0xd731ea6a04d0fd01: ADULT | {IRON, LONG, BOW},     # adult, iron boots, longshot, bow
+    0xa0973706f6415ecd: ADULT | {IRON, LONG, BOW},     # adult, iron boots, longshot, bow (probably)
+    0xe03a2965df9f7b30: ADULT | {IRON, LONG, BOW},     # adult, iron boots, longshot, bow
+    0x02974596f92cf377: ADULT | {IRON, LONG, BOW},     # adult, iron boots, longshot, bow
+    0x3d0de5adaeb73cc9: ADULT | {IRON, LONG, BOW},     # adult, iron boots, longshot, bow
 }
 SKULLTULA_GATING_SHARE = 0.35   # (of the gating items, how many are tried on a Skulltula)
 

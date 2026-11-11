@@ -283,13 +283,15 @@ not known without reading that format.
   Hookshot, both seen in play (the Hookshot on the House of Twins' Skulltula, an adult's at night, its Deku Scrub's
   seed pulled in and got with its text, the Skulltula dead afterwards), so the adult's Skulltulas are given gating
   items as the child's are.
-- **Worth watching: the adult's temples' Skulltulas are not known one by one.** The 27 of the Fire, Forest, Water,
-  Shadow and Spirit Temples are not in `SKULLTULA_RULES`: each asks for all its temple can and all a Skulltula's
-  place can (`SKULLTULA_ASKS`), so a gating item only goes to one late. That is safe, never too little, but it is a
-  guess that has not been checked against the remake, and three of the Spirit Temple's are in the child's half
-  and take less. To do: match each to the original's by its room (`skulltulas_to_check.txt` has the rooms), as
-  the others were. Also to watch: the 19 matched as "probably" there, and that the original's surroundings still
-  hold (the bean seller on Zora's River was past the boulders, not before them).
+- **Worth watching: the adult's temples' Skulltulas ask for all their temple can.** All 100 are in `SKULLTULA_RULES`
+  now, the Fire, Forest, Water, Shadow and Spirit Temples' 25 and Gerudo Fortress's two with their area's own rule
+  (`RULES`) in place of that and `SKULLTULA_ASKS`: no Megaton Hammer or Longshot where the temple takes none. Not
+  less than the area's, though the original's logic asks less of most: a temple's keys may lie behind anything
+  the temple takes (Dungeon keys: Own dungeon), and the rules know no keys. The one that asks less is the Forest
+  Temple's first, in the entrance room, which takes no key. Three of the Spirit Temple's are in the child's half
+  and take less; they were not told apart surely enough to say which. Also to watch: the matches marked
+  "probably" in `skulltulas_to_check.txt`, and that the original's surroundings still hold (the bean seller on
+  Zora's River was past the boulders, not before them).
 - **Seen in play, end to end:** the Lens of Truth, put by the logic on the Zora's River Skulltula in the soft soil in
   front of the bean seller (past the boulders: bombs, bugs), was got there. On the way the Goron's Bracelet
   (`Item_Gauntlet_Goron`, not in the pool) was made a pick-up and dropped by the Kokiri Forest night Skulltula
@@ -305,7 +307,7 @@ not known without reading that format.
   see than small. Both seen without a window, the Lens of Truth put on the vines.
 - `rando	est_chests.txt` (lines of `<a chest's hash> <an item>`) makes a chest give an item whatever the seed put
   there: for trying what comes after a gating item without playing up to it.
-- **What each Skulltula asks for** (`SKULLTULA_RULES`, 73 of the 100 by hash) is written from the original game's
+- **What each Skulltula asks for** (`SKULLTULA_RULES`, all 100 by hash) is written from the original game's
   randomizer logic (track-oot.net's `logic/vanilla.min.json`, without tricks; its `database/world.json` has who can
   get each and when). The two games' lists are the same length area by area, Lake Hylia's five and Lon Lon Ranch's
   four being in the Hyrule Field map here. Each was matched to the map's by its area, the child's or the adult's
@@ -315,7 +317,7 @@ not known without reading that format.
   southern grotto's crate (the adult's, after the child breaks the rock and kills the Skullwalltula; the grotto by
   the Gerudo Valley entrance has none), the tunnel on Lake Hylia's south-west shore, the vines inside Lon Lon
   Ranch's south-west tower, soft soil in front of the bean seller on Zora's River (past the boulders here: bombs), and the Great Deku Tree's fourth,
-  which takes no bombs. The adult's temples' are not in the table: each asks for all its temple can.
+  which takes no bombs.
 - **Kept from the Skulltulas** (`SKULLTULA_ITEMS_NOT_YET`): rupees, arrows and the magic jar. Their pouch file is one
   the game's own pick-up of the same thing has a copy of, and the first one loaded is the one used. Tried on the way,
   and no answer: getting a bundle as a token is got (`GetType` "Medium") with the event each time, the token's
