@@ -555,6 +555,56 @@ def skulltulas(data):
     return out
 
 
+# ---- the logic for a Gold Skulltula: what Link needs before its drop can be got ----
+# Not known Skulltula by Skulltula yet, so each asks for too much: what its area's chests can ask for (RULES), and
+# what a Skulltula's place can ask for anywhere: the three stones, the Longshot (the Hookshot's reach and more) and
+# the Megaton Hammer. A Skulltula known better than that is in SKULLTULA_RULES, by its hash: what it asks for in
+# place of all that. A gating item only goes to a Skulltula a child's map has: its drop is brought in by the
+# Boomerang, seen in play; the Hookshot bringing an item in has not been seen, and an adult has no Boomerang.
+SKULLTULA_ASKS = ADULT | {LONG, HAM}
+# (where a child goes: the overworld's maps say it in their name, <area>_Child_..., and a dungeon has one map for both)
+SKULLTULA_CHILD_DUNGEONS = ("InsideTheDekuTree", "DodongoCavern", "InsideJabuJabuBelly", "BottomOfTheWell")
+SKULLTULA_RULES = {}
+SKULLTULA_GATING_SHARE = 0.35   # (of the gating items, how many are tried on a Skulltula)
+
+
+def skulltula_rule(h, area):
+    """what the Skulltula of this hash, in this area, asks for"""
+    return SKULLTULA_RULES.get(h, rule(area, "") | SKULLTULA_ASKS)
+
+
+def gate_skulltulas(rng, gives, drops, skulls, needs, skull_needs, fixed, share=SKULLTULA_GATING_SHARE):
+    """Some of the gating items the logic put in chests (gives) moved to Gold Skulltulas that still drop their token
+    (skulls: hashes, in a fixed order; drops: the ones that do not), each only if every gating item can still be
+    got by the rules. The chest it leaves gives the token. needs and skull_needs: what a chest and a Skulltula ask
+    for; fixed: [(what it asks for, the item)] of the gating items in chests that stay.
+    Returns (what the chests give, what the Skulltulas drop, the spheres, how many were moved)."""
+    gives, drops = dict(gives), dict(drops)
+    where = {i: (False, h) for h, i in gives.items() if i in PROGRESSION}   # item -> (on a Skulltula, the hash)
+
+    def placed():
+        return fixed + [((skull_needs if on_skull else needs)[h], i) for i, (on_skull, h) in sorted(where.items())]
+
+    want = {i for _, i in fixed} | set(where)
+    free = [h for h in skulls if h not in drops]
+    rng.shuffle(free)
+    order = sorted(where)
+    rng.shuffle(order)
+    moved = 0
+    for item in order:
+        if not free or rng.random() >= share:
+            continue
+        chest = where[item][1]
+        where[item] = (True, free[-1])
+        if {i for sphere in collect(placed()) for i in sphere} >= want:
+            drops[free.pop()] = item
+            gives[chest] = TOKEN
+            moved += 1
+        else:
+            where[item] = (False, chest)
+    return gives, drops, collect(placed()), moved
+
+
 def mix_skulltulas(rng, gives, skulls):
     """The tokens of `skulls` (Skulltulas' hashes, in a fixed order) and the chests' items a Skulltula may be given
     (SKULLTULA_ITEMS) shuffled among those chests and those Skulltulas. Returns (what the chests give now, {a
@@ -1288,7 +1338,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" skulltulas %d" % a.skulltulas if a.skulltulas else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + ((" skulltulas %d" + " gated" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else ""))
     # (the seed in the game folder, made by an earlier version of the rules: made again as it was, not another one
@@ -1329,7 +1379,7 @@ def main():
 
     # ---- every map file with chests ----
     files = collections.OrderedDict()   # rel -> (bytes, [Chest])
-    skulls = collections.OrderedDict()  # hash -> [area, position, can be given a drop (in every file it is in), a dungeon's]
+    skulls = collections.OrderedDict()  # hash -> [area, position, can be given a drop (in every file it is in), a dungeon's, a child's map has it]
     paths = []
     for top, dirs, names in os.walk(os.path.join(romfs, "Banc")):
         dirs.sort()
@@ -1351,8 +1401,9 @@ def main():
                 pass
         for h, pos, can, dungeon in here:
             parts = rel.split("/")
-            entry = skulls.setdefault(h, [parts[1] if len(parts) > 2 else "(Banc)", pos, True, False])
+            entry = skulls.setdefault(h, [parts[1] if len(parts) > 2 else "(Banc)", pos, True, False, False])
             entry[2], entry[3] = entry[2] and can, entry[3] or dungeon
+            entry[4] = entry[4] or "_Child_" in parts[-1] or entry[0] in SKULLTULA_CHILD_DUNGEONS
         if found or here or any(struct.pack("<Q", h) in data for h in drops):
             files[rel] = (data, found)
 
@@ -1398,6 +1449,12 @@ def main():
         mine = [h for h, s in skulls.items() if a.skulltulas == 3 or s[3] == (a.skulltulas == 1)]   # (this setting's)
         able = [h for h in mine if skulls[h][2]]
         gives, skull_drops = mix_skulltulas(random.Random("skulltulas:%d:%d:%d" % (seed, a.skulltulas, len(able))), gives, able)
+        if logic:   # (some of the gating items to the Skulltulas, where the rules still let the game be finished)
+            fixed = [(needs[h], spots[h][1]) for h in spots if h not in gives and spots[h][1] in PROGRESSION]
+            gives, skull_drops, spheres, gated = gate_skulltulas(
+                random.Random("skulltulas gated:%d:%d:%d" % (seed, a.skulltulas, len(able))), gives, skull_drops,
+                [h for h in able if skulls[h][4]], needs, {h: skulltula_rule(h, skulls[h][0]) for h in able}, fixed)
+            print("Gold Skulltulas: %d gating item%s now dropped by one" % (gated, "" if gated == 1 else "s"))
         for h, item in skull_drops.items():
             drops.setdefault(h, item)   # (a test's drop for the same Skulltula stays)
         pickups = sorted(set(pickups) | set(skull_drops.values()))
@@ -1521,7 +1578,9 @@ def main():
     spoiler = []
     if logic:
         spoiler += ["", "the gating items, in the order the rules say they can be got:"] + [
-            "  %d. %s" % (k + 1, ", ".join("%s (%s)" % (i, next(spots[h][0] for h in gives if gives[h] == i) if i in gives.values() else "its own chest")
+            "  %d. %s" % (k + 1, ", ".join("%s (%s)" % (i, next(spots[h][0] for h in gives if gives[h] == i) if i in gives.values() else
+                                                      next(skulls[h][0] for h in skull_drops if skull_drops[h] == i) + ", a Gold Skulltula"
+                                                      if i in skull_drops.values() else "its own chest")
                                            for i in sphere)) for k, sphere in enumerate(spheres)]
     area_now = None
     for h in sorted(gives, key=lambda q: (spots[q][0], str(spots[q][5]), q)):
@@ -1535,7 +1594,7 @@ def main():
     if a.skulltulas:
         spoiler += ["", "Gold Skulltulas (area, position -> what it drops)"]
         for h in sorted(skulls, key=lambda q: (skulls[q][0], str(skulls[q][1]), q)):
-            area, pos, can, _ = skulls[h]
+            area, pos, can = skulls[h][:3]
             spoiler.append("  %-22s %-26s -> %s" % (area, str(pos), skull_drops.get(h) or drops.get(h, "(its token)" if can else "(its token: cannot be given a drop)")))
     if a.dry_run:
         print("\n".join(spoiler[:50]))

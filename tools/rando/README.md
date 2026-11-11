@@ -262,6 +262,14 @@ By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron
   their Skulltulas were back when the room was entered again; the nuts were got once some had been bought. It is
   there for later, as a token out of reach is, with no text to say why. The stick and Bombchu bundles have not been
   seen.
+- **Gating items on Skulltulas** (`gate_skulltulas`, with Major items and the logic): after the chests are placed, about
+  a third of the gating items are each tried on a Skulltula that still drops its token, and stay there if every
+  gating item can still be got by the rules; the chest left behind gives the token. What a Skulltula asks for is not
+  known one by one yet, so each asks for too much (`SKULLTULA_ASKS`: the three stones' items, the Longshot and the
+  Megaton Hammer, with all its area can ask for); `SKULLTULA_RULES` is for the ones known better, by hash, and
+  `<game folder>/rando/skulltulas_to_check.txt` lists all 100 to be filled in. Only a Skulltula a child's map has is
+  given one (`_Child_` in the overworld map's name, or one of the child's four dungeons): its drop is brought in by
+  the Boomerang, seen in play, and the Hookshot bringing an item in has not been seen. Not seen in play yet.
 - **Kept from the Skulltulas** (`SKULLTULA_ITEMS_NOT_YET`): rupees, arrows and the magic jar. Their pouch file is one
   the game's own pick-up of the same thing has a copy of, and the first one loaded is the one used. Tried on the way,
   and no answer: getting a bundle as a token is got (`GetType` "Medium") with the event each time, the token's

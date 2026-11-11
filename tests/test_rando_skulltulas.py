@@ -108,6 +108,42 @@ def main():
     check(not set(seed.SKULLTULA_ITEMS) & (set(seed.PROGRESSION) | set(seed.DUNGEON_ITEMS) | {"Obj_Heart_Piece"}),
           "a gating item, a dungeon's key or a Heart Piece may be given to a Skulltula")
 
+    # ---- gating items to the Skulltulas, where the rules still let the game be finished ----
+    P = sorted(seed.PROGRESSION)
+    chests = collections.OrderedDict((k, P[k] if k < len(P) else "TBox_Rupee_Red") for k in range(40))
+    needs = {k: frozenset() for k in chests}
+    skulls = [2000 + k for k in range(30)]
+    easy = {h: frozenset() for h in skulls}
+    moved_all = 0
+    for n in range(40):
+        gives2, drops2, spheres, moved = seed.gate_skulltulas(random.Random("g%d" % n), chests, {2000: "Item_ScrubBusinessSeed"}, skulls, needs, easy, [])
+        check(moved == sum(1 for i in gives2.values() if i == seed.TOKEN) == len(drops2) - 1, "a chest gives the token for each gating item moved")
+        check(drops2[2000] == "Item_ScrubBusinessSeed" and all(i in seed.PROGRESSION for h, i in drops2.items() if h != 2000),
+              "a Skulltula that drops a chest's item already was given another, or what is no gating item")
+        check(collections.Counter(i for i in list(gives2.values()) + list(drops2.values()) if i != seed.TOKEN) ==
+              collections.Counter(list(chests.values()) + ["Item_ScrubBusinessSeed"]), "moving a gating item lost or made an item")
+        check({i for sphere in spheres for i in sphere} == seed.PROGRESSION, "the spheres after the move do not have every gating item")
+        check(seed.gate_skulltulas(random.Random("g%d" % n), chests, {2000: "Item_ScrubBusinessSeed"}, skulls, needs, easy, []) ==
+              (gives2, drops2, spheres, moved), "the same seed is not the same move")
+        moved_all += moved
+    check(40 * 13 * 0.15 < moved_all < 40 * 13 * 0.6, "about the share asked for is moved (%d of %d)" % (moved_all, 40 * 13))
+    # (a Skulltula that asks for the item itself, or for what cannot be had before it: never given it)
+    hard = {h: seed.PROGRESSION for h in skulls}
+    for n in range(20):
+        gives2, drops2, spheres, moved = seed.gate_skulltulas(random.Random("h%d" % n), chests, {}, skulls, needs, hard, [], share=1.0)
+        check(moved == 0 and gives2 == dict(chests) and not drops2, "a gating item went to a Skulltula that asks for it")
+    # (one that asks for the sword: everything but the sword can go there, and what the rules say is still finishable)
+    sword = {h: frozenset((seed.S,)) for h in skulls}
+    gives2, drops2, spheres, moved = seed.gate_skulltulas(random.Random("s"), chests, {}, skulls, needs, sword, [], share=1.0)
+    check(moved == 12 and seed.S not in drops2.values() and spheres[0] == [seed.S], "with the sword asked for, the sword stays and the rest go")
+    check(seed.gate_skulltulas(random.Random("s"), chests, {}, [], needs, sword, [], share=1.0)[3] == 0, "no Skulltula: nothing moves")
+    # (what a Skulltula asks for: too much where it is not known better, and what is written for it where it is)
+    check(seed.skulltula_rule(1, "InsideTheDekuTree") >= seed.rule("InsideTheDekuTree", "") | seed.SKULLTULA_ASKS and
+          seed.skulltula_rule(1, "NoSuchArea") == seed.PROGRESSION, "a Skulltula asks for less than its area and a Skulltula's place can")
+    seed.SKULLTULA_RULES[1] = frozenset((seed.BM,))
+    check(seed.skulltula_rule(1, "InsideTheDekuTree") == frozenset((seed.BM,)), "a Skulltula known by its hash does not ask for what is written")
+    del seed.SKULLTULA_RULES[1]
+
     # ---- an item made from another item: the pick-up's parent goes to the one made from the chest's base ----
     actor, table_, pouch = packs.ACTOR, packs.TABLE, packs.POUCH
     chest_base = "Work/" + (actor % seed.CHEST_BASE).replace(".bgyml", ".gyml")
