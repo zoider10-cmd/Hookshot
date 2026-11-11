@@ -113,7 +113,7 @@ class AppImageCheck(unittest.TestCase):
         main = src[src.index("def main("):]
         self.assertLess(main.index("check_cpu()"), main.index("drop_stale_objects(work)"))
         check = src[src.index("def check(a, work):"):]
-        self.assertLess(check.index("check_cpu()"), check.index("if a.nup:"))
+        self.assertLess(check.index("check_cpu()"), check.index("if a.nup or a.nx:"))
 
 
 if __name__ == "__main__":

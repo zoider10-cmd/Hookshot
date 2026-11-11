@@ -9,6 +9,7 @@
   <a href="#already-playing-update">Update</a> ·
   <a href="#new-player-install">Install</a> ·
   <a href="#the-launcher">Launcher</a> ·
+  <a href="#amd-fsr-4">AMD FSR 4</a> ·
   <a href="#whats-in-mako">What's in Mako</a> ·
   <a href="#known-issues">Known issues</a> ·
   <a href="#credits">Credits</a>
@@ -26,19 +27,22 @@ Mako is a fork of [Hookshot](https://github.com/NotRexed/Hookshot), the static r
 
 ## Already playing? Update
 
-For players of **Hookshot AMD fix 2.0 / 2.1** who already have the launcher.
+For players who already have the **Mako launcher**.
 
-1. Open your launcher and press **Update**. It installs a small patch.
-2. Start the game. A **Mako** window asks to update: press **Yes**.
-3. Your builder downloads Mako and builds your game folder again by itself (around 45 minutes, then a first shader
-   preparation). **Your saves and settings are kept.** The old launcher and shortcut are replaced by **Mako**.
+1. Open the launcher and press **Update**.
+2. Small graphics fixes install in seconds. Bigger updates (like **3.3**) download the new builder and **build your game folder
+   again by itself** (around 25-45 minutes, then a first shader preparation). **Your saves and settings are kept.**
 
-Nothing to download by hand. If the builder that made your folder is gone, the window offers this page instead: follow
-[New player? Install](#new-player-install) and build into the **same folder** (saves and settings are kept).
+Still on **Hookshot AMD fix 2.x**? Follow [New player? Install](#new-player-install) and build into the **same folder**.
+
+> [!NOTE]
+> **Controller not working after updating to 3.3?** The first 3.3 package was missing `SDL2.dll` (DualSense, Switch Pro and
+> other non-Xbox controllers). Download **`SDL2.dll`** from the [3.3 release](https://github.com/Shakoquo/Mako/releases/tag/mako-3.3)
+> and put it in your game folder, next to `hookshot.exe`. No rebuild needed.
 
 ## New player? Install
 
-1. Download **`HookshotBuilder.zip`** from the [latest release](https://github.com/Shakoquo/Hookshot/releases/latest) and unzip it
+1. Download **`MakoBuilder.zip`** from the [latest release](https://github.com/Shakoquo/Mako/releases/latest) and unzip it
    anywhere (for example in `Documents`).
 2. Open the `HookshotBuilder` folder and run **`HookshotBuilder.exe`** (the Mako Builder).
 3. Pick your game file (the builder lists the `.nup` files it finds; or **Browse…**), choose where the game goes and its language.
@@ -58,8 +62,8 @@ Nothing to download by hand. If the builder that made your folder is gone, the w
 
 The **Mako** shortcut opens the launcher:
 - **Play**, and **Update** when a new version is out (graphics fixes install in seconds; bigger updates rebuild the game by themselves).
-- **Graphics**: quality preset, output resolution (2048x1152, 2560x1440, 3840x2160), 3D resolution, upscaling, sharpness,
-  frame generation, frame pacing, window or full screen, FPS counter.
+- **Graphics**: quality preset, output resolution (1280x720 up to 3840x2160), 3D resolution, upscaler (AMD FSR 3.1 / FSR 4),
+  sharpness, frame generation, frame pacing, VSync, frame rate cap, Anti-Lag 2, window or full screen.
 - **Game**: language and game options. **AMD fixes**: switches for AMD-specific problems.
 - **Randomizer**: the settings of a randomizer seed (chests, Gold Skulltulas, quest rewards, songs, Heart Pieces, shops,
   Deku Scrubs, dungeon rewards and keys) and **New seed**. They are also on the **Randomizer** tab of the game's menu
@@ -68,6 +72,18 @@ The **Mako** shortcut opens the launcher:
   and not yet checked against the remake ([tools/rando](tools/rando/README.md)). It needs Python 3 with `zstandard`,
   and a game built from this source. The other settings are not placed yet.
 - **Saves**, **Import saves** (from Eden, Lichii, Ryujinx, a Switch or another Hookshot) and **Game folder**.
+
+## AMD FSR 4
+
+- **AMD FSR 3.1** is built into the game: it works on almost every graphics card, **nothing to download**.
+  <kbd>Insert</kbd> in game → **Upscaler** → **AMD FSR 3.1**.
+- **AMD FSR 4** only runs on **Radeon RX 9000** cards, and needs two files from AMD that Mako cannot ship (AMD's signed files):
+  1. Download AMD's [FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) (release **v2.4.0**).
+  2. In it, open `Kits/FidelityFX/signedbin`.
+  3. Copy **`amd_fidelityfx_loader_vk.dll`** and **`amd_fidelityfx_upscaler_vk.dll`** into your game folder, next to `hookshot.exe`.
+  4. Start the game: <kbd>Insert</kbd> → **Upscaler** → **AMD FSR 4**.
+
+  The <kbd>Insert</kbd> menu only lists FSR 4 when it can run (an RX 9000 card **and** both files). The launcher always lists it.
 
 ## What's in Mako
 
@@ -83,7 +99,7 @@ The **Mako** shortcut opens the launcher:
 
 - Some trees (mostly firs, for example near the Temple of Time) can lose their leaves when you get close.
 - The first time a new effect appears, the game can pause for a moment while it is prepared; it does not happen again.
-- Report problems with your `hookshot_log.txt` (in the game folder) on the [issues page](https://github.com/Shakoquo/Hookshot/issues).
+- Report problems with your `hookshot_log.txt` (in the game folder) on the [issues page](https://github.com/Shakoquo/Mako/issues).
 
 ## Build from source
 

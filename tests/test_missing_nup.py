@@ -83,7 +83,7 @@ class MissingNupTests(unittest.TestCase):
     def expected_error(self, stat_error=None):
         code, text = self.invoke(stat_error)
         self.assertEqual(code, 1, text)
-        self.assertIn("@@error Could not access your .nup file", text)
+        self.assertIn("@@error Could not access your game package", text)
         self.assertIn(str(self.package), text)
         self.assertIn("choose the file again", text)
         self.assertIn("reconnect", text)

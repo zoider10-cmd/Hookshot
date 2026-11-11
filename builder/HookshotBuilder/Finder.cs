@@ -2,13 +2,13 @@ using System.IO;
 
 namespace HookshotBuilder;
 
-/// A .nup found on this PC
+/// A .nup or .nx game package found on this PC
 sealed record Dump(string Path, string Where, long Size, DateTime Modified);
 
 /// The player's game files where people keep them, and the game's shortcuts.
 static class Finder
 {
-    /// .nup files in Downloads, Desktop, Documents, the home folder and the top of each drive, one folder level down too,
+    /// .nup/.nx files in Downloads, Desktop, Documents, the home folder and the top of each drive, one folder level down too,
     /// newest first. (Only names and sizes are read here: the version is checked one file at a time afterwards.)
     public static List<Dump> FindDumps()
     {
@@ -47,7 +47,8 @@ static class Finder
             {
                 try
                 {
-                    foreach (var f in Directory.EnumerateFiles(sub, "*.nup"))
+                    foreach (var pattern in new[] { "*.nup", "*.nx" })
+                    foreach (var f in Directory.EnumerateFiles(sub, pattern))
                     {
                         var info = new FileInfo(f);
                         if (seen.Add(info.FullName)) found.Add(new Dump(info.FullName, name, info.Length, info.LastWriteTime));

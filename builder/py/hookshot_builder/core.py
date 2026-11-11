@@ -325,7 +325,7 @@ FOLDER_PROGRAMS = _guid("A77F5D77-2E2B-44C3-A6A2-ABA601054A51")
 
 
 def find_dumps():
-    """.nup files in Downloads, Desktop, Documents, the home folder and the top of each drive, one folder level down too, newest first"""
+    """.nup/.nx files in Downloads, Desktop, Documents, the home folder and the top of each drive, one folder level down too, newest first"""
     home = os.path.expanduser("~")
     places = [(_known_folder(FOLDER_DOWNLOADS) or os.path.join(home, "Downloads"), "Downloads"),
               (_known_folder(FOLDER_DESKTOP) or os.path.join(home, "Desktop"), "Desktop"),
@@ -351,7 +351,7 @@ def find_dumps():
         for sub in dirs:
             try:
                 for e in os.scandir(sub):
-                    if e.is_file() and e.name.lower().endswith(".nup"):
+                    if e.is_file() and e.name.lower().endswith((".nup", ".nx")):
                         full = os.path.abspath(e.path)
                         if os.path.normcase(full) not in seen:
                             seen.add(os.path.normcase(full))

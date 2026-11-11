@@ -1116,7 +1116,7 @@ class Window(QWidget):
             self.folders_label = l
             self.dump_list.addWidget(l)
         if not self.dumps:
-            l = note("No .nup files in Downloads, Desktop, Documents or the top folders of your drives. Browse to yours, or drop it on "
+            l = note("No .nup or .nx files in Downloads, Desktop, Documents or the top folders of your drives. Browse to yours, or drop it on "
                      "this window.")
             l.setContentsMargins(16, 14, 16, 14)
             self.dump_list.addWidget(l)
@@ -1177,7 +1177,8 @@ class Window(QWidget):
         import threading
 
         def run():
-            r = core.check(tools, ["--check", "--nup", nxt.path])
+            kind = "--nx" if nxt.path.lower().endswith(".nx") else "--nup"
+            r = core.check(tools, ["--check", kind, nxt.path])
             self.post(self.checked, nxt.path, r)
         threading.Thread(target=run, daemon=True).start()
 
@@ -1239,13 +1240,13 @@ class Window(QWidget):
     def dropEvent(self, e):
         for u in e.mimeData().urls():
             p = u.toLocalFile()
-            if p.lower().endswith(".nup") and os.path.isfile(p):
+            if p.lower().endswith((".nup", ".nx")) and os.path.isfile(p):
                 self.add_dump(p, "Dropped")
             elif os.path.isdir(os.path.join(p, "romfs")) and os.path.isdir(os.path.join(p, "exefs")):
                 self.use_folders(os.path.join(p, "romfs"), os.path.join(p, "exefs"))
 
     def browse_nup(self):
-        f, _ = QFileDialog.getOpenFileName(self, "Choose your game file", "", "Game file (*.nup)")
+        f, _ = QFileDialog.getOpenFileName(self, "Choose your game file", "", "Game file (*.nup *.nx)")
         if f:
             self.add_dump(os.path.normpath(f), "Chosen")
 
@@ -1336,7 +1337,7 @@ class Window(QWidget):
         if self.romfs and self.exefs:
             args = ["--romfs", self.romfs, "--exefs", self.exefs]
         elif self.chosen_nup:
-            args = ["--nup", self.chosen_nup]
+            args = ["--nx" if self.chosen_nup.lower().endswith(".nx") else "--nup", self.chosen_nup]
         else:
             return
         args += ["--out", self.out_path.text(), "--language", self.lang[0]]
@@ -1365,7 +1366,7 @@ class Window(QWidget):
             self.rows[sid] = row
             self.stage_list.addWidget(row)
         if update:
-            self.rows["read"].small_text("Your game files are kept: the .nup isn't needed")
+            self.rows["read"].small_text("Your game files are kept: the source package isn't needed")
 
     def run(self, tools, args, keep_rows=False, dlss=False):
         sel = self.worker_box.currentText()

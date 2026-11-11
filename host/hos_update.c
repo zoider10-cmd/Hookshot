@@ -29,8 +29,8 @@
 
 #include "../gpu/vk/vk_api.h"   /* (MKWVK_API_VERSION) */
 
-#define HOOKSHOT_FORK_BASE "mako-3.3"      /* (the exe: which graphics patches fit it) */
-#define HOOKSHOT_FORK_VERSION "mako-3.3"   /* (the release this folder was built from) */
+#define HOOKSHOT_FORK_BASE "mako-3.3.2rc.2"      /* (the exe: which graphics patches fit it) */
+#define HOOKSHOT_FORK_VERSION "mako-3.3.2rc.2"   /* (the release this folder was built from) */
 #define UPDATE_HOST L"api.github.com"
 #define UPDATE_PATH L"/repos/Shakoquo/Mako/releases/latest"
 #define RELEASES_PAGE L"https://github.com/Shakoquo/Mako/releases/latest"

@@ -1,10 +1,11 @@
 """A game folder from the user's own dump: what the builder app (builder/) runs.
 
     python -I nx2/make_game.py --nup <file.nup> --out <folder> [--work <folder>] [--jobs <n>]
+    python -I nx2/make_game.py --nx <file.nx> --out <folder> [--work <folder>] [--jobs <n>]
     python -I nx2/make_game.py --romfs <dir> --exefs <dir> --out <folder> [--work <folder>] [--jobs <n>]
-    python -I nx2/make_game.py --check --nup <file.nup>       (or --exefs <dir>: is this the right game and version?)
+    python -I nx2/make_game.py --check --nup <file.nup>       (also --nx <file.nx>, or --exefs <dir>)
     python -I nx2/make_game.py --update <folder>             (a folder built before, again with these tools: the game files it keeps)
-    python -I nx2/make_game.py --game <.nup or folder> --prepare   (RecompLauncher: --out defaults to ~/Games/Hookshot; no window,
+    python -I nx2/make_game.py --game <.nup, .nx or folder> --prepare   (RecompLauncher: --out defaults to ~/Games/Hookshot; no window,
                                                                     "progress <0..1> <text>" lines and an "error <text>" line on stdout,
                                                                     exit 0 when the game is built; with --check, its "check ok|bad" line)
 
@@ -422,10 +423,13 @@ def check_cpu():
 def check(a, work):
     check_windows_sdk()   # (first: said in plain words when the game is chosen, not after it has been read)
     check_cpu()
-    if a.nup:
+    if a.nup or a.nx:
         probe = os.path.join(work, "probe")
         shutil.rmtree(probe, ignore_errors=True)
-        run(PY + ["nx2/nup.py", a.nup, "--extract", probe, "--only", "exefs"])
+        if a.nx:
+            run(PY + ["nx2/nx.py", a.nx, "--extract", probe, "--only", "exefs", "--build", BUILD_ID])
+        else:
+            run(PY + ["nx2/nup.py", a.nup, "--extract", probe, "--only", "exefs"])
         check_modules(os.path.join(probe, "exefs"))
         bid = build_id(os.path.join(probe, "exefs", "main"))
         shutil.rmtree(probe, ignore_errors=True)
@@ -1258,6 +1262,7 @@ def place_ngx_runtime(out):
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--nup")
+    p.add_argument("--nx")
     p.add_argument("--romfs")
     p.add_argument("--exefs")
     p.add_argument("--out")
@@ -1268,7 +1273,7 @@ def parse_args():
     p.add_argument("--jobs", type=int)
     p.add_argument("--language", default="en-US", help="the game's language: a code from LANGUAGES, written to language.txt")
     p.add_argument("--check", action="store_true")
-    p.add_argument("--game", help="your copy: a .nup file, or a folder with romfs and exefs in it (the same as --nup, or --romfs and --exefs)")
+    p.add_argument("--game", help="your copy: a .nup/.nx file, or a folder with romfs and exefs in it")
     p.add_argument("--prepare", action="store_true", help="for RecompLauncher: no window, progress lines, --out ~/Games/Hookshot unless given")
     p.add_argument("--update", help="a game folder built before: built again from the game files it keeps (the game's update offer)")
     p.add_argument("--no-prepare-shaders", action="store_true",
@@ -1291,7 +1296,10 @@ def parse_args():
             if not (os.path.isdir(a.romfs) and os.path.isdir(a.exefs)):
                 fail("The folder %s needs both a romfs and an exefs folder in it." % a.game)
         elif os.path.isfile(a.game):
-            a.nup = a.game
+            if a.game.lower().endswith(".nx"):
+                a.nx = a.game
+            else:
+                a.nup = a.game
         else:
             fail("Your copy of the game was not found: %s" % a.game)
     a.default_work = p.get_default("work")   # (main: the builder's own work folder, stop_stray_compilers)
@@ -1314,8 +1322,11 @@ def main(a=None):
     if a.update:
         a.out = a.update
         a.language = folder_language(a.update) or a.language
-    if not a.out or not (a.update or a.nup or (a.romfs and a.exefs)):
-        fail("needs --out, and --nup or --romfs with --exefs")
+    sources = int(bool(a.nup)) + int(bool(a.nx)) + int(bool(a.romfs and a.exefs))
+    if sources > 1:
+        fail("choose only one game source: --nup, --nx, or --romfs with --exefs")
+    if not a.out or not (a.update or a.nup or a.nx or (a.romfs and a.exefs)):
+        fail("needs --out, and --nup, --nx, or --romfs with --exefs")
     out = os.path.abspath(a.out)
     work = os.path.abspath(a.work)
     os.makedirs(out, exist_ok=True)
@@ -1353,25 +1364,26 @@ def main(a=None):
         shutil.copytree(kept, exefs)
         check_modules(exefs)
         stand_in_damaged_files(out, romfs)   # (a folder unpacked by an earlier builder from a 23.3 GB dump)
-    elif a.nup:
+    elif a.nup or a.nx:
         # (what an earlier build left is not kept without a reason to trust it: builders before the compressed .nup fix wrote those files as
         # they lay, so a folder they left held broken game data, and the game crashed at start over its empty dictionaries)
         game = os.path.join(out, ".game")
         good = os.path.join(out, ".hookshot_romfs")
         check_cache_paths(out, (game, good, kept, romfs))
-        # (an update of the builder over the same .nup: nothing to read again, only what the build needs. Issues 21 and 28)
+        # (an update of the builder over the same package: nothing to read again, only what the build needs. Issues 21 and 28)
         try:
-            st = os.stat(a.nup)
+            source = a.nx or a.nup
+            st = os.stat(source)
         except OSError as e:
-            fail("Could not access your .nup file %s: %s. Check that the file is still there, reconnect its drive if needed, "
-                 "or choose the file again in Hookshot Builder." % (a.nup, e))
-        stamp = "unpacked by this builder: %s %d" % (os.path.basename(a.nup), st.st_size)
+            fail("Could not access your game package %s: %s. Check that the file is still there, reconnect its drive if needed, "
+                 "or choose the file again in Hookshot Builder." % (source, e))
+        stamp = ("unpacked by this builder (NXAR): %s %d" if a.nx else "unpacked by this builder: %s %d") % (os.path.basename(source), st.st_size)
         same = False
         if os.path.exists(good) and os.path.isdir(romfs) and os.path.isdir(kept):
             with open(good) as f:
                 same = f.read().strip() == stamp
         if same:
-            print("the game was read from this .nup before: reading it again is skipped", flush=True)
+            print("the game was read from this package before: reading it again is skipped", flush=True)
             shutil.copytree(kept, exefs)
         else:
             shutil.rmtree(game, ignore_errors=True)
@@ -1380,7 +1392,10 @@ def main(a=None):
             # Keep the last usable cache until the new package has been read and validated.
             staged_exefs = os.path.join(game, "exefs")
             try:
-                run(PY + ["nx2/nup.py", a.nup, "--extract", game])
+                if a.nx:
+                    run(PY + ["nx2/nx.py", source, "--extract", game, "--build", BUILD_ID])
+                else:
+                    run(PY + ["nx2/nup.py", source, "--extract", game])
                 check_modules(staged_exefs)
                 check_supported_build(staged_exefs)
                 if not os.path.isdir(os.path.join(game, "romfs")):
@@ -1403,7 +1418,7 @@ def main(a=None):
             with open(good, "w") as f:
                 f.write(stamp + chr(10))
         check_modules(exefs)
-        # (also when the .nup was read before: a folder built from a 23.3 GB dump by an earlier builder gets them too)
+        # (also when the package was read before: a folder built from a 23.3 GB dump by an earlier builder gets them too)
         stand_in_damaged_files(out, romfs)
     else:
         check_cache_paths(out, (kept, romfs))

@@ -423,7 +423,7 @@ public partial class MainWindow : Window
         {
             DumpList.Children.Add(new TextBlock
             {
-                Text = "No .nup files in Downloads, Desktop, Documents or the top folders of your drives. Browse to yours, or drop it on this window.",
+                Text = "No .nup or .nx files in Downloads, Desktop, Documents or the top folders of your drives. Browse to yours, or drop it on this window.",
                 Style = (Style)FindResource("Note"), Margin = new Thickness(16, 14, 16, 14),
             });
             return;
@@ -474,7 +474,8 @@ public partial class MainWindow : Window
         {
             checks[d.Path] = null;
             FillDumps();
-            var r = await Runner.Check(tools, new[] { "--check", "--nup", d.Path });
+            var sourceArg = d.Path.EndsWith(".nx", StringComparison.OrdinalIgnoreCase) ? "--nx" : "--nup";
+            var r = await Runner.Check(tools, new[] { "--check", sourceArg, d.Path });
             checks[d.Path] = r;
             if (!r.Ok && r.Text.Contains("antivirus", StringComparison.OrdinalIgnoreCase))
             {
@@ -546,7 +547,8 @@ public partial class MainWindow : Window
         if (runner != null || e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } paths) return;
         foreach (var p in paths)
         {
-            if (p.EndsWith(".nup", StringComparison.OrdinalIgnoreCase) && File.Exists(p)) AddDump(p, "Dropped");
+            if ((p.EndsWith(".nup", StringComparison.OrdinalIgnoreCase) || p.EndsWith(".nx", StringComparison.OrdinalIgnoreCase)) && File.Exists(p))
+                AddDump(p, "Dropped");
             else if (Directory.Exists(System.IO.Path.Combine(p, "romfs")) && Directory.Exists(System.IO.Path.Combine(p, "exefs")))
                 UseFolders(System.IO.Path.Combine(p, "romfs"), System.IO.Path.Combine(p, "exefs"));
         }
@@ -554,7 +556,7 @@ public partial class MainWindow : Window
 
     void BrowseNup(object sender, RoutedEventArgs e)
     {
-        var d = new OpenFileDialog { Filter = "Game file (*.nup)|*.nup", Title = "Choose your game file" };
+        var d = new OpenFileDialog { Filter = "Game file (*.nup;*.nx)|*.nup;*.nx", Title = "Choose your game file" };
         if (d.ShowDialog(this) == true) AddDump(d.FileName, "Chosen");
     }
 
@@ -683,7 +685,7 @@ public partial class MainWindow : Window
         }
         var args = new List<string>();
         if (romfs != null && exefs != null) args.AddRange(new[] { "--romfs", romfs, "--exefs", exefs });
-        else if (chosenNup != null) args.AddRange(new[] { "--nup", chosenNup });
+        else if (chosenNup != null) args.AddRange(new[] { chosenNup.EndsWith(".nx", StringComparison.OrdinalIgnoreCase) ? "--nx" : "--nup", chosenNup });
         else return;
         args.AddRange(new[] { "--out", OutPath.Text, "--language", lang.Code });
         if (FsrTick.IsChecked == true) args.Add("--fsr");   // (an --update of the folder keeps it: make_game.py's mark)
@@ -745,7 +747,7 @@ public partial class MainWindow : Window
             rows[list[i].Id] = row;
             StageList.Children.Add(row.Root);
         }
-        if (update) rows["read"].Small("Your game files are kept: the .nup isn't needed");
+        if (update) rows["read"].Small("Your game files are kept: the source package isn't needed");
     }
 
     /// dlss: NVIDIA DLSS, its license accepted: NVIDIA's SDK fetched into Storage.NgxSdk first (only what is missing), and built in
@@ -1198,7 +1200,11 @@ public partial class MainWindow : Window
                     File.Exists(System.IO.Path.Combine(Storage.NgxSdk, "LICENSE.txt")));
         // (prepareNow: the saved choice, read in BeginUpdate. The launcher's Update and the --update start after a self-update never
         // ran ApplySettings, so the tick there is only its default)
-        Run(tools, ShaderStep.Args(new List<string> { "--update", folder }, prepareNow), keepRows: true, dlss: dlss);
+        // (Mako 3.3.1: AMD FSR 4 too, by the saved tick or its default (on). Before, an update kept FSR 4 only for a folder already
+        // built with it (make_game.py's .hookshot_fsr mark), which no 3.0.x folder was: every 3.0 -> 3.3 update was built without it)
+        var args = new List<string> { "--update", folder };
+        if (BuilderSettings.Load(SettingsPath)?.Fsr ?? true) args.Add("--fsr");
+        Run(tools, ShaderStep.Args(args, prepareNow), keepRows: true, dlss: dlss);
     }
 
     // ================= the window =================
