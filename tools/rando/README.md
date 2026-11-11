@@ -270,6 +270,17 @@ By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron
   `<game folder>/rando/skulltulas_to_check.txt` lists all 100 to be filled in. Only a Skulltula a child's map has is
   given one (`_Child_` in the overworld map's name, or one of the child's four dungeons): its drop is brought in by
   the Boomerang, seen in play, and the Hookshot bringing an item in has not been seen. Not seen in play yet.
+- **What each Skulltula asks for** (`SKULLTULA_RULES`, 73 of the 100 by hash) is written from the original game's
+  randomizer logic (track-oot.net's `logic/vanilla.min.json`, without tricks; its `database/world.json` has who can
+  get each and when). The two games' lists are the same length area by area, Lake Hylia's five and Lon Lon Ranch's
+  four being in the Hyrule Field map here. Each was matched to the map's by its area, the child's or the adult's
+  map, `Nocturnal`, `IsMagicBeanSoil`, and where two were alike by height or room; where two could not be told
+  apart both ask for the most either does. `<game folder>/rando/skulltulas_to_check.txt` has every line, how sure
+  it is, and the original's name for it. The remake's own, from the player and the guides: the Hyrule Field
+  southern grotto's crate (the adult's, after the child breaks the rock and kills the Skullwalltula; the grotto by
+  the Gerudo Valley entrance has none), the tunnel on Lake Hylia's south-west shore, the vines inside Lon Lon
+  Ranch's south-west tower, soft soil in front of the bean seller on Zora's River, and the Great Deku Tree's fourth,
+  which takes no bombs. The adult's temples' are not in the table: each asks for all its temple can.
 - **Kept from the Skulltulas** (`SKULLTULA_ITEMS_NOT_YET`): rupees, arrows and the magic jar. Their pouch file is one
   the game's own pick-up of the same thing has a copy of, and the first one loaded is the one used. Tried on the way,
   and no answer: getting a bundle as a token is got (`GetType` "Medium") with the event each time, the token's

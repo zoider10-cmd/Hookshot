@@ -564,7 +564,111 @@ def skulltulas(data):
 SKULLTULA_ASKS = ADULT | {LONG, HAM}
 # (where a child goes: the overworld's maps say it in their name, <area>_Child_..., and a dungeon has one map for both)
 SKULLTULA_CHILD_DUNGEONS = ("InsideTheDekuTree", "DodongoCavern", "InsideJabuJabuBelly", "BottomOfTheWell")
-SKULLTULA_RULES = {}
+# Written from the original game's randomizer logic (track-oot.net's, without tricks), each matched to the map's
+# Skulltula by its area, who can get it, night and soft soil, and where two were alike by height or room; the
+# remake's new places from the player (<game folder>/rando/skulltulas_to_check.txt has every line and how sure
+# it is). In the rules' own words: CHILD is out of the forest (night, a bottle of bugs, a Deku Stick), ADULT is the
+# three stones done (the Hookshot, the songs an adult learns). Where the original gives a choice (the Boomerang or
+# the Hookshot) the child's is asked for; where two could not be told apart both ask for the most either does. The
+# adult's temples' are not here: each asks for all its temple and a Skulltula's place can.
+SKULLTULA_RULES = {
+    # Bottom of the Well
+    0x6789388e9fb9c92c: ADULT | {LENS},        # boomerang, lens, adult first (Song of Storms)
+    0xa8d6182a5c956e16: ADULT | {LENS},        # boomerang, lens, adult first (Song of Storms)
+    0x35fb354fac262d36: ADULT | {LENS},        # boomerang, lens, adult first (Song of Storms)
+    # DeathMountainCrater
+    0xfcd7f04dcf755e8e: CHILD | {BB},          # child, sword, slingshot, bombs (to get up the mountain)
+    0x58c75badf059ca54: ADULT | {HAM},         # child, bugs, and adult first with the hammer (the child gets here by B
+    # DeathMountainTrail
+    0xf5359b24fc86ac22: ADULT | {HAM},         # adult, hammer, night
+    0x0b8e43abfa0b5f86: ADULT | {HAM},         # adult, hammer, night
+    0x04e03ac27985e328: CHILD | {BB},          # bombs (or the hammer)
+    0xf1d32c06612da232: CHILD | {BB},          # child, bugs, bombs
+    # DesertColossus
+    0xd0f7e5ffa76ba288: DESERT,                # adult, hookshot, night; all it takes to cross the desert (probably)
+    0x9ae3d0ac392e6cda: DESERT,                # adult, hookshot or longshot, night; all it takes to cross the desert (probably)
+    0x0341f2c03598c861: DESERT,                # child, bugs; adult first with all it takes to cross the desert (the ch
+    # Dodongo's Cavern
+    0xbdfe13c37f356829: CHILD | {BB},          # bombs (or the hammer) (probably)
+    0x758ce7b4868447fb: CHILD | {BB, BM},      # boomerang or hookshot, bombs (probably)
+    0x3f5b150f16d84603: CHILD | {BB},          # bombs (probably)
+    0x0d53e429a1ef383d: ADULT | {LONG},        # adult, scarecrow or longshot (probably)
+    0x10434342a3917ebd: CHILD | {BB},          # sword or slingshot, bombs (probably)
+    # Ganon's Castle (outside)
+    0x4e13cc311cd04df4: ADULT,                 # adult
+    # GerudoValley
+    0xbc85efca2b222cd9: ADULT | {LONG},        # adult, hookshot, night, longshot (to cross the valley)
+    0xa017ce09904c2dce: ADULT | {LONG},        # adult, hookshot, night, longshot (to cross the valley)
+    0x738f5746cc517702: CHILD,                 # child, bugs
+    0xd3d86d3d6988ed8c: CHILD | {BM},          # child, boomerang, night
+    # GoronCity
+    0xfbbc2d490276c68e: ADULT,                 # adult
+    0x07e6e21142cc54db: CHILD | {BB},          # child, bombs
+    # Graveyard
+    0x032f42f523be6425: CHILD | {BM},          # child, boomerang, night
+    0xe91f6be796358ffc: CHILD,                 # child, bugs
+    # Haunted Wasteland
+    0xceed596f17934971: DESERT,                # hookshot or boomerang; all it takes to cross the desert
+    # Hyrule Castle
+    0x22c0f7dff5ebb86d: CHILD,                 # child, sword or slingshot
+    0x7f28485fa5d3688f: ADULT,                 # boomerang or hookshot, bombs, Song of Storms (adult first) (probably)
+    # HyruleField
+    0x0af4d6f063d3ae9f: ADULT | {LONG},        # adult, longshot, night
+    0x6689bdebc95368eb: ADULT | {IRON},        # adult, iron boots, hookshot
+    0x7d8ec14bdd1f6341: ADULT,                 # adult, bombs as a child (the rock over the grotto), sword or slingshot
+    0x781e0de8eed42373: CHILD,                 # sword or slingshot
+    0xa6a4e87da18fa678: CHILD | {BB, BM},      # boomerang or hookshot, bombs (to open the grotto) (probably)
+    0x25e6072d4df023b3: CHILD | {BM},          # boomerang or hookshot, night (probably)
+    0x04be4a8ff29f2099: CHILD | {BM},          # child, boomerang, night (probably)
+    0x1e38e8d23596eecf: CHILD | {BM},          # child, boomerang, night (probably)
+    0xc1858a4fcd84a28e: CHILD | {BM},          # child, boomerang, night
+    0x61576befd16c499a: CHILD,                 # child, bugs
+    0xdc8113831c56b194: CHILD | {BM},          # child, boomerang, night (probably)
+    # IceCavern
+    0xcdb49f5d0a67fcf6: ADULT,                 # adult, hookshot or boomerang
+    0x63701a2cf70b201c: ADULT,                 # adult, hookshot or boomerang
+    0x165fc0bc0aca1f6c: ADULT,                 # adult, hookshot or boomerang
+    # Inside Jabu-Jabu's Belly
+    0x9c95fd41b89c058a: ADULT,                 # child, boomerang, bombs (to get to Jabu-Jabu)
+    0xc03f282ff60942b6: ADULT,                 # child, boomerang, bombs (to get to Jabu-Jabu)
+    0x9fc92497f014dbd5: ADULT,                 # child, boomerang, bombs (to get to Jabu-Jabu)
+    0xddd260afb6f2989a: ADULT,                 # child, boomerang, bombs (to get to Jabu-Jabu)
+    # Inside the Deku Tree
+    0xf2e27d6a27026acf: CHILD,                 # slingshot or boomerang
+    0xbce05898ce61f1c0: frozenset((S,)),       # sword or slingshot
+    0xfad8931a0011e1d4: CHILD,                 # slingshot or boomerang (probably)
+    0xdf73f3739cef466b: CHILD,                 # slingshot or boomerang (probably)
+    # KakarikoVillage
+    0x2df265292516bdf0: ADULT,                 # adult, hookshot, night
+    0xa1632e322c612b97: CHILD,                 # child, night
+    0x6a8d9b2373d08fcb: CHILD,                 # child, night, sword or slingshot
+    0xc3c68d0ac4b85831: CHILD,                 # child, night
+    0xd1cef51cf294fb86: CHILD,                 # child, night, slingshot (probably)
+    0xd4883a16973b1d06: CHILD,                 # child, night
+    # KokiriForest
+    0x62c340f0b876c195: ADULT,                 # adult, hookshot, night
+    0xecdc46b409ed7d38: CHILD,                 # child, sword or slingshot, night (out of the forest, or the Sun's Song
+    0x858f5000ad57b2cc: CHILD,                 # child, bugs, sword or slingshot
+    # Lost Woods
+    0x3c2b585ac5c0443e: ADULT,                 # adult, night, a bean planted as a child (probably)
+    0x8186bcb07d6c2cf9: CHILD,                 # child, bugs
+    0xf6fa6ef0ca152948: CHILD,                 # child, bugs
+    # Market
+    0x7c1a05315f83c34d: CHILD,                 # child
+    # SacredForestMeadow
+    0xc8db3346f78ea31b: ADULT,                 # adult, hookshot, night
+    # ZoraDomain
+    0x853b892663c0215d: ADULT,                 # adult, night, hookshot or bow
+    # ZoraFountain
+    0x845ba51dc18c855e: ADULT | {SG},          # adult, hookshot, night, silver gauntlets, bombs (probably)
+    0x63446d12663daa83: ADULT,                 # child, boomerang, night, bombs (to get up the river)
+    0xf0dac245e2fc448e: CHILD | {BB},          # child, bombs (to get up the river)
+    # ZoraRiver
+    0x97824c2ffeaa877c: ADULT,                 # adult, hookshot, night
+    0x8325fea55edfbe97: ADULT,                 # adult, hookshot, night
+    0xabad0e9f0d471156: CHILD,                 # child, bugs
+    0x78ae4fd90b3cfaaa: CHILD | {BB},          # child, night, sword or slingshot, bombs (past the boulders)
+}
 SKULLTULA_GATING_SHARE = 0.35   # (of the gating items, how many are tried on a Skulltula)
 
 
