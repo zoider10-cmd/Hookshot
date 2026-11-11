@@ -86,7 +86,7 @@ the game's own colour the mod is removed. It has nothing to do with the seed: no
   cloth is `Angin_Tile_A_Alb`, a picture nine models share: young Link's tunic, Mido's clothes, a Kokiri bed and the
   Fairy Ocarina's strap change colour with it. Young Link's vest, hat and stitching (`Mt_Vest_`, `Mt_Cloth_Parts_` and
   `Mt_PantsParts_Player_Child_Alb`) are changed too, after white and black were seen in play as changed cloth under a
-  green vest; Mido's vest is his own and stays green. Giving adult Link a cloth of his own would take a new texture file, so
+  green vest; Mido's vest is his own and stays green. Seen in play since: young Link's tunic is whole in the colour. Giving adult Link a cloth of his own would take a new texture file, so
   a size table entry beside the seed's.
 - The hearts and the magic meter are pictures of `UI/Layout2Archive/Common...bntx.zs`, the file of every picture of
   the game's screens (878 of them, a quarter of a gigabyte unpacked): the mod carries that file whole (75 MB) with 17
