@@ -478,7 +478,7 @@ class LauncherForm : Form {
     static readonly int[] TunicValues = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
     static readonly object[][] CosmeticRows = {
         new object[] { "cosmetic_tunic_kokiri", "Kokiri Tunic", TunicColours, TunicValues,
-            "The colour of the green tunic's cloth, vest and hat. Young Link's tunic and Mido's clothes are the same cloth and change with it." },
+            "The colour of the green tunic's cloth, vest and hat, as an adult and as a child. Mido's clothes are the same cloth and change with it." },
         new object[] { "cosmetic_tunic_goron", "Goron Tunic", TunicColours, TunicValues,
             "The colour of the red tunic's cloth and hat. Its gold trim and leather keep their own." },
         new object[] { "cosmetic_tunic_zora", "Zora Tunic", TunicColours, TunicValues,

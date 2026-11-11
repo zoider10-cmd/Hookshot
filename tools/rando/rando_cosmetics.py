@@ -26,7 +26,8 @@ Tunic's vest and inner shirt turned purple.
 What is changed: on each texture of a tunic, the hearts or the meter (COSMETICS below), only the colours whose hue is the tunic's own (the Goron
 Tunic's reds, not its gold trim or its leather). What is not: the tunic's icon in the equipment menu, which is a
 picture of its own. The Kokiri Tunic's cloth is a picture young Link's tunic, Mido's clothes and a few Kokiri things
-share, so they take its colour too; the Goron and Zora Tunics' are their own.
+share, so they take its colour too: young Link's vest, hat and stitching are changed with it, so his tunic is whole;
+Mido keeps his own green vest over the changed cloth. The Goron and Zora Tunics' pictures are their own.
 
 What a block can hold limits it: the two colours of a part are stored with few steps (as few as 6 a channel), so a
 changed colour lands on the nearest step, as the game's own did.
@@ -45,8 +46,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rando_seed as seed   # (the game's zstd dictionaries)
 
 MOD = "cosmetics"
-VERSION = 4   # (raised when the same settings would write other textures: the launcher's run at Play then writes them again.
-# 2: the Kokiri Tunic's cloth, and a pinker Pink; 3: its stitching and fringe; 4: the hearts and the magic meter)
+VERSION = 5   # (raised when the same settings would write other textures: the launcher's run at Play then writes them again.
+# 2: the Kokiri Tunic's cloth, and a pinker Pink; 3: its stitching and fringe; 4: the hearts and the magic meter; 5: young Link's vest and stitching)
 TRIT_AT, TRIT_N = (0, 2, 4, 5, 7), (2, 2, 1, 2, 1)   # (where a trit block's T bits lie between its values' bits)
 QUINT_AT, QUINT_N = (0, 3, 5), (3, 2, 2)
 
@@ -444,12 +445,18 @@ COLOURS = (
 HUD = "UI/Layout2Archive/Common.Product.100.Nin_Ounce_NVN2.bntx.zs"   # (every picture of the game's screens but the title's)
 COSMETICS = (
     # (the Kokiri Tunic's cloth, Angin_Tile_A_Alb, is not Link's alone: young Link's tunic, Mido's clothes, a Kokiri bed
-    # and the Fairy Ocarina's strap are the same picture, and change with it)
+    # and the Fairy Ocarina's strap are the same picture, and change with it. Young Link's other pictures are changed
+    # too, below; Mido's vest is his own and stays green over the changed cloth)
     ("kokiri", "cosmetic_tunic_kokiri", "Kokiri Tunic", (70.0, 165.0), 100.0,
      ("Mt_Vest_Player_Adult_Alb", "Angin_Tile_A_Alb",
       # (its stitching and fringe are an olive of their own: taken as that texture's colour, so they come out the
       # tunic's colour and not one a third of the way round from it)
-      ("Mt_Angin_Acs_Player_Adult_Alb", (50.0, 165.0), 75.0))),
+      ("Mt_Angin_Acs_Player_Adult_Alb", (50.0, 165.0), 75.0),
+      # (young Link's: his cloth is the shared picture above, so his vest and hat, and the stitching and fringe of his
+      # cloth and shorts, go with it. Seen in play before they did: white cloth under a green vest)
+      "Mt_Vest_Player_Child_Alb",
+      ("Mt_Cloth_Parts_Player_Child_Alb", (50.0, 165.0), 90.0),
+      ("Mt_PantsParts_Player_Child_Alb", (50.0, 165.0), 80.0))),
     ("goron", "cosmetic_tunic_goron", "Goron Tunic", (320.0, 15.0), 358.0,
      ("Mt_Vest_Armor_Adult_Goron_Alb", "Mt_Inner_Armor_Adult_Goron_Alb", "Mt_Angin_Armor_Adult_Goron_Alb")),
     ("zora", "cosmetic_tunic_zora", "Zora Tunic", (190.0, 262.0), 222.0,
