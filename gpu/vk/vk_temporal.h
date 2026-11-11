@@ -22,6 +22,10 @@ int temporal_mode();
 /// (vk_fsr3.cpp fsr3_wanted). Where it cannot run, a saved FSR 3.1 stays
 bool temporal_env_chosen();
 bool temporal_wanted();       // (temporal_mode() != GAME)
+/// The Upscaler row's Off (upscaler_rows.h OFF) with no engine running over it for this run (temporal_mode() is GAME): no
+/// upscaler at all. temporal_upscale then leaves the game's network out too and stretches its input to its output with a plain
+/// linear filter
+bool temporal_off();
 /// DLAA or FSR's native anti-aliasing: the 3D drawn at full scale, whatever the Render resolution row says
 bool temporal_full_scale();
 
@@ -55,7 +59,8 @@ void temporal_note_skinned_draw(const SkinnedDraw& k);
 /// share): its input as it samples it (in, in_view) and its output's storage view (out at level 0). known: one of the
 /// gameplay networks by its key; else a network of that shape (the fixed shares' own), taken only when its input is this
 /// frame's scene and its output the picture, and left to run without a word otherwise. true: the engine wrote the output
-/// (the dispatch is left out); false: the network runs, the reason logged
+/// (the dispatch is left out); false: the network runs, the reason logged. With the Upscaler Off (temporal_off) the same
+/// dispatches get the linear stretch in place of an engine
 bool temporal_upscale(VkCommandBuffer cmd, uint64_t key, bool known, Texture* in, VkImageView in_view, Texture* out,
                       VkImageView out_view, uint32_t out_level);
 
@@ -72,6 +77,8 @@ int temporal_status(char* b, size_t n);
 /// 0 when there is to be none (no engine drawing, or RX_VK_DLSS_JITTER=0). Axis 2: the jitter sequence's length for the
 /// engine's scale (dlss_jitter_phases, HOS_OPT_DLSS_JITTER_PHASES)
 uint32_t temporal_jitter_size(int axis);
+/// One completed sample shared by DLSS and FSR 4; all zero while inactive.
+MkwVkJitter temporal_jitter_sample();
 
 // ---- what an engine is given and does ----
 

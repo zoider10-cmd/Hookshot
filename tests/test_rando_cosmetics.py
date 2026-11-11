@@ -238,7 +238,7 @@ def mod_and_sources():
     rows = rows[:rows.index("\n    };")]
     check(re.findall(r'new object\[\] \{ "(\w+)", "([^"]*)", TunicColours, TunicValues,', rows) == [(key, label) for _, key, label, _, _, _ in t.COSMETICS],
           "the launcher's Cosmetics page and the script's tunics differ")
-    check("AddSelectors(CosmeticRows, 3, cx, colW, cosmetics);" in launcher and '"hookshot_cosmetics.ini"' in launcher and
+    check("AddSelectors(CosmeticRows, 4, cx, colW, cosmetics);" in launcher and '"hookshot_cosmetics.ini"' in launcher and
           "void SaveCosmetics()" in launcher, "the launcher does not show or keep its Cosmetics page")
     check('Text = "Randomize all"' in launcher and "Click = OnRandomCosmetics" in launcher and "s.Set(r.Next(1, s.Items.Length), false);" in launcher,
           "the launcher's Cosmetics page has no Randomize all button, or it can pick the game's own colour")

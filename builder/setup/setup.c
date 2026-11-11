@@ -507,13 +507,32 @@ static void wanted_tag(char *out, size_t n) {
 /* (an update to a named release reads THAT release's list: the latest/download link can answer with the release before it for a
    while after a publish, and the setup then installed the old version again and started it with --fetched, which builds without
    checking: players pressed Update and stayed on v2.0.3, 2026-11-08) */
+/* (a nightly's version, git describe --long's v2.1.0-rc.1-3-g1a2b3c4: its files are on the rolling nightly release) */
+static int nightly_tag(const char *s) {
+    size_t n = strlen(s), h;
+    if (n > 6 && !strcmp(s + n - 6, "-dirty")) n -= 6;
+    for (h = n; h && strchr("0123456789abcdef", s[h - 1]); h--) {}
+    if (h == n || h < 3 || s[h - 1] != 'g' || s[h - 2] != '-') return 0;
+    size_t d = h - 2;
+    while (d && s[d - 1] >= '0' && s[d - 1] <= '9') d--;
+    return d < h - 2 && d > 0 && s[d - 1] == '-';
+}
+
+/* (HOOKSHOT_SETUP_RELEASE, set when a release candidate's or the nightly's setup is built: started with no --tag, it installs
+   the release it came from (v2.1.0-rc.1, or nightly: the newest nightly), not the latest release) */
+#ifndef HOOKSHOT_SETUP_RELEASE
+#define HOOKSHOT_SETUP_RELEASE ""
+#endif
+
 static const char *manifest_url(void) {
     static char u[1024];
     const char *e = getenv("HOOKSHOT_SETUP_LIST");
     char tag[128];
     wanted_tag(tag, sizeof tag);
+    if (!tag[0] && HOOKSHOT_SETUP_RELEASE[0] && strlen(HOOKSHOT_SETUP_RELEASE) < sizeof tag) strcpy(tag, HOOKSHOT_SETUP_RELEASE);
     if (e && *e) snprintf(u, sizeof u, "%s", e);
-    else if (tag[0]) snprintf(u, sizeof u, "https://github.com/NotRexed/Hookshot/releases/download/%s/hookshot-setup.txt", tag);
+    else if (tag[0])
+        snprintf(u, sizeof u, "https://github.com/NotRexed/Hookshot/releases/download/%s/hookshot-setup.txt", nightly_tag(tag) ? "nightly" : tag);
     else snprintf(u, sizeof u, "%s", "https://github.com/NotRexed/Hookshot/releases/latest/download/hookshot-setup.txt");
     return u;
 }
@@ -691,6 +710,13 @@ static DWORD WINAPI work(LPVOID unused) {
             GetSystemDirectoryW(sys, MAX_PATH);
             swprintf(tarcmd, 2 * MAX_PATH + 64, L"\"%ls\\tar.exe\" -xf \"%ls\" -C \"%ls\"", sys, zip, dest);
             RunResult tar = run_wait(tarcmd, dest);
+            if (tar.start_error == ERROR_FILE_NOT_FOUND)
+                fail(L"Windows' tar.exe was not found (Windows error 2).\n"
+                     L"Open Command Prompt as administrator and run:\n"
+                     L"DISM /Online /Cleanup-Image /RestoreHealth\n"
+                     L"After DISM succeeds, run:\nsfc /scannow\n"
+                     L"Then restart Windows and run setup again.\n"
+                     L"Archive: %ls\nDestination: %ls", zip, dest);
             if (tar.start_error) fail(L"Could not start Windows' tar.exe (Windows error %lu).\nArchive: %ls\nDestination: %ls", tar.start_error, zip, dest);
             if (tar.status_error) fail(L"Could not read Windows' tar.exe exit status (Windows error %lu).\nArchive: %ls\nDestination: %ls", tar.status_error, zip, dest);
             if (tar.code) {

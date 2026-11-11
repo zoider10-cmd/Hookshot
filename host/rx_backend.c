@@ -139,6 +139,15 @@ static uint64_t host_guest_alloc(uint64_t size) {
 void hos_watch_guest_writes(const uint8_t *data, uint64_t size);   /* nvn_native.c */
 static void host_watch_guest_writes(uint64_t guest, uint64_t size) { hos_watch_guest_writes(hos_guest_base() + guest, size); }
 static float host_aspect_ratio(void) { return hos_aspect_ratio; }
+static float host_wide_menus(uint32_t keep_mask) {   /* (MkwVkHost.wide_menus) */
+    extern volatile uint32_t hos_wide_keep_mask;
+    extern volatile float hos_wide_margin;
+    static const char *forced;
+    static int looked;
+    if (!looked) looked = 1, forced = getenv("HOS_WIDE_KEEP");
+    hos_wide_keep_mask = forced ? (uint32_t)strtoul(forced, NULL, 16) : keep_mask;
+    return hos_wide_margin;
+}
 int hos_mouse_pointer(MkwVkPointer *out);   /* display.c, posix/display_sdl.c */
 int hos_sdl_gyro_status(void);   /* pad_sdl.c */
 extern const char *hos_romfs_dir;   /* nn_fs.c, set by hos_main.c */
@@ -158,6 +167,16 @@ int hos_vk_take_key_press(int key) {
 #define host_take_key_press NULL
 #endif
 
+/* (hookshot) the FPS counter's Breakdown: this thread's sleeps so far (host/hos_thread.c) */
+extern _Thread_local int64_t hos_slept_ns[2];
+extern volatile int64_t hos_poll_slept_ns, hos_acquire_slept_ns;
+extern volatile int hos_fps_timing;
+static void host_fps_timing(int on) { __atomic_store_n(&hos_fps_timing, on != 0, __ATOMIC_RELAXED); }
+static void host_slept_ns(int64_t out[2]) {
+    out[0] = __atomic_load_n(&hos_poll_slept_ns, __ATOMIC_RELAXED);
+    out[1] = hos_slept_ns[1] + __atomic_load_n(&hos_acquire_slept_ns, __ATOMIC_RELAXED);
+}
+
 static const MkwVkHost vk_host = {
     MKWVK_API_VERSION, host_log, hos_guest_base, hos_guest_size, hos_gpu_ptr, nvn_gpu_guest, nvn_gpu_read,
     nvn_gpu_write, host_collect, host_free_pages, host_mark_written, hos_ticks, hos_now_ns, nvn_tex_layout,
@@ -165,7 +184,7 @@ static const MkwVkHost vk_host = {
     hos_gpu_maps_generation, nvn_vmap_generation, hos_reserved_cpus, host_collect_in, host_guest_alloc,
     host_watch_guest_writes, hos_pad_raw, hos_binding, hos_bind, host_aspect_ratio, host_take_key_press,
     hos_mouse_pointer, hos_mic_count, hos_mic_name, hos_mic_select, hos_sdl_gyro_status, hos_log_flush, hos_prompts_face,
-    host_romfs_dir,
+    host_romfs_dir, host_wide_menus, host_slept_ns, host_fps_timing,
 };
 
 static const MkwVkRenderer *vk;   /* the Vulkan back end, when it was chosen and started */
@@ -323,19 +342,23 @@ void rx_nvn_present(const nvn_tex *t, const int crop[4]) {
    the Halton (2, 3) sequence, over as many frames as the upscaler's scale wants (HOS_OPT_DLSS_JITTER_PHASES: gpu/vk/dlss_math.h
    dlss_jitter_phases, 8 for DLAA up to 64). */
 int hos_dlss_jitter_clip(uint64_t projection, float out[2]) {
+    static SRWLOCK lock = SRWLOCK_INIT;
     static LONG at = -1;
-    static float w, h;
-    static int phases;
+    static MkwVkJitter jitter;
+    MkwVkJitter sample;
+    AcquireSRWLockExclusive(&lock);
     const LONG frame = presents;
     if (frame != at) {   /* (asked once a frame: the renderer's lock is not taken for every view) */
         at = frame;
-        w = (float)rx_option(HOS_OPT_DLSS_JITTER_W, 0), h = (float)rx_option(HOS_OPT_DLSS_JITTER_H, 0);
-        phases = rx_option(HOS_OPT_DLSS_JITTER_PHASES, 16);
+        jitter = (MkwVkJitter){0};
+        if (vk && vk->jitter_sample) vk->jitter_sample(&jitter);
     }
+    sample = jitter;
+    ReleaseSRWLockExclusive(&lock);
     float p[16];
     memcpy(p, GP(projection), sizeof p);
     extern volatile float hos_wide_ratio;
-    return dlss_jitter_clip(p, hos_wide_ratio, (unsigned)frame, phases, w, h, out);
+    return dlss_jitter_clip(p, hos_wide_ratio, (unsigned)frame, (int)sample.phases, (float)sample.width, (float)sample.height, out);
 }
 static void forward(const early_call *c) {
     switch (c->kind) {

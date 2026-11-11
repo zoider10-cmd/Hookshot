@@ -26,6 +26,7 @@ struct Texture {
     VkImageType type = VK_IMAGE_TYPE_2D;
     VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
     VkImageUsageFlags usage = 0;
+    VkImageCreateFlags create_flags = 0;   // (hookshot: as its image was made, for the compaction's copy of it)
     uint32_t width = 1, height = 1, depth = 1, levels = 1, layers = 1;   // the image's (after skip)
     uint32_t skip = 0;        // top levels of the texture left out (huge textures: RX_VK_TEX_MAX_DIM, _MAX_MB)
     // (a huge array kept whole as a sparse resident image instead: each layer gets device memory when it is first
@@ -84,6 +85,7 @@ struct Texture {
     bool vw_listed = false;   // (in the list of GPU-written textures of virtual pools: texture_flush_to_guest)
     uint64_t pool_key = 0;    // (a render target's image: its create info's key in the pool it goes to when the texture does)
     std::unordered_map<uint64_t, VkImageView> views;
+    uint64_t view_failed_frame = 0;   // (transient allocation failure: retry uncached views next frame, keep cached ones usable)
 };
 
 /// Makes texels [x, x + w) x [y, y + h) of level `level`, layers [first, first + count), of a sparse texture resident
@@ -140,6 +142,11 @@ Texture* texture_get(const nvn_tex* t, bool for_sampling);
 enum class ViewUse { Sample, Attachment, Storage };
 VkImageView texture_view(Texture* tex, const nvn_tex* t, const nvn_view* v, VkImageViewType view_type, ViewUse use,
                          VkFormat* format_out = nullptr, VkFormat force_format = VK_FORMAT_UNDEFINED);
+/// (hookshot) The format rules texture_get and texture_view follow (vk_texture.cpp), shared with the pipeline state list
+VkFormat image_format_of(VkFormat vf, bool astc_decoded);
+VkFormat view_format_of(VkFormat image, bool astc_decoded, bool bc, int view_nvn, ViewUse use, VkFormat force_format);
+/// The format a draw renders in on this device, into a texture of NVN format tex_nvn through a view of NVN format view_nvn
+VkFormat attachment_format(int tex_nvn, int view_nvn);
 /// The view format an NVN texture and view sample / render in
 int view_nvn_format(const nvn_tex* t, const nvn_view* v);
 /// The level and layer a view starts at (the texture's levels)
@@ -160,6 +167,8 @@ void texture_rendered(Texture* tex);
 uint64_t texture_frame_no();
 /// A texel buffer view over guest memory (texture targets of NVN_TEXTURE_TARGET_BUFFER, and image buffers)
 VkBufferView texel_buffer_view(const nvn_tex* t, const nvn_view* v, bool storage);
+/// Release an imported buffer's views immediately before its completed destruction (memory.cpp).
+void release_texel_buffer_views(VkBuffer buffer);
 /// The texture whose image was rendered for the window (present): t's own, or one rendered at its storage
 Texture* texture_for_present(const nvn_tex* t);
 /// Ages the cache by one present; images nothing used for a while go, after the work that last read them

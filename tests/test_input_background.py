@@ -19,6 +19,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+RUN_ALL_ARGS = ["--cc", "gcc"]
+
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ("foreground", "script-background", "headless", "noactivate", "live-background",
          "no-script-background", "exclusive-foreground", "exclusive-background", "pads-env", "pads-menu", "pads-off",
@@ -69,7 +71,8 @@ def main():
     start = hid.index("typedef struct { int64_t start_ms, end_ms;")
     script = block(hid, "static void scripted_input(")
     end = hid.index(script) + len(script)
-    cheat_state = re.search(r"^static uint64_t flight_input;\nstatic uint64_t free_camera_axes;\nstatic int free_camera_height;", hid, re.M).group(0)
+    cheat_state = re.search(r"^static uint64_t flight_input;\nstatic uint64_t free_camera_axes;\nstatic int free_camera_height;\n"
+                            r"static int move_stick_held;", hid, re.M).group(0)
     cheat_spies = """
 volatile int hos_oot_live_action;
 int hos_oot_flight_shortcut_ready(void) { CHECK(!"unexpected cheat readiness query"); return 0; }

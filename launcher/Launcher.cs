@@ -1,6 +1,6 @@
 // Mako Launcher (Ocarina of Time PC recompile, by sharkiix; based on Hookshot, GPL-3). The window players open first: update
 // check (the same GitHub release and graphics patch rules as host/hos_update.c), the game's settings (hookshot_options.ini, the
-// Insert menu's file), the AMD fix switches (hookshot_env.txt, read by the game at start), language, saves folders, and PLAY.
+// Insert menu's file), the fix switches (AMD fixes, basic controller mode) (hookshot_env.txt, read by the game at start), language, saves folders, and PLAY.
 // It sits beside the game's exe. One window drawn by hand (no stock controls): a dark navy theme taken from the shark logo,
 // animated light streaks and bubbles, hover fades. Built with the .NET Framework's own csc (C# 5, nothing to install): build.ps1.
 using System;
@@ -316,13 +316,162 @@ class SaveCopiesForm : Form {
     }
 }
 
+// (Mako) AMD's FSR files, from AMD's own repository (FidelityFX SDK v2.4.0, Kits/FidelityFX/signedbin): name, what it is, size
+static class Fsr {
+    public const string Base = "https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/v2.4.0/Kits/FidelityFX/signedbin/";
+    public const string Page = "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK";
+    public static readonly string[][] Files = {
+        new[] { "amd_fidelityfx_loader_vk.dll", "AMD FSR loader", "39184" },
+        new[] { "amd_fidelityfx_upscaler_vk.dll", "AMD FSR 4 upscaling", "36135696" },
+        new[] { "amd_fidelityfx_framegeneration_vk.dll", "AMD FSR frame generation (RX 9000)", "36806928" },
+    };
+    static string gpu;
+    /// the display adapter's name, a Radeon first (the registry's display class: no WMI)
+    public static string Gpu() {
+        if (gpu != null) return gpu;
+        gpu = "";
+        try {
+            using (var cls = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}")) {
+                if (cls != null)
+                    foreach (string k in cls.GetSubKeyNames()) {
+                        if (k.Length != 4) continue;
+                        try {
+                            using (var a = cls.OpenSubKey(k)) {
+                                string d = a == null ? null : a.GetValue("DriverDesc") as string;
+                                if (string.IsNullOrEmpty(d)) continue;
+                                if (gpu.Length == 0 || (d.Contains("Radeon") && !gpu.Contains("Radeon"))) gpu = d;
+                            }
+                        } catch { }
+                    }
+            }
+        } catch { }
+        return gpu;
+    }
+    /// 2: Radeon RX 9000 (FSR 4 + frame generation), 1: Radeon RX 6000 / 7000 (FSR 4), 0: other
+    public static int Tier(string name) {
+        if (name.IndexOf("Radeon", StringComparison.OrdinalIgnoreCase) < 0) return 0;
+        var m = Regex.Match(name, @"RX\s*(\d)\d{3}", RegexOptions.IgnoreCase);
+        if (!m.Success) return 0;
+        int series = m.Groups[1].Value[0] - '0';
+        return series >= 9 ? 2 : series >= 6 ? 1 : 0;
+    }
+
+    [DllImport("wintrust.dll", CharSet = CharSet.Unicode)]
+    static extern int WinVerifyTrust(IntPtr hwnd, [MarshalAs(UnmanagedType.LPStruct)] Guid action, ref WinTrustData data);
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct WinTrustFileInfo { public uint Size; public string Path; public IntPtr File; public IntPtr Subject; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct WinTrustData {
+        public uint Size; public IntPtr Policy; public IntPtr SipData; public uint UiChoice; public uint RevocationChecks; public uint UnionChoice;
+        public IntPtr FileInfo; public uint StateAction; public IntPtr StateData; public string UrlReference; public uint ProvFlags; public uint UiContext;
+        public IntPtr SignatureSettings;
+    }
+    /// a valid Authenticode signature whose signer is AMD
+    public static bool SignedByAmd(string path) {
+        try {
+            var cert = System.Security.Cryptography.X509Certificates.X509Certificate.CreateFromSignedFile(path);
+            if (cert.Subject.IndexOf("Advanced Micro Devices", StringComparison.OrdinalIgnoreCase) < 0) return false;
+        } catch { return false; }
+        var fi = new WinTrustFileInfo { Size = (uint)Marshal.SizeOf(typeof(WinTrustFileInfo)), Path = path };
+        IntPtr pfi = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(WinTrustFileInfo)));
+        try {
+            Marshal.StructureToPtr(fi, pfi, false);
+            var d = new WinTrustData { Size = (uint)Marshal.SizeOf(typeof(WinTrustData)), UiChoice = 2, RevocationChecks = 0, UnionChoice = 1,
+                                       FileInfo = pfi, StateAction = 0, ProvFlags = 0x80 };
+            var action = new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");   // (WINTRUST_ACTION_GENERIC_VERIFY_V2)
+            return WinVerifyTrust(new IntPtr(-1), action, ref d) == 0;
+        } finally { Marshal.DestroyStructure(pfi, typeof(WinTrustFileInfo)); Marshal.FreeHGlobal(pfi); }
+    }
+}
+
+// (Mako) The Recommended tab: what this PC has (graphics card and its memory, processor, memory, screen), read once, and the
+// settings that suit it, with the reason for each
+class PcInfo {
+    public string Gpu = "", Cpu = "";
+    public int Tier, Threads, ScreenW, ScreenH, Hz;
+    public long VramMB, RamMB;
+    public bool Amd, Nvidia, Intel, Integrated;
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct MemStatus { public uint Length, Load; public ulong Total, Avail, TotalPage, AvailPage, TotalVirt, AvailVirt, AvailExt; }
+    [DllImport("kernel32.dll")] static extern bool GlobalMemoryStatusEx(ref MemStatus m);
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct DevMode {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
+        public short SpecVersion, DriverVersion, Size, DriverExtra; public int Fields;
+        public int PositionX, PositionY, DisplayOrientation, DisplayFixedOutput;
+        public short Color, Duplex, YResolution, TTOption, Collate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string FormName;
+        public short LogPixels; public int BitsPerPel, PelsWidth, PelsHeight, DisplayFlags, DisplayFrequency;
+        public int ICMMethod, ICMIntent, MediaType, DitherType, Reserved1, Reserved2, PanningWidth, PanningHeight;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool EnumDisplaySettings(string dev, int mode, ref DevMode dm);
+
+    public static PcInfo Read() {
+        var p = new PcInfo();
+        p.Gpu = Fsr.Gpu();
+        p.Tier = Fsr.Tier(p.Gpu);
+        string n = p.Gpu.ToLowerInvariant();
+        p.Amd = n.Contains("radeon") || n.Contains("amd");
+        p.Nvidia = n.Contains("nvidia") || n.Contains("geforce") || n.Contains("rtx") || n.Contains("gtx");
+        p.Intel = n.Contains("intel");
+        try {   // (the adapter's memory: the display class key the name came from)
+            using (var cls = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"))
+                if (cls != null)
+                    foreach (string k in cls.GetSubKeyNames()) {
+                        if (k.Length != 4) continue;
+                        try {
+                            using (var a = cls.OpenSubKey(k)) {
+                                if (a == null || (a.GetValue("DriverDesc") as string) != p.Gpu) continue;
+                                object q = a.GetValue("HardwareInformation.qwMemorySize"), m = a.GetValue("HardwareInformation.MemorySize");
+                                long bytes = 0;
+                                if (q is long) bytes = (long)q;
+                                else if (m is int) bytes = (uint)(int)m;
+                                else if (m is byte[] && ((byte[])m).Length >= 4) bytes = BitConverter.ToUInt32((byte[])m, 0);
+                                if (bytes > 0) p.VramMB = Math.Max(p.VramMB, bytes >> 20);
+                            }
+                        } catch { }
+                    }
+        } catch { }
+        // (built into the processor: Intel's (not Arc), or a Radeon without an RX name and little memory of its own)
+        p.Integrated = (p.Intel && !n.Contains("arc")) || (p.Amd && !Regex.IsMatch(p.Gpu, @"RX\s*\d", RegexOptions.IgnoreCase) && p.VramMB > 0 && p.VramMB <= 2048);
+        try {
+            var ms = new MemStatus { Length = (uint)Marshal.SizeOf(typeof(MemStatus)) };
+            if (GlobalMemoryStatusEx(ref ms)) p.RamMB = (long)(ms.Total >> 20);
+        } catch { }
+        p.Threads = Environment.ProcessorCount;
+        try {
+            using (var c = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0"))
+                if (c != null) p.Cpu = ((c.GetValue("ProcessorNameString") as string) ?? "").Trim();
+        } catch { }
+        try {
+            var dm = new DevMode { DeviceName = "", FormName = "" };
+            dm.Size = (short)Marshal.SizeOf(typeof(DevMode));
+            if (EnumDisplaySettings(null, -1, ref dm)) { p.ScreenW = dm.PelsWidth; p.ScreenH = dm.PelsHeight; p.Hz = dm.DisplayFrequency; }
+        } catch { }
+        if (p.ScreenW <= 0) { var b = Screen.PrimaryScreen.Bounds; p.ScreenW = b.Width; p.ScreenH = b.Height; }
+        if (p.Hz <= 1) p.Hz = 60;
+        return p;
+    }
+
+    public int VramGB { get { return (int)Math.Round(VramMB / 1024.0); } }
+    public int RamGB { get { return (int)Math.Round(RamMB / 1024.0); } }
+}
+
+// (one line of the Recommended tab: a setting, the value for this PC, why; apply: the options.ini key and value the Apply button
+// writes, null for advice only)
+class RecRow {
+    public string What, Value, Why, Key; public int Set; public bool Good = true;
+    public RecRow(string what, string value, string why) { What = what; Value = value; Why = why; }
+}
+
 static class Fork {
     public const string Name = "Mako";
     // (the update check compares the first number of the tags: the first Mako release must be numbered above amd-fix-2.1, or the
     // 2.x launchers players have would think it older and never offer it)
-    public const string Base = "mako-3.3.2rc.2";      // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
-    public const string Version = "mako-3.3.2rc.2"; // (HOOKSHOT_FORK_VERSION)
-    public const int Api = 12;                  // (gpu/vk/vk_api.h MKWVK_API_VERSION)
+    public const string Base = "mako-3.4";      // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
+    public const string Version = "mako-3.4"; // (HOOKSHOT_FORK_VERSION)
+    public const int Api = 15;                  // (gpu/vk/vk_api.h MKWVK_API_VERSION)
     public const string Api_Url = "https://api.github.com/repos/Shakoquo/Mako/releases/latest";
     public const string Page = "https://github.com/Shakoquo/Mako/releases/latest";
     public const string Home = "https://github.com/Shakoquo/Mako";
@@ -524,7 +673,7 @@ class Selector : Widget {
 class Toggle : Widget {
     public string Key, Label, HelpText; public bool On; public Action<Toggle> Changed;
     float knob;   // (0..1, follows On)
-    public override string Help { get { return HelpText; } }
+    public override string Help { get { return null; } }   // (its text is on it already)
     public override void Down(PointF p, LauncherForm ui) { On = !On; if (Changed != null) Changed(this); }
     public void Snap() { knob = On ? 1 : 0; }
     public override bool Animating { get { return Math.Abs(knob - (On ? 1 : 0)) > 0.01f; } }
@@ -604,7 +753,8 @@ class LauncherForm : Form {
     readonly Dictionary<string, Toggle> fixes = new Dictionary<string, Toggle>();
     readonly List<TabW> tabs = new List<TabW>();
     Selector langSel;
-    Btn updateButton, playButton;
+    Btn updateButton, playButton, fsrButton;
+    string fsrLine = ""; Color fsrLineColor = Theme.Dim; bool fsrBusy;
     Image logo;
     Bitmap backdrop;
     readonly System.Windows.Forms.Timer timer;
@@ -731,7 +881,7 @@ class LauncherForm : Form {
         new object[] { "cosmetic_magic", "Magic meter", TunicColours, TunicValues,
             "The colour of the magic meter under the hearts." },
     };
-    static readonly string[] PresetKeys = { "resolution", "upscaling", "sharpness", "frame_generation", "frame_pacing", "game_speed", "handheld_profile" };
+    static readonly string[] PresetKeys = { "resolution", "upscaling", "sharpness", "frame_pacing", "game_speed", "handheld_profile" };   // (as the game's presets: frame generation is the player's)
     static readonly string[][] Languages = {
         new[] { "en-US", "English (US)" }, new[] { "en-GB", "English (UK)" }, new[] { "fr", "Français (France)" }, new[] { "fr-CA", "Français (Canada)" },
         new[] { "de", "Deutsch" }, new[] { "it", "Italiano" }, new[] { "es", "Español (España)" }, new[] { "es-419", "Español (Latinoamérica)" },
@@ -742,6 +892,12 @@ class LauncherForm : Form {
     static readonly string[][] Fixes = {
         new[] { "RX_VK_WAIT_GPU", "", "No blue light flashes", "Each frame waits for the graphics card to finish the previous one. Stops the one-frame blue light flashes in Hyrule Field. Costs a few fps. Recommended.", "-1" },
         new[] { "HOOKSHOT_OCCLUSION_OFF", "1", "Occlusion tests off", "The game no longer guesses what is hidden: everything is drawn. Steadier sun glare on AMD cards, a little slower.", "" },
+        // (Mako) Ducky's controller workaround: HOS_NO_SDL=1 leaves SDL out (host/pad_sdl.c), pads only through XInput
+        new[] { "HOS_NO_SDL", "1", "Basic controller mode (tip by Ducky)", "Controller not detected, double inputs or wrong buttons? Reads only Xbox-style (XInput) pads: a PlayStation pad then needs Steam or DS4Windows. No motion aiming.", "" },
+        // (Mako) the predicted pipelines behind the game (gpu/vk/vk_draw.cpp predict_background); off: all before the title
+        new[] { "RX_VK_PREDICT_BG", "1", "Quick first start", "Off (recommended): after an update every effect is prepared before the title (up to ~40 min, once). On: the title comes much sooner, but expect stutters for hours.", "" },
+        // (Mako) AMD FSR Redstone frame generation (gpu/vk/vk_redstone.h), off unless switched on: it takes video memory
+        new[] { "RX_VK_REDSTONE", "1", "AMD FSR Redstone frame generation (RX 9000)", "AMD's AI frame generation instead of Mako's: cleaner motion, steady HUD. Needs an RX 9000, AMD's files (FSR tab), FSR 4 and Frame generation 2x. Best with 12 GB+.", "" },
     };
 
     [DllImport("user32.dll")] static extern bool ReleaseCapture();
@@ -788,42 +944,53 @@ class LauncherForm : Form {
                               Click = () => OpenUrl(Fork.Home) });
 
         // (tabs)
-        string[] names = { "Graphics", "Game", "Randomizer", "Cosmetics", "AMD fixes", "About" };
+        string[] names = { "Recommended", "Graphics", "Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About" };
         float tx = LeftW + 36;
-        using (var g = CreateGraphics())
+        using (var g = CreateGraphics()) {
+            // (eight tabs with the randomizer's two: the room around each name is made smaller until they fit the page's width)
+            float room = W - LeftW - 72, text = 0, pad = 26, gap = 6;
+            foreach (string name in names) text += g.MeasureString(name, Theme.Tab).Width;
+            if (text + names.Length * pad + (names.Length - 1) * gap > room) {
+                gap = 2;
+                pad = Math.Max(2, (room - text - (names.Length - 1) * gap) / names.Length);
+            }
             for (int i = 0; i < names.Length; i++) {
-                float w = g.MeasureString(names[i], Theme.Tab).Width + 26;
+                float w = g.MeasureString(names[i], Theme.Tab).Width + pad;
                 var t = new TabW { Text = names[i], Index = i, R = new RectangleF(tx, 50, w, 40) };
                 tabs.Add(t); widgets.Add(t);
-                tx += w + 6;
+                tx += w + gap;
             }
+        }
 
         float cx = LeftW + 36, cw = W - LeftW - 72, colW = (cw - 14) / 2;
-        AddSelectors(GraphicsRows, 0, cx, colW);
-        AddSelectors(GameRows, 1, cx, colW);
-        AddSelectors(RandoRows, 2, cx, colW, null, 60, 54);   // (fourteen of them: closer lines, seven in all)
-        AddSelectors(CosmeticRows, 3, cx, colW, cosmetics);
+        AddSelectors(GraphicsRows, 1, cx, colW);
+        AddSelectors(GameRows, 2, cx, colW);
+        AddSelectors(RandoRows, 3, cx, colW, null, 53, 50);   // (sixteen of them: closer lines, eight in all, over the seed's buttons)
+        AddSelectors(CosmeticRows, 4, cx, colW, cosmetics);
         // (beside the fifth selector, in the third line's right half)
-        widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx + colW + 14, 112 + 2 * 70 + 11, 160, 40), Page = 3, Click = OnRandomCosmetics });
-        // (beside the eleventh selector, in the sixth line's right half)
+        widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx + colW + 14, 112 + 2 * 70 + 11, 160, 40), Page = 4, Click = OnRandomCosmetics });
         // (under the selectors: the seed's three buttons, and its ID beside them)
-        widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx, 538, 116, 38), Page = 2, Click = OnNewSeed });
-        widgets.Add(new Btn { Text = "Copy seed ID", R = new RectangleF(cx + 126, 538, 136, 38), Page = 2, Click = OnCopySeedId });
-        widgets.Add(new Btn { Text = "Paste seed ID", R = new RectangleF(cx + 272, 538, 136, 38), Page = 2, Click = OnPasteSeedId });
+        widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx, 542, 116, 36), Page = 3, Click = OnNewSeed });
+        widgets.Add(new Btn { Text = "Copy seed ID", R = new RectangleF(cx + 126, 542, 136, 36), Page = 3, Click = OnCopySeedId });
+        widgets.Add(new Btn { Text = "Paste seed ID", R = new RectangleF(cx + 272, 542, 136, 36), Page = 3, Click = OnPasteSeedId });
         var langItems = new string[Languages.Length]; var langValues = new int[Languages.Length];
         for (int i = 0; i < Languages.Length; i++) { langItems[i] = Languages[i][1]; langValues[i] = i; }
-        langSel = new Selector { Key = "language", Label = "Language", Items = langItems, Values = langValues, Page = 1, Index = 0,
+        langSel = new Selector { Key = "language", Label = "Language", Items = langItems, Values = langValues, Page = 2, Index = 0,
                                  HelpText = "The game's language: text and voices.",
                                  R = new RectangleF(cx + colW + 14, 112 + 2 * 70, colW, 62) };   // (the third line's right half: the five game selectors end in its left)
         langSel.Changed = s => { if (!loading) SaveLanguage(); };
         widgets.Add(langSel);
         for (int i = 0; i < Fixes.Length; i++) {
-            var tg = new Toggle { Key = Fixes[i][0], Label = Fixes[i][2], HelpText = Fixes[i][3], Page = 4, R = new RectangleF(cx, 112 + i * 112, cw, 100) };
+            var tg = new Toggle { Key = Fixes[i][0], Label = Fixes[i][2], HelpText = Fixes[i][3], Page = 5, R = new RectangleF(cx, 112 + i * 92, cw, 88) };
             tg.Changed = t => { if (!loading) SaveEnv(); };
             fixes[tg.Key] = tg; widgets.Add(tg);
         }
-        widgets.Add(new Btn { Text = "Project page on GitHub", R = new RectangleF(cx, 470, 220, 40), Page = 5, Click = () => OpenUrl(Fork.Home) });
-        widgets.Add(new Btn { Text = "Licence (GPL-3)", R = new RectangleF(cx + 232, 470, 170, 40), Page = 5, Click = () => OpenUrl(Fork.Home + "/blob/HEAD/LICENSE") });
+        // (Mako) the FSR tab: AMD's files, fetched from AMD's own GitHub with one button (Fsr below)
+        fsrButton = new Btn { Text = "Download AMD FSR", Style = Btn.Kind.Primary, R = new RectangleF(cx, 470, 260, 44), Page = 6, Click = OnFsrDownload };
+        widgets.Add(fsrButton);
+        widgets.Add(new Btn { Text = "AMD FSR SDK on GitHub", R = new RectangleF(cx + 272, 470, 220, 44), Page = 6, Click = () => OpenUrl(Fsr.Page) });
+        widgets.Add(new Btn { Text = "Project page on GitHub", R = new RectangleF(cx, 470, 220, 40), Page = 7, Click = () => OpenUrl(Fork.Home) });
+        widgets.Add(new Btn { Text = "Licence (GPL-3)", R = new RectangleF(cx + 232, 470, 170, 40), Page = 7, Click = () => OpenUrl(Fork.Home + "/blob/HEAD/LICENSE") });
 
         // (bottom row: folders)
         widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 130, 42), Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
@@ -833,11 +1000,17 @@ class LauncherForm : Form {
         widgets.Add(new Btn { Text = "Save copies", R = new RectangleF(cx + 460, 612, 150, 42),
                               Click = () => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } });
 
+        // (Mako) the Recommended tab: this PC read once, and its Apply button
+        BuildRecommendations();
+        widgets.Add(new Btn { Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 460, 612, cw - 460, 42), Page = 0, Click = OnApplyRecommended });
+
         LoadAll();
         int first;
         string[] cmd = Environment.GetCommandLineArgs();
         ShowPage(cmd.Length > 2 && int.TryParse(cmd[2], out first) && first >= 0 && first < tabs.Count ? first : 0);
         tabX = tabs[PageNow].R.X; tabW = tabs[PageNow].R.Width;
+        float scroll0;   // (a third argument: the Recommended tab scrolled, for screenshots)
+        if (cmd.Length > 3 && float.TryParse(cmd[3], out scroll0)) recScroll = scroll0;
 
         timer = new System.Windows.Forms.Timer { Interval = 16 };
         timer.Tick += (s, e) => Step();
@@ -1039,23 +1212,25 @@ class LauncherForm : Form {
 
     void PaintPageExtras(Graphics g) {
         float x = LeftW + 36;
-        if (PageNow == 1)
-            Theme.Text_(g, "Controls are set in game: press Insert or F1 for the menu.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + 3 * 70 + 6, 500, 20),
+        if (PageNow == 0) PaintRecommended(g, x);
+        if (PageNow == 2)
+            Theme.Text_(g, "Controls are set in game: press Insert or F1 for the menu.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + ((GameRows.Length + 1) / 2) * 70 + 6, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
-        if (PageNow == 2) {   // (the randomizer: the seed beside its button, and what the page does not do yet)
+        if (PageNow == 3) {   // (the randomizer: the seed beside its button, and what the page does not do yet)
             string seed = randoSeed != 0 ? SeedId() : "No seed yet";
-            Theme.Text_(g, seed, Theme.Small, Theme.Dim, new RectangleF(x + 420, 538, W - LeftW - 72 - 420, 38), StringAlignment.Near, StringAlignment.Center);
+            Theme.Text_(g, seed, Theme.Small, Theme.Dim, new RectangleF(x + 420, 542, W - LeftW - 72 - 420, 36), StringAlignment.Near, StringAlignment.Center);
             Theme.Text_(g, "Placed when Play is pressed. The seed's ID holds the seed and every setting above: the same ID is the same seed.",
                         Theme.Small, Theme.Faint, new RectangleF(x, 584, W - LeftW - 72, 18), StringAlignment.Near, StringAlignment.Near);
         }
-        if (PageNow == 3)
+        if (PageNow == 4)
             Theme.Text_(g, "Written when Play is pressed: about half a minute after a colour is changed, nothing after that. " +
                         "The equipment menu's pictures of the tunics keep the game's colours.",
                         Theme.Small, Theme.Faint, new RectangleF(x, 112 + 3 * 70 + 6, W - LeftW - 72, 40), StringAlignment.Near, StringAlignment.Near);
-        if (PageNow == 4)
-            Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + Fixes.Length * 112, 500, 20),
+        if (PageNow == 5)
+            Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + Fixes.Length * 92, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
-        if (PageNow == 5) {
+        if (PageNow == 6) PaintFsr(g, x);
+        if (PageNow == 7) {
             var r = new RectangleF(x, 112, W - LeftW - 72, 340);
             using (var p = Theme.Round(r, 14)) {
                 using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, p);
@@ -1142,7 +1317,7 @@ class LauncherForm : Form {
         var o = ReadOptions();
         // (the game's own defaults where the file has nothing yet: options.ini is written by the game's Insert menu)
         var defaults = new Dictionary<string, int> { { "quality_preset", 0 }, { "output_res", 0 }, { "resolution", 0 }, { "upscaling", 2 }, { "sharpness", 30 },
-            { "frame_generation", 2 }, { "frame_pacing", 1 }, { "vsync", 0 }, { "fullscreen", 1 }, { "ultrawide", 0 }, { "handheld_profile", 0 },
+            { "frame_generation", 0 }, { "frame_pacing", 1 }, { "vsync", 0 }, { "fullscreen", 1 }, { "ultrawide", 0 }, { "handheld_profile", 0 },
             { "fps_counter", 0 }, { "dlss", 0 }, { "frame_rate_cap", 0 }, { "amd_anti-lag_2", 0 }, { "game_speed", 1 }, { "text_speed", 0 }, { "fast_forward", 0 }, { "controller_in_background", 0 } };
         foreach (var row in RandoRows) defaults[(string)row[0]] = 0;   // (the randomizer: off, every setting the game's own)
         foreach (var kv in defaults) SetSetting(kv.Key, o.ContainsKey(kv.Key) ? o[kv.Key] : kv.Value);
@@ -1259,11 +1434,11 @@ class LauncherForm : Form {
     void ApplyPreset(int p) {
         int[][] t = {
             null,
-            new[] { 4, 2, 50, 2, 1, 1, 1 },
-            new[] { 2, 2, 35, 2, 1, 1, 1 },
-            new[] { 1, 1, 25, 2, 1, 1, 0 },
-            new[] { 1, 2, 30, 2, 1, 1, 0 },
-            new[] { 1, 2, 40, 3, 1, 1, 0 },
+            new[] { 4, 2, 30, 1, 1, 1 },
+            new[] { 2, 2, 30, 1, 1, 1 },
+            new[] { 1, 1, 30, 1, 1, 0 },
+            new[] { 1, 2, 40, 1, 1, 0 },
+            new[] { 1, 2, 50, 1, 1, 0 },
         };
         if (p <= 0 || p >= t.Length) return;
         for (int i = 0; i < PresetKeys.Length; i++) SetSetting(PresetKeys[i], t[p][i]);
@@ -1318,7 +1493,7 @@ class LauncherForm : Form {
             if (lines.Count == 0 && File.Exists(envPath)) File.Delete(envPath);
             else if (lines.Count > 0) File.WriteAllLines(envPath, lines.ToArray(), new UTF8Encoding(false));
         } catch (Exception ex) {
-            MessageBox.Show(this, "The AMD fix switches could not be saved:\n" + ex.Message, Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "The fix switches could not be saved:\n" + ex.Message, Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -1583,6 +1758,321 @@ class LauncherForm : Form {
         } catch (Exception ex) { MessageBox.Show(this, ex.Message, Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
     void OpenUrl(string url) { try { Process.Start(url); } catch { } }
+
+    // ---- (Mako) the FSR tab ------------------------------------------------------------------------------------------------
+    // AMD's FSR files (loader, FSR 4 upscaler, FSR frame generation) are AMD's: Mako never ships them. The button fetches the
+    // signed ones from AMD's own repository (Fsr.Base), checks each is signed by AMD (Authenticode, Fsr.SignedByAmd) and puts
+    // them beside the game, where the game looks for them (gpu/vk/vk_fsr4.cpp).
+
+    // ---- (Mako) the Recommended tab ----
+    PcInfo pc;
+    Bitmap recPage; float recScroll, recHeight;
+    List<RecRow> recGraphics, recFixes;
+    List<string[]> recNotes;   // (heading, text)
+    string recVerdict = "";
+
+    string ItemOf(string key, int value) {
+        foreach (var row in GraphicsRows)
+            if ((string)row[0] == key) {
+                var items = (string[])row[2]; var values = (int[])row[3];
+                for (int i = 0; i < values.Length; i++) if (values[i] == value) return items[i];
+            }
+        foreach (var row in GameRows)
+            if ((string)row[0] == key) {
+                var items = (string[])row[2]; var values = (int[])row[3];
+                for (int i = 0; i < values.Length; i++) if (values[i] == value) return items[i];
+            }
+        return value.ToString();
+    }
+    RecRow Opt(string what, string key, int value, string why) {
+        var r = new RecRow(what, ItemOf(key, value), why) { Key = key, Set = value };
+        recGraphics.Add(r);
+        return r;
+    }
+
+    void BuildRecommendations() {
+        pc = PcInfo.Read();
+        recGraphics = new List<RecRow>(); recFixes = new List<RecRow>(); recNotes = new List<string[]>();
+        int v = pc.VramGB, h = pc.ScreenH, hz = pc.Hz;
+        bool knownVram = pc.VramMB > 0;
+        bool low = pc.Integrated || (knownVram && v < 5);
+        string card = pc.Gpu.Length > 0 ? pc.Gpu : "your graphics card";
+
+        // (the verdict)
+        if (pc.Integrated) recVerdict = "A graphics chip built into the processor: Mako runs, at the lightest settings. Expect around 30 fps.";
+        else if (!knownVram) recVerdict = "The graphics card's memory could not be read: these are middle settings. Lower the Quality preset if it stutters.";
+        else if (v >= 14) recVerdict = "A strong PC for Mako: high settings, with room for AMD FSR 4 and frame generation.";
+        else if (v >= 10) recVerdict = "A good PC for Mako: high settings at your screen's resolution.";
+        else if (v >= 7) recVerdict = "A solid PC for Mako: balanced settings. 8 GB of video memory is the limit to watch.";
+        else recVerdict = "A light PC for Mako: low settings keep it smooth. Video memory is the limit here.";
+
+        // (Quality preset: from the video memory, as its own names say)
+        int preset = low ? 1 : !knownVram ? 3 : v < 7 ? 2 : v < 10 ? 3 : v < 14 ? 4 : 5;
+        Opt("Quality preset", "quality_preset", preset,
+            knownVram ? "Your card has " + v + " GB of video memory. The preset fits the game's textures and effects to it; one step lower if the game stutters after a while."
+                      : "Set from a middle guess. One step lower if the game stutters after a while.");
+
+        // (Output resolution: the screen's, no higher than the memory allows)
+        int cap = low ? 720 : !knownVram ? 1080 : v < 7 ? 1080 : v < 14 ? 1440 : 2160;
+        int target = Math.Min(h > 0 ? h : 1080, cap);
+        int[][] outs = { new[] { 2160, 2 }, new[] { 1440, 1 }, new[] { 1152, 0 }, new[] { 1080, 3 }, new[] { 900, 5 }, new[] { 720, 6 } };
+        int outVal = 6;
+        foreach (var o in outs) if (o[0] <= target) { outVal = o[1]; break; }
+        Opt("Output resolution", "output_res", outVal,
+            "Your screen is " + pc.ScreenW + " x " + pc.ScreenH + "." + (target < h ? " Higher would ask more video memory than your card has: the picture is fitted to your screen." : " The game draws at your screen's own size: the sharpest picture."));
+
+        // (Upscaler)
+        int up; string upWhy;
+        if (pc.Tier == 2) { up = 4; upWhy = "Radeon RX 9000: AMD FSR 4 is the sharpest. It needs AMD's files: one click in the FSR tab. Native AA is sharper still but much heavier: only with 16 GB and power to spare."; }
+        else if (pc.Tier == 1) { up = 3; upWhy = "Radeon RX 6000 / 7000: AMD FSR 3.1 is light and clean. FSR 4 also works on this card (FSR tab), sharper but heavier: try it if you have fps to spare."; }
+        else if (low) { up = 0; upWhy = "The game's own upscaler is the lightest: best for a graphics chip in the processor."; }
+        else { up = 3; upWhy = "AMD FSR 3.1 works on every graphics card and is sharper than the game's own when the 3D is drawn smaller."; }
+        Opt("Upscaler", "dlss", up, upWhy);
+
+        Opt("3D resolution", "resolution", low ? 4 : 0,
+            low ? "Half the output resolution: what keeps a built-in graphics chip near 30 fps." : "Auto lowers the 3D's sharpness only when the graphics card is busy, so the frame rate stays steady.");
+        Opt("Screen filter", "upscaling", low ? 1 : 2, low ? "Catmull-Rom: sharp and light." : "Lanczos: the sharpest fit to your screen.");
+        Opt("Sharpness", "sharpness", up == 4 ? 20 : 30, up == 4 ? "FSR 4 is sharp already: a little more is enough." : "A little sharpening; above 50% shows halos around edges.");
+
+        // (Frame generation and the frame rate: the screen's refresh decides)
+        bool fg = hz >= 100 && !low && (!knownVram || v >= 8);
+        Opt("Frame generation", "frame_generation", fg ? 2 : 0,
+            fg ? "Your screen shows " + hz + " Hz: 2x fills it with smoother motion. Made frames do not make the game react faster. 3x and more show more mistakes in the picture: not recommended."
+               : hz < 100 ? "Your screen shows " + hz + " Hz: made frames would not be shown, so they only cost. Off."
+                          : "Off: made frames need video memory and power this PC is better using for the game itself.");
+        int[][] caps = { new[] { 240, 5 }, new[] { 165, 4 }, new[] { 144, 3 }, new[] { 120, 2 }, new[] { 90, 1 }, new[] { 0, 0 } };
+        int capVal = 0;
+        foreach (var c in caps) if (c[0] <= hz) { capVal = c[1]; break; }
+        Opt("Frame rate cap", "frame_rate_cap", capVal, "Your screen's refresh (" + hz + " Hz): frames above it are never shown.");
+        Opt("Frame pacing", "frame_pacing", 1, "Spaces the frames evenly: steadier motion on every PC.");
+        Opt("VSync", "vsync", hz <= 75 ? 1 : 0,
+            hz <= 75 ? "On a 60 Hz screen VSync stops the picture tearing." : "Off with frame pacing on: less delay. Turn it on if you see the picture tear (screens without FreeSync / G-Sync).");
+        Opt("AMD Anti-Lag 2", "amd_anti-lag_2", pc.Amd && !pc.Integrated ? 1 : 0,
+            pc.Amd && !pc.Integrated ? "Less delay between your button and the screen on AMD cards (no effect while frame generation is on)." : "AMD graphics cards only.");
+        Opt("Display", "fullscreen", 1, "Fullscreen: the smoothest frame timing. Alt+Enter switches in game.");
+        bool wide = pc.ScreenH > 0 && pc.ScreenW / (double)pc.ScreenH > 1.9;
+        Opt("Screen shape", "ultrawide", wide ? 1 : 0, wide ? "Your screen is wider than 16:9: the camera widens to fill it." : "Your screen is 16:9 (or close): the game's own shape.");
+        Opt("Handheld profile", "handheld_profile", low ? 1 : 0, low ? "The console's undocked mode: lighter on a built-in graphics chip." : "Off: the docked console's sharper picture.");
+        Opt("Game speed", "game_speed", 1, "Real time keeps the game at its normal speed even when the frame rate drops.");
+
+        // (the Fixes tab and the FSR tab: advice, the Apply button leaves them)
+        recFixes.Add(new RecRow("No blue light flashes", "On", "Stops the one-frame blue light flashes in Hyrule Field. Costs a few fps, worth it."));
+        recFixes.Add(new RecRow("Occlusion tests off", pc.Amd ? "On" : "Off", pc.Amd ? "Steadier sun glare on AMD cards, at a small cost." : "Only needed on AMD cards."));
+        recFixes.Add(new RecRow("Basic controller mode", "Off", "Only if your controller is not detected, presses twice or has wrong buttons."));
+        recFixes.Add(new RecRow("Quick first start", "Off", "Off, the game prepares every effect once after each update" + (pc.Threads < 8 ? " (longer on your " + pc.Threads + "-thread processor)" : "") +
+                                ", then plays smoothly. On reaches the title sooner, but the preparation then runs during play for hours, with stutters and objects appearing late."));
+        bool redstone = pc.Tier == 2 && (!knownVram || v >= 12);
+        recFixes.Add(new RecRow("Redstone frame gen.", redstone ? "On, with FSR 4 and 2x" : "Off",
+                                pc.Tier == 2 ? (redstone ? "Your RX 9000 has the memory for it: AMD's frame generation, made by AI, gives cleaner motion and a steady HUD. Needs AMD's files (FSR tab), the Upscaler on AMD FSR 4 and Frame generation on 2x."
+                                                         : "Your RX 9000 has " + v + " GB: Redstone takes video memory the game needs. Keep it off, or try it with the Quality preset one step lower.")
+                                             : "Made for Radeon RX 9000 cards only.") { Good = redstone });
+        recFixes.Add(new RecRow("AMD FSR files (FSR tab)", pc.Tier >= 1 ? "Download" : "Not needed",
+                                pc.Tier >= 1 ? "One click, about 110 MB from AMD's own GitHub, checked as signed by AMD. Needed for FSR 4 and Redstone." : "FSR 4 needs a Radeon RX 6000 or newer; FSR 3.1 works without these files."));
+
+        // (good to know: from this PC)
+        if (pc.RamMB > 0 && pc.RamGB < 12) recNotes.Add(new[] { "Memory: " + pc.RamGB + " GB", "Below what the game likes (16 GB). Close the web browser and other large programs before playing; long sessions can freeze." });
+        else if (pc.RamMB > 0 && pc.RamGB < 24) recNotes.Add(new[] { "Memory: " + pc.RamGB + " GB", "Enough. For long sessions, close large programs (web browser with many tabs, video editors) while you play." });
+        else if (pc.RamMB > 0) recNotes.Add(new[] { "Memory: " + pc.RamGB + " GB", "Plenty: nothing to do." });
+        if (pc.Threads > 0 && pc.Threads < 8) recNotes.Add(new[] { "Processor: " + pc.Threads + " threads", "The first start after each update takes longer here: let it finish once, the next starts are quick." });
+        if (pc.Integrated) recNotes.Add(new[] { "Laptop or built-in graphics", "Keep it plugged in. If the PC also has a graphics card, in Windows Settings > System > Display > Graphics set hookshot.exe to High performance." });
+        if (pc.Nvidia) recNotes.Add(new[] { "NVIDIA card", "Mako is tuned and tested on AMD cards first. NVIDIA works; tell us on GitHub if something looks wrong." });
+        if (knownVram && v <= 8) recNotes.Add(new[] { "Video memory: " + v + " GB", "The limit to watch. If the game starts to stutter after a while, lower the Quality preset one step. Leave Native AA and Redstone off." });
+        recNotes.Add(new[] { "After every update", "The first start prepares the game's effects (up to about 40 minutes on AMD cards, once). Let it finish: the following starts are quick." });
+        recNotes.Add(new[] { "Graphics driver", "Keep it up to date: AMD Software: Adrenalin Edition, the NVIDIA App or Intel Graphics Software." });
+        recNotes.Add(new[] { "In game", "Insert opens the menu: the same settings, applied at once. The launcher's tabs change the same file." });
+        recNotes.Add(new[] { "Troubleshooting", "Blue flashes: No blue light flashes (Fixes). Controller problems: Basic controller mode. Stutters for hours after an update: Quick first start off. " +
+                                                       "Shaking HUD with frame generation: Redstone on an RX 9000, or Frame generation off. Too slow: Quality preset one step lower." });
+    }
+
+    float LayoutRec(Graphics g, float w, bool draw) {
+        float y = 0, pad = 18;
+        Func<string, Font, float, float> hgt = (s, f, ww) => g.MeasureString(s, f, (int)ww).Height;
+        // (title and verdict)
+        if (draw) Theme.Text_(g, "Recommended for this PC", Theme.Pick(22f, FontStyle.Bold, "Bahnschrift", "Segoe UI"), Color.White, new RectangleF(0, y, w, 30), StringAlignment.Near, StringAlignment.Near);
+        y += 34;
+        float vh = hgt(recVerdict, Theme.Body, w);
+        if (draw) g.DrawString(recVerdict, Theme.Body, new SolidBrush(Theme.Cyan), new RectangleF(0, y, w, vh + 2));
+        y += vh + 10;
+        // (the PC card)
+        string[][] facts = {
+            new[] { "Graphics card", (pc.Gpu.Length > 0 ? pc.Gpu : "not found") + (pc.VramMB > 0 ? "  ·  " + pc.VramGB + " GB of video memory" : "") },
+            new[] { "Processor", (pc.Cpu.Length > 0 ? pc.Cpu : "unknown") + "  ·  " + pc.Threads + " threads" },
+            new[] { "Memory", pc.RamMB > 0 ? pc.RamGB + " GB" : "unknown" },
+            new[] { "Screen", pc.ScreenW + " x " + pc.ScreenH + " at " + pc.Hz + " Hz" },
+        };
+        float cardH = 16 + facts.Length * 24 + 8;
+        if (draw) {
+            var r = new RectangleF(0, y, w, cardH);
+            using (var p = Theme.Round(r, 12)) { using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, p); using (var pen = new Pen(Theme.Line)) g.DrawPath(pen, p); }
+            float fy = y + 12;
+            foreach (var f in facts) {
+                Theme.Text_(g, f[0].ToUpperInvariant(), Theme.Label, Theme.Dim, new RectangleF(pad, fy + 2, 130, 20), StringAlignment.Near, StringAlignment.Near);
+                Theme.Text_(g, f[1], Theme.Body, Theme.Text, new RectangleF(pad + 130, fy, w - pad * 2 - 130, 22), StringAlignment.Near, StringAlignment.Near);
+                fy += 24;
+            }
+        }
+        y += cardH + 18;
+        // (the sections)
+        y = RecSection(g, w, y, draw, "GRAPHICS  ·  the Apply button sets these", recGraphics);
+        y = RecSection(g, w, y, draw, "FIXES AND FSR TABS  ·  set them yourself", recFixes);
+        if (draw) Theme.Text_(g, "GOOD TO KNOW", Theme.Label, Theme.Cyan, new RectangleF(0, y, w, 18), StringAlignment.Near, StringAlignment.Near);
+        y += 24;
+        foreach (var n in recNotes) {
+            float th = hgt(n[1], Theme.Small, w - 190);
+            if (draw) {
+                Theme.Text_(g, n[0], Theme.Strong, Theme.Text, new RectangleF(0, y, 180, 22), StringAlignment.Near, StringAlignment.Near);
+                g.DrawString(n[1], Theme.Small, new SolidBrush(Theme.Dim), new RectangleF(190, y + 2, w - 190, th + 2));
+            }
+            y += Math.Max(24, th + 4) + 10;
+        }
+        return y + 10;
+    }
+
+    float RecSection(Graphics g, float w, float y, bool draw, string title, List<RecRow> rows) {
+        if (draw) Theme.Text_(g, title, Theme.Label, Theme.Cyan, new RectangleF(0, y, w, 18), StringAlignment.Near, StringAlignment.Near);
+        y += 24;
+        foreach (var r in rows) {
+            float th = g.MeasureString(r.Why, Theme.Small, (int)(w - 190)).Height;
+            if (draw) {
+                Theme.Text_(g, r.What, Theme.Small, Theme.Dim, new RectangleF(0, y + 3, 180, 20), StringAlignment.Near, StringAlignment.Near);
+                Theme.Text_(g, r.Value, Theme.Strong, r.Good ? Color.White : Theme.Amber, new RectangleF(190, y, w - 190, 22), StringAlignment.Near, StringAlignment.Near);
+                g.DrawString(r.Why, Theme.Small, new SolidBrush(Theme.Dim), new RectangleF(190, y + 23, w - 190, th + 2));
+            }
+            y += 23 + th + 10;
+            if (draw) using (var pen = new Pen(Theme.A(Theme.Line, 140))) g.DrawLine(pen, 0, y - 5, w, y - 5);
+        }
+        return y + 12;
+    }
+
+    void PaintRecommended(Graphics g, float x) {
+        float w = W - LeftW - 72;
+        var area = new RectangleF(x, 104, w + 14, 496);
+        if (recPage == null) {
+            using (var probe = new Bitmap(1, 1)) using (var pg = Graphics.FromImage(probe)) {
+                pg.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                recHeight = LayoutRec(pg, w - 12, false);
+            }
+            recPage = new Bitmap((int)w, (int)Math.Ceiling(recHeight) + 4);
+            using (var pg = Graphics.FromImage(recPage)) {
+                pg.SmoothingMode = SmoothingMode.AntiAlias; pg.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                LayoutRec(pg, w - 12, true);
+            }
+        }
+        recScroll = Math.Max(0, Math.Min(recScroll, Math.Max(0, recHeight - area.Height + 8)));
+        var state = g.Save();
+        g.SetClip(area);
+        g.DrawImageUnscaled(recPage, (int)x, (int)(area.Y + 8 - recScroll));
+        g.Restore(state);
+        // (scroll bar, and a fade at the bottom while there is more)
+        if (recHeight > area.Height) {
+            float track = area.Height - 16, bar = Math.Max(30, track * area.Height / recHeight);
+            float by = area.Y + 8 + (track - bar) * recScroll / Math.Max(1, recHeight - area.Height + 8);
+            using (var p = Theme.Round(new RectangleF(x + w + 6, by, 4, bar), 2)) using (var b = new SolidBrush(Theme.A(Theme.Cyan, 120))) g.FillPath(b, p);
+            if (recScroll < recHeight - area.Height)
+                using (var b = new LinearGradientBrush(new RectangleF(x, area.Bottom - 40, w, 41), Theme.A(Theme.Bg1, 0), Theme.A(Theme.Bg1, 230), LinearGradientMode.Vertical))
+                    g.FillRectangle(b, x, area.Bottom - 40, w, 40);
+            Theme.Text_(g, "Scroll for more", Theme.Small, Theme.Faint, new RectangleF(x, area.Bottom - 2, w, 16), StringAlignment.Center, StringAlignment.Near);
+        }
+    }
+
+    protected override void OnMouseWheel(MouseEventArgs e) {
+        base.OnMouseWheel(e);
+        if (PageNow == 0) recScroll = Math.Max(0, Math.Min(recScroll - e.Delta * 0.6f, Math.Max(0, recHeight - 488)));
+    }
+
+    void OnApplyRecommended() {
+        if (MessageBox.Show(this, "This sets the Graphics tab to the values shown here. Your current graphics settings are replaced.\n" +
+                            "(The Fixes and FSR tabs are left as they are.)\n\nApply?", Fork.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        loading = true;
+        foreach (var r in recGraphics) if (r.Key != null) SetSetting(r.Key, r.Set);
+        loading = false;
+        SaveOptions();
+        MessageBox.Show(this, "Done: the recommended settings are saved. You can still change any of them in the Graphics tab.", Fork.Name,
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    void PaintFsr(Graphics g, float x) {
+        var r = new RectangleF(x, 112, W - LeftW - 72, 340);
+        using (var p = Theme.Round(r, 14)) {
+            using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, p);
+            using (var pen = new Pen(Theme.Line)) g.DrawPath(pen, p);
+        }
+        Theme.Text_(g, "AMD FSR", Theme.Pick(22f, FontStyle.Bold, "Bahnschrift", "Segoe UI"), Color.White, new RectangleF(r.X + 24, r.Y + 16, 400, 30), StringAlignment.Near, StringAlignment.Near);
+        string gpu = Fsr.Gpu();
+        int tier = Fsr.Tier(gpu);
+        string what = tier == 2 ? "FSR 4 upscaling and FSR Redstone frame generation (switch in the Fixes tab) are made for this card."
+                    : tier == 1 ? "FSR 4 upscaling works on this card. FSR frame generation needs a Radeon RX 9000."
+                    : "FSR 4 needs an AMD Radeon RX 6000 or newer. FSR 3.1 works on every card without these files.";
+        Theme.Text_(g, "Graphics card: " + (gpu.Length > 0 ? gpu : "unknown"), Theme.Body, Theme.Cyan, new RectangleF(r.X + 24, r.Y + 52, r.Width - 48, 22), StringAlignment.Near, StringAlignment.Near);
+        Theme.Text_(g, what, Theme.Body, Theme.Text, new RectangleF(r.X + 24, r.Y + 76, r.Width - 48, 22), StringAlignment.Near, StringAlignment.Near);
+        float y = r.Y + 116;
+        foreach (var f in Fsr.Files) {
+            string path = Path.Combine(dir, f[0]);
+            bool have = File.Exists(path);
+            string ver = "";
+            if (have) try { ver = FileVersionInfo.GetVersionInfo(path).FileVersion ?? ""; } catch { }
+            using (var b = new SolidBrush(have ? Theme.Green : Theme.Amber)) g.FillEllipse(b, r.X + 26, y + 6, 9, 9);
+            Theme.Text_(g, f[1] + (have ? "  ·  installed" + (ver.Length > 0 ? " (" + ver.Trim() + ")" : "") : "  ·  missing"), Theme.Body,
+                        have ? Theme.Text : Theme.Dim, new RectangleF(r.X + 44, y, r.Width - 68, 22), StringAlignment.Near, StringAlignment.Near);
+            y += 28;
+        }
+        Theme.Text_(g, "One click: the files are downloaded from AMD's official GitHub (about 110 MB), checked (signed by AMD) and put in " +
+                    "the game folder. Then choose AMD FSR 4 as the Upscaler (Graphics tab, or in game with Insert).",
+                    Theme.Small, Theme.Dim, new RectangleF(r.X + 24, y + 10, r.Width - 48, 40), StringAlignment.Near, StringAlignment.Near);
+        Theme.Text_(g, fsrLine, Theme.Small, fsrLineColor, new RectangleF(r.X + 24, r.Bottom - 34, r.Width - 48, 22), StringAlignment.Near, StringAlignment.Near);
+    }
+
+    void OnFsrDownload() {
+        if (fsrBusy) return;
+        foreach (var pr in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(Fork.GameExe))) {
+            string exe = "";
+            try { exe = pr.MainModule.FileName; } catch { }
+            if (exe.Length > 0 && string.Equals(Path.GetDirectoryName(exe), dir, StringComparison.OrdinalIgnoreCase)) {
+                fsrLine = "Close the game first: its files are in use."; fsrLineColor = Theme.Amber; return;
+            }
+        }
+        fsrBusy = true; fsrButton.Enabled = false;
+        fsrLine = "Downloading..."; fsrLineColor = Theme.Cyan;
+        new Thread(() => {
+            string done;
+            Color col;
+            try {
+                long all = 0;
+                foreach (var f in Fsr.Files) all += long.Parse(f[2]);
+                long got = 0;
+                var tmp = new List<string>();
+                foreach (var f in Fsr.Files) {
+                    string part = Path.Combine(dir, f[0] + ".download");
+                    tmp.Add(part);
+                    using (var c = new WebClient()) {
+                        c.Headers[HttpRequestHeader.UserAgent] = "Mako-launcher";
+                        long before = got;
+                        var ev = new ManualResetEvent(false); Exception err = null;
+                        c.DownloadProgressChanged += (s, e) => {
+                            long now = before + e.BytesReceived;
+                            try { BeginInvoke((Action)(() => { fsrLine = "Downloading  " + (now >> 20) + " / " + (all >> 20) + " MB"; })); } catch { }
+                        };
+                        c.DownloadFileCompleted += (s, e) => { err = e.Error; ev.Set(); };
+                        c.DownloadFileAsync(new Uri(Fsr.Base + f[0]), part);
+                        ev.WaitOne();
+                        if (err != null) throw err;
+                    }
+                    got += new FileInfo(part).Length;
+                    if (!Fsr.SignedByAmd(part)) throw new Exception(f[0] + " is not signed by AMD: not installed");
+                }
+                for (int i = 0; i < Fsr.Files.Length; i++) {
+                    string target = Path.Combine(dir, Fsr.Files[i][0]);
+                    if (File.Exists(target)) File.Delete(target);
+                    File.Move(tmp[i], target);
+                }
+                done = "Done: AMD FSR is installed. Choose AMD FSR 4 as the Upscaler."; col = Theme.Green;
+            } catch (Exception ex) {
+                foreach (var f in Fsr.Files) try { File.Delete(Path.Combine(dir, f[0] + ".download")); } catch { }
+                done = "Could not install AMD FSR: " + ex.Message; col = Theme.Red;
+            }
+            try { BeginInvoke((Action)(() => { fsrLine = done; fsrLineColor = col; fsrBusy = false; fsrButton.Enabled = true; })); } catch { }
+        }) { IsBackground = true }.Start();
+    }
 
     void OnImport() {
         OpenFolder(Path.Combine(dir, "SAVE FOLDER"));

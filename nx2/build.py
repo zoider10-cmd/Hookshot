@@ -30,6 +30,7 @@ import concurrent.futures
 import ctypes
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -418,6 +419,22 @@ def mem_need(src):
     return 1000 if src.endswith(".cpp") else 400
 
 
+def mem_limit_mb():
+    """HOOKSHOT_MEM_LIMIT_GB (the builder's Build memory choice) in MB; None: the memory free decides"""
+    raw = os.environ.get("HOOKSHOT_MEM_LIMIT_GB")
+    if not raw:
+        return None
+    try:
+        gb = float(raw)
+    except ValueError:
+        gb = 0.0
+    if not (gb > 0 and math.isfinite(gb)):
+        print("HOOKSHOT_MEM_LIMIT_GB=%s is not a finite number above 0: the memory free decides" % raw, flush=True)
+        return None
+    print("build: the compilers may take %g GB together, whatever is free (HOOKSHOT_MEM_LIMIT_GB)" % gb, flush=True)
+    return gb * 1024
+
+
 class MemoryGate:
     """(issue 418) Compilers started by the memory there is, not only by --jobs: one per CPU thread ran PCs out of memory (the kernel
     stopped a compiler, or the whole build), and a count low enough for the biggest files and the PC's other programs left most of
@@ -426,24 +443,29 @@ class MemoryGate:
     on Windows up to 4 (half the threads on smaller CPUs) always run, as Windows pages rather than fails (issues 502, 503, 511: 1-2
     compilers on 16 GB PCs took hours); on Linux one (issue 531: Linux stops a compiler that does not fit, and it is compiled again
     alone). The free memory is read again as compiles start and end, so a game or browser opened during the build makes later
-    compiles wait"""
+    compiles wait. With HOOKSHOT_MEM_LIMIT_GB the player chooses instead: a compile starts when the needs of those running and its
+    own fit in that, whatever is free, above the same floor"""
 
     def __init__(self):
         self.cv = threading.Condition()
         self.running = {}   # (per-compile lease: [need, Popen or None]; one source can have several objects)
         self.reserve = float(os.environ.get("HOOKSHOT_MEM_RESERVE_GB") or 1.5) * 1024
+        self.limit = mem_limit_mb()
         self.floor = max(1, min(4, (os.cpu_count() or 2) // 2)) if os.name == "nt" else 1
+
+    def fits(self, need):
+        if self.limit:
+            return sum(n for n, _ in self.running.values()) + need <= self.limit
+        free = free_mb()
+        if free is None:
+            return True
+        owed = sum(max(0, n - rss_mb(p)) for n, p in self.running.values())
+        return free - owed - self.reserve >= need
 
     def enter(self, src):
         need = mem_need(src)
         with self.cv:
-            while len(self.running) >= self.floor:
-                free = free_mb()
-                if free is None:
-                    break
-                owed = sum(max(0, n - rss_mb(p)) for n, p in self.running.values())
-                if free - owed - self.reserve >= need:
-                    break
+            while len(self.running) >= self.floor and not self.fits(need):
                 self.cv.wait(1.0)
             lease = object()
             self.running[lease] = [need, None]
@@ -456,6 +478,8 @@ class MemoryGate:
     def expected(self, jobs):
         """How many compilers the memory free now is likely to hold at once (COMPILER_MB each), between the floor and the jobs:
         the compile countdown's estimate"""
+        if self.limit:
+            return max(self.floor, min(jobs, int(self.limit // COMPILER_MB)))
         free = free_mb()
         if free is None:
             return jobs
@@ -796,8 +820,25 @@ def main():
         # new profile kept the hot code built from the old one)
         with open(PGO, "rb") as f:
             hot_fl = hot_fl + ["-fprofile-instr-use=" + PGO, "-DHOOKSHOT_PROFILE_SHA1=" + hashlib.sha1(f.read(), usedforsecurity=False).hexdigest()[:16]]
+    # (Mako) the builder's fast build: the costliest chunks (about RX_FAST_SHARE of the lifted code) at -O0, which compiles them
+    # about three times sooner. Not all of them: every chunk at -O0 makes an exe over 2 GB, which Windows will not load
+    fast_fl, fast = [("-O0" if f == "-" + a.opt else f) for f in fl], set()
+    share = float(os.environ.get("RX_FAST_SHARE", "0") or 0)
+    if share > 0:
+        cold = [s for s in srcs if os.path.basename(s).startswith("code_") and not os.path.basename(s).startswith("code_hot")]
+        total, done = sum(os.path.getsize(s) for s in cold), 0
+        try:   # (the chunks the game runs least first, so the -O0 ones cost the fewest frames; others after, the costliest first)
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fast_order.txt")) as f:
+                order = {n.strip(): i for i, n in enumerate(l for l in f if l.strip() and not l.startswith("#"))}
+        except OSError:
+            order = {}
+        for s in sorted(cold, key=lambda s: (order.get(os.path.basename(s), len(order)), -compile_cost(s, costs))):
+            if done + os.path.getsize(s) > share * total:
+                continue
+            fast.add(s); done += os.path.getsize(s)
+        print("fast build: %d of %d chunks at -O0" % (len(fast), len(cold)), flush=True)
     jobs = [(cc, s, os.path.join(obj_dir, os.path.basename(s)[:-2] + ".o"),
-             hot_fl if os.path.basename(s).startswith("code_hot") else fl,
+             hot_fl if os.path.basename(s).startswith("code_hot") else (fast_fl if s in fast else fl),
              shim_deps if os.path.dirname(s) == NX2_RT else deps) for s in srcs]
     # (issue 624) what the game code's object keys are made of, as short fingerprints: two builds' logs side by side say which part
     # changed when an update compiled everything again (the headers, the flags, the profile, or the lifted code itself)

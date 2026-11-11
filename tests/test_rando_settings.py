@@ -12,6 +12,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+RUN_ALL_ARGS = ["--cxx", "g++", "--cc", "gcc"]
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -61,7 +63,7 @@ def sources(rows):
     got = [(key, label, re.findall(r'"([^"]*)"', choices), [int(v) for v in values.split(",")], help_)
            for key, label, choices, values, help_ in found[1:]]
     check(got == want, "the launcher's Randomizer page and gpu/vk/oot_rando.h differ:\n  %r\n  %r" % (got, want))
-    check("AddSelectors(RandoRows, 2, cx, colW, null, 60, 54);" in launcher and '"Game", "Randomizer", "Cosmetics", "AMD fixes", "About"' in launcher,
+    check("AddSelectors(RandoRows, 3, cx, colW, null, 53, 50);" in launcher and '"Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About"' in launcher,
           "the launcher does not show its Randomizer page")
     check('lines[i] = k + "=" + randoSeed;' in launcher and 'lines.RemoveAll(l => l.StartsWith("rando_import="))' in launcher,
           "the launcher does not keep the seed, or leaves an import that would undo its settings")

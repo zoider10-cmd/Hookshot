@@ -46,16 +46,37 @@ def main():
         if not re.search(r"&%s\)\s*return\s*\"%s\"" % (re.escape(value), name), key):
             raise SystemExit("ini_key: %s is not saved as %s (an options file from before would lose it)" % (value, name))
     # the menu's rules are upscaler_rows.h's, checked by behaviour in test_upscaler_rows.cpp: here only that the menu uses them
+    # (the Upscaler by engine, Native on the Render resolution row: render_fixed, step_engine, step_render)
     uses = {
-        "row_fixed": ("ur::upscaler_fixed(", "ur::resolution_fixed(", "reflex_available()", "ur::model_fixed("),
-        "row_shown": ("ur::upscaler_shown(dlss_built() || fsr4_built(), fsr3::supported())", "ur::model_shown(dlss_built())"),
-        "set_row": ("ur::step_upscaler(", "ur::step(", "ur::snap(", "row_fixed("),
+        "row_fixed": ("ur::upscaler_fixed(", "ur::render_fixed(", "ur::model_fixed("),
+        "row_shown": ("ur::upscaler_shown(upscalers_available())", "ur::model_shown(dlss_why() == DLSS_OK)"),
+        "set_row": ("ur::step_engine(", "ur::step_render(", "ur::snap_render(", "row_fixed("),
     }
     for name, calls in uses.items():
         body = function(menu, "%s %s(" % ("void" if name == "set_row" else "bool", name))
         for call in calls:
             if call not in body:
                 raise SystemExit("%s does not use %s (upscaler_rows.h)" % (name, call))
+    # a row for what this PC cannot run is hidden, not shown with a "Not available here" line: Reflex and Anti-Lag 2
+    # where the driver lacks them (the Upscaler and the DLSS model above), and HDR's levels while HDR is off
+    shown = function(menu, "bool row_shown(int i) {")
+    for call in ("v != &opts.reflex || reflex_available()", "v != &opts.antilag || antilag_available()",
+                 "(v != &opts.hdr_white && v != &opts.hdr_peak) || opts.hdr != 0"):
+        if call not in shown:
+            raise SystemExit("row_shown: %s is not there (a row for what is not available here, or HDR's levels with HDR "
+                             "off, would show)" % call)
+    if "Not available here" in menu:
+        raise SystemExit("vk_menu.cpp: a row still says Not available here: hide it in row_shown instead")
+    fixed = function(menu, "bool row_fixed(")
+    if "reflex_available()" in fixed or "antilag_available()" in fixed:
+        raise SystemExit("row_fixed: Reflex or Anti-Lag 2 is fixed where it does not run, when row_shown hides it")
+    # every place that walks a tab's rows asks row_shown, so the keys, the pad, the mouse, the scrolling and the help all
+    # see the same rows; the selection comes back inside the tab when a row after it goes
+    for walk in ("int tab_row_count(int t) {", "int tab_row_to_global(int t, int local_idx) {"):
+        if "row_shown(i)" not in function(menu, walk):
+            raise SystemExit("%s does not skip the hidden rows" % walk.split("(")[0])
+    if "if (selected >= tab_count) selected = tab_count - 1;" not in function(menu, "void menu_tick() {"):
+        raise SystemExit("menu_tick: the selection is not brought back when rows after it are hidden")
     # the help: a row's own, then a line for the value chosen (Row::hint). The Upscaler's says why DLSS is not offered, and
     # DLSS's values ask for more Sharpness (it looks softer than the game's own)
     upscaler = function(menu, "const char* hn_upscaler(int v, int variant) {")
@@ -114,6 +135,27 @@ def main():
         raise SystemExit("upscalers_available does not ask vk_fsr3.cpp whether FSR 3.1 runs here")
     if "fsr4_why() == FSR_OK" not in available:
         raise SystemExit("upscalers_available does not ask vk_fsr4.cpp whether FSR 4 runs here")
+    # Off: offered on every PC, shown as what runs, and the game's network left out for it where DLSS's and FSR 4's are
+    if "ur::bit(ur::OFF)" not in available:
+        raise SystemExit("upscalers_available does not offer Off (no upscaler) everywhere")
+    if "temporal_off()" not in function(menu, "int upscaler() {"):
+        raise SystemExit("upscaler(): the row does not show Off while it runs")
+    if "bool temporal_off() { return opts.dlss == ur::OFF && temporal_mode() == ur::GAME; }" not in temporal:
+        raise SystemExit("temporal_off: Off is not the row's Off with no engine over it (RX_VK_DLSS, RX_VK_FSR4, FSR 3.1)")
+    upscale = function(temporal, "bool temporal_upscale(")
+    if "temporal_off() && stretch(" not in upscale:
+        raise SystemExit("temporal_upscale: the Upscaler's Off does not stretch in place of the game's network")
+    stretch = function(temporal, "bool stretch(")
+    for need in ("s.linear, in_view", "s.out_layout", "c.valid", "in->width != c.width", "VK_FORMAT_B10G11R11_UFLOAT_PACK32"):
+        if need not in stretch:
+            raise SystemExit("stretch: %s is missing (Off's linear stretch of the scene only, into the picture)" % need)
+    if "!temporal_wanted() && !temporal_off()" not in function(temporal, "void temporal_note_scene_draw("):
+        raise SystemExit("temporal_note_scene_draw: no scene camera with Off, so the fixed shares' networks are never stretched")
+    draw = (ROOT / "gpu" / "vk" / "vk_draw.cpp").read_text(encoding="utf-8")
+    if "(!temporal_wanted() && !temporal_off())" not in function(draw, "bool temporal_stand_in("):
+        raise SystemExit("temporal_stand_in: the game's network runs with Off")
+    if "(temporal_wanted() || temporal_off()) && temporal_rejected_network(" not in function(draw, "bool upscale_stub("):
+        raise SystemExit("upscale_stub: a network that did not translate is not stretched with Off")
     if "upscalers_available()" not in function(menu, "void set_row(") or "upscalers_available()" not in function(menu, "bool row_fixed("):
         raise SystemExit("the Upscaler row does not step over (or fix on) what runs here")
     with tempfile.TemporaryDirectory(prefix="upscaler-rows-") as tmp:

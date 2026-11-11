@@ -52,6 +52,11 @@ public partial class MainWindow : Window
         LanguageBox.SelectedItem = lang;
         WorkerBox.ItemsSource = BuildWorkers.Choices(Environment.ProcessorCount);
         WorkerBox.SelectedIndex = 0;
+        MemoryBox.ItemsSource = BuildMemory.Choices(BuildMemory.TotalGb());
+        MemoryBox.SelectedIndex = 0;
+        TrackBox.ItemsSource = TrackNames;
+        TrackBox.SelectedIndex = Array.IndexOf(TrackIds, Track);
+        TrackBox.SelectionChanged += TrackChanged;
         clock.Tick += (_, _) => Tick();
         Drop += Dropped;
         SourceInitialized += (_, _) =>
@@ -113,7 +118,7 @@ public partial class MainWindow : Window
         ShowMain();
         if (Environment.GetEnvironmentVariable("HOOKSHOT_UI_PREVIEW") is { Length: > 0 } preview) { Preview(preview); return; }
         CheckAll();
-        latestTag = Environment.GetEnvironmentVariable("HOOKSHOT_LATEST_TAG") is { Length: > 0 } fake ? (fake == "none" ? null : fake) : await Updater.LatestTag();
+        latestTag = Environment.GetEnvironmentVariable("HOOKSHOT_LATEST_TAG") is { Length: > 0 } fake ? (fake == "none" ? null : fake) : await Updater.LatestTag(Track);
         RefreshMode();
     }
 
@@ -145,10 +150,10 @@ public partial class MainWindow : Window
         var game = OutPath.Text.Length > 2 ? GameVersion(OutPath.Text) : null;
         var builder = Tools.Find()?.Version;
         // (the newest release known: GitHub's, else this builder's own. v2.0.0 took a GitHub that did not answer for "up to date")
-        updateTarget = latestTag ?? builder;
+        updateTarget = Updater.Target(latestTag, builder, Track);
         if (game != null && updateTarget != null && game != updateTarget && !sourcePicked) mode = Mode.UpdateGame;
         else if (game != null && !sourcePicked) mode = Mode.UpToDate;
-        else if (latestTag != null && builder != null && builder != latestTag) mode = Mode.UpdateBuilder;
+        else if (latestTag != null && builder != null && builder != updateTarget) mode = Mode.UpdateBuilder;
         else mode = Mode.Build;
         switch (mode)
         {
@@ -167,7 +172,7 @@ public partial class MainWindow : Window
                 break;
             case Mode.UpdateBuilder:
                 FilesTitle.Text = "Build your game";
-                FilesSub.Text = $"Mako Builder {latestTag} is available (this one is {builder}): update it first, then build.";
+                FilesSub.Text = $"Mako Builder {updateTarget} is available (this one is {builder}): update it first, then build.";
                 BuildButton.Content = "Update builder";
                 break;
             default:
@@ -199,8 +204,8 @@ public partial class MainWindow : Window
         LaunchVersion.Text = (game != null ? $"Mako {game}" : "Mako") + " · " + folder;
         LaunchPlay.IsEnabled = File.Exists(GameExe(folder));
         ShowPage(LaunchPage);
-        latestTag = Environment.GetEnvironmentVariable("HOOKSHOT_LATEST_TAG") is { Length: > 0 } fake ? (fake == "none" ? null : fake) : await Updater.LatestTag();
-        updateTarget = latestTag ?? Tools.Find()?.Version;   // (GitHub's newest, else this builder's own)
+        latestTag = Environment.GetEnvironmentVariable("HOOKSHOT_LATEST_TAG") is { Length: > 0 } fake ? (fake == "none" ? null : fake) : await Updater.LatestTag(Track);
+        updateTarget = Updater.Target(latestTag, Tools.Find()?.Version, Track);   // (GitHub's newest, else this builder's own)
         if (updateTarget == null) LaunchStatus.Text = "Could not check for updates (GitHub did not answer)";
         else if (game != null && game != updateTarget && GameVersion(folder) != null)
         {
@@ -241,7 +246,43 @@ public partial class MainWindow : Window
         Process.Start(si);
     }
 
-    void LaunchUpdateClick(object sender, RoutedEventArgs e) => Updater.UpdateFolder(this, launchFolder, updateTarget, fetched: false);
+    void LaunchUpdateClick(object sender, RoutedEventArgs e)
+    {
+        if (OlderOk(GameVersion(launchFolder))) Updater.UpdateFolder(this, launchFolder, updateTarget, fetched: false, named: Switching);
+    }
+
+    // ---- the update track (Updater.cs): the one chosen in the Track menu, saved; by default these tools' own ----
+    static readonly string[] TrackIds = { Updater.Release, Updater.Candidate, Updater.Nightly };
+    static readonly string[] TrackNames = { "Release", "Release candidate", "Nightly" };
+    string? chosenTrack;
+    string Track
+    {
+        get
+        {
+            if (chosenTrack != null) return chosenTrack;
+            var saved = BuilderSettings.Load(SettingsPath)?.Track;
+            return saved != null && TrackIds.Contains(saved) ? saved : Updater.TrackOf(Tools.Find()?.Version);
+        }
+    }
+    /// (a track other than these tools' own: its newest is installed, even an older version)
+    bool Switching => Track != Updater.TrackOf(Tools.Find()?.Version);
+
+    async void TrackChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (TrackBox.SelectedIndex < 0 || TrackIds[TrackBox.SelectedIndex] == Track) return;
+        chosenTrack = TrackIds[TrackBox.SelectedIndex];
+        SaveSettings();
+        latestTag = null;
+        RefreshMode();
+        latestTag = await Updater.LatestTag(Track);
+        RefreshMode();
+    }
+
+    /// (going to an older version, from another track: asked first)
+    bool OlderOk(string? have) =>
+        !Switching || !Updater.Newer(have, updateTarget) ||
+        MessageBox.Show(this, $"{updateTarget} is older than {have}, the version you have now. Install {updateTarget}?", "Hookshot",
+                        MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
 
     void LaunchPlayClick(object sender, RoutedEventArgs e)
     {
@@ -264,6 +305,9 @@ public partial class MainWindow : Window
         if (!string.IsNullOrEmpty(s.Out)) OutPath.Text = s.Out;
         DlssTick.IsChecked = s.Dlss;
         FsrTick.IsChecked = s.Fsr;
+        fsrLicense = s.FsrLicense;
+        MemoryBox.SelectedItem = BuildMemory.Saved(MemoryBox.ItemsSource.Cast<object>(), s.MemoryGb);
+        FastTick.IsChecked = s.Fast;
         if (s.Romfs != null && s.Exefs != null && Directory.Exists(s.Romfs) && File.Exists(System.IO.Path.Combine(s.Exefs, "main")))
         {
             romfs = s.Romfs;
@@ -287,7 +331,11 @@ public partial class MainWindow : Window
         {
             var s = new BuilderSettings { Out = OutPath.Text, Nup = romfs == null ? chosenNup : null, Romfs = romfs, Exefs = exefs,
                                           Dlss = DlssTick.IsChecked == true, Fsr = FsrTick.IsChecked == true,
-                                          PrepareLater = PrepareTick.IsChecked != true };
+                                          FsrLicense = fsrLicense,
+                                          Fast = FastTick.IsChecked == true,
+                                          PrepareLater = PrepareTick.IsChecked != true,
+                                          MemoryGb = MemoryBox.SelectedItem is int gb ? gb : null,
+                                          Track = chosenTrack ?? BuilderSettings.Load(SettingsPath)?.Track };
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(SettingsPath)!);
             File.WriteAllText(SettingsPath, System.Text.Json.JsonSerializer.Serialize(s));
         }
@@ -542,6 +590,22 @@ public partial class MainWindow : Window
         RefreshMode();
     }
 
+    /// The game folder or the build files folder on a hard drive: the build works, but much more slowly than on an SSD. Null
+    /// when both are on an SSD (or their drive cannot be told, as on a network share)
+    string? HardDriveWarning()
+    {
+        foreach (var (what, folder) in new[] { ("game folder", OutPath.Text), ("build files folder", Storage.Work) })
+        {
+            if (Disk.Spinning(folder) != true) continue;
+            string root;
+            try { root = System.IO.Path.GetPathRoot(System.IO.Path.GetFullPath(folder))!.TrimEnd('\\'); }
+            catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { root = folder; }
+            return $"The {what} is on a hard drive ({root}). An SSD builds the game much faster: build there if you can.\n\n" +
+                   "Choose OK to build here anyway, or Cancel to choose another folder.";
+        }
+        return null;
+    }
+
     void Dropped(object sender, DragEventArgs e)
     {
         if (runner != null || e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } paths) return;
@@ -657,18 +721,20 @@ public partial class MainWindow : Window
         switch (mode)
         {
             case Mode.UpdateGame:   // (the kept game files; the newer builder first when this one is older)
+                if (!OlderOk(GameVersion(OutPath.Text))) return;
                 SaveSettings();
-                Updater.UpdateFolder(this, OutPath.Text, updateTarget, fetched: false);
+                Updater.UpdateFolder(this, OutPath.Text, updateTarget, fetched: false, named: Switching);
                 return;
             case Mode.UpToDate:
                 finished = OutPath.Text;
                 Play(sender, e);
                 return;
             case Mode.UpdateBuilder:
+                if (!OlderOk(Tools.Find()?.Version)) return;
                 SaveSettings();
                 BuildButton.IsEnabled = false;
                 BuildButton.Content = "Getting the new builder…";
-                try { await Updater.RunLatestSetup(this, Array.Empty<string>()); }
+                try { await Updater.RunLatestSetup(this, Array.Empty<string>(), updateTarget, Switching); }
                 catch (Exception ex)
                 {
                     MessageBox.Show(this, ex.Message + " You can also download HookshotBuilder.exe from the releases page.", "Mako");
@@ -689,8 +755,10 @@ public partial class MainWindow : Window
         else return;
         args.AddRange(new[] { "--out", OutPath.Text, "--language", lang.Code });
         if (FsrTick.IsChecked == true) args.Add("--fsr");   // (an --update of the folder keeps it: make_game.py's mark)
+        if (FastTick.IsChecked == true) args.Add("--fast");   // (Mako: the same, make_game.py's .hookshot_fast mark)
         prepareNow = PrepareTick.IsChecked == true;
-        Run(tools, ShaderStep.Args(args, prepareNow), dlss: DlssTick.IsChecked == true);
+        Run(tools, ShaderStep.Args(args, prepareNow), dlss: DlssTick.IsChecked == true,
+            fsr: FsrTick.IsChecked == true && fsrLicense);
     }
 
     const string DlssLicense =
@@ -708,6 +776,32 @@ public partial class MainWindow : Window
             MessageBox.Show(this, DlssLicense, "NVIDIA DLSS", MessageBoxButton.YesNo, MessageBoxImage.Information) != MessageBoxResult.Yes)
             DlssTick.IsChecked = false;
         SaveSettings();   // (kept at once, not only when Build is pressed: ticked and closed, it is still ticked next time)
+    }
+
+    const string FsrLicense =
+        "AMD FSR 4 is AMD's, not Hookshot's. With it ticked, the build downloads AMD's FSR runtime for Vulkan (FidelityFX SDK " +
+        "v2.4.0: amd_fidelityfx_loader_vk.dll and amd_fidelityfx_upscaler_vk.dll, signed by AMD) from " +
+        "github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK, each file checked against its SHA-256, under AMD's FSR SDK license:\n\n" +
+        "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/blob/7539ae8b6568ad29ed78a753404351daf3b5cca7/Kits/FidelityFX/docs/license.md\n\n" +
+        "Its files stay on this PC (in the builder's ffx-sdk folder, and the two DLLs with LICENSE-AMD-FSR-SDK.md in the game " +
+        "folder).\n\n" +
+        "Do you accept AMD's license?";
+
+    /// AMD's license accepted on the FSR 4 tick. A tick saved before the builder asked builds with FSR 4 as it did, its DLLs
+    /// the player's own, and fetches nothing until it is ticked again
+    bool fsrLicense;
+
+    /// The AMD FSR 4 tick: AMD's license first, and the tick stays only when it is accepted (as DLSS's; this builder is
+    /// Windows', where AMD publishes the runtime)
+    void FsrChanged(object sender, RoutedEventArgs e)
+    {
+        if (FsrTick.IsChecked == true)
+        {
+            fsrLicense = MessageBox.Show(this, FsrLicense, "AMD FSR 4", MessageBoxButton.YesNo, MessageBoxImage.Information) ==
+                         MessageBoxResult.Yes;
+            if (!fsrLicense) FsrTick.IsChecked = false;
+        }
+        SaveSettings();
     }
 
     static readonly (string Id, string Build, string Update)[] Stages =
@@ -750,11 +844,20 @@ public partial class MainWindow : Window
         if (update) rows["read"].Small("Your game files are kept: the source package isn't needed");
     }
 
-    /// dlss: NVIDIA DLSS, its license accepted: NVIDIA's SDK fetched into Storage.NgxSdk first (only what is missing), and built in
-    void Run(Tools tools, List<string> args, bool keepRows = false, bool dlss = false)
+    /// dlss: NVIDIA DLSS, its license accepted: NVIDIA's SDK fetched into Storage.NgxSdk first (only what is missing), and built in.
+    /// fsr: AMD FSR 4, its license accepted: built with it, AMD's runtime fetched into Storage.FfxSdk and put in the game folder
+    void Run(Tools tools, List<string> args, bool keepRows = false, bool dlss = false, bool fsr = false)
     {
-        int? workers;
-        try { workers = BuildWorkers.Selected(WorkerBox.SelectedItem); }
+        // (a warning, not a stop: the player may have no other folder with the room. An update keeps its rows and its own flow)
+        if (!keepRows && HardDriveWarning() is { } slow &&
+            MessageBox.Show(this, slow, "Hookshot", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+            return;
+        int? workers, memoryGb;
+        try
+        {
+            workers = BuildWorkers.Selected(WorkerBox.SelectedItem);
+            memoryGb = BuildMemory.Selected(MemoryBox.SelectedItem);
+        }
         catch (ArgumentException e)
         {
             MessageBox.Show(this, e.Message, "Mako");
@@ -792,7 +895,9 @@ public partial class MainWindow : Window
         Tick();
         if (Storage.WorkChosen && !args.Contains("--work")) args.AddRange(new[] { "--work", Storage.Work });   // (the build files where the player chose)
         if (dlss && !args.Contains("--fetch-ngx-sdk")) args.AddRange(new[] { "--fetch-ngx-sdk", "--accept-nvidia-license" });
-        runner = new Runner(tools, args, workers, dlss ? Storage.NgxSdk : null);
+        if (fsr && !args.Contains("--fsr")) args.Add("--fsr");
+        if (fsr && !args.Contains("--fetch-fsr-runtime")) args.AddRange(new[] { "--fetch-fsr-runtime", "--accept-amd-license" });
+        runner = new Runner(tools, args, workers, dlss ? Storage.NgxSdk : null, memoryGb, fsr ? Storage.FfxSdk : null);
         runner.Line += l => Dispatcher.BeginInvoke(() => Line(l));
         runner.Finished += failure => Dispatcher.BeginInvoke(() => Ended(failure));
         runner.Start();
@@ -1155,6 +1260,8 @@ public partial class MainWindow : Window
         VersionChip.Visibility = Visibility.Visible;
         VersionChipText.Text = from != null && from != to ? $"{from} → {to}" : to;
         prepareNow = BuilderSettings.PrepareNow(SettingsPath);
+        // (the updates show no menu: the saved choice, as ApplySettings may not have run)
+        MemoryBox.SelectedItem = BuildMemory.Saved(MemoryBox.ItemsSource.Cast<object>(), BuilderSettings.Load(SettingsPath)?.MemoryGb);
         MakeRows(update: true, shaders: prepareNow);
         BuildTitle.Text = "Updating your game";
         BuildNote.Text = "Getting the update…";
@@ -1198,13 +1305,22 @@ public partial class MainWindow : Window
         var dlss = BuilderSettings.Load(SettingsPath)?.Dlss == true ||
                    (File.Exists(System.IO.Path.Combine(folder, "ngx", "nvngx_dlss.dll")) &&
                     File.Exists(System.IO.Path.Combine(Storage.NgxSdk, "LICENSE.txt")));
+        // (AMD FSR 4, the same: the saved tick with AMD's license accepted, or a folder built with FSR 4 whose AMD runtime
+        // was fetched, AMD's license saved beside it then, keeps it and its runtime)
+        var saved = BuilderSettings.Load(SettingsPath);
+        var fsr = (saved?.Fsr == true && saved.FsrLicense) ||
+                  (File.Exists(System.IO.Path.Combine(folder, ".hookshot_fsr")) &&
+                   File.Exists(System.IO.Path.Combine(folder, "amd_fidelityfx_upscaler_vk.dll")) &&
+                   File.Exists(System.IO.Path.Combine(folder, "LICENSE-AMD-FSR-SDK.md")));
         // (prepareNow: the saved choice, read in BeginUpdate. The launcher's Update and the --update start after a self-update never
         // ran ApplySettings, so the tick there is only its default)
-        // (Mako 3.3.1: AMD FSR 4 too, by the saved tick or its default (on). Before, an update kept FSR 4 only for a folder already
-        // built with it (make_game.py's .hookshot_fsr mark), which no 3.0.x folder was: every 3.0 -> 3.3 update was built without it)
+        // (Mako 3.3.1: AMD FSR 4 built in too by the saved tick or its default (on), even without AMD's runtime fetched (the
+        // player's own DLLs, the launcher's FSR tab). Before, every 3.0 -> 3.3 update was built without it)
         var args = new List<string> { "--update", folder };
-        if (BuilderSettings.Load(SettingsPath)?.Fsr ?? true) args.Add("--fsr");
-        Run(tools, ShaderStep.Args(args, prepareNow), keepRows: true, dlss: dlss);
+        if (!fsr && (saved?.Fsr ?? true)) args.Add("--fsr");
+        // (Mako: the fast build as last chosen; no saved choice: the folder's mark decides, as it was built)
+        if (saved != null) args.Add(saved.Fast ? "--fast" : "--no-fast");
+        Run(tools, ShaderStep.Args(args, prepareNow), keepRows: true, dlss: dlss, fsr: fsr);
     }
 
     // ================= the window =================

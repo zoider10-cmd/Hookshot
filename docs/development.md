@@ -81,7 +81,7 @@ screen. It costs some GPU time on cards that cull quickly, so it is off unless s
 | `HOS_FULLSCREEN=1` | Starts in fullscreen; the Insert menu's Fullscreen row is then left alone |
 | `HOS_AUDIO=0` | No sound device is opened (the mixer still runs); `scripts/run-vk.ps1` sets it unless `-Sound` |
 | `HOS_LANGUAGE=<code>` | The game's language for this run, a code from `language.txt` |
-| `HOS_OUTPUT_RES=<0..3>`, `HOS_HANDHELD=1`, `HOS_ASPECT=<ratio>` | Over the options file: the output resolution (0 2048x1152, 1 2560x1440, 2 3840x2160, 3 1920x1080), the handheld profile, a picture wider than 16:9 (2.3889 for 3440x1440) |
+| `HOS_OUTPUT_RES=<width>x<height>`, `HOS_HANDHELD=1`, `HOS_ASPECT=<ratio>` | Over the options file: the output resolution (a size, as `output_res`), the handheld profile, a picture wider than 16:9 (2.3889 for 3440x1440) |
 | `HOS_DYNRES=0`, `HOS_REALTIME_STEP=0`, `HOS_TEXT_SPEED=<0..3>` | Over the options file: Resolution 100% (non-zero: Auto), Game speed Per frame (1: Real time), Text speed |
 | `RX_VK_FRAMEGEN=0`, `RX_VK_FRAMEGEN_MULT=<2..8>`, `RX_VK_PACE=0`, `RX_VK_UPSCALE=<0..2>` | No frame generation whatever the menu says; over the options file: its multiplier, frame pacing, the upscaling filter |
 | `RX_VK_DEVICE=<n>` | The graphics card listed as `vk: device <n>` in the log, over the menu's GPU device |
@@ -126,7 +126,8 @@ case-sensitive, and an unknown one is ignored.
 | `HOS_SAMPLE=<thread>` + `HOS_SAMPLE_FILE=<file>` | One thread's stacks, sampled every millisecond (needs `HOS_PROFILE`); `python -I scripts/prof.py <file>` reads them |
 | `HOS_SAMPLE_ALL=<file>` | Every game and renderer thread every 2 ms while `<file>.go` exists (needs `HOS_PROFILE`); `scripts/crit.py`, `scripts/vkprof.py` and `scripts/hotlist.py` read it (on Linux with `RX_MAPS=<game folder>`: they name frames from its `hookshot` and `hookshot_vk.so`) |
 | `HOS_THREAD_TIMES=<seconds>` | Every interval, the threads that used over 5% of a core |
-| `HOS_FPS_LOG` (set), `HOS_PRESENT_TRACE=<csv>` | The game's frame limiter, VRR flags and nominal rate every 300 presents; a CSV line per game present |
+| `HOS_FPS_LOG` (set), `HOS_PRESENT_TRACE=<csv>` | The game's frame limiter, VRR flags and nominal rate every 300 presents, and the game clock's speed (1.000: real time); a CSV line per game present with host-clock times before queue flushing, around the renderer call, after virtual-core reacquisition, and at the return counter. These are CPU wall times, not GPU completion or scanout; async rendering measures the enqueue call. Unset/empty trace adds no clock reads |
+| `HOS_FPS_MAX=<61-1000>` | A frame rate cap for one run, over the Game frame rate cap row (1000 is Uncapped's) |
 | `RX_VK_FRAME_LOG=<csv>` | A CSV line per present: frame, seconds, frame time in ms |
 | `RX_VK_PASS_TIMING=1` or `2` | GPU time per pass (2: per program too), logged every 600 presents |
 | `RX_VK_SLOW_LOG=<ms>` | The replay's times for each frame that took longer than this |
@@ -143,17 +144,24 @@ case-sensitive, and an unknown one is ignored.
 | `RX_VK_SKIP_PROG=<prefix>,...` | Leaves out the draws of these programs (default `53509044401d78d2`; `-` leaves out none) |
 | `RX_VK_PIPE_SKIP=0` | A draw whose pipeline is not ready waits for it, instead of being left out when its targets hold an earlier frame |
 | `RX_VK_PRECOMPILE=0` or `1` | The shader preparation before the title off or on (on in builds made with `RX_RELEASE=1`, as the builders' are) |
+| `RX_VK_TASK_MESH_FALLBACK=0` or `1` | Task + mesh draws through the compute fallback (1) or the driver's mesh shaders (0). By default the fallback is on for AMD's Navi 21 and Navi 22 on Windows (RX 6800, 6800 XT, 6900 XT, 6700 XT), where the native path timed out the driver (issue 996) |
 | `RX_VK_NO_PROGRAM_CACHE` (set) | Neither reads nor writes `hookshot_programs.bin` and the pipeline notes |
+| `RX_VK_UB_WORD_HASH=0` | A/B test: use the old low-address-bit index for cached uniform words (default: mix upper address bits to reduce aligned-buffer collisions) |
 | `RX_VK_MIRROR=0`, `RX_VK_MIRROR_MB=<MB>` | No VRAM mirrors of the game's memory pools (on for discrete cards); their budget |
 | `RX_VK_VRAM_MB=<MB>` | The texture cache's budget (default 70% of what the driver allows, at most 6 GB) |
+| `RX_VK_COMPACT=1`, `RX_VK_COMPACT_PCT=<50..90>`, `RX_VK_COMPACT_MB=<MB>` | VRAM compaction (off by default): the textures that are not render targets in a pool of their own, moved out of sparsely used blocks a few a present so that the blocks go back to the driver, and the texture budget holding the driver's count at that share of what it allows (85); the free space that starts a run (512; 192 while the count is over 90%) |
 | `RX_VK_NO_WRITEBACK` (set) | GPU writes to mirrored pools are not copied back to guest memory (an experiment, for A/B) |
 | `RX_VK_WB_DIFF=0` | Write-backs copy every byte again instead of only what changed against a VRAM shadow (the diff is on by default; v2.0.9 and v2.0.10 had it off, issue 1161) |
 | `RX_VK_DLSS=0/1/2`, `RX_VK_DLSS_PRESET=<letter>`, `RX_VK_DLSS_LOG=1`, `RX_VK_REFLEX`, `RX_VK_REFLEX_LOG=1`, `RX_VK_ANTILAG=0/1` | NVIDIA DLSS and Reflex, and AMD Anti-Lag 2, for one run (`=-` on Reflex or Anti-Lag 2: its extensions not even enabled): the readme's NVIDIA DLSS section. `RX_VK_DLSS_TRACE=<frames>` logs one frame's large draws every that many frames, `RX_VK_DLSS_DEBUG=motion` shows the motion vectors, `=alternate` the game's own upscale every other frame |
 | `RX_VK_FSR4=0/1/2`, `RX_VK_FSR_DIR=<folder>` | AMD FSR 4 for one run (0 never, 1 FSR 4, 2 its Native AA), and another folder for AMD's DLLs (not from `hookshot_env.txt`): the readme's AMD FSR 4 section. `RX_VK_FSR4=1/2` and `RX_VK_DLSS=1/2` go over the Upscaler row, a saved FSR 3.1 too where the engine they ask for runs; `RX_VK_FSR=1` goes over them (one upscaler at a time). The DLSS trace and debug switches above apply to FSR 4 too, on the frame chain they share |
 | `RX_VK_ASYNC=1` | The replay on a thread of its own instead of the game's submitting thread |
+| `RX_VK_FIFO=1`, `RX_VK_IMMEDIATE=1` | V-Sync On (FIFO) or Off (immediate) for one run, over the menu's V-Sync row |
 | `HOS_VCORES=0`, `HOS_CORES=<1..8>`, `HOS_RESERVE_CORE=0` | No virtual cores; the cores the game sees (6); no core kept for the replay (one is, with 8 or more logical processors) |
 
 ### Building
+
+A build reads and writes tens of gigabytes. When the game folder or the build files folder is on a hard drive,
+`make_game.py` warns that an SSD is much faster and builds anyway (the builders ask before they start).
 
 | Switch | What it does |
 |---|---|
@@ -168,6 +176,55 @@ case-sensitive, and an unknown one is ignored.
 | `RX_MARCH=<level>` | The CPU level to build for (default this PC's: `x86-64-v3`, else `x86-64-v2`, else `x86-64`) |
 | `RX_VK_ONLY=1` | Only the Vulkan back end, with no lift |
 | `OOT_WORK`, `OOT_DUMP`, `OOT_EXEFS`, `OOT_ROMFS` | The work folder and the dump's folders, over `work/dump.txt` |
+
+## The pipeline state list
+
+Every release ships a list of pipelines, merged from the sources in `assets/pipeline_states/`:
+
+- `tour.bin.xz`, which only the pipeline tour (`scripts/pipeline_tour.py`) writes, replaced whole each time;
+- `contrib/<name>.bin.xz`, one per contributed list, which people add.
+
+Each has a note beside it (`<name>.md`) that says who recorded it, on what GPU, driver, build and settings, and the
+route. [`assets/pipeline_states/README.md`](../assets/pipeline_states/README.md) has how to record and add a list. Each
+record is a pipeline the game asked for: its shaders' hashes, the program variant's hash, and the target formats,
+vertex formats and draw state it was made with (`nx2/pipeline_states.py` has the layout). It holds no game code: a
+player's build turns the hashes back into shaders from their own `hookshot_shaders.bin`.
+
+`nx2/make_game.py` merges the sources at every build into the game folder's `hookshot_pipeline_states_shipped.bin`. It
+takes the tour's list first, then the contributed ones by name, and keeps each pipeline once. The same sources always
+give the same bytes, and the first start's shader preparation builds those pipelines before the title. Without them a
+new install builds them in play, and draws left out while they compile wash the first field load white for seconds
+(v2.0.8 to v2.0.14 shipped none). The sources are xz-compressed, written with fixed settings, so that the repository's
+history stays small. The current ones hold 11527 pipelines in about 175 KB.
+
+Every release carries them:
+
+- the AppImage with `assets/`: `scripts/linux/appimage.sh` stops without them, and `scripts/linux/check_player_build.sh`
+  checks them with the image's Python;
+- the Windows builder's `tools/assets/pipeline_states`: `scripts/release_parts.py package` stops when there are none or
+  one does not read.
+
+xz rather than zstd: the AppImage's Python is 3.12, whose standard library has `lzma` but not `compression.zstd`.
+
+A game run writes `hookshot_pipeline_states.bin` beside the executable, adding each pipeline it makes in play. To add a
+list, play on a build of the current source and add that file as a contributed list. `add` keeps only the pipelines no
+other contributed list holds:
+
+```sh
+python -I nx2/pipeline_states.py add <name> <game folder>/hookshot_pipeline_states.bin --who ... --gpu ... --build ... --settings ... --route ...
+python -I nx2/pipeline_states.py tour <tour lists>... --gpu ... --build ... --settings ... --route ...   # the tour's, replaced
+python -I nx2/pipeline_states.py check                      # every source, and the merge, as CI and the release checks read them
+python -I nx2/pipeline_states.py merge --out merged.bin     # the list make_game writes beside the game
+```
+
+A list depends on the settings it was recorded with: its records hold the target formats and draw state, so one recorded
+at 1440p with DLSS shares few pipelines with one recorded at 360p.
+
+Refresh the tour's list before each release, and after a change to the shaders' translation or to the state a pipeline
+is made from. A record that no longer matches what play asks for builds a pipeline nothing uses, and the one play wants
+compiles in play. When the record's format changes (its magic and record size, `MAGIC` and `SIZE` in
+`nx2/pipeline_states.py`), the old lists no longer read and the release checks stop. Convert each source in place, or
+record it again, and make a new tour list. The folder's layout stays the same.
 
 ## The options file
 
@@ -184,7 +241,7 @@ number is not the obvious one:
 | `gpu_device` | 0 Auto, n the n-th card with Vulkan 1.3 as the row lists them |
 | `frame_generation` | 0 Off, 2 to 8 the multiplier |
 | `resolution` | 0 Auto, 1 100%, 2 75%, 3 67%, 4 50% |
-| `output_res` | 0 2048x1152, 1 2560x1440, 2 3840x2160, 3 1920x1080 |
+| `output_res` | A size, `<width>x<height>`: 2048x1152 (the game's own), 1920x1080, 2560x1440, 3840x2160, 5120x1440, 5120x2880, or any other with each side a multiple of 8 (rounded down), at least 640x360, at most 5120x2880's pixels, 5:4 to 32:9; anything else is the game's own. The numbers saved before (0 2048x1152, 1 2560x1440, 2 3840x2160, 3 1920x1080, 4 5120x1440, 5 5120x2880) are still read |
 | `upscaling` | 0 Off, 1 Catmull-Rom, 2 Lanczos |
 | `sharpness`, `rumble_strength`, `motion_sensitivity_x`, `motion_sensitivity_y` | percent |
 | `mouse_sensitivity` | hundredths: 100 is 1.00 |

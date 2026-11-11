@@ -9,6 +9,7 @@
   <a href="#already-playing-update">Update</a> ·
   <a href="#new-player-install">Install</a> ·
   <a href="#the-launcher">Launcher</a> ·
+  <a href="#why-mako">Why Mako</a> ·
   <a href="#amd-fsr-4">AMD FSR 4</a> ·
   <a href="#whats-in-mako">What's in Mako</a> ·
   <a href="#known-issues">Known issues</a> ·
@@ -16,7 +17,26 @@
 </p>
 
 Mako is a fork of [Hookshot](https://github.com/NotRexed/Hookshot), the static recompilation of Ocarina of Time. It started as
-"Hookshot AMD fix (sharkiix version)" and is now its own project: AMD fixes, faster crowded places, its own launcher and builder.
+"Hookshot AMD fix (sharkiix version)" and is now its own project, built for one thing: **the best way to play Ocarina of Time on
+PC**. It keeps up with every Hookshot improvement and adds what you will not find there.
+
+## Why Mako
+
+| | Hookshot | **Mako** |
+|---|:---:|:---:|
+| Latest Hookshot engine work | ✅ | ✅ merged within days |
+| **AMD fixes**: shaders, white grass and flowers, trees losing leaves, blue bosses | — | ✅ |
+| **Castle Town without the big stutters** | — | ✅ |
+| **AMD FSR Redstone** AI frame generation (Radeon RX 9000), HUD kept still | — | ✅ |
+| **AMD FSR 4 files in one click** (from AMD's GitHub, signature checked) | — | ✅ |
+| **Recommended settings for your PC** (card, video memory, RAM, CPU, screen) | — | ✅ |
+| **Mako launcher**: one-click updates, graphics, fixes, saves import | — | ✅ |
+| Graphics-only updates in **seconds**, no rebuild | — | ✅ |
+| Controller button icons (Xbox, PlayStation, Steam Deck) | ✅ | ✅ + **Steam Controller**, new pictures |
+| **Fast build** option (about 1/3 less compile time) | — | ✅ |
+| **SAVE FOLDER**: drop a save, it is imported | — | ✅ |
+| Discord Rich Presence with Ocarina of Time art | — | ✅ |
+| **Safe defaults**: risky options off until you turn them on | — | ✅ |
 
 > [!IMPORTANT]
 > This repository **does not contain the game, keys or an executable**, and it does not explain how to get them. Mako is built
@@ -30,7 +50,7 @@ Mako is a fork of [Hookshot](https://github.com/NotRexed/Hookshot), the static r
 For players who already have the **Mako launcher**.
 
 1. Open the launcher and press **Update**.
-2. Small graphics fixes install in seconds. Bigger updates (like **3.3**) download the new builder and **build your game folder
+2. Small graphics fixes install in seconds. Bigger updates (like **3.4**) download the new builder and **build your game folder
    again by itself** (around 25-45 minutes, then a first shader preparation). **Your saves and settings are kept.**
 
 Still on **Hookshot AMD fix 2.x**? Follow [New player? Install](#new-player-install) and build into the **same folder**.
@@ -62,36 +82,46 @@ Still on **Hookshot AMD fix 2.x**? Follow [New player? Install](#new-player-inst
 
 The **Mako** shortcut opens the launcher:
 - **Play**, and **Update** when a new version is out (graphics fixes install in seconds; bigger updates rebuild the game by themselves).
+- **Recommended**: reads your PC and lists the best settings for it, with the reason for each. **Apply these** in one click.
 - **Graphics**: quality preset, output resolution (1280x720 up to 3840x2160), 3D resolution, upscaler (AMD FSR 3.1 / FSR 4),
   sharpness, frame generation, frame pacing, VSync, frame rate cap, Anti-Lag 2, window or full screen.
-- **Game**: language and game options. **AMD fixes**: switches for AMD-specific problems.
+- **Game**: language and game options.
 - **Randomizer**: the settings of a randomizer seed (chests, Gold Skulltulas, quest rewards, songs, Heart Pieces, shops,
-  Deku Scrubs, dungeon rewards and keys) and **New seed**. They are also on the **Randomizer** tab of the game's menu
-  (<kbd>Insert</kbd>), which shows the seed's ID to share it. **Chests work**: **Play** shuffles them as a mod, and
-  with **Major items** on the big items too, placed so the game can be finished by rules written from the original game
-  and not yet checked against the remake ([tools/rando](tools/rando/README.md)). It needs Python 3 with `zstandard`,
-  and a game built from this source. The other settings are not placed yet.
+  Deku Scrubs, dungeon rewards and keys), **New seed**, and the seed's ID to copy or paste. **Chests, Gold Skulltulas
+  and Quest rewards work**: **Play** shuffles them as a mod, and with **Major items** on the big items too, placed so
+  the game can be finished by rules written from the original game and not yet checked against the remake
+  ([tools/rando](tools/rando/README.md)). It needs Python 3 with `zstandard`, and a game built from this source. The
+  other settings are not placed yet. **Cosmetics**: the colours of the tunics, the hearts and the magic meter.
+- **Fixes**: blue light flashes, Basic controller mode (tip by Ducky), Quick first start, AMD FSR Redstone frame generation.
+- **FSR**: checks your card and downloads AMD's FSR files in one click.
 - **Saves**, **Import saves** (from Eden, Lichii, Ryujinx, a Switch or another Hookshot) and **Game folder**.
 
 ## AMD FSR 4
 
 - **AMD FSR 3.1** is built into the game: it works on almost every graphics card, **nothing to download**.
   <kbd>Insert</kbd> in game → **Upscaler** → **AMD FSR 3.1**.
-- **AMD FSR 4** only runs on **Radeon RX 9000** cards, and needs two files from AMD that Mako cannot ship (AMD's signed files):
+- **AMD FSR 4** only runs on **Radeon RX 9000** cards, and needs files from AMD that Mako cannot ship (AMD's signed files).
+  **Easiest: the launcher's FSR tab downloads them in one click.** By hand:
   1. Download AMD's [FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK) (release **v2.4.0**).
   2. In it, open `Kits/FidelityFX/signedbin`.
   3. Copy **`amd_fidelityfx_loader_vk.dll`** and **`amd_fidelityfx_upscaler_vk.dll`** into your game folder, next to `hookshot.exe`.
   4. Start the game: <kbd>Insert</kbd> → **Upscaler** → **AMD FSR 4**.
 
   The <kbd>Insert</kbd> menu only lists FSR 4 when it can run (an RX 9000 card **and** both files). The launcher always lists it.
+- **AMD FSR Redstone frame generation** (RX 9000): AMD's AI frame generation in place of Mako's own, with the HUD kept still.
+  Needs AMD's third file `amd_fidelityfx_framegeneration_vk.dll` (the FSR tab gets it), FSR 4 and Frame generation 2x.
+  Turn it on in the launcher's **Fixes** tab. Best with 12 GB of video memory or more.
 
 ## What's in Mako
 
 - **AMD fixes**: shaders that failed to translate on AMD now do; no white grass blades or flowers in Hyrule Field; trees keep
   their leaves up close; NaN guard against flashing/black pixels.
 - **Castle Town without the big stutters**: memory imports no longer stall the game in crowded places.
-- **Up to date with Hookshot**: the latest upstream work (draw setup cache, render thread on its own core, texture fixes...).
-- **Frame generation 2x and frame pacing** on by default (<kbd>Insert</kbd> in game to change them).
+- **Up to date with Hookshot**: the latest upstream work (new pipeline cache, vsync with 3 choices, FPS counter levels, output
+  resolution, texture fixes...).
+- **AMD FSR Redstone** frame generation and one-click AMD FSR 4 files.
+- **Recommended settings** for your PC in the launcher, and **safe defaults** (frame generation and other risky options off).
+- **Real controller icons**: Xbox, DualSense and Steam Controller buttons (pictures by DoctorTwitch).
 - **SAVE FOLDER**: drop a save in the `SAVE FOLDER` beside the game and start it: it is imported, older saves are backed up.
 - **The Mako launcher and builder**: one-click updates, resolution settings, a new look.
 
@@ -109,6 +139,9 @@ launcher is `launcher/` (`build.ps1`), the builder app `builder/HookshotBuilder`
 ## Credits
 
 - **sharkiix**: Mako, the AMD fixes, the launcher and builder.
+- **[captainducky66](https://github.com/captainducky66)** (Ducky): Discord Rich Presence, .nx support, the performance monitor,
+  the Basic controller mode tip.
+- **DoctorTwitch**: the controller pictures ([GameBanana mod 737074](https://gamebanana.com/mods/737074), CC BY-NC-ND 4.0).
 - **NotRexed** and everyone credited in [Hookshot's readme](docs/hookshot-readme.md#credits): Hookshot itself, which Mako is built on.
 - **Eden**, **Eglantine**, **suyu**, **EvilBoyce / EvilOOT**, **Lichii**, **Mesa** and the other projects listed there.
 

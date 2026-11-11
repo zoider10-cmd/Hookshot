@@ -56,8 +56,8 @@ def main():
           "the menu's table has not a row for each line")
     check(re.search(r"char tracker_name\[kTrackerRows\]\[48\];\s*char tracker_value\[kTrackerRows\]\[72\];", menu),
           "the menu's room for a name and a value is not what the script writes for (47 and 71 characters)")
-    check('"mods\\\\rando-seed\\\\tracker.txt"' in menu and "TAB_TRACKER = 4," in menu and "TAB_COUNT = 5," in menu and
-          '{"Graphics", "Gameplay", "Controls", "Debug", "Tracker"}' in menu, "the menu has no Tracker tab that reads the seed's file")
+    check('"mods\\\\rando-seed\\\\tracker.txt"' in menu and "TAB_TRACKER = 5," in menu and "TAB_COUNT = 6," in menu and
+          '{"Graphics", "Audio", "Gameplay", "Controls", "Debug", "Tracker"}' in menu, "the menu has no Tracker tab that reads the seed's file")
     check("rows[i].tracker < tracker_count &&" in menu and "if (t == TAB_TRACKER) tracker_load();" in menu,
           "the rows past the file's lines are shown, or the file is not read for the tab")
     check("else if (press[7] && !r.value && r.tracker < 0 && can_bind()) page = 1" in menu and

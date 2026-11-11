@@ -5,7 +5,8 @@
    button to press on this pad, custom controls too.
 
    The face: hookshot_options.ini's button_prompts (the menu's Button prompts row): 0 Auto, from the first controller's name
-   (SDL), else 1 Switch, 2 Xbox, 3 PlayStation 4, 4 PlayStation 5, 5 Steam Deck. The game reads the font once, at its start:
+   (SDL), else 1 Switch, 2 Xbox, 3 PlayStation 4, 4 PlayStation 5, 5 Steam Deck, 6 Steam Controller (Mako). Auto with
+   HOS_NO_SDL (the launcher's Basic controller mode: only XInput pads) is Xbox. The game reads the font once, at its start:
    a new face or new controls show at the next start.
 
    The font as built: an OpenType font behind an 8-byte header, XORed per little-endian word with the key the header's magic
@@ -33,7 +34,7 @@ int hos_mods_has(const char *prefix, const char *suffix);   /* mods.c */
 #define SIZES_PATH "system/resource/resourcesizetable."   /* (then the version, ".rsizetable.zs") */
 #define MAGIC 0x18029a7fu
 #define PAD_BASE 0xF700
-static const char *const faces[HOS_PROMPT_N] = {"switch", "xbox", "ps4", "ps5", "steamdeck"};
+static const char *const faces[HOS_PROMPT_N] = {"switch", "xbox", "ps4", "ps5", "steamdeck", "steamcontroller"};
 /* the Switch buttons' code points in the font, in HOS_SW_* order (nx2/prompt_assets.py SWITCH) */
 static const uint16_t switch_code[HOS_SW_N] = {0xE040, 0xE041, 0xE042, 0xE043, 0xE056, 0xE057, 0xE044, 0xE045,
                                                0xE046, 0xE047, 0xE04B, 0xE04C, 0xE062, 0xE060, 0xE063, 0xE061};
@@ -79,10 +80,12 @@ static int choose_face(const char *dir) {
         if (!name[0]) Sleep(50);
     }
     int face;
-    if (!name[0]) face = HOS_PROMPT_SWITCH;   /* (no controller: the keyboard, the game's own icons; or XInput without SDL) */
+    if (!name[0] && getenv("HOS_NO_SDL")) face = HOS_PROMPT_XBOX;   /* (Mako: without SDL only XInput pads work: Xbox-style) */
+    else if (!name[0]) face = HOS_PROMPT_SWITCH;   /* (no controller: the keyboard, the game's own icons; or XInput without SDL) */
     else if (contains(name, "dualsense") || contains(name, "ps5")) face = HOS_PROMPT_PS5;
     else if (contains(name, "dualshock") || contains(name, "ps4") || contains(name, "playstation")) face = HOS_PROMPT_PS4;
     else if (contains(name, "steam deck")) face = HOS_PROMPT_STEAMDECK;
+    else if (contains(name, "steam controller")) face = HOS_PROMPT_STEAMCONTROLLER;   /* (Mako; Steam's virtual pads: Xbox) */
     else if (contains(name, "nintendo") || contains(name, "switch") || contains(name, "joy-con")) face = HOS_PROMPT_SWITCH;
     else face = HOS_PROMPT_XBOX;   /* (Xbox pads, and the many that copy their layout) */
     hos_log("prompts: auto: controller \"%s\": %s", name[0] ? name : "(none)", faces[face]);

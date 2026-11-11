@@ -78,6 +78,9 @@ struct Device {
     VkFormat swap_format = VK_FORMAT_UNDEFINED;
     VkExtent2D swap_extent{};
     std::vector<VkImage> swap_images;
+    // (hookshot) how many of its images may be held acquired at once with no acquire timeout: the count less the surface's
+    // minImageCount (the Vulkan spec's limit). vk_framegen.cpp's present ahead holds two
+    uint32_t swap_spare = 0;
     std::vector<VkImageView> swap_views;   // (hookshot) a view of each, for Dear ImGui's overlays (VK_NULL_HANDLE: none)
     VkFormat swap_view_format = VK_FORMAT_UNDEFINED;   // (their format: the UNORM one of an sRGB swapchain when it can be)
     bool swap_mutable = false;   // (VK_KHR_swapchain_mutable_format: an sRGB swapchain's images viewed as UNORM)
@@ -135,6 +138,14 @@ struct BindSite {
         tl_import_defer -= defer;
     }
 };
+/// Authored constants in the recording's stream: never recycled until its recording completes.
+/// Fill mapped, then flush memory through binding.offset + binding.size before GPU use.
+struct UniformUpload {
+    BufferRef binding;
+    uint8_t* mapped = nullptr;
+    VmaAllocation memory = nullptr;
+};
+UniformUpload uniform_upload(uint64_t size);   // empty: no recording or no room; no history consumed
 /// Changes when a read binding remembered earlier must be looked up again (a pool left, a mirror was made, a new submission)
 uint64_t gpu_bind_stamp();
 /// Around each submission's recording: mirrors wanted since the last one are made (begin), what the GPU wrote into
@@ -233,6 +244,8 @@ void memory_rb_segments_begin(uint64_t base, uint64_t n);   // (and a parallel r
 void memory_note_gpu_write(uint64_t gpu, uint64_t size);
 /// (vk_replay.cpp) The GPU's progress on the recordings' timeline, and a wait for it to reach v
 uint64_t vk_timeline_completed();
+/// A future submission completion covering images retired during replay; zero: no safe value.
+uint64_t vk_retirement_value();
 void vk_timeline_wait(uint64_t v);
 uint32_t memory_generation();
 /// 1: a page of [guest, guest + size) was written after generation gen; 0: none was
@@ -257,7 +270,26 @@ bool has_stencil(VkFormat f);
 
 // device memory (vk_vma.cpp, Vulkan Memory Allocator)
 bool vma_init(PFN_vkGetInstanceProcAddr gipa);
-bool create_image(const VkImageCreateInfo& ci, VkImage& image, VmaAllocation& allocation, bool dedicated = false, bool target = false);
+/// (textures: from the textures' own pool, the one image_compact_* moves allocations in: vk_texture.cpp's compaction)
+bool create_image(const VkImageCreateInfo& ci, VkImage& image, VmaAllocation& allocation, bool dedicated = false, bool target = false,
+                  bool textures = false);
+// (hookshot) the textures' pool compacted: VMA's defragmentation, a pass at a time (vk_texture.cpp's compact_step)
+struct ImageMove {
+    VmaAllocation src;   // (the allocation to move: it stays the texture's, and points at the new place once the pass ends)
+};
+/// The free space inside the textures' pool's blocks, and what the blocks hold in all; false without the pool
+bool textures_pool_usage(uint64_t* block_bytes, uint64_t* free_bytes);
+bool image_compact_begin(uint64_t max_bytes_a_pass, uint32_t max_moves_a_pass);
+bool image_compact_active();
+/// A pass begun: the moves VMA asks for. False: nothing left to move, the compaction is over (then *freed_bytes and
+/// *freed_blocks say what went back to the driver in all)
+bool image_compact_pass(std::vector<ImageMove>& moves, uint64_t* freed_bytes, uint32_t* freed_blocks);
+/// The new image of move i bound at its new place; false: not bound (the caller destroys the image and ignores the move)
+bool image_compact_bind(size_t i, VkImage image);
+void image_compact_ignore(size_t i);
+/// The pass ended (its old images destroyed by the caller, nothing of the pool freed since it began). False: that was
+/// the last one; then *freed_bytes and *freed_blocks say what went back to the driver in all
+bool image_compact_pass_end(uint64_t* freed_bytes, uint32_t* freed_blocks);
 void destroy_image(VkImage image, VmaAllocation allocation);
 /// What an allocation really takes (VkMemoryRequirements.size: padding, alignment, the driver's metadata), 0 for none
 uint64_t allocation_size(VmaAllocation allocation);
@@ -282,11 +314,17 @@ bool create_swapchain(uint32_t width, uint32_t height);
 bool replay_start();                          // vk_replay.cpp
 bool precompile_wanted();                     // vk_draw.cpp
 void precompile_run(void (*progress)(size_t done, size_t total));
-bool prepare_run(void (*progress)(size_t done, size_t total), bool background);
+bool prepare_run(void (*progress)(size_t done, size_t total), bool background, bool refresh_states = false);
 bool prepare_is_update();
 void prepare_background();
 void state_list_run();                        // (an update: the state list's pipelines noted before precompile_run)
-void predict_run(void (*progress)(size_t done, size_t total));   // (after a prepare_run that prepared: the notes' predictions)
+void predict_run(void (*progress)(size_t done, size_t total), bool background = false);   // (after a prepare_run that prepared: the notes' predictions)
+// (Mako) the predicted pipelines in play, behind the game (RX_VK_PREDICT_BG, on unless =0): predict_deferred() says so,
+// predict_defer() marks them owed (instead of predict_run before the title), predict_background() builds what is owed
+bool predict_deferred();
+void predict_defer();
+void predict_background();
+void prepare_guess(size_t out[3]);   // (the three parts' counts from the files, before they run: PrepareBar)
 /// (hookshot) The window was closed while the shaders were prepared: prepare_run and precompile_run take nothing more and return,
 /// what is done kept (the program cache, the driver's) and not counted as a start that ended inside them
 void prepare_stop();

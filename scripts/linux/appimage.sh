@@ -3,7 +3,7 @@
 # nothing made from it is in it: the game is built from the player's own copy, as on Windows.
 #
 #   scripts/linux/deps.sh        (first: the compiler, Python, FFmpeg, SDL2, headers into build-linux/deps)
-#   scripts/linux/appimage.sh    -> build-linux/Hookshot-<version>-x86_64.AppImage
+#   scripts/linux/appimage.sh    -> build-linux/Hookshot-<version>-x86_64.AppImage and its .zsync
 # The same image builds the game and, with --play, starts the one it saved.
 #
 # Built on the oldest system it is for (CI: Ubuntu 22.04): the sysroot it carries is that system's C library, so the
@@ -15,7 +15,9 @@ ROOT=$PWD
 B=$ROOT/build-linux
 DEPS=${DEPS:-$B/deps}
 APPDIR=$B/AppDir
-VERSION=${HOOKSHOT_VERSION:-$(git describe --tags --always --match "v[0-9]*" 2>/dev/null || echo dev)}
+# (--long: a nightly built on a tagged commit is v2.1.0-rc.1-0-g1a2b3c4, so the updaters know it is the nightly:
+# builder/linux/linux_update.py track_of)
+VERSION=${HOOKSHOT_VERSION:-$(git describe --tags --long --always --match "v[0-9]*" 2>/dev/null || echo dev)}
 export EMSDK=$DEPS/emsdk RX_CPM=$DEPS/cpm
 PY=$DEPS/python/bin/python3
 
@@ -63,9 +65,13 @@ cp -a third_party/a64-kit/* "$T/third_party/a64-kit/"
 rm -f "$T/third_party/a64-kit/tools/lld-link.exe"
 if [ -d work ]; then
     mkdir -p "$T/work/image"
-    for f in hot_funcs.txt hot_order.txt hookshot_pieces.prof pipeline_states.bin; do [ -f "work/$f" ] && cp "work/$f" "$T/work/"; done
+    for f in hot_funcs.txt hot_order.txt hookshot_pieces.prof; do [ -f "work/$f" ] && cp "work/$f" "$T/work/"; done
     [ -f work/image/chunks.txt ] && cp work/image/chunks.txt "$T/work/image/"
 fi
+# (the pipeline state list's sources, assets/pipeline_states/, came with assets/ above, and are required: nx2/make_game.py merges
+# them beside the game, and without them a new install's first field load is drawn white for seconds while its pipelines
+# compile; v2.0.8 to v2.0.14 shipped none. scripts/linux/check_player_build.sh reads them back from the image)
+[ -n "$(find "$T/assets/pipeline_states" -name "*.bin.xz" 2>/dev/null)" ] || { echo "assets/pipeline_states/ holds no pipeline state list: a release ships them (docs/development.md, \"The pipeline state list\")"; exit 1; }
 find "$T" -name __pycache__ -prune -exec rm -rf {} +
 
 # ---- what it builds with ----
@@ -149,7 +155,15 @@ cp assets/hookshot.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/hookshot.pn
 python3 scripts/linux/make_parts.py "$APPDIR" "$VERSION" "$B/parts" \
     --base "https://github.com/${GITHUB_REPOSITORY:-NotRexed/Hookshot}/releases/download/linux-parts"
 
+# The update information AppImageUpdate and Gear Lever read: the newest .zsync of this repository's latest release (or of
+# the release HOOKSHOT_UPDATE_RELEASE names). appimagetool writes it into the image and makes the .zsync beside it with
+# its bundled zsyncmake, which names the AppImage by its file name, next to the .zsync on the same release.
+UPDATE_REPO=${GITHUB_REPOSITORY:-NotRexed/Hookshot}
+UPDATE_INFO=${HOOKSHOT_UPDATE_INFO:-"gh-releases-zsync|${UPDATE_REPO%%/*}|${UPDATE_REPO#*/}|${HOOKSHOT_UPDATE_RELEASE:-latest}|Hookshot-*-x86_64.AppImage.zsync"}
 OUT=$B/Hookshot-$VERSION-x86_64.AppImage
-rm -f "$OUT"
-ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$DEPS/appimagetool" --runtime-file "$DEPS/runtime-x86_64" --comp zstd "$APPDIR" "$OUT"
-echo "$OUT: $(du -h "$OUT" | cut -f1)"
+rm -f "$OUT" "$OUT.zsync"
+# (from build-linux/: appimagetool writes the .zsync into the current folder)
+(cd "$B" && ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$DEPS/appimagetool" --runtime-file "$DEPS/runtime-x86_64" \
+    --comp zstd -u "$UPDATE_INFO" "$APPDIR" "$(basename "$OUT")")
+[ -f "$OUT.zsync" ] || { echo "appimagetool made no $OUT.zsync"; exit 1; }
+echo "$OUT: $(du -h "$OUT" | cut -f1), update information: $UPDATE_INFO"

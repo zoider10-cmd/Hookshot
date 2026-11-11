@@ -438,6 +438,30 @@ class ProgressSink:
         return count
 
 
+class HeadSink:
+    """Check the Zstd prefix and available member digest during extraction, without reopening the file."""
+    def __init__(self, output, expected):
+        self.output = output
+        self.expected = expected
+        self.digest = hashlib.sha256() if expected is not None else None
+        self.head = b""
+
+    def write(self, data):
+        if len(self.head) < 4:
+            self.head += bytes(data[:4 - len(self.head)])
+        if self.digest is not None:
+            self.digest.update(data)
+        return self.output.write(data)
+
+    def damaged(self):
+        return not zstd_start(self.head) or (self.digest is not None and self.digest.digest() != self.expected)
+
+# Damaged romfs .zs files found while extracting, beside
+# the extracted romfs: its first line HEADS_MAGIC, then one path under romfs a line, with "/"
+HEADS_NAME = "romfs_zstd_heads.txt"
+HEADS_MAGIC = "hookshot romfs zstd heads 1"
+
+
 def file_system(path):
     """The file system of the volume path is on (NTFS, exFAT, FAT32, ReFS): Windows only, None elsewhere"""
     if os.name != "nt":
@@ -467,6 +491,11 @@ def out_of_space(error, dst, part, rel, size):
 
 def extract(nup, t, out, only=None, quiet=False):
     total = n = written = 0
+    digests = {}
+    details = getattr(nup, "file_details", ())
+    if only != "exefs" and details:
+        digests = {id(record): expected for record, (expected, _, _) in zip(nup.files, details)
+                   if expected != bytes(32)}
     interval = 2
     next_report = 0 if quiet else monotonic() + interval
 
@@ -481,17 +510,34 @@ def extract(nup, t, out, only=None, quiet=False):
     for part in ("exefs", "romfs"):
         if only and part != only:
             continue
+        damaged = [] if part == "romfs" else None
         for rel, r in nup.walk(t[part]):
             dst = extraction_path(out, part, rel)
+            checked = damaged is not None and rel.endswith(".zs")
+            expected = digests.get(id(r)) if checked else None
             if os.path.exists(dst) and os.path.getsize(dst) == r[2]:
-                continue          # (re-runs pick up where they stopped)
+                if checked:
+                    with open(dst, "rb") as f:
+                        prefix = f.read(4)
+                        if not zstd_start(prefix):
+                            damaged.append(rel)
+                        elif expected is not None:
+                            digest = hashlib.sha256(prefix)
+                            for block in iter(lambda: f.read(1 << 20), b""):
+                                digest.update(block)
+                            if digest.digest() != expected:
+                                damaged.append(rel)
+                continue
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             temporary = dst + ".part"
             g = open(temporary, "wb")
             try:
                 with g:
-                    nup.copy_to(r, g if quiet else ProgressSink(g, progress), rel)
+                    sink = HeadSink(g, expected) if checked else g
+                    nup.copy_to(r, sink if quiet else ProgressSink(sink, progress), rel)
                 os.replace(temporary, dst)
+                if checked and sink.damaged():
+                    damaged.append(rel)
             except BaseException as error:
                 full = out_of_space(error, dst, part, rel, r[2])   # (measured before the member's space is freed)
                 # Free the failed member's space without hiding the extraction error.
@@ -502,7 +548,29 @@ def extract(nup, t, out, only=None, quiet=False):
                 raise
             total += r[2]
             n += 1
+        if damaged is not None:   # (the whole romfs was walked: its answer is complete)
+            heads = os.path.join(out, HEADS_NAME)
+            with open(heads + ".part", "w", encoding="utf-8", newline="\n") as f:
+                f.write(HEADS_MAGIC + "\n" + "".join(rel + "\n" for rel in damaged))
+            os.replace(heads + ".part", heads)
     return n, total
+
+
+def read_heads(path):
+    """HEADS_NAME's list (paths under romfs, "/"), or None when the file is missing or not one of these"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().split("\n")
+    except OSError:
+        return None
+    if not lines or lines[0] != HEADS_MAGIC:
+        return None
+    return read_heads_text("\n".join(lines[1:]))
+
+
+def read_heads_text(text):
+    """The paths of HEADS_NAME's list after its first line"""
+    return [line for line in text.split("\n") if line]
 
 
 def heal(nup, t, out, names):
@@ -583,13 +651,16 @@ def stand_in_for(path, damaged=()):
     return best and best[1]
 
 
-def stand_in_damaged(romfs, progress=None):
+def stand_in_damaged(romfs, progress=None, damaged=None):
     """Each damaged .zs file in an unpacked romfs replaced by a copy of its stand-in: (damaged, stand-in or None) each.
-    Only for a romfs this tool unpacked: the player's own folder is never written to. progress: damaged_game_files'"""
+    Only for a romfs this tool unpacked: the player's own folder is never written to. progress: damaged_game_files'.
+    damaged: the paths already known (the extraction's HEADS_NAME), so no file is opened to find them"""
     done = []
-    damaged = damaged_game_files(romfs, progress)
+    if damaged is None:
+        damaged = damaged_game_files(romfs, progress)
+    excluded = set(damaged)
     for path in damaged:
-        other = stand_in_for(path, set(damaged))
+        other = stand_in_for(path, excluded)
         if other:
             shutil.copyfile(long_path(other), long_path(path + ".part"))
             os.replace(long_path(path + ".part"), long_path(path))

@@ -238,6 +238,7 @@ bool pick_device() {
     dev.physical = all[best];
     vkGetPhysicalDeviceProperties(dev.physical, &dev.props);
     vkGetPhysicalDeviceMemoryProperties(dev.physical, &dev.memory);
+    menu_first_start_for_gpu(dev.props, dev.memory);   // (no options yet: the preset for this card's memory)
     return true;
 }
 
@@ -251,9 +252,30 @@ bool create_device() {
         flag = has_extension(exts, name);
         if (flag) want.push_back(name);
     };
-    // (RX_VK_FORCE_MESH_FALLBACK=1, a test: mesh shaders not used where they are, so the no-mesh fallback the GTX 10xx and RX 5000
-    // cards run (issue 640) can be tried on any GPU)
-    if (getenv("RX_VK_FORCE_MESH_FALLBACK") && atoi(getenv("RX_VK_FORCE_MESH_FALLBACK")) != 0) dev.mesh_shader = false;
+    // (the Graphics tab's Mesh shaders row, mesh_shaders= in hookshot_options.ini, #1001: 0 Automatic (native where there are mesh
+    // shaders, the compute fallback where not and for the task + mesh draws of the cards below), 1 Native (no fallback where
+    // there are mesh shaders), 2 Compute (the fallback on every GPU). RX_VK_FORCE_MESH_FALLBACK=1, a test, is Compute over it:
+    // mesh shaders not used where they are, so the no-mesh fallback the GTX 10xx and RX 5000 cards run (issue 640) can be tried
+    // on any GPU)
+    static const int mesh_mode = [] {
+        char exe[MAX_PATH];
+        const DWORD len = game_module_path(exe, MAX_PATH);   // (the game folder, not bin beside the launcher: vk_paths.h)
+        std::string ini(exe, len);
+        ini = ini.substr(0, ini.find_last_of("\\/") + 1) + "hookshot_options.ini";
+        int v = 0;
+        if (FILE* fl = fopen(ini.c_str(), "r")) {
+            char line[80];
+            while (fgets(line, sizeof line, fl))
+                if (!strncmp(line, "mesh_shaders=", 13)) {
+                    v = atoi(line + 13);
+                    break;
+                }
+            fclose(fl);
+        }
+        if (const char* e = getenv("RX_VK_FORCE_MESH_FALLBACK")) v = atoi(e) != 0 ? 2 : v;
+        return v >= 0 && v <= 2 ? v : 0;
+    }();
+    if (mesh_mode == 2) dev.mesh_shader = false;
     else optional(VK_EXT_MESH_SHADER_EXTENSION_NAME, dev.mesh_shader);
     optional(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME, dev.external_memory_host);
     optional(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, dev.external_memory_fd);   // (guest memory as udmabufs: vk_memory.cpp import_dma_buf)
@@ -459,12 +481,18 @@ bool create_device() {
     if (dev.mesh_fallback) logf("vk: no mesh shaders: task and mesh programs run as compute shaders (issue 640 fallback)");
     bool task_mesh_fallback = false;
 #ifdef _WIN32
-    // Navi 22 can time out on task + mesh draws in the AMD Windows driver (issue 996).
-    task_mesh_fallback = dev.props.vendorID == 0x1002 && dev.props.deviceID == 0x73df;
+    // Navi 22 can time out on task + mesh draws in the AMD Windows driver (issue 996), and so can Navi 21: on an RX 6800 XT
+    // (driver 0x800161) the native path lost the device within minutes at Hyrule Castle's entrance, while the fallback played
+    // 25 minutes there with none. Navi 21 is 0x73bf (RX 6800, 6800 XT, 6900 XT); Navi 22 is 0x73df (RX 6700 XT)
+    task_mesh_fallback = dev.props.vendorID == 0x1002 && (dev.props.deviceID == 0x73bf || dev.props.deviceID == 0x73df);
 #endif
+    if (mesh_mode == 1) task_mesh_fallback = false;   // (Native: the card's own mesh shaders for every draw)
     if (const char* e = getenv("RX_VK_TASK_MESH_FALLBACK")) task_mesh_fallback = atoi(e) != 0;
     dev.task_mesh_fallback = task_mesh_fallback && dev.mesh_shader && f12.bufferDeviceAddress && !getenv("RX_VK_NO_MESH_FALLBACK");
     if (dev.task_mesh_fallback) logf("vk: task + mesh programs use the compute fallback (RX_VK_TASK_MESH_FALLBACK=0: native)");
+    logf("vk: mesh shaders row: %s (%s)", mesh_mode == 2 ? "Compute" : mesh_mode == 1 ? "Native" : "Automatic",
+         dev.mesh_shader ? (dev.task_mesh_fallback ? "native, task + mesh draws on the compute path" : "native")
+                         : dev.mesh_fallback ? "the compute path" : "none");
     if (robust) logf("vk: robust buffer access %s", robust_ok ? "on" : "not supported");
     f.features.robustBufferAccess = robust_ok ? VK_TRUE : VK_FALSE;   // (off by default: the game's accesses stay in their buffers)
     dev.features = f.features;
@@ -598,16 +626,17 @@ bool create_swapchain(uint32_t width, uint32_t height) {
     }
     if (result != VK_SUCCESS || modes.empty())
         logf("vk: querying present modes failed (VkResult %d, count %u); trying mandatory FIFO mode", (int)result, n);
+    // (hookshot) the Insert menu's V-Sync (menu_vsync: RX_VK_FIFO=1 On, RX_VK_IMMEDIATE=1 Off for a run): On is FIFO, as on a
+    // card or driver with vsync forced; Auto and Off as below. FIFO is the one mode every driver has
     VkPresentModeKHR mode = VK_PRESENT_MODE_FIFO_KHR;
-    // (as on a card or driver with vsync forced; Mako: the Insert menu's VSync row the same)
-    const bool force_fifo = getenv("RX_VK_FIFO") != nullptr || opts.vsync;
-    if (!force_fifo) {
+    const int vsync = menu_vsync();
+    if (vsync != 1) {
         for (auto m : modes)
             if (m == VK_PRESENT_MODE_MAILBOX_KHR) mode = m;
         // (Windows, no mailbox: AMD's driver has none, and FIFO held anything under 60 fps at 30.
         //  Linux: immediate on NVIDIA's X11 path turns vblank off for every output, so the other
-        //  monitor and other programs tear. RX_VK_IMMEDIATE=1 still asks for it.)
-        const bool want_immediate = getenv("RX_VK_IMMEDIATE") != nullptr;
+        //  monitor and other programs tear: Auto leaves it to V-Sync Off, which asks for it.)
+        const bool want_immediate = vsync == 2;
 #ifdef _WIN32
         if (want_immediate || mode == VK_PRESENT_MODE_FIFO_KHR)
 #else
@@ -673,6 +702,7 @@ bool create_swapchain(uint32_t width, uint32_t height) {
         dev.swapchain = VK_NULL_HANDLE;
         dev.swap_rendered.clear();
         dev.swap_images.clear();
+        dev.swap_spare = 0;
     }
     if (result != VK_SUCCESS) {
         logf("vk: vkCreateSwapchainKHR failed (VkResult %d, extent %ux%u, format %d, usage %#x, mode %d, images %u)",
@@ -704,8 +734,10 @@ bool create_swapchain(uint32_t width, uint32_t height) {
     dev.swap_format = fmt.format;
     dev.swap_extent = {width, height};
     dev.swap_images = std::move(images);
-    logf("vk: swapchain %ux%u, %u images, %s", width, height, n,
-         mode == VK_PRESENT_MODE_MAILBOX_KHR ? "mailbox" : mode == VK_PRESENT_MODE_IMMEDIATE_KHR ? "immediate" : "fifo");
+    dev.swap_spare = n > caps.minImageCount ? n - caps.minImageCount : 0;
+    logf("vk: swapchain %ux%u, %u images, %s (V-Sync %s)", width, height, n,
+         mode == VK_PRESENT_MODE_MAILBOX_KHR ? "mailbox" : mode == VK_PRESENT_MODE_IMMEDIATE_KHR ? "immediate" : "fifo",
+         vsync == 1 ? "On" : vsync == 2 ? "Off" : "Auto");
     swap_views_make(ci.imageUsage, mutable_view ? view_formats[1] : fmt.format);
     reflex_swapchain_created(sc);   // (NVIDIA Reflex: its sleep mode on the new swapchain)
     return true;
@@ -922,6 +954,9 @@ std::string skipped_path() {
 // of it before the window shows anything (and a console with the count on Windows)
 std::atomic<int> prep_stage{0};   // 0 the programs, 1 the pipelines the notes predict (a first start), 2 the noted pipelines
 std::atomic<size_t> prep_done{0}, prep_total{0};
+// (the parts' guesses before they run, and the parts that do not run: the one bar's total, PrepareBar)
+std::atomic<size_t> prep_guess[3]{};
+std::atomic<bool> prep_skip[3]{};
 std::atomic<bool> prep_running{false}, prep_finished{false};
 HANDLE prep_ended = nullptr;
 #ifndef _WIN32
@@ -952,11 +987,23 @@ void prepare_with_screen() {
     prep_running.store(true);
     std::thread worker([] {
         const bool update = prepare_is_update();   // (an update, RX_VK_PREPARE_BACKGROUND=1: what the notes name now, the rest in play)
+        {
+            size_t guess[3];
+            prepare_guess(guess);
+            for (int k = 0; k < 3; k++) prep_guess[k].store(guess[k]);
+        }
+        if (update) prep_skip[0].store(true), prep_skip[1].store(true);
         const bool prepared = !update && prepare_run(prep_progress, false);
-        if (prepared && !prepare_stopped()) {   // (a first start only: the pipelines the notes predict, into the driver's cache)
+        if (!prepared) prep_skip[0].store(true);
+        if (prepared && !prepare_stopped() && predict_deferred()) {   // (Mako: those in play, behind the game)
+            predict_defer();
+            prep_skip[1].store(true);
+        } else if (prepared && !prepare_stopped()) {   // (a first start only: the pipelines the notes predict, into the driver's cache)
             prep_done.store(0), prep_total.store(0);
             prep_stage.store(1);
             predict_run(prep_progress);
+        } else {
+            prep_skip[1].store(true);
         }
         if (!prepare_stopped()) {
             prep_done.store(0), prep_total.store(0);
@@ -965,6 +1012,7 @@ void prepare_with_screen() {
         }
         if (prepare_stopped()) pipeline_cache_save(true);   // (the driver's part built so far, for the next start)
         else if (update) prepare_background();
+        if (!prepare_stopped()) predict_background();   // (Mako: the predicted pipelines still owed, behind the game)
         prep_finished.store(true, std::memory_order_release);
         SetEvent(prep_ended);
     });
@@ -975,8 +1023,8 @@ void prepare_with_screen() {
     static std::atomic<bool> paint_stop{false};
     HANDLE painted = CreateEventA(nullptr, TRUE, FALSE, nullptr);
     std::thread painter([t0, painted] {
-        ProgressClock eta;
-        int eta_stage = -1;
+        ProgressClock eta;   // (over the whole bar: its units, PrepareBar)
+        PrepareBar bar;
         double next_log = 10;
         bool prepared = false;   // (this start prepares the programs: a first start after an update, two steps)
         uint32_t last_w = dev.swap_extent.width, last_h = dev.swap_extent.height;
@@ -985,18 +1033,26 @@ void prepare_with_screen() {
             const double secs = std::chrono::duration<double>(clock::now() - t0).count();
             const int stage = prep_stage.load();
             const size_t done = prep_done.load(std::memory_order_relaxed), total = prep_total.load(std::memory_order_relaxed);
-            if (stage != eta_stage) eta.reset(), eta_stage = stage;
-            if (total) eta.note(secs, done, total);
-            const double left = total ? eta.left() : -1;
+            for (int k = 0; k < 3; k++) {
+                bar.guess(k, prep_guess[k].load(std::memory_order_relaxed));
+                if (prep_skip[k].load(std::memory_order_relaxed)) bar.skip(k);
+            }
+            if (total) bar.at(stage, done, total);
+            else bar.reach(stage);
+            if (finished) bar.finish();
+            const double whole = bar.fraction();
+            eta.note(secs, (size_t)(bar.units_done() * 100), (size_t)(bar.units_total() * 100));
+            const double left = eta.left();
             if (secs >= next_log && total) {
-                logf("vk: start-up: %s %zu of %zu%s%s", stage == 2 ? "pipelines" : stage ? "predicted pipelines" : "shaders", done, total, left >= 0 ? ", " : "",
-                     left_text(left).c_str());
+                logf("vk: start-up: %s %zu of %zu, %.0f%% of all%s%s", stage == 2 ? "pipelines" : stage ? "predicted pipelines" : "shaders", done,
+                     total, whole * 100, left >= 0 ? ", " : "", left_text(left).c_str());
                 next_log = secs + 10;
             }
             if (stage == 0 && total) prepared = true;
             StartupState st;
             st.stage = stage, st.done = done, st.total = total, st.left = left, st.secs = secs;
             st.prepared = prepared, st.finished = finished, st.stopping = prepare_stopped();
+            st.whole = whole;
             const StartupView view = startup_view(st);
             startup_screen(&view);
             uint32_t w, h;
@@ -1053,13 +1109,15 @@ bool started_up() {
     if (const char* e = getenv("RX_VK_START_DELAY")) Sleep((DWORD)atoi(e) * 1000);   // (diagnosis: a long start, as the first one is)
     if (!replay_start()) return false;
     if (prepare_only()) {
-        // (three parts: the programs, the pipelines the notes predict, then those they name; most of the time is the first)
+        // (three parts: the programs, the pipelines the notes predict, then those they name, on one bar whose total has all three
+        // from the start: PrepareBar. The fixed shares it had (70%, 20%, 10%) kept the predicted pipelines' minutes in a fifth)
         static int part;
+        static PrepareBar bar;
         const auto progress = [](size_t done, size_t total) {
-            static size_t last = ~(size_t)0;
+            static int last = -1;
             if (!total) return;
-            static const size_t from[3] = {0, 700, 900}, span[3] = {700, 200, 100};
-            const size_t at = from[part] + done * span[part] / total;
+            bar.at(part, done, total);
+            const int at = (int)(bar.fraction() * 1000);
             if (at == last) return;
             last = at;
             printf("@@progress %.3f\n", at / 1000.0);
@@ -1067,11 +1125,22 @@ bool started_up() {
         };
         printf("@@stage shaders Preparing shaders\n");
         fflush(stdout);
+        {
+            size_t guess[3];
+            prepare_guess(guess);
+            for (int k = 0; k < 3; k++) bar.guess(k, guess[k]);
+        }
         part = 0;
-        const bool prepared = prepare_run(progress, false);
+        const bool prepared = prepare_run(progress, false, true);
+        if (!prepared) {
+            if (!bar.counted[0]) bar.skip(0);   // (an already prepared seed can still import pipeline states)
+            bar.skip(1);
+        }
         part = 1;
-        if (prepared) predict_run(progress);
+        if (prepared && predict_deferred()) predict_defer(), bar.skip(1);   // (Mako: the game builds them in play)
+        else if (prepared) predict_run(progress);
         part = 2;
+        bar.reach(2);
         precompile_run(progress);
         pipeline_cache_save(true);
         remove(skipped_path().c_str());
@@ -1127,10 +1196,14 @@ bool started_up() {
             WriteFile(console, line, (DWORD)n, &wrote, nullptr);
         };
         const bool update = prepare_is_update();   // (an update: what the notes name now, the rest in play)
-        if (!update && prepare_run(progress, false)) predict_run(progress);
+        if (!update && prepare_run(progress, false)) {
+            if (predict_deferred()) predict_defer();   // (Mako: in play, behind the game)
+            else predict_run(progress);
+        }
         if (update) state_list_run();
         precompile_run(progress);
         if (update) prepare_background();
+        predict_background();   // (Mako: the predicted pipelines still owed)
         if (console) CloseHandle(console), console = nullptr, FreeConsole();
     }
     return true;
@@ -1154,7 +1227,9 @@ int start(void* hwnd) {
         dev.swap_extent = {1920, 1080};
         dev.swap_format = VK_FORMAT_R8G8B8A8_UNORM;
         logf("vk: no window: presents render offscreen (%ux%u)", dev.swap_extent.width, dev.swap_extent.height);
-        return started_up() ? 1 : 0;
+        if (!started_up()) return 0;
+        pipeline_cache_play();   // (play begins: what is made from now on goes into the play files)
+        return 1;
     }
 #ifdef _WIN32
     VkWin32SurfaceCreateInfoKHR si{VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
@@ -1201,6 +1276,7 @@ int start(void* hwnd) {
         logf("vk: renderer startup failed after window and swapchain initialization");
         return 0;
     }
+    pipeline_cache_play();   // (play begins: what is made from now on goes into the play files)
     return 1;
 }
 
@@ -1233,10 +1309,8 @@ __attribute__((visibility("default")))
 #endif
 void mkwvk_close_asked(void) {
     using namespace mkwvk;
-    if (!prep_running.load() || prepare_stopped()) {   // (in play: the pipelines compiled since the last save, kept)
-        pipeline_cache_save_at_exit();
-        return;
-    }
+    pipeline_cache_close();   // (in play: the pipelines made since the last save, kept for the next start)
+    if (!prep_running.load() || prepare_stopped()) return;
     logf("vk: the window was closed while the shaders were prepared: stopping, what is done is kept");
     prepare_stop();
     if (WaitForSingleObject(prep_ended, 10000) != WAIT_OBJECT_0) logf("vk: the preparation did not stop within 10 s: closing anyway");

@@ -29,6 +29,9 @@
 // RX_VK_FSR4=1 / 2 (FSR 4, its native anti-aliasing) over it, and =0 takes that engine out for the run. AMD FSR 3.1
 // (vk_fsr3.cpp, the row's value 3 or RX_VK_FSR=1) has inputs of its own (vk_fsr3_inputs.cpp): while it upscales, this chain
 // stands aside.
+// The row's Off (temporal_off) takes the same dispatches with no engine: the network's input, stretched to its output with
+// a linear filter and squared back to linear colour (shaders/dlss_out.comp, at the same size a copy). No camera, depth, motion
+// or jitter, nothing kept from frame to frame: the network's cost and its anti-aliasing both gone, the cheapest picture there is.
 // RX_VK_DLSS_DEBUG=motion: the motion vectors shown instead of the picture (|x|, |y| over 16 px as red and green, the actors'
 // in it); =alternate: every other frame the game's own upscale (a test's reference beside the engine's). (The names are
 // DLSS's from before FSR came: they apply to either engine.)
@@ -49,12 +52,14 @@
 #include "dlss_actor.h"
 #include "dlss_checks.h"
 #include "dlss_math.h"
+#include "temporal_jitter.h"
 #include "upscaler_rows.h"
 #include "vk_dlss.h"
 #include "vk_draw.h"
 #include "vk_fsr3.h"   // (fsr3_wanted: AMD FSR 3.1 upscales with inputs of its own)
 #include "vk_fsr4.h"
 #include "vk_menu.h"
+#include "vk_redstone.h"
 #include "vk_texture.h"
 
 #include "shaders/dlss_actor_frag_spv.h"
@@ -100,6 +105,7 @@ int temporal_mode() {
     return v;
 }
 bool temporal_wanted() { return temporal_mode() != ur::GAME; }
+bool temporal_off() { return opts.dlss == ur::OFF && temporal_mode() == ur::GAME; }
 bool temporal_full_scale() { return ur::full_scale(temporal_mode()); }
 
 namespace {
@@ -147,8 +153,7 @@ struct State {
     std::atomic<uint64_t> last_frame{0};   // (the frame an engine last drew: read on the game's thread too)
     float last_jitter[2]{};   // (its camera's jitter: the frame before's, for the next one)
     float last_vp[16]{};      // (its camera's view-projection: the frame before's)
-    std::atomic<uint32_t> jitter_w{0}, jitter_h{0};   // (the scene's size while an engine draws: the host's jitter's scale)
-    std::atomic<uint32_t> jitter_phases{8};           // (its sequence's length, for the engine's scale: dlss_jitter_phases)
+    TemporalJitter jitter;    // (one completed scene size, sequence and frame)
     std::unordered_map<VkImage, VkImageView> depth_views;
     uint64_t depth_views_gen = 0;
     const char* reason = nullptr;
@@ -628,7 +633,8 @@ void temporal_note_scene_draw(const Texture* color0, uint32_t width, uint32_t he
     // pause screen's model views, a reflection) is never the scene; one this size that is not either is left by the checks
     // below: the format, the camera's own size and perspective, the largest in the frame, and the upscale's input)
     if (!color0 || !depth || !camera || camera_size < 0x230 || !temporal_scene_size(width, height)) return;
-    if (color0->format != VK_FORMAT_B10G11R11_UFLOAT_PACK32 || !temporal_wanted()) return;
+    // (with the Upscaler Off too: its stretch takes the fixed shares' networks only with the frame's scene as their input)
+    if (color0->format != VK_FORMAT_B10G11R11_UFLOAT_PACK32 || (!temporal_wanted() && !temporal_off())) return;
     State& s = st();
     std::lock_guard lk(s.mu);
     const uint64_t now = texture_frame_no();
@@ -661,17 +667,19 @@ bool temporal_scene_size(uint32_t width, uint32_t height) {
                                         s.out_h.load(std::memory_order_relaxed));
 }
 
-uint32_t temporal_jitter_size(int axis) {
-    // (RX_VK_DLSS_JITTER=0: none. 0 too once no engine has drawn for a while: the camera as the game has it)
+MkwVkJitter temporal_jitter_sample() {
     static const bool off = env_switch("RX_VK_DLSS_JITTER") == 0;
     State& s = st();
     const int mode = temporal_mode();
-    if (off || mode == ur::GAME) return 0;
+    if (off || mode == ur::GAME) return {};
     const uint64_t last = s.last_frame.load(std::memory_order_relaxed);
-    if (s.engines[ur::is_fsr4(mode) ? 1 : 0].failed.load(std::memory_order_relaxed) || !last || texture_frame_no() - last > 30)
-        return 0;
-    if (axis == 2) return s.jitter_phases.load(std::memory_order_relaxed);
-    return axis ? s.jitter_h.load(std::memory_order_relaxed) : s.jitter_w.load(std::memory_order_relaxed);
+    if (s.engines[ur::is_fsr4(mode) ? 1 : 0].failed.load(std::memory_order_relaxed) || !last) return {};
+    return s.jitter.read(texture_frame_no());
+}
+
+uint32_t temporal_jitter_size(int axis) {
+    const MkwVkJitter sample = temporal_jitter_sample();
+    return axis == 2 ? sample.phases : axis ? sample.height : sample.width;
 }
 
 int temporal_status(char* b, size_t n) {
@@ -758,10 +766,65 @@ void temporal_note_skinned_draw(const SkinnedDraw& k) {
     s.skins.push_back(std::move(d));
 }
 
+namespace {
+/// The Upscaler's Off: the gameplay upscale's input stretched into its output, in place of the network (temporal_upscale's
+/// dispatches, found the same way). known: one of the gameplay networks by its key; else a network of that shape, taken only
+/// when its input is this frame's scene (the camera temporal_note_scene_draw took) and its output the picture. true: written
+bool stretch(VkCommandBuffer cmd, uint64_t key, bool known, Texture* in, VkImageView in_view, Texture* out, VkImageView out_view,
+             uint32_t out_level) {
+    State& s = st();
+    std::lock_guard lk(s.mu);
+    if (!in || !in_view || !out || !out_view || out->format != VK_FORMAT_B10G11R11_UFLOAT_PACK32) return false;
+    const uint32_t ow = std::max(1u, out->width >> out_level), oh = std::max(1u, out->height >> out_level);
+    if (ow < in->width || oh < in->height) return false;   // (never a network that makes its picture smaller)
+    if (!known) {
+        // (the gameplay networks' formats, a picture larger than the input, and the input this frame's scene: as above)
+        if (in->format != VK_FORMAT_B10G11R11_UFLOAT_PACK32 || ow <= in->width) return false;
+        note_output(out, out_level);
+        const Camera& c = s.cam;
+        if (!c.valid || texture_frame_no() - c.frame > 1 || in->width != c.width || in->height != c.height) return false;
+    } else {
+        note_output(out, out_level);
+    }
+    s.cam.valid = false;   // (each frame's own camera)
+    if (!make_pipelines()) {
+        static bool told = false;
+        if (!told) told = true, logf("vk: upscaler: Off: its shader was not made: the game's upscale runs");
+        return false;
+    }
+    struct Disturbed {   // (the program's descriptor pushes are gone from the bind point and are pushed again)
+        ~Disturbed() { descriptors_disturbed(); }
+    } disturbed;
+    full_barrier(cmd);   // (the scene's colour, written before)
+    const int32_t pc[2] = {(int32_t)ow, (int32_t)oh};
+    const VkDescriptorImageInfo info[2] = {{s.linear, in_view, VK_IMAGE_LAYOUT_GENERAL},
+                                           {VK_NULL_HANDLE, out_view, VK_IMAGE_LAYOUT_GENERAL}};
+    VkWriteDescriptorSet w[2]{{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}, {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET}};
+    w[0].dstBinding = 0, w[0].descriptorCount = 1, w[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    w[0].pImageInfo = &info[0];
+    w[1].dstBinding = 1, w[1].descriptorCount = 1, w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    w[1].pImageInfo = &info[1];
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, s.out);
+    vkCmdPushDescriptorSetKHR(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, s.out_layout, 0, 2, w);
+    vkCmdPushConstants(cmd, s.out_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof pc, pc);
+    vkCmdDispatch(cmd, (ow + 7) / 8, (oh + 7) / 8, 1);
+    full_barrier(cmd);
+    // (the log: once, and again at another size, as the dynamic resolution or the Render resolution row moves it)
+    static uint64_t told = 0;
+    const uint64_t sizes = (uint64_t)in->width << 48 | (uint64_t)in->height << 32 | (uint64_t)ow << 16 | oh;
+    if (told != sizes) {
+        told = sizes;
+        logf("vk: upscaler: Off: network %016llx left out, its input stretched linearly (%ux%u -> %ux%u)",
+             (unsigned long long)key, in->width, in->height, ow, oh);
+    }
+    return true;
+}
+}  // namespace
+
 bool temporal_upscale(VkCommandBuffer cmd, uint64_t key, bool known, Texture* in, VkImageView in_view, Texture* out,
                       VkImageView out_view, uint32_t out_level) {
     const int mode = temporal_mode();
-    if (mode == ur::GAME) return false;
+    if (mode == ur::GAME) return temporal_off() && stretch(cmd, key, known, in, in_view, out, out_view, out_level);
     State& s = st();
     std::lock_guard lk(s.mu);
     if (!known) {   // (another network of the upscale's shape: only the scene into the picture, the rest untouched and unsaid)
@@ -849,7 +912,7 @@ bool temporal_upscale(VkCommandBuffer cmd, uint64_t key, bool known, Texture* in
 
     const uint64_t now = texture_frame_no();
     const uint64_t last = s.last_frame;
-    const bool reset = !last || now - last > 2;
+    bool reset = !last || now - last > 2;
     struct {
         float reproject[16];
         float jitter[2];
@@ -864,6 +927,7 @@ bool temporal_upscale(VkCommandBuffer cmd, uint64_t key, bool known, Texture* in
     std::memcpy(previous, s.last_vp, sizeof previous);
     dlss_math::unjitter(previous, s.last_jitter);
     const bool motion = !reset && dlss_math::reprojection(cam.current, previous, pc.reproject);
+    if (!motion) reset = true;   // (without a valid reprojection, prior history has no mapping to this camera)
     pc.jitter[0] = cam.jitter[0], pc.jitter[1] = cam.jitter[1];
     pc.size[0] = (int32_t)rw, pc.size[1] = (int32_t)rh, pc.flags = (motion ? 1 : 0) | (show_motion ? 2 : 0);
 
@@ -927,6 +991,7 @@ bool temporal_upscale(VkCommandBuffer cmd, uint64_t key, bool known, Texture* in
         vkCmdPushConstants(cmd, s.out_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof opc, opc);
         vkCmdDispatch(cmd, (ow + 7) / 8, (oh + 7) / 8, 1);
     }
+    redstone_note_frame(f, out, ow, oh);   // (Mako: Redstone frame generation's depth, motion and picture)
     s.last_frame = now;
     s.last_jitter[0] = cam.jitter[0], s.last_jitter[1] = cam.jitter[1];
     // (for the status line, temporal_status: the jitter the engine was given, in render pixels)
@@ -934,7 +999,7 @@ bool temporal_upscale(VkCommandBuffer cmd, uint64_t key, bool known, Texture* in
     s.status_drawn++;
 
     std::memcpy(s.last_vp, cam.current, sizeof s.last_vp);
-    s.jitter_w = rw, s.jitter_h = rh, s.jitter_phases = (uint32_t)dlss_jitter_phases(rw, rh, dw, dh);
+    s.jitter.publish(rw, rh, (uint32_t)dlss_jitter_phases(rw, rh, dw, dh), now);
     if (s.reason) logf("vk: %s draws the upscale again (frame %llu)", engine.e->name, (unsigned long long)now);
     s.reason = nullptr;
     // (RX_VK_DLSS_DEBUG=alternate, a test's reference: every other frame the game's own upscale over the engine's, which still

@@ -9,7 +9,11 @@ sealed class BuilderSettings
     public string? Exefs { get; set; }
     public bool Dlss { get; set; }   // (NVIDIA DLSS ticked: NVIDIA's license was accepted)
     public bool Fsr { get; set; } = true;   // (AMD FSR 4 ticked: on by default in Mako)
+    public bool FsrLicense { get; set; }   // (AMD's license accepted when it was ticked: a tick saved before it was asked has not)
+    public bool Fast { get; set; }   // (Mako: "Fast build" ticked: make_game.py --fast)
     public bool PrepareLater { get; set; }   // ("Prepare shaders now" unticked)
+    public int? MemoryGb { get; set; }
+    public string? Track { get; set; }   // (the update track chosen, Updater.cs: release, rc or nightly; null: these tools' own)   // (Build memory; null: Automatic. The updates use it too, as they show no menu)
 
     public static BuilderSettings? Load(string path)
     {

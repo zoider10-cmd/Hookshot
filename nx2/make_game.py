@@ -27,10 +27,12 @@ build's last step, the shaders' preparation, was skipped or failed and is left t
 """
 import argparse
 import contextlib
+import errno
 import filecmp
 import hashlib
 import importlib.util
 import json
+import ntpath
 import os
 import queue
 import re
@@ -49,6 +51,7 @@ BUILD_ID = "e0f3ccfa"   # (the version the patches, the hot list and the profile
 STARTED = time.time()   # (the build's total time, kept in build_times.json and said as @@times)
 sys.path[:0] = [HERE, os.path.join(ROOT, "third_party", "a64-kit", "tools")]   # (python -I leaves the script folder off)
 import toolchain as _toolchain
+import disk as _disk
 # (hookshot) RX_TARGET=windows on Linux: the Windows game, with llvm-mingw's Linux release (HOOKSHOT_MINGW, or llvm-mingw
 # beside the builder), to run under Proton or copy to a Windows PC
 LINUX, CROSS = not _toolchain.windows(), _toolchain.windows() and os.name != "nt"
@@ -103,9 +106,59 @@ def say(*words):
     print("@@" + " ".join(str(w) for w in words), flush=True)
 
 
+def check_writable(out):
+    """The game folder must take new files before anything is read into it. A folder under Program Files (or another protected
+    place) only takes them with administrator rights, and the build used to stop minutes later inside nup.py with a bare
+    "PermissionError: [WinError 5]" on its .game folder"""
+    probe = os.path.join(out, ".hookshot_write_check")
+    try:
+        os.makedirs(out, exist_ok=True)
+        with open(probe, "w") as f:
+            f.write("ok")
+        os.remove(probe)
+    except PermissionError as e:
+        protected = [os.environ.get(k) for k in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "SystemRoot")]
+        inside = any(d and os.path.normcase(os.path.abspath(out)).startswith(os.path.normcase(os.path.abspath(d)) + os.sep)
+                     for d in protected)
+        where = (" Windows protects folders under Program Files and Windows, and only lets administrators write there."
+                 if inside else "")
+        example = "~/Games/Hookshot" if LINUX else r"C:\Games\Hookshot"
+        fail("The game folder %s can't be written to (%s).%s In Hookshot Builder, choose a game folder of your own, for example "
+             "%s, and build again." % (out, e.strerror or e, where, example))
+
+
 def fail(text):
     say("error", text)
     sys.exit(1)
+
+
+# (Windows' answers for a drive that cannot give back what it holds: ERROR_CRC, ERROR_IO_DEVICE, ERROR_FILE_CORRUPT,
+# ERROR_DISK_CORRUPT)
+DRIVE_ERRORS = {23: "a read failed its data check", 1117: "the drive reported an I/O error",
+                1392: "the file or folder is corrupted and unreadable", 1393: "the disk structure is corrupted and unreadable"}
+
+
+def drive_error(error):
+    """A drive that could not read its own files, said as that with what to do, or None for any other error. Listing the
+    unpacked romfs\\Tex stopped the build with "an error it did not expect: OSError: [WinError 1392]" and a request to
+    report it (issue 2063): nothing in the builder or the game files is wrong there, and a rebuild meets it again until
+    the drive is repaired"""
+    if not isinstance(error, OSError):
+        return None
+    code = getattr(error, "winerror", None)
+    if code in DRIVE_ERRORS:
+        reason = "%s (Windows error %d)" % (DRIVE_ERRORS[code], code)
+    elif code is None and error.errno == errno.EIO:
+        reason = "the drive reported an I/O error"
+    else:
+        return None
+    path = error.filename if isinstance(error.filename, str) else None
+    drive = ntpath.splitdrive(path)[0] if path and code is not None else ""
+    check = ('open a terminal as administrator and run "chkdsk %s /f"' % drive if re.fullmatch("[A-Za-z]:", drive)
+             else "check the drive for errors")
+    return ("Your drive could not read %s: %s. This is a fault of the drive or its file system, not of Hookshot or your "
+            "game files. To repair it, %s, then build again. If it keeps happening the drive may be failing: build on "
+            "another drive." % (path or "one of the build's files", reason, check))
 
 
 def failure_reason(lines):
@@ -357,6 +410,24 @@ def file_progress(verb, clock=time.monotonic):
     return progress
 
 
+HEADS = ".hookshot_romfs_heads"   # (the extraction's damaged .zs list, under the stamp of the unpack that made it)
+
+
+def keep_heads(out, game, stamp):
+    """nup.py's list of the romfs .zs files that do not start as zstd (its HEADS_NAME, beside the extracted romfs), kept in the
+    game folder under this unpack's stamp for stand_in_damaged_files: the ~100,000 files are then not opened again"""
+    import nup
+    made = os.path.join(game, nup.HEADS_NAME)
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(os.path.join(out, HEADS))
+    if nup.read_heads(made) is None:
+        return
+    with open(made, encoding="utf-8") as f:
+        listed = f.read().partition("\n")[2]
+    with open(os.path.join(out, HEADS), "w", encoding="utf-8", newline="\n") as f:
+        f.write(stamp.strip() + "\n" + listed)
+
+
 def stand_in_damaged_files(out, romfs):
     """An incomplete dump's damaged textures replaced by whole ones of the same kind, and said: without them the game
     leaves out the walls and floors that use them (the Water Temple, #1002). Only in a romfs this builder unpacked (its
@@ -373,11 +444,25 @@ def stand_in_damaged_files(out, romfs):
             if f.read() == stamp:
                 return
     import nup
-    print("checking your game files for damaged textures (once after an unpack): every .zs file is opened, which can take "
-          "minutes", flush=True)
-    done = nup.stand_in_damaged(romfs, file_progress("checked"))
+    heads = os.path.join(out, HEADS)
+    known = None
+    try:
+        with open(heads, encoding="utf-8") as f:
+            first, _, rest = f.read().partition("\n")
+        if first == stamp.strip():   # (made by this unpack's extraction: nup.py HEADS_NAME)
+            known = nup.read_heads_text(rest)
+    except OSError:
+        pass
+    if known is None:
+        print("checking your game files for damaged textures (once after an unpack): every .zs file is opened, which can take "
+              "minutes", flush=True)
+        done = nup.stand_in_damaged(romfs, file_progress("checked"))
+    else:   # (found while the .nup was extracted: no file opened again)
+        done = nup.stand_in_damaged(romfs, damaged=[os.path.normpath(os.path.join(romfs, rel)) for rel in known])
     with open(checked, "w") as f:
         f.write(stamp)
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(heads)
     if not done:
         return
     print("Your game dump is incomplete: %d game file%s in it %s damaged (a complete dump is about 23.8 GB, an incomplete "
@@ -929,17 +1014,35 @@ def seed_pipelines(out):
 
 
 def ship_state_list(out):
-    """The pipeline state list made from a play of the game on the development PC (work/pipeline_states.bin: each pipeline's stage
-    code keys, vertex and target formats and draw state; hashes and state only, no game code), as the folder's
-    hookshot_pipeline_states_shipped.bin: the first start's shader preparation builds those pipelines before the title, from the
-    player's own shaders (hookshot_shaders.bin), instead of compiling each when it is first drawn. Good for any build: optional"""
-    src = os.path.join(ROOT, "work", "pipeline_states.bin")
+    """The pipeline state list made from play of the game (assets/pipeline_states/: the pipeline tour's list and the contributed
+    ones, merged by nx2/pipeline_states.py, each pipeline once; hashes, formats and draw state only, no game code), written as the
+    folder's hookshot_pipeline_states_shipped.bin: the first start's shader preparation builds those pipelines before the
+    title, from the player's own shaders (hookshot_shaders.bin), instead of compiling each when it is first drawn. Good for
+    any build, and optional: a list that does not read is left out with a line saying so, and the others are shipped (the
+    release checks stop on it: nx2/pipeline_states.py check)"""
+    import pipeline_states
+    src = pipeline_states.sources_dir(ROOT)
     dst = os.path.join(out, "hookshot_pipeline_states_shipped.bin")
-    if not os.path.isfile(src):
+    if not os.path.isdir(src):
         return
-    if not (os.path.isfile(dst) and filecmp.cmp(src, dst, shallow=False)):
-        shutil.copyfile(src, dst)
-    print("the shipped pipeline state list: %d pipelines" % ((os.path.getsize(src) - 12) // 528), flush=True)
+    try:
+        recs = pipeline_states.merged(src, strict=False)
+    except (OSError, SystemExit) as e:
+        print("the shipped pipeline state list was left out: %s" % e, flush=True)
+        return
+    if not recs:
+        return
+    data = pipeline_states.pack(recs)
+    try:
+        with open(dst, "rb") as f:
+            same = f.read() == data
+    except OSError:
+        same = False
+    if not same:
+        with open(dst + ".new", "wb") as f:
+            f.write(data)
+        os.replace(dst + ".new", dst)
+    print("the shipped pipeline state list: %d pipelines" % len(recs), flush=True)
 
 
 # (the builders read this line's start: the step was skipped or failed, and the shaders' row says so instead of a check mark)
@@ -1228,6 +1331,17 @@ def ngx_built():
     return bool(sdk) and os.path.isfile(ngx_script().library(sdk, ngx_platform()))
 
 
+FAST_MARK = ".hookshot_fast"   # (Mako: a game folder built with --fast: --update builds it fast again, unless --no-fast)
+
+
+def fast_wanted(a, out):
+    """(Mako) The fast build: about half of the game's rarely run code compiled at -O0 instead of -O1 (nx2/build.py RX_FAST_SHARE;
+    all of it makes an exe over 2 GB, which Windows will not load), its hot code as always"""
+    if getattr(a, "no_fast", False):
+        return False
+    return bool(getattr(a, "fast", False)) or bool(a.update and os.path.isfile(os.path.join(out, FAST_MARK)))
+
+
 FSR_MARK = ".hookshot_fsr"   # (in a game folder built with AMD FSR 4: --update builds it with FSR again)
 
 
@@ -1237,6 +1351,51 @@ def fsr_wanted(a, out):
     if getattr(a, "no_fsr", False):
         return False
     return bool(getattr(a, "fsr", False)) or bool(a.update and os.path.isfile(os.path.join(out, FSR_MARK)))
+
+
+def ffx_script():
+    """scripts/ffx_sdk.py as a module: AMD's FSR runtime, its files and SHA-256s"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ffx_sdk", os.path.join(ROOT, "scripts", "ffx_sdk.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def ffx_folder():
+    """Where --fetch-fsr-runtime keeps AMD's FSR runtime between builds: HOOKSHOT_FFX_SDK, else work/ffx-sdk here"""
+    return os.environ.get("HOOKSHOT_FFX_SDK") or os.path.join(ROOT, "work", "ffx-sdk")
+
+
+def fetch_fsr_runtime(a):
+    """--fetch-fsr-runtime (with --fsr, Windows; the Hookshot Builder's AMD FSR 4 tick): AMD's signed FSR SDK 2.4 Vulkan
+    runtime (scripts/ffx_sdk.py) into ffx_folder() before the build, once AMD's license was accepted (--accept-amd-license:
+    the builder asked first, as for NVIDIA's), each file checked against its SHA-256; only what is missing or not the file
+    expected is downloaded. Off unless asked: a build with --fsr alone downloads nothing"""
+    if not getattr(a, "accept_amd_license", False):
+        fail("AMD FSR 4 needs AMD's license accepted first (--accept-amd-license).")
+    ffx = ffx_script()
+    print(ffx.NOTICE, flush=True)
+    print("AMD's license accepted: getting AMD's FSR runtime into %s" % ffx_folder(), flush=True)
+    try:
+        ffx.fetch(ffx_folder(), say=lambda line: print(line, flush=True))
+    except (OSError, ValueError) as e:
+        fail("AMD's FSR runtime could not be downloaded (%s). Check the connection and build again, or leave out "
+             "--fetch-fsr-runtime and put AMD's DLLs beside the game yourself (the readme)." % e)
+
+
+def place_fsr_runtime(out):
+    """(AMD FSR 4, --fetch-fsr-runtime) AMD's runtime into the game folder, where gpu/vk/vk_fsr4.cpp looks. Returns the folder,
+    or None when nothing was fetched"""
+    ffx = ffx_script()
+    if LINUX or not ffx.complete(ffx_folder()):
+        return None
+    if ffx.others(out):
+        ffx.install(ffx_folder(), out, say=lambda line: print(line, flush=True))   # (it says what it left alone)
+        return None
+    dst = ffx.install(ffx_folder(), out)
+    print("AMD FSR 4: AMD's runtime in %s (AMD's, under AMD's license)" % dst, flush=True)
+    return dst
 
 
 def place_ngx_runtime(out):
@@ -1285,6 +1444,12 @@ def parse_args():
     # (AMD FSR 4, off unless asked: nothing is downloaded. gpu/vk/vk_fsr4.cpp)
     p.add_argument("--fsr", action="store_true", help="build with AMD FSR 4 (AMD's DLLs are not included: see the readme)")
     p.add_argument("--no-fsr", action="store_true", help="with --update: build without AMD FSR 4 even if the folder had it")
+    p.add_argument("--fetch-fsr-runtime", action="store_true",
+                   help="with --fsr (Windows): download AMD's FSR runtime (scripts/ffx_sdk.py) and put it in the game folder")
+    p.add_argument("--accept-amd-license", action="store_true", help="AMD's FSR SDK license, accepted (with --fetch-fsr-runtime)")
+    # (Mako: the fast build, nx2/build.py RX_FAST_SHARE: half the cold code at -O0)
+    p.add_argument("--fast", action="store_true", help="fast build: about half the compile time, a few fps less (rarely run code less optimised)")
+    p.add_argument("--no-fast", action="store_true", help="with --update: the normal build even if the folder was built fast")
     a = p.parse_args()
     if a.prepare:   # (first: a bad --game below is said as RecompLauncher's "error" line)
         global PREPARE
@@ -1305,6 +1470,91 @@ def parse_args():
     a.default_work = p.get_default("work")   # (main: the builder's own work folder, stop_stray_compilers)
     return a
 
+
+def spinning_disk(folder):
+    """True on a hard drive, False on an SSD, None when the drive cannot be told (nx2/disk.py)"""
+    return _disk.spinning(folder)
+
+
+def warn_slow_disk(*folders):
+    """A build reads and writes tens of gigabytes, and on a hard drive it takes much longer than on an SSD. Say so, and build
+    anyway: the player may have no other folder with the room. Said once, for the first folder on a hard drive."""
+    for folder in folders:
+        if spinning_disk(folder) is True:
+            # (on stderr under --prepare: RecompLauncher reads stdout's progress lines only)
+            print("Warning: %s is on a hard drive. An SSD builds the game much faster: build there if you can. "
+                  "The build goes ahead on this drive." % folder, file=sys.stderr if PREPARE else sys.stdout, flush=True)
+            return
+
+
+
+def end_stale_games(folders):
+    """(Windows) The running processes whose exe is in one of folders (the game being updated): those with no visible window, a
+    copy left behind (a shader preparation that hung, a game whose window closed but whose process did not end), are ended and
+    waited for, as their file could not be replaced while they ran ("Could not replace bin/hookshot.exe", Discord 2026-11-10).
+    Returns the process ids of those with a window, which the player is to close: a game in play is never ended."""
+    if os.name != "nt":   # (tests run the finish step as Windows on Linux too: nothing to look for there)
+        return []
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return []
+    k32, u32 = ctypes.WinDLL("kernel32", use_last_error=True), ctypes.WinDLL("user32", use_last_error=True)
+    roots = [os.path.normcase(os.path.abspath(f)) + os.sep for f in folders]
+
+    class Entry(ctypes.Structure):
+        _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD), ("th32ProcessID", wintypes.DWORD),
+                    ("th32DefaultHeapID", ctypes.c_size_t), ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                    ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", ctypes.c_long), ("dwFlags", wintypes.DWORD),
+                    ("szExeFile", ctypes.c_wchar * 260)]
+    k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    k32.OpenProcess.restype = wintypes.HANDLE
+    snap = k32.CreateToolhelp32Snapshot(0x2, 0)
+    if not snap or snap == wintypes.HANDLE(-1).value:
+        return []
+    found = []
+    try:
+        e = Entry()
+        e.dwSize = ctypes.sizeof(Entry)
+        ok = k32.Process32FirstW(snap, ctypes.byref(e))
+        while ok:
+            if e.th32ProcessID != os.getpid() and e.szExeFile.lower().endswith(".exe"):
+                h = k32.OpenProcess(0x1000, False, e.th32ProcessID)   # (PROCESS_QUERY_LIMITED_INFORMATION)
+                if h:
+                    buf, n = ctypes.create_unicode_buffer(1024), wintypes.DWORD(1024)
+                    if k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)):
+                        path = os.path.normcase(buf.value)
+                        if any(path.startswith(r) for r in roots) and os.path.dirname(path) + os.sep in roots:
+                            found.append(e.th32ProcessID)
+                    k32.CloseHandle(h)
+            ok = k32.Process32NextW(snap, ctypes.byref(e))
+    finally:
+        k32.CloseHandle(snap)
+    if not found:
+        return []
+    visible = set()
+    proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    def each(hwnd, _):
+        if u32.IsWindowVisible(hwnd):
+            pid = wintypes.DWORD()
+            u32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if pid.value in found:
+                visible.add(pid.value)
+        return True
+    u32.EnumWindows(proc(each), 0)
+    for pid in found:
+        if pid in visible:
+            continue
+        h = k32.OpenProcess(0x0001 | 0x00100000, False, pid)   # (PROCESS_TERMINATE | SYNCHRONIZE)
+        if h:
+            print("A copy of Hookshot left running without a window (process %d) was ended so the update can replace it" % pid,
+                  flush=True)
+            k32.TerminateProcess(h, 1)
+            k32.WaitForSingleObject(h, 10000)
+            k32.CloseHandle(h)
+    return sorted(visible)
 
 def main(a=None):
     if a is None:
@@ -1329,7 +1579,8 @@ def main(a=None):
         fail("needs --out, and --nup, --nx, or --romfs with --exefs")
     out = os.path.abspath(a.out)
     work = os.path.abspath(a.work)
-    os.makedirs(out, exist_ok=True)
+    warn_slow_disk(out, work)   # (a warning, not a stop: a hard drive still builds, only much slower)
+    check_writable(out)
     # (linux) the compiler probe waits until the compile. The game-free cache test stops at the lift, and a missing
     # compiler is still said before the long compile, not after the package has been read
     check_cpu()   # (no game read yet: the AppImage on a CPU without AVX2 stops here)
@@ -1342,6 +1593,11 @@ def main(a=None):
     # (AMD FSR 4: the build's switch for nx2/build.py, and the folder's mark for the next --update)
     if fsr_wanted(a, out):
         os.environ["HOOKSHOT_FSR"] = "1"
+        if getattr(a, "fetch_fsr_runtime", False) and not LINUX:
+            fetch_fsr_runtime(a)
+        elif getattr(a, "fetch_fsr_runtime", False):
+            print("--fetch-fsr-runtime: AMD publishes this runtime for Windows only; on Linux see the readme "
+                  "(amd_fidelityfx_upscaler_vk.so)", flush=True)
         open(os.path.join(out, FSR_MARK), "w").close()
         if os.environ.get("HOOKSHOT_VK_PREBUILT"):   # (the AppImage's back end, built without FSR 4)
             print("--fsr: this build uses the prebuilt Vulkan back end (HOOKSHOT_VK_PREBUILT), which has no AMD FSR 4: the "
@@ -1350,6 +1606,13 @@ def main(a=None):
         os.environ.pop("HOOKSHOT_FSR", None)
         if os.path.isfile(os.path.join(out, FSR_MARK)):
             os.remove(os.path.join(out, FSR_MARK))
+    # (Mako: the fast build, and its mark for the next --update)
+    a.fast_build = fast_wanted(a, out)
+    if a.fast_build:
+        open(os.path.join(out, FAST_MARK), "w").close()
+        print("fast build: the game's rarely run code is compiled less optimised (about half the compile time, a few fps less)", flush=True)
+    elif os.path.isfile(os.path.join(out, FAST_MARK)):
+        os.remove(os.path.join(out, FAST_MARK))
     exefs = os.path.join(work, "exefs")
     romfs = os.path.join(out, "romfs")
 
@@ -1411,6 +1674,7 @@ def main(a=None):
             if os.path.exists(romfs):
                 shutil.rmtree(romfs)
             shutil.move(os.path.join(game, "romfs"), romfs)
+            keep_heads(out, game, stamp)
             shutil.move(staged_exefs, exefs)
             shutil.rmtree(game, ignore_errors=True)
             shutil.rmtree(kept, ignore_errors=True)
@@ -1541,7 +1805,8 @@ def main(a=None):
             if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
                 plan[:] = [int(parts[1]), int(parts[2])]
     try:
-        run(PY + ["nx2/build.py", "--standalone", "--jobs", str(a.jobs)], env, compiled)
+        run(PY + ["nx2/build.py", "--standalone", "--jobs", str(a.jobs)],
+            dict(env or {}, RX_FAST_SHARE="0.5") if getattr(a, "fast_build", False) else env, compiled)
     except SystemExit:
         # (hookshot) a compile or link that failed forgets the lift: the next build translates the game again. A lifted file cut short
         # (an antivirus, a full disk, a stopped run: "g_module_b" for g_module_base, issue 1197) or lifted C another builder left (20
@@ -1593,6 +1858,11 @@ def main(a=None):
             fail("Could not stage the new build at %s. Check that %s is readable and the staged file and output folder are writable, "
                  "close any program using that file, then retry. No installed files were replaced; the compiled source is still available."
                  % (dst + ".new", src))
+    if not LINUX:   # (a copy of this game still running holds its exe: one with no window is a leftover, ended; else named)
+        shown = end_stale_games([game_dir, out])
+        if shown:
+            fail("Hookshot is still running from this folder (%s). Close it, then retry. No installed files were replaced."
+                 % ", ".join("process %d" % pid for pid in shown))
     for src, dst in staged:
         try:
             os.replace(dst + ".new", dst)   # (linux: a running copy keeps its own file; windows: a running exe cannot be replaced)
@@ -1608,6 +1878,8 @@ def main(a=None):
             except OSError:
                 pass
     place_ngx_runtime(out)
+    if fsr_wanted(a, out) and getattr(a, "fetch_fsr_runtime", False):
+        place_fsr_runtime(out)
     # every shader of the game, for its first start to translate (gpu/vk/vk_shader.cpp seed_open). Without it the game still runs, compiling them
     # as it meets them: not worth stopping a finished build for
     if run(shader_census_cmd(romfs, os.path.join(out, "hookshot_shaders.bin")), check=False, output=sys.stderr):
@@ -1729,6 +2001,9 @@ def cli():
         except BaseException as e:
             import traceback
             print(traceback.format_exc(), flush=True)
+            if drive_error(e):   # (not the builder's error to be sent in: the drive's, with its repair)
+                say("error", drive_error(e))
+                sys.exit(1)
             say("error", "The builder stopped on an error it did not expect: %s: %s. Please send the text under Show details to the "
                 "Hookshot issues page." % (type(e).__name__, str(e)[:300]))
             sys.exit(1)

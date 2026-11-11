@@ -54,8 +54,9 @@ FACES = {
             ("face", .700, .275, .080, "west"), ("face", .775, .375, .080, "south"), ("face", .775, .175, .080, "north"),
             ("face", .850, .275, .080, "east"), ("small", .498, .120, .090, "guide"), ("small", .420, .275, .052, "back"),
             ("small", .576, .275, .052, "start"), ("small", .498, .355, .044, None)]),
-        parts=_parts(1156, ((343, 210, 43), (696, 344, 43)), (451, 364, 44, 16), ((809, 160), (746, 218), (871, 218), (809, 275), 31),
-                     (513, 218, 19), (578, 129, 34), ((330, 48), (470, 57)), share=(558, 243, 598, 283)),
+        # (Mako: the picture is nx2/prompt_faces/xbox/Controller_Pro.png, from the Controller UI packs; these parts are its)
+        parts=_parts(1160, ((330, 185, 45), (712, 343, 45)), (449, 341, 48, 16), ((841, 127), (786, 184), (896, 184), (841, 240), 28),
+                     (510, 183, 20), (580, 88, 38), ((380, 14), (280, 62)), share=(553, 227, 607, 250)),
         icons=dict(_DPAD, south="button_a", east="button_b", west="button_x", north="button_y", back="button_view",
                    start="button_menu", lshoulder="lb", rshoulder="rb", ltrigger="lt", rtrigger="rt", lstick="ls", rstick="rs")),
     "ps4": dict(
@@ -66,7 +67,7 @@ FACES = {
             ("face", .814, .395, .072, "south"), ("face", .886, .285, .072, "east"), ("small", .298, .130, .036, "back"),
             ("small", .702, .130, .036, "start"), ("small", .500, .510, .046, "guide")]),
         parts=_parts(1160, ((447, 357, 40), (713, 357, 40)), (326, 237, 49, 18), ((841, 177), (781, 234), (901, 234), (841, 292), 28),
-                     (412, 153, 12), (580, 352, 16), ((320, 67), (455, 92)), touchpad=(446, 117, 712, 263)),
+                     (412, 153, 12), (580, 352, 16), ((320, 67), (408, 97)), touchpad=(446, 117, 712, 263)),
         icons=dict(_DPAD, south="button_cross", east="button_circle", west="button_square", north="button_triangle",
                    back="/playstation4_button_share", start="/playstation4_button_options", lshoulder="trigger_l1",
                    rshoulder="trigger_r1", ltrigger="trigger_l2", rtrigger="trigger_r2", lstick="button_l3", rstick="button_r3")),
@@ -77,8 +78,9 @@ FACES = {
             ("pad", .498, .175, (.400, .300), None), ("face", .765, .265, .078, "west"), ("face", .840, .150, .078, "north"),
             ("face", .840, .380, .078, "south"), ("face", .915, .265, .078, "east"), ("small", .248, .080, .036, "back"),
             ("small", .750, .080, .036, "start"), ("small", .496, .480, .046, "guide"), ("small", .496, .575, .030, None)]),
-        parts=_parts(1158, ((430, 341, 39), (730, 341, 39)), (305, 217, 51, 19), ((863, 153), (800, 217), (925, 217), (863, 281), 30),
-                     (370, 114, 12), (577, 336, 16), ((321, 52), (445, 64)), touchpad=(412, 84, 744, 250), mute=(563, 375, 591, 403)),
+        # (Mako: the picture is nx2/prompt_faces/ps5/Controller_Pro.png, from the Controller UI packs; these parts are its)
+        parts=_parts(1154, ((433, 327, 45), (721, 327, 45)), (297, 201, 59, 20), ((865, 140), (805, 204), (925, 204), (865, 266), 26),
+                     (370, 104, 14), (580, 330, 22), ((300, 46), (390, 62)), touchpad=(405, 52, 755, 232), mute=(565, 398, 592, 422)),
         icons=dict(_DPAD, south="button_cross", east="button_circle", west="button_square", north="button_triangle",
                    back="/playstation5_button_create", start="/playstation5_button_options", lshoulder="trigger_l1",
                    rshoulder="trigger_r1", ltrigger="trigger_l2", rtrigger="trigger_r2", lstick="button_l3", rstick="button_r3")),
@@ -91,8 +93,19 @@ FACES = {
             ("face", .970, .180, .036, "east"), ("small", .125, .075, .024, "back"), ("small", .875, .075, .024, "start"),
             ("small", .150, .755, .030, "guide"), ("small", .850, .755, .030, None)]),
         parts=_parts(1159, ((242, 230, 27), (917, 230, 27)), (157, 222, 25, 9), ((1009, 180), (974, 215), (1043, 215), (1009, 249), 16),
-                     (209, 174, 9), (234, 437, 12), ((154, 144), (229, 142)), screen=(294, 159, 866, 491),
+                     (209, 174, 9), (234, 437, 12), ((115, 153), (165, 144)), screen=(294, 159, 866, 491),
                      ltrackpad=(169, 290, 279, 394), rtrackpad=(880, 290, 990, 394), more=(908, 420, 942, 454)),
+        icons=dict(_DPAD, south="button_a", east="button_b", west="button_x", north="button_y", back="button_view",
+                   start="button_options", lshoulder="button_l1", rshoulder="button_r1", ltrigger="button_l2",
+                   rtrigger="button_r2")),
+    # (Mako) the Steam Controller: its picture is nx2/prompt_faces/steamcontroller/Controller_Pro.png (from the Controller UI
+    # packs), its icons the Steam Deck's (the same A B X Y, View, Menu)
+    "steamcontroller": dict(
+        font="kenney_input_steam_deck.otf", prefix="steamdeck_",
+        drawing=None,
+        parts=_parts(1160, ((458, 226, 35), (702, 226, 35)), (317, 170, 48, 18), ((843, 119), (792, 166), (893, 166), (843, 214), 24),
+                     (427, 106, 14), (580, 164, 28), ((330, 46), (275, 76)), ltrackpad=(318, 293, 517, 493),
+                     rtrackpad=(643, 293, 842, 493), more=(548, 380, 612, 408)),
         icons=dict(_DPAD, south="button_a", east="button_b", west="button_x", north="button_y", back="button_view",
                    start="button_options", lshoulder="button_l1", rshoulder="button_r1", ltrigger="button_l2",
                    rtrigger="button_r2")),

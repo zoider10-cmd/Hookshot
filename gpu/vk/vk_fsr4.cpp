@@ -38,7 +38,10 @@
 #include "api/include/ffx_api_types.h"
 #include "api/include/vk/ffx_api_vk.h"
 #include "upscalers/include/ffx_upscale.h"
+#include "framegeneration/include/ffx_framegeneration.h"
+#include "vk_menu.h"
 #endif
+#include "vk_redstone.h"
 #include "vk_work.h"   // (after the others: the barriers here count as work for full_barrier)
 
 namespace mkwvk {
@@ -80,6 +83,7 @@ struct Library {
     PfnFfxDestroyContext destroy = nullptr;
     PfnFfxQuery query = nullptr;
     PfnFfxDispatch dispatch = nullptr;
+    PfnFfxConfigure configure = nullptr;   // (Mako: Redstone frame generation's)
     uint64_t version_id = 0;
     VkDeviceContext device_context{};
 };
@@ -193,7 +197,8 @@ bool load() {
     l.destroy = (PfnFfxDestroyContext)symbol("ffxDestroyContext");
     l.query = (PfnFfxQuery)symbol("ffxQuery");
     l.dispatch = (PfnFfxDispatch)symbol("ffxDispatch");
-    if (!l.create || !l.destroy || !l.query || !l.dispatch) {
+    l.configure = (PfnFfxConfigure)symbol("ffxConfigure");
+    if (!l.create || !l.destroy || !l.query || !l.dispatch || !l.configure) {
         logf("vk: AMD FSR 4: %s lacks the FSR API's entry points", kLoader);
         return no(FSR_NO_LIBRARY);
     }
@@ -412,6 +417,7 @@ bool evaluate(VkCommandBuffer cmd, const TemporalFrame& f) {
     d.cameraNear = f.near_z, d.cameraFar = f.far_z, d.cameraFovAngleVertical = f.fov_y;
     d.viewSpaceToMetersFactor = 1.0f;
     d.flags = FFX_UPSCALE_FLAG_NON_LINEAR_COLOR_SRGB;
+    ::mkwvk::rec::boundary(::mkwvk::rec::B_DIRECT);   // (ffxDispatch records into cmd itself: what this thread recorded through vk_work.h reaches cmd first)
     const ffxReturnCode_t r = l.dispatch(&s.context->context, &d.header);
     note_work();   // (AMD's dispatches: full_barrier must not take the next barrier for a repeat of the one before them)
 
@@ -459,12 +465,336 @@ bool fsr4_wants_descriptor_buffer() {
 #endif
 }
 
+
+// ---- (Mako) AMD FSR Redstone frame generation (vk_redstone.h) ----
+
+namespace {
+
+struct RsInputs {   // (the temporal chain's last frame, and the picture it was drawn into)
+    std::mutex mu;
+    TemporalFrame f{};
+    Texture* out = nullptr;
+    uint32_t ow = 0, oh = 0;
+    uint64_t frame = 0, taken = 0;
+    // (the HUD-less copy of that picture, made at the first pass into it)
+    VkImage hudless = VK_NULL_HANDLE;
+    VmaAllocation hudless_mem{};
+    uint32_t hw = 0, hh = 0;
+    uint64_t hudless_frame = 0;
+    bool hudless_failed = false;
+};
+RsInputs& rs_in() {
+    static RsInputs& s = *new RsInputs;   // (never destroyed: lib()'s note)
+    return s;
+}
+
+struct Redstone {   // (used on the present thread only)
+    bool tried = false, ok = false, failed = false;
+    uint64_t version_id = 0;
+    ffxContext context = nullptr;
+    uint32_t w = 0, h = 0;
+    uint64_t made = 0, asked = 0, no_inputs = 0, no_hud = 0;
+    uint64_t last_sequence = 0, frame_id = 0;
+    std::chrono::steady_clock::time_point last{};
+};
+Redstone& rs() {
+    static Redstone& r = *new Redstone;
+    return r;
+}
+
+bool rs_env_off() {   // (Mako: off by default, RX_VK_REDSTONE=1 from the launcher's switch: it takes video memory)
+    static const bool off = env_switch("RX_VK_REDSTONE") != 1;
+    return off;
+}
+
+/// AMD's library has a 4.x frame generation for this device (Redstone): asked once
+bool rs_start() {
+    Redstone& r = rs();
+    if (r.tried) return r.ok;
+    r.tried = true;
+    if (!load()) {
+        logf("vk: Redstone: AMD's FSR library is not there (the launcher's FSR tab): the renderer's own frame generation");
+        return false;
+    }
+    Library& l = lib();
+    ffxQueryDescGetVersions versions{};
+    versions.header.type = FFX_API_QUERY_DESC_TYPE_GET_VERSIONS;
+    versions.createDescType = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATION;
+    versions.device = &l.device_context;
+    uint64_t count = 0;
+    versions.outputCount = &count;
+    if (l.query(nullptr, &versions.header) != FFX_API_RETURN_OK || !count) {
+        logf("vk: Redstone: AMD's library has no frame generation for this GPU (amd_fidelityfx_framegeneration_vk.dll missing?)");
+        return false;
+    }
+    std::vector<uint64_t> ids(count);
+    std::vector<const char*> names(count);
+    versions.versionIds = ids.data();
+    versions.versionNames = names.data();
+    if (l.query(nullptr, &versions.header) != FFX_API_RETURN_OK) return false;
+    std::string listed;
+    unsigned best[3] = {0, 0, 0};
+    for (uint64_t i = 0; i < count; i++) {
+        const char* name = names[i] ? names[i] : "";
+        listed += (listed.empty() ? "" : ", ") + std::string(name);
+        unsigned v[3] = {0, 0, 0};
+        sscanf(name, "%u.%u.%u", &v[0], &v[1], &v[2]);
+        if (v[0] == 4 && (!r.version_id || v[1] > best[1] || (v[1] == best[1] && v[2] > best[2]))) {
+            std::memcpy(best, v, sizeof best);
+            r.version_id = ids[i];
+        }
+    }
+    if (!r.version_id) {
+        logf("vk: Redstone: no FSR 4 frame generation for this GPU (AMD's library has: %s): the renderer's own",
+             listed.c_str());
+        return false;
+    }
+    logf("vk: Redstone: frame generations %s; using %u.%u.%u", listed.c_str(), best[0], best[1], best[2]);
+    r.ok = true;
+    return true;
+}
+
+void rs_drop_context() {
+    Redstone& r = rs();
+    if (!r.context) return;
+    {
+        std::lock_guard qk(dev.present_mu);
+        device_wait_idle_locked();
+    }
+    lib().destroy(&r.context, nullptr);
+    r.context = nullptr;
+    r.w = r.h = 0;
+}
+
+bool rs_context(uint32_t w, uint32_t h, float far_z) {
+    Redstone& r = rs();
+    if (r.context && r.w == w && r.h == h) return true;
+    rs_drop_context();
+    Library& l = lib();
+    ffxCreateBackendVKDesc backend{};
+    backend.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_BACKEND_VK;
+    backend.deviceContext = l.device_context;
+    ffxOverrideVersion version{};
+    version.header.type = FFX_API_DESC_TYPE_OVERRIDE_VERSION;
+    version.versionId = r.version_id;
+    ffxCreateContextDescFrameGenerationVersion api{};
+    api.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATION_VERSION;
+    api.version = FFX_FRAMEGENERATION_VERSION;
+    ffxCreateContextDescFrameGenerationHudless hud{};
+    hud.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATION_HUDLESS;
+    hud.hudlessBackBufferFormat = FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM;
+    ffxCreateContextDescFrameGeneration c{};
+    c.header.type = FFX_API_CREATE_CONTEXT_DESC_TYPE_FRAMEGENERATION;
+    c.header.pNext = &api.header;
+    api.header.pNext = &hud.header;
+    hud.header.pNext = &backend.header;
+    backend.header.pNext = &version.header;
+    // (the chain's depth: [0, 1], not reversed; its motion at the render size, the jitter taken off)
+    c.flags = far_z > 1e6f ? FFX_FRAMEGENERATION_ENABLE_DEPTH_INFINITE : 0u;
+    c.displaySize = {w, h};
+    c.maxRenderSize = {w, h};
+    c.backBufferFormat = FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM;
+    const ffxReturnCode_t e = l.create(&r.context, &c.header, nullptr);
+    if (e != FFX_API_RETURN_OK || !r.context) {
+        logf("vk: Redstone: its frame generation was not made (%d) for %ux%u: the renderer's own", (int)e, w, h);
+        r.context = nullptr;
+        return false;
+    }
+    r.w = w, r.h = h;
+    ffxQueryGetProviderVersion provider{};
+    provider.header.type = FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION;
+    const bool known = l.query(&r.context, &provider.header) == FFX_API_RETURN_OK && provider.versionName;
+    logf("vk: Redstone: AMD frame generation %s made for %ux%u", known ? provider.versionName : "?", w, h);
+    return true;
+}
+
+FfxApiResource rs_resource(VkImage image, VkFormat format, uint32_t w, uint32_t h, VkImageUsageFlags usage) {
+    VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    ci.imageType = VK_IMAGE_TYPE_2D, ci.format = format, ci.extent = {w, h, 1};
+    ci.mipLevels = 1, ci.arrayLayers = 1, ci.samples = VK_SAMPLE_COUNT_1_BIT, ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ci.usage = usage, ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    // (every image here is GENERAL before and after: AMD's backend moves it to what it needs and back)
+    return ffxApiGetResourceVK((void*)image, ffxApiGetImageResourceDescriptionVK(image, ci, 0),
+                               FFX_API_RESOURCE_STATE_UNORDERED_ACCESS);
+}
+
+}  // namespace
+
+void redstone_note_frame(const TemporalFrame& f, Texture* out, uint32_t ow, uint32_t oh) {
+    if (rs_env_off() || opts.framegen != 2) return;
+    RsInputs& s = rs_in();
+    std::lock_guard lk(s.mu);
+    s.f = f, s.out = out, s.ow = ow, s.oh = oh, s.frame = texture_frame_no();
+}
+
+void redstone_hudless(VkCommandBuffer cmd, Texture* color0) {
+    RsInputs& s = rs_in();
+    if (!color0 || color0 != s.out) return;   // (the cheap test first: almost every pass is another target)
+    std::lock_guard lk(s.mu);
+    const uint64_t now = texture_frame_no();
+    if (color0 != s.out || s.frame != now || s.hudless_frame == now || s.hudless_failed || !color0->image) return;
+    if (color0->width != s.ow || color0->height != s.oh) return;
+    if (s.hudless && (s.hw != s.ow || s.hh != s.oh)) {
+        // (a new size: the old copy is left as it is, as work in flight may still read it; sizes change rarely)
+        s.hudless = VK_NULL_HANDLE;
+    }
+    if (!s.hudless) {
+        VkFormatProperties fs{}, fd{};
+        vkGetPhysicalDeviceFormatProperties(dev.physical, color0->format, &fs);
+        vkGetPhysicalDeviceFormatProperties(dev.physical, VK_FORMAT_R8G8B8A8_SRGB, &fd);
+        // (an sRGB image, so the blit encodes as the game's last blit does; AMD reads it through a UNORM view: the bytes the
+        // presented picture has)
+        VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+        ci.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+        ci.imageType = VK_IMAGE_TYPE_2D, ci.format = VK_FORMAT_R8G8B8A8_SRGB, ci.extent = {s.ow, s.oh, 1};
+        ci.mipLevels = 1, ci.arrayLayers = 1, ci.samples = VK_SAMPLE_COUNT_1_BIT, ci.tiling = VK_IMAGE_TILING_OPTIMAL;
+        ci.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        if (!(fs.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) ||
+            !(fd.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT) || !create_image(ci, s.hudless, s.hudless_mem)) {
+            s.hudless = VK_NULL_HANDLE, s.hudless_failed = true;
+            logf("vk: Redstone: no HUD-less copy here (format %d): the HUD is given with the scene", (int)color0->format);
+            return;
+        }
+        s.hw = s.ow, s.hh = s.oh;
+        VkImageMemoryBarrier2 b = barrier(s.hudless, 0, VK_ACCESS_2_MEMORY_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
+                                          VK_IMAGE_LAYOUT_GENERAL);
+        barriers(cmd, &b, 1);
+        logf("vk: Redstone: the HUD-less picture is copied at the first pass after the upscale (%ux%u)", s.ow, s.oh);
+    }
+    full_barrier(cmd);   // (the upscale's write)
+    VkImageBlit r{};
+    r.srcSubresource = r.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    r.srcOffsets[1] = r.dstOffsets[1] = {(int32_t)s.ow, (int32_t)s.oh, 1};
+    vkCmdBlitImage(cmd, color0->image, VK_IMAGE_LAYOUT_GENERAL, s.hudless, VK_IMAGE_LAYOUT_GENERAL, 1, &r, VK_FILTER_NEAREST);
+    full_barrier(cmd);
+    s.hudless_frame = now;
+}
+
+bool redstone_wanted() {
+    if (rs_env_off() || opts.framegen != 2 || rs().failed) return false;
+    return rs_start();
+}
+
+int redstone_frame(VkCommandBuffer cmd, VkImage color, VkImage made, uint32_t w, uint32_t h, uint64_t sequence, bool reset) {
+    Redstone& r = rs();
+    if (++r.asked % 600 == 0) {
+        logf("vk: Redstone: %llu of the last 600 made frames by AMD, %llu without the upscaler's inputs, %llu without the HUD-less picture",
+             (unsigned long long)r.made, (unsigned long long)r.no_inputs, (unsigned long long)r.no_hud);
+        r.made = r.no_inputs = r.no_hud = 0;
+    }
+    if (!redstone_wanted()) return 0;
+    TemporalFrame f;
+    VkImage hudless = VK_NULL_HANDLE;
+    {
+        RsInputs& s = rs_in();
+        std::lock_guard lk(s.mu);
+        // (the frame drawn since the last present, at this present's size, once)
+        if (!s.frame || s.frame == s.taken || s.frame + 2 < texture_frame_no() || s.ow != w || s.oh != h) {
+            r.no_inputs++;
+            return 0;
+        }
+        s.taken = s.frame;
+        f = s.f;
+        if (s.hudless && s.hudless_frame == s.frame && s.hw == w && s.hh == h) hudless = s.hudless;
+    }
+    if (!hudless) r.no_hud++;
+    if (!f.depth.image || !f.motion.image || !rs_context(w, h, f.far_z)) {
+        if (!r.context) r.failed = true;
+        return 0;
+    }
+    Library& l = lib();
+    const auto now = std::chrono::steady_clock::now();
+    const float frame_ms = r.last_sequence ? std::chrono::duration<float, std::milli>(now - r.last).count() : 1000.0f / 30.0f;
+    r.last = now;
+    if (r.last_sequence + 1 != sequence) reset = true;
+    r.last_sequence = sequence;
+    const uint64_t id = ++r.frame_id;
+    const FfxApiRect2D rect{0, 0, (int32_t)w, (int32_t)h};
+
+    ffxConfigureDescFrameGeneration cfg{};
+    cfg.header.type = FFX_API_CONFIGURE_DESC_TYPE_FRAMEGENERATION;
+    cfg.swapChain = nullptr;
+    cfg.frameGenerationEnabled = true;
+    cfg.allowAsyncWorkloads = false;
+    cfg.flags = FFX_FRAMEGENERATION_FLAG_NO_SWAPCHAIN_CONTEXT_NOTIFY;
+    cfg.HUDLessColor = hudless ? rs_resource(hudless, VK_FORMAT_R8G8B8A8_UNORM, w, h, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                               : FfxApiResource{};
+    cfg.onlyPresentGenerated = false;
+    cfg.generationRect = rect;
+    cfg.frameID = id;
+    ffxReturnCode_t e = l.configure(&r.context, &cfg.header);
+    if (e != FFX_API_RETURN_OK) {
+        logf("vk: Redstone: its configuration failed (%d): the renderer's own frame generation from now on", (int)e);
+        r.failed = true;
+        return 0;
+    }
+    full_barrier(cmd);   // (this present's colour, copied just before)
+    ffxDispatchDescFrameGenerationPrepareV2 p{};
+    p.header.type = FFX_API_DISPATCH_DESC_TYPE_FRAMEGENERATION_PREPARE_V2;
+    p.frameID = id;
+    p.flags = 0;
+    p.commandList = cmd;
+    p.renderSize = {f.render_w, f.render_h};
+    p.jitterOffset = {f.jitter[0], f.jitter[1]};
+    p.motionVectorScale = {1.0f, 1.0f};   // (render pixels, towards the frame before)
+    p.frameTimeDelta = frame_ms;
+    p.reset = reset || f.reset;
+    p.cameraNear = f.near_z, p.cameraFar = f.far_z, p.cameraFovAngleVertical = f.fov_y;
+    p.viewSpaceToMetersFactor = 1.0f;
+    p.depth = rs_resource(f.depth.image, f.depth.format, f.depth.width, f.depth.height,
+                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+    p.motionVectors = rs_resource(f.motion.image, f.motion.format, f.motion.width, f.motion.height,
+                                  VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
+    const float up[3] = {0.0f, 1.0f, 0.0f}, right[3] = {1.0f, 0.0f, 0.0f}, forward[3] = {0.0f, 0.0f, -1.0f};
+    std::memcpy(p.cameraUp, up, sizeof up), std::memcpy(p.cameraRight, right, sizeof right);
+    std::memcpy(p.cameraForward, forward, sizeof forward);
+    ::mkwvk::rec::boundary(::mkwvk::rec::B_DIRECT);
+    e = l.dispatch(&r.context, &p.header);
+    note_work();
+    if (e != FFX_API_RETURN_OK) {
+        logf("vk: Redstone: its preparation failed (%d): the renderer's own frame generation from now on", (int)e);
+        r.failed = true;
+        full_barrier(cmd);
+        return 0;
+    }
+    ffxDispatchDescFrameGeneration d{};
+    d.header.type = FFX_API_DISPATCH_DESC_TYPE_FRAMEGENERATION;
+    d.commandList = cmd;
+    const VkImageUsageFlags fu = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    d.presentColor = rs_resource(color, VK_FORMAT_R8G8B8A8_UNORM, w, h, fu);
+    d.outputs[0] = rs_resource(made, VK_FORMAT_R8G8B8A8_UNORM, w, h, fu);
+    d.numGeneratedFrames = 1;
+    d.reset = p.reset;
+    d.backbufferTransferFunction = FFX_API_BACKBUFFER_TRANSFER_FUNCTION_SRGB;
+    d.minMaxLuminance[0] = 0.0f, d.minMaxLuminance[1] = 1000.0f;
+    d.generationRect = rect;
+    d.frameID = id;
+    ::mkwvk::rec::boundary(::mkwvk::rec::B_DIRECT);
+    e = l.dispatch(&r.context, &d.header);
+    note_work();
+    full_barrier(cmd);
+    if (e != FFX_API_RETURN_OK) {
+        logf("vk: Redstone: its frame generation failed (%d): the renderer's own from now on", (int)e);
+        r.failed = true;
+        return 0;
+    }
+    if (r.made++ == 0 && r.asked < 600)
+        logf("vk: Redstone: AMD makes the frame between each two of the game's (%ux%u, depth and motion %ux%u, HUD-less %s)", w,
+             h, f.render_w, f.render_h, hudless ? "yes" : "not this frame");
+    return 1;
+}
+
 #else  // (no HOOKSHOT_FSR in this build: FSR is not there)
 
 bool fsr4_built() { return false; }
 const TemporalEngine* fsr4_engine() { return nullptr; }
 void fsr4_probe() {}
 bool fsr4_wants_descriptor_buffer() { return false; }
+void redstone_note_frame(const TemporalFrame&, Texture*, uint32_t, uint32_t) {}
+void redstone_hudless(VkCommandBuffer, Texture*) {}
+bool redstone_wanted() { return false; }
+int redstone_frame(VkCommandBuffer, VkImage, VkImage, uint32_t, uint32_t, uint64_t, bool) { return 0; }
 
 #endif
 

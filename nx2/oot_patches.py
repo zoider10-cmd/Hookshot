@@ -42,7 +42,7 @@ def fixed_scale(t):
     t = t.replace(APPLY_OLD, APPLY_NEW, 1).replace(FLAGS_OLD, FLAGS_NEW, 1)
     return t.replace('#include "a64.h"\n', '#include "a64.h"\n' + DECL2, 1), 1
 
-TEXT_DECL = "extern volatile float hos_text_scale;\n"
+TEXT_DECL = "extern volatile float hos_text_scale;\nextern void hos_oot_text_pane(Ctx *c, uint64_t anim);\n"
 LIFE_BUILD_ID = "e0f3ccfaf50065ae4ea01eb5aeb13b1a45da3348"
 LIFE_HEAD = "void f_804bd8c0(Ctx *__restrict A64_NOESC c) {\n"
 MOVE_HEAD = "void f_82c415e0(Ctx *__restrict A64_NOESC c) {\n"
@@ -125,6 +125,46 @@ def patch_view(source):
     return (source[:start] + body + source[end:]).replace(
         '#include "a64.h"\n', '#include "a64.h"\nextern void hos_oot_free_view(Ctx *c, uint64_t view);\n', 1)
 
+# Movement speed (the Debug tab's row, host/hos_main.c hos_oot_cct_speed): a character controller's forward speed (s0), on its way
+# to *(controller+40)+472, which the physics step moves the body by with its collisions. The host scales it for Link's controller
+# while the row is above 1x. Three places set it: f_809552f0, the move Link's own walk, run and swim go through (a direction at
+# x1, the speed in metres a frame), at its two calls of the setter, each after it took the controller into x0; and the setter
+# itself, f_80559df0 (the controller's vtable +0x70), with f_80964bf0, which takes the CCT component and inlines that setter
+# (OneShotPhysicsCctSetForwardSpeedMpf and others). The first inlines the setter too, so no speed is scaled twice. Only a walk's,
+# run's or swim's speed is scaled: a climb up a ledge goes through f_809552f0 too, at some 55 m/s for a frame, and scaled it threw
+# Link past the ledge.
+SPEED_HOOK = ("    hos_oot_cct_speed(c, c->x[0], %d);   /* (nx2/oot_patches.py: movement speed; x0 the controller, s0 the speed, "
+              "in metres a %s) */\n")
+SPEED_PLACES = (   # (the function's head, the text in it the hook follows, and 1 when s0 is a second's speed, 0 a frame's)
+    ("void f_809552f0(Ctx *__restrict A64_NOESC c) {\n", "L_80955424:;\n    c->x[0]=recomp_load64(c,c->x[8] + 8);\n", 0),
+    ("void f_809552f0(Ctx *__restrict A64_NOESC c) {\n", "L_809554dc:;\n    c->x[0]=recomp_load64(c,c->x[8] + 8);\n", 0),
+    ("void f_80559df0(Ctx *__restrict A64_NOESC c) {\n", "void f_80559df0(Ctx *__restrict A64_NOESC c) {\n", 1),
+    ("void f_80964bf0(Ctx *__restrict A64_NOESC c) {\n", "void f_80964bf0(Ctx *__restrict A64_NOESC c) {\n    c->x[0]=recomp_load64(c,c->x[0] + 8);\n", 1),
+)
+
+
+def patch_cct_speed(source):
+    """The forward speed's places in this file hooked: (source, how many are hooked now), None when none of them is here"""
+    if not any(head in source for head, _, _ in SPEED_PLACES):
+        return None
+    n = 0
+    for head, anchor, per_second in SPEED_PLACES:
+        hook = SPEED_HOOK % (per_second, "second" if per_second else "frame")
+        start = source.find(head)
+        if start < 0:
+            continue
+        end = source.find("\n}", start)
+        body = source[start:end]
+        if body.count(anchor + hook) == 1:
+            n += 1
+        elif end >= 0 and body.count(anchor) == 1:
+            source = source[:start] + body.replace(anchor, anchor + hook, 1) + source[end:]
+            n += 1
+    if n and "extern void hos_oot_cct_speed(" not in source:
+        source = source.replace('#include "a64.h"\n', '#include "a64.h"\nextern void hos_oot_cct_speed(Ctx *c, uint64_t controller, int per_second);\n', 1)
+    return source, n
+
+
 # Native mouse look (host/mouse_native.c): the player camera's update, f_80644c80 (a virtual method, the camera in x0), hands
 # its camera to the host before anything else, on the game's thread, once a frame; with the menu's Mouse camera on the mouse's
 # motion turns the camera's yaw (+0x1a4) and pitch (+0x18c) there, before the camera reads its input.
@@ -140,6 +180,33 @@ def patch_mouse_camera(source):
     at = start + len(CAM_HEAD)
     source = source[:at] + "    hos_mouse_camera(c->x[0]);   /* (nx2/oot_patches.py: native mouse look) */\n" + source[at:]
     return source.replace('#include "a64.h"\n', '#include "a64.h"\nextern void hos_mouse_camera(uint64_t camera);\n', 1)
+
+
+# The camera's state-3 yaw follow: after f_80642c80's authored heading override (the branch to 0x806492c4), the block at
+# 0x8064720c derives a heading from Link's movement and eases yaw (+0x1a4) through f_80642410 at 0x806475e4. Skip only
+# the movement path, restoring x25's parameter base as that path does, and join the other yaw paths at 0x80645ad8.
+# State 4's stick, state 2's explicit recenter and authored heading overrides stay intact; pitch and collision follow.
+CAM_FOLLOW_ANCHOR = "L_8064720c:;\nif (!c->z) { goto L_806492c4; }\n"
+CAM_FOLLOW_JOIN = "L_80645ad8:;"
+CAM_FOLLOW_HOOK = ("    if (hos_disable_camera_centering()) { c->x[25] = c->x[26]; goto L_80645ad8; }"
+                   "   /* (nx2/oot_patches.py: disable camera centering) */\n")
+
+
+def patch_camera_centering(source):
+    start = source.find(CAM_HEAD)
+    if start < 0:
+        return None
+    end = source.find("\n}", start)
+    if end < 0:
+        return None
+    body = source[start:end]
+    if body.count(CAM_FOLLOW_ANCHOR) != 1 or body.count(CAM_FOLLOW_JOIN) != 1:
+        return None
+    if CAM_FOLLOW_HOOK in body:
+        return source
+    body = body.replace(CAM_FOLLOW_ANCHOR, CAM_FOLLOW_ANCHOR + CAM_FOLLOW_HOOK, 1)
+    return (source[:start] + body + source[end:]).replace(
+        '#include "a64.h"\n', '#include "a64.h"\nextern int hos_disable_camera_centering(void);\n', 1)
 
 
 MENU_FOCUS_HEAD = "void f_802ed660(Ctx *__restrict A64_NOESC c) {\n"
@@ -184,7 +251,8 @@ TEXT_OLD = ("L_80b1e1b4:;\n"
 # (the same block in a build with interrupt polls: nx2/poll.py puts the poll before each backward goto, as a block)
 TEXT_OLD_POLLED = TEXT_OLD.replace("{ goto L_80b1e18c; }", "{ { A64_POLL(c); goto L_80b1e18c; } }")
 TEXT_ADD = ("    if (hos_text_scale != 1.0f) { float _t; uint32_t _u; memcpy(&_t,c->vreg[0],4); _t *= hos_text_scale; "
-            "memcpy(&_u,&_t,4); a64_vset64(c->vreg[0],_u); }   /* (nx2/oot_patches.py: text speed) */\n")
+            "memcpy(&_u,&_t,4); a64_vset64(c->vreg[0],_u); }   /* (nx2/oot_patches.py: text speed) */\n"
+            "    hos_oot_text_pane(c, c->x[19]);   /* (nx2/oot_patches.py: text size; x19 the LetterAnimControl) */\n")
 TEXT_NEW = TEXT_OLD + TEXT_ADD
 
 
@@ -247,8 +315,88 @@ def unpatch_frame_seconds(s):
     return s if STEP_MARK in s else s.replace(STEP_DECL, "", 1)   # (a hook of another shape stays, with its declarations)
 
 
+# A movie's frame count above a 60 cap. The game's movie player counts its updates while a movie plays (f_83b7c710: one more
+# at +760 of the player each frame), and a cutscene that shows a movie takes that count as its timeline's frame (f_83b5ec10,
+# f_83b5e9a0): the narration, the rumble and the cutscene's end are placed by it. The movie itself follows the clock, so above
+# 60 fps those cues ran ahead of the picture, fps / 60 times too fast (issue 1742). The count now grows by the frames' time, as
+# the game's clock does (hos_movie_frames, host/nn_vi.c: 1 as before while the host gives no frame time).
+MOVIE_HEAD = "void f_83b7c710(Ctx *__restrict A64_NOESC c) {\n"
+# (the load and the add alone: the store after them is rewritten by the page marks' pass, which runs after these edits)
+MOVIE_OLD = ("    c->x[8]=recomp_load32(c,c->x[20] + 760);\n"
+             "    { uint64_t _a=c->x[8], _b=1ULL; uint64_t _r=_a+_b; _r&=0xFFFFFFFFULL; c->x[8]=_r; }\n")
+MOVIE_NEW = MOVIE_OLD.replace("_b=1ULL", "_b=hos_movie_frames(c->x[20])")
+MOVIE_DECL = "uint32_t hos_movie_frames(uint64_t player);\n"
+
+
+def patch_movie_frames(s):
+    """The movie player's count by the frames' time; None when the file has no such function, s unchanged when the function is
+    there but its code differs (another game version) or has the patch already."""
+    head = s.find(MOVIE_HEAD)
+    if head < 0:
+        return None
+    end = s.find("\nvoid f_", head + len(MOVIE_HEAD))
+    body = s[head:end if end >= 0 else len(s)]
+    if body.count(MOVIE_OLD) != 1:
+        return s
+    at = head + body.index(MOVIE_OLD)
+    s = s[:at] + MOVIE_NEW + s[at + len(MOVIE_OLD):]
+    return s if MOVIE_DECL in s else s.replace('#include "a64.h"\n', '#include "a64.h"\n' + MOVIE_DECL, 1)
+
+
+# Counters that add the frame step, or the step times a whole number, cut to whole frames (host/frame_whole.h). At 60 fps the step
+# is 1; under a Frame rate cap above 60 it is the frame's own time, under 1 (0.42 at 144 fps), and the cut is 0 every frame:
+# - f_80a87e50, the pick-up indicator above Link's head (a rupee, a Deku Stick): the count it shows (+864) moves toward the
+#   wallet's (+860) by (int)(step * max(distance / 50, 1)) and the indicator fades when they meet. Cut to 0, it stayed at the old
+#   count until a door or a talk replaced it (issue 1832).
+# hos_frame_whole carries the fractions per counter while the frames' own time is the step, so each moves at the game's rate;
+# otherwise it cuts as the game does. A site is added here once it is seen to misbehave in game. (A site's function, its code to
+# replace, and the counter's address for its remainder.)
+WHOLE_SITES = (
+    # (the cut alone, the function's one: the multiply before it is a64_fpx_hot_mul32_fma32 in a lift where the function is
+    # among A64_HOT_FUNCS)
+    ("void f_80a87e50(Ctx *__restrict A64_NOESC c) {@",
+     "    c->x[12]=recomp_fp_to_int(c->vreg[0][0]&UINT64_C(0xffffffff),32,32,1,3,c->fpcr,&c->fpsr);@",
+     "c->x[19] + 864"),
+)
+WHOLE_SITES = tuple((h.replace("@", "\n"), o.replace("@", "\n"), k) for h, o, k in WHOLE_SITES)
+WHOLE_MARK = "/* (the step's whole frames: nx2/oot_patches.py) */"
+WHOLE_DECL = "extern uint32_t hos_frame_whole(uint64_t at, uint32_t amount_bits);\n"
+
+
+def whole_new(old, key):
+    """old with its cut to whole frames (the one recomp_fp_to_int) made hos_frame_whole's for the counter at key"""
+    lines = old.split("\n")
+    for i, line in enumerate(lines):
+        if "recomp_fp_to_int(c->vreg[0][0]" in line:
+            reg = line.split("=", 1)[0]
+            lines[i] = "%s=hos_frame_whole(%s, (uint32_t)c->vreg[0][0]);   %s" % (reg, key, WHOLE_MARK)
+    return "\n".join(lines)
+
+
+def patch_whole_frames(s):
+    """The counters of WHOLE_SITES take hos_frame_whole's whole frames: (s, the sites patched here). A file without the function,
+    one patched before, or one whose code differs (another game version) is left as it is."""
+    done = 0
+    for head_text, old, key in WHOLE_SITES:
+        head = s.find(head_text)
+        if head < 0:
+            continue
+        end = s.find("\n}\n", head)
+        body = s[head:end if end >= 0 else len(s)]
+        new = whole_new(old, key)
+        if new in body or body.count(old) != 1:
+            continue
+        at = head + body.index(old)
+        s = s[:at] + new + s[at + len(old):]
+        done += 1
+    if done and WHOLE_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + WHOLE_DECL, 1)
+    return s, done
+
+
 def patch_text_speed(s):
-    """The scale at the head of the letters' block of f_80b1e140; None when the file has no such function, s unchanged when the
+    """The scale at the head of the letters' block of f_80b1e140 (Text speed), and the call to hos_oot_text_pane after it
+    (Text size: host/oot_text_size.c); None when the file has no such function, s unchanged when the
     function is there but its code differs (another game version)."""
     head = s.find(TEXT_HEAD)
     if head < 0:
@@ -274,7 +422,7 @@ def apply(gen, *, protect_hearts=False, required=False):
     The other patches only warn when their place is not found once."""
     import oot_native_resolution   # (HOS_SCENE_NATIVE=1: the scene's base scale 1.0; off by default since #849's output resolution)
     oot_native_resolution.apply(gen)
-    done = {"dynamic resolution branch": 0, "text speed block": 0, "fixed path's scale": 0}
+    done = {"dynamic resolution branch": 0, "text speed block": 0, "fixed path's scale": 0, "movie's frame count": 0}
     if protect_hearts:   # (the supported build's: these places are its functions)
         done["menu focus hook"] = 0
         done["menu tick hook"] = 0
@@ -283,7 +431,10 @@ def apply(gen, *, protect_hearts=False, required=False):
         done["player flight rotation"] = 0
         done["free camera"] = 0
         done["mouse camera"] = 0
+        done["disable camera centering"] = 0
+    speed_hooks = 0   # (SPEED_PLACES', in one file or several)
     step_sites, step_files = 0, []   # (the divides with the hook, and the files that have it)
+    whole_sites = 0   # (the counters of WHOLE_SITES with the whole frames: patch_whole_frames)
     for path in sorted(glob.glob(os.path.join(glob.escape(gen), "code_*.c"))):
         with open(path, encoding="utf-8", newline="") as f:
             s = f.read()
@@ -297,7 +448,7 @@ def apply(gen, *, protect_hearts=False, required=False):
         if t is not None and t != out:
             out = t
             done["text speed block"] += 1
-            print("oot_patches: text speed scale in", os.path.basename(path))
+            print("oot_patches: text speed scale and text size in", os.path.basename(path))
         focus = patch_menu_focus(out) if protect_hearts else None
         if focus is not None:
             out = focus
@@ -308,6 +459,13 @@ def apply(gen, *, protect_hearts=False, required=False):
             out = tick
             done["menu tick hook"] += 1
             print("oot_patches: the menus' update hook in", os.path.basename(path))
+        movie = patch_movie_frames(out)
+        if movie is not None:
+            if MOVIE_NEW in movie:   # (made now, or by an earlier run over this file)
+                done["movie's frame count"] += 1
+            if movie != out:
+                print("oot_patches: the movie's frame count by the frames' time in", os.path.basename(path))
+            out = movie
         out, n = fixed_scale(out)
         if n:
             done["fixed path's scale"] += 1
@@ -332,6 +490,17 @@ def apply(gen, *, protect_hearts=False, required=False):
             out = mouse
             done["mouse camera"] += 1
             print("oot_patches: native mouse camera in", os.path.basename(path))
+        center = patch_camera_centering(out) if protect_hearts else None
+        if center is not None:
+            out = center
+            done["disable camera centering"] += 1
+            print("oot_patches: disable camera centering switch in", os.path.basename(path))
+        speed = patch_cct_speed(out) if protect_hearts else None
+        if speed is not None:
+            if speed[0] != out:
+                print("oot_patches: movement speed in", os.path.basename(path))
+            out = speed[0]
+            speed_hooks += speed[1]
         view = patch_view(out) if protect_hearts else None
         if view is not None:
             out = view
@@ -343,11 +512,17 @@ def apply(gen, *, protect_hearts=False, required=False):
             step_files.append(path)
         if sites:
             print("oot_patches: the frame's time at %d step divide(s) in %s" % (sites, os.path.basename(path)))
+        out, whole = patch_whole_frames(out)
+        whole_sites += out.count(WHOLE_MARK)   # (made now, or by an earlier run over this file)
+        if whole:
+            print("oot_patches: %d frame counter(s) with the step's whole frames in %s" % (whole, os.path.basename(path)))
         if out != s:
             whole_write.write_whole(path, out, newline="")
     for what, n in done.items():
         if n != 1:
             print("oot_patches: WARNING: the %s was found %d times" % (what, n))
+    if protect_hearts and speed_hooks != len(SPEED_PLACES):
+        print("oot_patches: WARNING: the movement speed's places were found %d times, not %d" % (speed_hooks, len(SPEED_PLACES)))
     if step_sites != len(STEP_SITES):
         # (both or neither: with one divide timed and the other stepping 1/60 s the two clocks of the game would run apart. Without
         # the hook the host keeps the rate up to the cap, as before: host/nn_vi.c, hos_step_probe)
@@ -357,6 +532,9 @@ def apply(gen, *, protect_hearts=False, required=False):
             whole_write.write_whole(path, unpatch_frame_seconds(s), newline="")
         print("oot_patches: WARNING: the frame's time was found at %d of %d step divides, none patched (a Frame rate cap above 60 "
               "keeps the game's own step)" % (step_sites, len(STEP_SITES)))
+    elif whole_sites != len(WHOLE_SITES):   # (the frames' own time without them: the pick-up indicator stays above 60 fps)
+        print("oot_patches: WARNING: %d of %d frame counters found for the step's whole frames (above 60 fps a counter can stop: "
+              "the pick-up indicator)" % (whole_sites, len(WHOLE_SITES)))
     apply_output_size(gen, required=required)
 
 
@@ -380,14 +558,14 @@ OUT_EDITS = [
      "    { uint64_t _r = ((uint64_t)0 | ((c->x[1]) << 0)); c->x[20] = _r; }\n",
      "    { uint64_t _a=c->x[0], _b=724ULL; uint64_t _r=_a+_b; c->x[21]=_r; }\n"
      "    { uint64_t _r = ((uint64_t)0 | ((c->x[1]) << 0)); c->x[20] = _r; }\n"
-     "    if (hos_output_size(0) != 2560 && recomp_load32(c, c->x[20] + 8) == 2560) { recomp_store32(c, c->x[20] + 8, hos_output_size(0)); recomp_store32(c, c->x[20] + 12, hos_output_size(1)); }\n"),
+     "    if ((hos_output_size(0) != 2560 || hos_output_size(1) != 1440) && recomp_load32(c, c->x[20] + 8) == 2560) { recomp_store32(c, c->x[20] + 8, hos_output_size(0)); recomp_store32(c, c->x[20] + 12, hos_output_size(1)); }\n"),
     # - f_80ea2f30: the 3D's largest size, ResolutionParam's BaseResolution (or 1920 x 1080 as constants), 3/4 of 2560 x 1440;
     #   above it the game takes a smaller upscale network (1/3: 1280 x 720 at 4K). Scaled with the output.
     ("c->x[30] = 0x80ea2ffcULL; f_831cca50(c);\n"
      "    { uint64_t _b=c->x[0]; int64_t _o=0; { uint64_t _p0,_p1; recomp_ldp32(c,(_b+_o),&_p0,&_p1); c->x[24]=_p0; c->x[25]=_p1; } }\n",
      "c->x[30] = 0x80ea2ffcULL; f_831cca50(c);\n"
      "    { uint64_t _b=c->x[0]; int64_t _o=0; { uint64_t _p0,_p1; recomp_ldp32(c,(_b+_o),&_p0,&_p1); c->x[24]=_p0; c->x[25]=_p1; } }\n"
-     "    if (hos_output_size(0) != 2560) { c->x[24] = (uint32_t)c->x[24] * hos_output_size(0) / 2560; c->x[25] = (uint32_t)c->x[25] * hos_output_size(1) / 1440; }\n"),
+     "    if (hos_output_size(0) != 2560 || hos_output_size(1) != 1440) { c->x[24] = (uint32_t)c->x[24] * hos_output_size(0) / 2560; c->x[25] = (uint32_t)c->x[25] * hos_output_size(1) / 1440; }\n"),
     ("    c->x[8] = 0x44f00000ULL;\n    c->x[8] &= 0xFFFFFFFFULL;\n    recomp_store32(c,c->x[19] + 3668,c->x[8]);\n"
      "    c->x[8] = 0x44870000ULL;\n    c->x[8] &= 0xFFFFFFFFULL;\n",
      "    c->x[8] = hos_output_size(0) * 3 / 4;\n    { float _f = (float)c->x[8]; uint32_t _u; memcpy(&_u, &_f, 4); c->x[8] = _u; }\n"

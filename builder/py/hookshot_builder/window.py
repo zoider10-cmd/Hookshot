@@ -30,6 +30,8 @@ WITHOUT_SHADERS = {"download": (0, 0.04), "read": (0.04, 0.04), "lift": (0.08, 0
 # (the game's --prepare-shaders run, make_game.py's last step: minutes on some GPUs, the first start's wait moved here)
 WITH_SHADERS = {"download": (0, 0.04), "read": (0.04, 0.04), "lift": (0.08, 0.14), "compile": (0.22, 0.68), "finish": (0.90, 0.02),
                 "shaders": (0.92, 0.08)}
+FAST_TIP = ('Compiles the parts of the game that run the least with less optimisation. Measured: about a third less time compiling the game code, and about 4 to 8% fewer FPS in game (Castle Town market, RX 9060 XT: 46 to 44 FPS standing, 43.5 to 41.7 walking). Nothing is removed from the game. Untick it and update to get the full speed back.')
+
 SHADERS_LATER = "--no-prepare-shaders"
 NOT_PREPARED = re.compile(r"^the shaders were not prepared now \((.*)\): ")   # (make_game.py NOT_PREPARED)
 
@@ -729,7 +731,11 @@ class Window(QWidget):
         self.prepare_tick.setToolTip("Prepares the game's shaders at the end of the build, a few minutes (longer on some GPUs). Unticked, "
                                      "the game prepares them at its first start, behind a black window.")
         self.prepare_tick.clicked.connect(self.save_settings)
-        work_col = holder(vbox(section("BUILD WORKERS"), self.worker_box, 12, self.prepare_tick))
+        # (Mako) the fast build: make_game --fast (half the rarely run code less optimised)
+        self.fast_tick = Tick("Fast build", False)
+        self.fast_tick.setToolTip(FAST_TIP)
+        self.fast_tick.clicked.connect(self.save_settings)
+        work_col = holder(vbox(section("BUILD WORKERS"), self.worker_box, 12, self.prepare_tick, 6, self.fast_tick))
         work_col.setFixedWidth(160)
         row4 = hbox(hbox(Glyph("info"), 8, self.tools_note), 20)
         row4.addWidget(work_col, 0, Qt.AlignmentFlag.AlignTop)
@@ -1059,6 +1065,7 @@ class Window(QWidget):
             self.out_path.setText(s["Out"])
         self.dlss_tick.setChecked(bool(s.get("Dlss")))
         self.prepare_tick.setChecked(not s.get("PrepareLater"))
+        self.fast_tick.setChecked(bool(s.get("Fast")))
         r, x, n = s.get("Romfs"), s.get("Exefs"), s.get("Nup")
         if r and x and os.path.isdir(r) and os.path.isfile(os.path.join(x, "main")):
             self.romfs, self.exefs = r, x
@@ -1072,7 +1079,7 @@ class Window(QWidget):
     def save_settings(self):
         core.save_settings({"Out": self.out_path.text(), "Nup": None if self.romfs else self.chosen_nup, "Romfs": self.romfs,
                             "Exefs": self.exefs, "Dlss": self.dlss_tick.isChecked(),
-                            "PrepareLater": not self.prepare_tick.isChecked()})
+                            "PrepareLater": not self.prepare_tick.isChecked(), "Fast": self.fast_tick.isChecked()})
 
     def preview(self, what):
         """(development) HOOKSHOT_UI_PREVIEW=build|ready|problem|update|launch: one screen with made-up progress, nothing run"""
@@ -1344,6 +1351,8 @@ class Window(QWidget):
         self.prepare_now = self.prepare_tick.isChecked()
         if not self.prepare_now:
             args.append(SHADERS_LATER)
+        if self.fast_tick.isChecked():
+            args.append("--fast")
         self.run(tools, args, dlss=self.dlss_tick.isChecked())
 
     def dlss_changed(self):
@@ -1368,7 +1377,23 @@ class Window(QWidget):
         if update:
             self.rows["read"].small_text("Your game files are kept: the source package isn't needed")
 
+    def hard_drive_warning(self):
+        """The game folder or the build files folder on a hard drive: the build works, but much more slowly than on an SSD.
+        None when both are on an SSD (or their drive cannot be told, as on a network share)"""
+        for what, folder in (("game folder", self.out_path.text()), ("build files folder", core.work())):
+            if core.spinning(folder) is not True:
+                continue
+            root = os.path.splitdrive(os.path.abspath(folder))[0] or folder
+            return ("The %s is on a hard drive (%s). An SSD builds the game much faster: build there if you can.\n\n"
+                    "Choose OK to build here anyway, or Cancel to choose another folder." % (what, root))
+        return None
+
     def run(self, tools, args, keep_rows=False, dlss=False):
+        # (a warning, not a stop: the player may have no other folder with the room. An update keeps its own flow)
+        slow = None if keep_rows else self.hard_drive_warning()
+        if slow and QMessageBox.question(self, "Hookshot", slow, QMessageBox.StandardButton.Ok |
+                                         QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Ok:
+            return
         sel = self.worker_box.currentText()
         workers = None if sel == core.AUTOMATIC else int(sel)
         if not keep_rows:
@@ -1720,7 +1745,8 @@ class Window(QWidget):
             self.rows["download"].done()
             self.rows["download"].small_text("Build tools checked")
         dlss = os.path.isfile(os.path.join(folder, "ngx", "nvngx_dlss.dll")) and os.path.isfile(os.path.join(core.ngx_sdk(), "LICENSE.txt"))
-        self.run(tools, ["--update", folder] + ([] if self.prepare_now else [SHADERS_LATER]), keep_rows=True, dlss=dlss)
+        fast = ["--fast" if core.load_settings().get("Fast") else "--no-fast"]   # (the saved choice, as the WPF builder)
+        self.run(tools, ["--update", folder] + ([] if self.prepare_now else [SHADERS_LATER]) + fast, keep_rows=True, dlss=dlss)
 
     def quit_app(self):
         QApplication.quit()
