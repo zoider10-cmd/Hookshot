@@ -288,6 +288,13 @@ not known without reading that format.
   (`rando	est_drops.txt`, `rando	est_pickups.txt`): got with its text, and bombs could be used after it, so it is
   the item that lets Link use them, not the talk with Darunia. The Lens of Truth and the bracelet are small as they
   hang and a little hard to see.
+- **A small item is made larger** (`PICKUP_SCALES`: the Lens of Truth and the Goron's Bracelet, 1.5 times), by its
+  ModelInfo's `DebugModelScale`, which the game's own actors use (dogs 0.85, the bosses' light balls 1.5). It is as
+  much larger in its chest's scene, the two being one actor: not looked at. **An item hangs about half a metre
+  over the place it is taken at**: it is in the pose of the chest's scene (its `ASRef`, `ASInfoRef`), which lifts it
+  and turns it to face the camera, and the size carries the lift with it (at 2.5 the Lens of Truth hung a metre
+  over; at 1.5, some 40 cm more than at 1). Without the pose it is at the right height and lies edge-on, harder to
+  see than small. Both seen without a window, the Lens of Truth put on the vines.
 - `rando	est_chests.txt` (lines of `<a chest's hash> <an item>`) makes a chest give an item whatever the seed put
   there: for trying what comes after a gating item without playing up to it.
 - **What each Skulltula asks for** (`SKULLTULA_RULES`, 73 of the 100 by hash) is written from the original game's

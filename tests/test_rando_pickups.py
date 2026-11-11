@@ -134,6 +134,16 @@ def main():
     pouch = read(seed.sarc_read(seed.pickup_pack("Item_Thing", seed.sarc_write(said), seed.sarc_write(base), each_time=True))[POUCH % "Thing"])
     check(pouch["PlayGetEventManyTimes"] is True and pouch["GetType"] == 7, "how an item is got was changed where its file says it")
 
+    # (a small item is made larger, by its model's own setting; the others' models are left as they are)
+    seed.PICKUP_SCALES["Item_Thing"] = 1.5
+    try:
+        big = read(seed.sarc_read(seed.pickup_pack("Item_Thing", packed, seed.sarc_write(base)))["Component/ModelInfo/Item_Thing.bgyml"])
+    finally:
+        del seed.PICKUP_SCALES["Item_Thing"]
+    check(big["FmdbName"] == "Item_Thing" and all(abs(big["DebugModelScale"][axis] - 1.5) < 1e-6 for axis in "XYZ"),
+          "a small item's model is not made larger, or lost what it had")
+    check(all(1.0 < k <= 2.0 for k in seed.PICKUP_SCALES.values()), "an item is made smaller, or so large that it hangs far from where it is taken")
+
     # (a table that has a parent keeps it; a pack without the actor is not taken)
     kept = collections.OrderedDict(item)
     kept[TABLE % "Item_Thing"] = byml({"$parent": "Work/Other.gyml"})

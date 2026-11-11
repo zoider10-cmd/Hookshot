@@ -935,6 +935,16 @@ def pickup_family(item, item_pack):
     return [name.split("/")[1].split(".")[0] for name, _, _ in actor_chain(item, sarc_read(item_pack)) if name != chest]
 
 
+# An item's model is made to be held up over Link's head, seen from close: hanging where a Skulltula died the
+# smallest are hard to see (the Lens of Truth and the Goron's Bracelet, seen in play). These are made larger, by
+# their ModelInfo's DebugModelScale (the game's own dogs, light balls and a rolling rock have one that is not 1). The
+# model is as much larger in its chest's scene: the two are one actor. Not more than this: an item hangs in the
+# pose of that scene, about half a metre over the place it is taken at, and its size carries that with it (at 2.5
+# the Lens of Truth hung a metre over it; without the pose, its ASRef and ASInfoRef left out, it lay edge-on at
+# the right height: both seen without a window).
+PICKUP_SCALES = {"Item_GlassTruth": 1.5, "Item_Gauntlet_Goron": 1.5}
+
+
 # How an item is got, in its pouch file: "Large" is Link holding it up (the hash of the word, as the game's files have it)
 GET_LARGE = 1746592023
 
@@ -1013,6 +1023,11 @@ def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=
         sub, sub_version = byml_parse(files[first])
         sub[1]["DefaultAutoGet"] = (0xD0, struct.pack("<I", 1))
         files[first] = byml_build(sub, sub_version)
+    name = part("ModelInfoRef")
+    if name and item in PICKUP_SCALES:
+        sub, sub_version = byml_parse(files[name])
+        sub[1]["DebugModelScale"] = ("dict", collections.OrderedDict((axis, (0xD2, struct.pack("<f", PICKUP_SCALES[item]))) for axis in "XYZ"))
+        files[name] = byml_build(sub, sub_version)
     if first and each_time and not pouch_says("PlayGetEventManyTimes"):
         sub, sub_version = byml_parse(files[first])
         sub[1]["PlayGetEventManyTimes"] = (0xD0, struct.pack("<I", 1))
