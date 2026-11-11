@@ -241,6 +241,13 @@ By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron
   one's actor changed, in its own pack's copy, and the other's pack is made a pick-up with it (`pickup_family`). What
   is got by touching it already (a rupee, arrows, a magic jar: `DefaultAutoGet` in its pouch file or that one's
   parent) keeps its pouch file. Checks: `tests/test_rando_skulltulas.py`.
+- **Seen in play, Gold Skulltulas: All.** A chest gave a gold token with its text, and the count went up. A Skulltula
+  dropped a Deku Scrub's seed: it stayed in place, turned, and was collected by touch. A red rupee and a bomb bundle
+  (both `IsBundle` in their pouch file) were collected by touch too, but did not turn, and their model stayed where
+  it was afterwards, not to be touched again. **Open.** Not the pick-up itself: a red rupee put in the map in front
+  of Link and walked into without a window was collected with its text and was gone.
+- **Open: the Kokiri Sword's chest holding another item** still plays Link putting the sword on his back, and he can
+  use the sword until the next load; it is not in the inventory.
 - Seen in play with `Item_Boomerang` made a pick-up: its own chest still gives it, with its scene. Dropped by a Gold
   Skulltula it fell to the ground and Link picked it up, with a short animation over his head and no scene. A world
   rupee (`Obj_Rupee_Purple`) flew out, fell, and was collected with its text. A Heart Piece dropped by a Skulltula on
