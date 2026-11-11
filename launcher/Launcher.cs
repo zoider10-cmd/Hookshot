@@ -993,16 +993,16 @@ class LauncherForm : Form {
         widgets.Add(new Btn { Text = "Licence (GPL-3)", R = new RectangleF(cx + 232, 470, 170, 40), Page = 7, Click = () => OpenUrl(Fork.Home + "/blob/HEAD/LICENSE") });
 
         // (bottom row: folders)
-        widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 130, 42), Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
-        widgets.Add(new Btn { Text = "Import saves", R = new RectangleF(cx + 140, 612, 150, 42), Click = OnImport });
-        widgets.Add(new Btn { Text = "Game folder", R = new RectangleF(cx + 300, 612, 150, 42), Click = () => OpenFolder(dir) });
+        widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 104, 42), Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
+        widgets.Add(new Btn { Text = "Import saves", R = new RectangleF(cx + 112, 612, 128, 42), Click = OnImport });
+        widgets.Add(new Btn { Text = "Game folder", R = new RectangleF(cx + 248, 612, 124, 42), Click = () => OpenFolder(dir) });
         // (kept copies of the saves, of the folder the Randomizer setting names: more than the game's one save of the player's own)
-        widgets.Add(new Btn { Text = "Save copies", R = new RectangleF(cx + 460, 612, 150, 42),
+        widgets.Add(new Btn { Text = "Save copies", R = new RectangleF(cx + 380, 612, 122, 42),
                               Click = () => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } });
 
         // (Mako) the Recommended tab: this PC read once, and its Apply button
         BuildRecommendations();
-        widgets.Add(new Btn { Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 460, 612, cw - 460, 42), Page = 0, Click = OnApplyRecommended });
+        widgets.Add(new Btn { Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 510, 612, cw - 510, 42), Page = 0, Click = OnApplyRecommended });
 
         LoadAll();
         int first;
