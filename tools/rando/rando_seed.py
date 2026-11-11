@@ -559,8 +559,8 @@ def skulltulas(data):
 # Not known Skulltula by Skulltula yet, so each asks for too much: what its area's chests can ask for (RULES), and
 # what a Skulltula's place can ask for anywhere: the three stones, the Longshot (the Hookshot's reach and more) and
 # the Megaton Hammer. A Skulltula known better than that is in SKULLTULA_RULES, by its hash: what it asks for in
-# place of all that. A gating item only goes to a Skulltula a child's map has: its drop is brought in by the
-# Boomerang, seen in play; the Hookshot bringing an item in has not been seen, and an adult has no Boomerang.
+# place of all that. A drop is brought in by the Boomerang and by the Hookshot (both seen in play), so a gating item
+# goes to the child's Skulltulas and the adult's alike.
 SKULLTULA_ASKS = ADULT | {LONG, HAM}
 # (where a child goes: the overworld's maps say it in their name, <area>_Child_..., and a dungeon has one map for both)
 SKULLTULA_CHILD_DUNGEONS = ("InsideTheDekuTree", "DodongoCavern", "InsideJabuJabuBelly", "BottomOfTheWell")
@@ -1469,7 +1469,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + ((" skulltulas %d" + " gated" * logic_now) % a.skulltulas if a.skulltulas else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else ""))
@@ -1585,7 +1585,7 @@ def main():
             fixed = [(needs[h], spots[h][1]) for h in spots if h not in gives and spots[h][1] in PROGRESSION]
             gives, skull_drops, spheres, gated = gate_skulltulas(
                 random.Random("skulltulas gated:%d:%d:%d" % (seed, a.skulltulas, len(able))), gives, skull_drops,
-                [h for h in able if skulls[h][4]], needs, {h: skulltula_rule(h, skulls[h][0]) for h in able}, fixed)
+                able, needs, {h: skulltula_rule(h, skulls[h][0]) for h in able}, fixed)
             print("Gold Skulltulas: %d gating item%s now dropped by one" % (gated, "" if gated == 1 else "s"))
         for h, item in skull_drops.items():
             drops.setdefault(h, item)   # (a test's drop for the same Skulltula stays)

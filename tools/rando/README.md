@@ -279,9 +279,10 @@ not known without reading that format.
   gating item can still be got by the rules; the chest left behind gives the token. What a Skulltula asks for is not
   known one by one yet, so each asks for too much (`SKULLTULA_ASKS`: the three stones' items, the Longshot and the
   Megaton Hammer, with all its area can ask for); `SKULLTULA_RULES` is for the ones known better, by hash, and
-  `<game folder>/rando/skulltulas_to_check.txt` lists all 100 to be filled in. Only a Skulltula a child's map has is
-  given one (`_Child_` in the overworld map's name, or one of the child's four dungeons): its drop is brought in by
-  the Boomerang, seen in play, and the Hookshot bringing an item in has not been seen.
+  `<game folder>/rando/skulltulas_to_check.txt` lists all 100. A drop is brought in by the Boomerang and by the
+  Hookshot, both seen in play (the Hookshot on the House of Twins' Skulltula, an adult's at night, its Deku Scrub's
+  seed pulled in and got with its text, the Skulltula dead afterwards), so the adult's Skulltulas are given gating
+  items as the child's are.
 - **Seen in play, end to end:** the Lens of Truth, put by the logic on the Zora's River Skulltula in the soft soil in
   front of the bean seller (past the boulders: bombs, bugs), was got there. On the way the Goron's Bracelet
   (`Item_Gauntlet_Goron`, not in the pool) was made a pick-up and dropped by the Kokiri Forest night Skulltula
