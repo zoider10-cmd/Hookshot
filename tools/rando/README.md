@@ -37,6 +37,12 @@ shares the one randomizer folder. Saves made with the randomizer on before this 
 are in `user/save`: copy that folder to `user/save_rando` once to go on with them. Seen in play: a save made with the randomizer on
 is not listed with it off, and is there again with it on.
 
+**More saves than the game's one.** The game keeps one save of the player's own (`slot_00`) and five it makes itself;
+its load menu lists no more. The launcher's **Save copies** button keeps the whole save folder under a name
+(`user/save_copies/<save folder>/<name>`) and puts a kept copy back, after keeping the saves that were there as
+"Before restore <date and time>". The randomizer's copies and the normal game's are apart, as their saves are. A
+restore is refused while the game runs (`SaveCopies`, launcher/Launcher.cs; `tests/test_save_copies.py`).
+
 | Setting | What `rando_seed.py` does with it |
 |---|---|
 | Chests | Overworld / Dungeons / All: which chests take part. Their items are shuffled among them, across areas. |

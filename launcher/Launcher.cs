@@ -83,6 +83,182 @@ static class RandoId {
     }
 }
 
+// ---- kept copies of the saves ----
+// The game has one save of the player's own and five it makes itself (slot_00, and slot_01 to slot_05), and its load menu
+// lists no more. A kept copy is the whole save folder under a name, in <game folder>\user\save_copies\<save folder>\<name>:
+// the randomizer's saves (save_rando) and the normal game's (save) have their own. Restoring one puts it in the save
+// folder's place, after keeping what was there as a copy of its own, so that nothing is lost. tests/test_save_copies.py
+public static class SaveCopies {
+    public const string Folder = "save_copies";
+    public const string BeforeRestore = "Before restore ";
+
+    public static string Root(string dir, string saveFolder) { return Path.Combine(dir, "user", Folder, saveFolder); }
+
+    // (a name that can be a folder's: no path, no character Windows refuses, no dot or space at its end)
+    public static string Clean(string name) {
+        var sb = new StringBuilder();
+        foreach (char c in name ?? "")
+            if (Array.IndexOf(Path.GetInvalidFileNameChars(), c) < 0 && c >= ' ') sb.Append(c);
+        string n = sb.ToString().Trim().TrimEnd('.', ' ');
+        return n.Length > 80 ? n.Substring(0, 80).TrimEnd('.', ' ') : n;
+    }
+
+    // (the copies, the newest first)
+    public static List<string> List(string dir, string saveFolder) {
+        var found = new List<string>();
+        string root = Root(dir, saveFolder);
+        if (!Directory.Exists(root)) return found;
+        var dirs = new List<DirectoryInfo>(new DirectoryInfo(root).GetDirectories());
+        dirs.Sort((a, b) => b.CreationTimeUtc.CompareTo(a.CreationTimeUtc));
+        foreach (var d in dirs) found.Add(d.Name);
+        return found;
+    }
+
+    static void CopyTree(string from, string to) {
+        Directory.CreateDirectory(to);
+        foreach (string f in Directory.GetFiles(from)) File.Copy(f, Path.Combine(to, Path.GetFileName(f)), true);
+        foreach (string d in Directory.GetDirectories(from)) CopyTree(d, Path.Combine(to, Path.GetFileName(d)));
+    }
+
+    static bool HasFiles(string path) {
+        return Directory.Exists(path) && Directory.GetFiles(path, "*", SearchOption.AllDirectories).Length > 0;
+    }
+
+    // Keeps the save folder as a copy named `name`. Returns null, or what went wrong. A copy of that name is not replaced.
+    public static string Keep(string dir, string saveFolder, string name) {
+        string clean = Clean(name);
+        if (clean.Length == 0) return "Give the copy a name.";
+        string from = Path.Combine(dir, "user", saveFolder), to = Path.Combine(Root(dir, saveFolder), clean);
+        if (!HasFiles(from)) return "There are no saves to copy yet.";
+        if (Directory.Exists(to)) return "There is already a copy named \"" + clean + "\".";
+        string part = to + ".part";
+        try {
+            if (Directory.Exists(part)) Directory.Delete(part, true);
+            CopyTree(from, part);
+            Directory.Move(part, to);   // (whole, or not there)
+            return null;
+        } catch (Exception ex) {
+            try { if (Directory.Exists(part)) Directory.Delete(part, true); } catch { }
+            return ex.Message;
+        }
+    }
+
+    // Puts the copy named `name` in the save folder's place. What was there is kept first, as "Before restore <date and
+    // time>", unless it is empty. Returns null, or what went wrong (then the saves are as they were).
+    public static string Restore(string dir, string saveFolder, string name, DateTime now) {
+        string from = Path.Combine(Root(dir, saveFolder), name), to = Path.Combine(dir, "user", saveFolder);
+        if (name != Clean(name) || !HasFiles(from)) return "That copy is not there any more.";
+        if (HasFiles(to)) {
+            string stem = BeforeRestore + now.ToString("yyyy-MM-dd HH.mm.ss"), kept = stem;
+            for (int i = 2; Directory.Exists(Path.Combine(Root(dir, saveFolder), kept)); i++) kept = stem + " (" + i + ")";
+            string error = Keep(dir, saveFolder, kept);
+            if (error != null) return "The saves you have now could not be kept first, so nothing was changed:\n" + error;
+        }
+        string old = to + ".old";
+        try {
+            if (Directory.Exists(old)) Directory.Delete(old, true);
+            if (Directory.Exists(to)) Directory.Move(to, old);
+            try { CopyTree(from, to); }
+            catch {
+                try { if (Directory.Exists(to)) Directory.Delete(to, true); } catch { }
+                if (Directory.Exists(old)) Directory.Move(old, to);   // (as they were)
+                throw;
+            }
+            if (Directory.Exists(old)) Directory.Delete(old, true);
+            return null;
+        } catch (Exception ex) { return ex.Message; }
+    }
+
+    public static string Delete(string dir, string saveFolder, string name) {
+        string path = Path.Combine(Root(dir, saveFolder), name);
+        if (name != Clean(name) || name.Length == 0 || !Directory.Exists(path)) return "That copy is not there any more.";
+        try { Directory.Delete(path, true); return null; } catch (Exception ex) { return ex.Message; }
+    }
+}
+
+// (the window of the Save copies button: a name to keep the saves under, and the copies kept, to restore or delete)
+class SaveCopiesForm : Form {
+    readonly string dir, saveFolder;
+    readonly TextBox name = new TextBox();
+    readonly ListBox list = new ListBox();
+    readonly Button keep = new Button(), restore = new Button(), delete = new Button(), close = new Button();
+
+    public SaveCopiesForm(string dir, string saveFolder) {
+        this.dir = dir; this.saveFolder = saveFolder;
+        bool rando = saveFolder == "save_rando";
+        Text = "Save copies: " + (rando ? "the randomizer's saves" : "the normal game's saves");
+        FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(520, 430);
+        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        var top = new Label { Text = "Keep the saves you have now under a name:", AutoSize = true, Location = new Point(16, 14) };
+        name.SetBounds(16, 40, 368, 26); name.MaxLength = 80;
+        name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
+        Style(keep, "Keep a copy", 394, 38, 110);
+        var mid = new Label { Text = "Kept copies, the newest first:", AutoSize = true, Location = new Point(16, 84) };
+        list.SetBounds(16, 110, 488, 232); list.IntegralHeight = false;
+        list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
+        Style(restore, "Restore", 16, 354, 110); Style(delete, "Delete", 136, 354, 110); Style(close, "Close", 394, 354, 110);
+        var foot = new Label { Text = "Restoring keeps the saves you have now as a copy first. Close the game before restoring.",
+                               AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 396), Size = new Size(488, 24), Font = new Font("Segoe UI", 8.5f) };
+        Controls.AddRange(new Control[] { top, name, keep, mid, list, restore, delete, close, foot });
+        AcceptButton = keep; CancelButton = close;
+        keep.Click += (o, e) => OnKeep();
+        restore.Click += (o, e) => OnRestore();
+        delete.Click += (o, e) => OnDelete();
+        close.Click += (o, e) => Close();
+        list.SelectedIndexChanged += (o, e) => Buttons();
+        list.DoubleClick += (o, e) => OnRestore();
+        Fill(null);
+    }
+
+    static void Style(Button b, string text, int x, int y, int w) {
+        b.Text = text; b.SetBounds(x, y, w, 30); b.FlatStyle = FlatStyle.Flat;
+        b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+    }
+
+    void Buttons() { restore.Enabled = delete.Enabled = list.SelectedIndex >= 0; }
+
+    void Fill(string select) {
+        list.Items.Clear();
+        foreach (string n in SaveCopies.List(dir, saveFolder)) list.Items.Add(n);
+        if (select != null) list.SelectedItem = select;
+        Buttons();
+    }
+
+    void Say(string text, MessageBoxIcon icon) { MessageBox.Show(this, text, "Save copies", MessageBoxButtons.OK, icon); }
+
+    void OnKeep() {
+        string n = SaveCopies.Clean(name.Text);
+        string error = SaveCopies.Keep(dir, saveFolder, n);
+        if (error != null) { Say(error, MessageBoxIcon.Warning); return; }
+        name.Text = "";
+        Fill(n);
+    }
+
+    void OnRestore() {
+        if (list.SelectedIndex < 0) return;
+        string n = (string)list.SelectedItem;
+        if (LauncherForm.GameRunning()) { Say("Close the game first: it would write its own saves over the restored ones.", MessageBoxIcon.Information); return; }
+        if (MessageBox.Show(this, "Restore \"" + n + "\"?\n\nThe saves you have now are kept as a copy first.", "Save copies",
+                            MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+        string error = SaveCopies.Restore(dir, saveFolder, n, DateTime.Now);
+        if (error != null) { Say(error, MessageBoxIcon.Warning); Fill(n); return; }
+        Fill(n);
+        Say("\"" + n + "\" is restored. It is in the game's load menu at the next start.", MessageBoxIcon.Information);
+    }
+
+    void OnDelete() {
+        if (list.SelectedIndex < 0) return;
+        string n = (string)list.SelectedItem;
+        if (MessageBox.Show(this, "Delete the copy \"" + n + "\"? It cannot be brought back.\n\nThe saves in the game are not touched.", "Save copies",
+                            MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
+        string error = SaveCopies.Delete(dir, saveFolder, n);
+        if (error != null) Say(error, MessageBoxIcon.Warning);
+        Fill(null);
+    }
+}
+
 static class Fork {
     public const string Name = "Mako";
     // (the update check compares the first number of the tags: the first Mako release must be numbered above amd-fix-2.1, or the
@@ -592,6 +768,9 @@ class LauncherForm : Form {
         widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 130, 42), Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
         widgets.Add(new Btn { Text = "Import saves", R = new RectangleF(cx + 140, 612, 150, 42), Click = OnImport });
         widgets.Add(new Btn { Text = "Game folder", R = new RectangleF(cx + 300, 612, 150, 42), Click = () => OpenFolder(dir) });
+        // (kept copies of the saves, of the folder the Randomizer setting names: more than the game's one save of the player's own)
+        widgets.Add(new Btn { Text = "Save copies", R = new RectangleF(cx + 460, 612, 150, 42),
+                              Click = () => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } });
 
         LoadAll();
         int first;
@@ -1334,7 +1513,7 @@ class LauncherForm : Form {
     }
 
     // ---- play and folders ----
-    static bool GameRunning() { return Process.GetProcessesByName(Path.GetFileNameWithoutExtension(Fork.GameExe)).Length > 0; }
+    public static bool GameRunning() { return Process.GetProcessesByName(Path.GetFileNameWithoutExtension(Fork.GameExe)).Length > 0; }
 
     void OpenFolder(string path) {
         try {
