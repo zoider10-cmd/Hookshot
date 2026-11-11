@@ -20,8 +20,9 @@
    is copied from it.
 
    What is not here: the item placement. tools/rando/rando_seed.py reads rando_on, rando_seed, rando_chests,
-   rando_skulltulas, rando_keys, rando_major, rando_open_deku, rando_open_forest and rando_skip_intro, shuffles the
-   chests and the Gold Skulltulas' drops and makes the last three's changes as a mod (the launcher runs it at Play); the other settings are not placed yet
+   rando_skulltulas, rando_quests (with rando_frogs and rando_light_arrows), rando_keys, rando_major, rando_open_deku,
+   rando_open_forest and rando_skip_intro, shuffles the chests, the Gold Skulltulas' drops and some characters' gifts and
+   makes the open ways' and the opening's changes as a mod (the launcher runs it at Play); the other settings are not placed yet
    (host/oot_rando.c). */
 #ifndef OOT_RANDO_H
 #define OOT_RANDO_H
@@ -42,7 +43,7 @@
       "Which Gold Skulltulas take part: their tokens change places with the chests' supplies (all but rupees). Needs Chests.", \
       "Off", "Dungeons", "Overworld", "All") \
     X(QUESTS, "Quest rewards", "rando_quests", \
-      "What characters give you is shuffled: gifts, side quests, mini-games and the Gold Skulltula family's rewards.", \
+      "What some characters give takes part with the chests: Darunia, mini-games, side quests and the Gold Skulltula family. Needs Chests.", \
       "Off", "On") \
     X(SONGS, "Songs", "rando_songs", \
       "Song spots: the songs are shuffled among the places that teach one. Anywhere: a song can be any item's place.", \
@@ -73,6 +74,12 @@
       "Off", "On") \
     X(SKIP_INTRO, "Skip opening", "rando_skip_intro", \
       "A new game starts in Link's house, without the narration and Navi's flight.", \
+      "Off", "On") \
+    X(FROGS, "Frogs", "rando_frogs", \
+      "With Quest rewards: the frogs of Zora's River take part too.", \
+      "Off", "On") \
+    X(LIGHT_ARROWS, "Light Arrows", "rando_light_arrows", \
+      "With Quest rewards: the Light Arrows Zelda gives take part too, and can be anywhere.", \
       "Off", "On")
 
 enum {

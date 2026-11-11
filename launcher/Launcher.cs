@@ -682,13 +682,13 @@ class LauncherForm : Form {
     // seed's ID is copied and pasted)
     static readonly object[][] RandoRows = {
         new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
-            "Turns the seed on. Chests, Gold Skulltulas, Dungeon keys, Major items, the forest's two ways and the opening are made when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
+            "Turns the seed on. Chests, Gold Skulltulas, Quest rewards (with Frogs and Light Arrows), Dungeon keys, Major items, the forest's two ways and the opening are made when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
         new object[] { "rando_chests", "Chests", new[] { "Off", "Overworld", "Dungeons", "All" }, new[] { 0, 1, 2, 3 },
             "Which treasure chests hold a shuffled item. All is every chest in the game." },
         new object[] { "rando_skulltulas", "Gold Skulltulas", new[] { "Off", "Dungeons", "Overworld", "All" }, new[] { 0, 1, 2, 3 },
             "Which Gold Skulltulas take part: their tokens change places with the chests' supplies (all but rupees). Needs Chests." },
         new object[] { "rando_quests", "Quest rewards", new[] { "Off", "On" }, new[] { 0, 1 },
-            "What characters give you is shuffled: gifts, side quests, mini-games and the Gold Skulltula family's rewards." },
+            "What some characters give takes part with the chests: Darunia, mini-games, side quests and the Gold Skulltula family. Needs Chests." },
         new object[] { "rando_songs", "Songs", new[] { "Off", "Song spots", "Anywhere" }, new[] { 0, 1, 2 },
             "Song spots: the songs are shuffled among the places that teach one. Anywhere: a song can be any item's place." },
         new object[] { "rando_heart_pieces", "Heart Pieces", new[] { "Off", "On" }, new[] { 0, 1 },
@@ -709,6 +709,10 @@ class LauncherForm : Form {
             "A new game's way out of Kokiri Forest is open from the start: Link can leave before the Deku Tree is done." },
         new object[] { "rando_skip_intro", "Skip opening", new[] { "Off", "On" }, new[] { 0, 1 },
             "A new game starts in Link's house, without the narration and Navi's flight." },
+        new object[] { "rando_frogs", "Frogs", new[] { "Off", "On" }, new[] { 0, 1 },
+            "With Quest rewards: the frogs of Zora's River take part too." },
+        new object[] { "rando_light_arrows", "Light Arrows", new[] { "Off", "On" }, new[] { 0, 1 },
+            "With Quest rewards: the Light Arrows Zelda gives take part too, and can be anywhere." },
     };
     // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and

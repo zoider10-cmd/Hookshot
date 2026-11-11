@@ -150,6 +150,98 @@ RULES = {
 }
 
 
+# ---- Quest rewards: the gifts that take part, and what they add to the rules ----
+# With Quest rewards on, what some characters give takes part with the chests: a gift is a spot like a chest, its
+# item goes into the pool and the scene gives what the shuffle put there (gift_items). Which scenes, who gives and what
+# each asks for were gone through with the game's owner (the list of every gift of the game's flows, 164 lines, and
+# the answers: <game folder>\rando\gifts_to_check.txt).
+# Two of the gifts' items gate the game, so with the setting on they are gating items too (QUEST_GATES) and the rules
+# name them (quest_need): the Goron's Bracelet, without which bombs cannot be used (found in play) nor Dodongo's
+# Cavern entered, and the Silver Scale, for Ruto's Letter at the bottom of Lake Hylia, so for Jabu-Jabu and all that
+# an adult does. Off, they are where the game has them and the rules are as they were: the seeds made before keep
+# their shuffle.
+# NOT in the shuffle yet, each for a reason found in its flow (they stay as the game has them):
+#   the six Great Fairies            ask "has Link got my item" (IsGet.Item_...): another item would be given at
+#                                    every visit, and theirs found elsewhere would shut the fountain
+#   the Goron and Zora Tunics        the same, by what is in the pouch (Armor_Adult_Goron, Armor_Adult_Zora)
+#   Biggoron's Sword, the lake       the same (Weapon_Sword_Giant; Item_Scale_Gold)
+#   scientist's Piece of Heart
+#   the two ocarinas                 put in the pouch by the scene itself, not through the gift's flow
+#   the Gerudo's card                many scenes ask for it: to be looked at
+#   Dampe's Piece of Heart           is dropped from the hole as an actor of its own, then picked up
+BR, SSC = "Item_Gauntlet_Goron", "Item_Scale_Silver"
+QUEST_GATES = frozenset((BR, SSC))
+CHILD_BOMBS = CHILD | {BB, BR}
+GROWN = ADULT | QUEST_GATES
+Gift = collections.namedtuple("Gift", "key flow olds item area name need when")
+# key: its name in the seed (never changed: a gift's place in the shuffle). flow: the scene's flow. olds: the items
+# the flow names for this gift (a prize of sizes names two: the one Link has not got yet is given); each is made the
+# gift's new item. item: what goes into the pool for it. area: the Banc folder its rules and the tracker count it in.
+# need: what Link needs (meant to ask for too much, never too little; where the way to it is not known in the terms of
+# the rules it asks for everything: such a gift only ever holds what the game can be finished without).
+# when: None, or the setting of its own it waits for ("frogs", "light").
+EVERYTHING = PROGRESSION | QUEST_GATES
+GIFTS = (
+    Gift("darunia", "Dm_Goron_0030", ("Item_Gauntlet_Goron",), BR, "GoronCity", "Darunia's gift", CHILD, None),
+    Gift("lostwood_target", "Dm_LostWood_0040", ("Item_BulletBag_Medium", "Item_BulletBag_Large"), "Item_BulletBag_Medium", "LostWood",
+         "the Lost Woods target", CHILD, None),
+    Gift("skulltula_house_10", "GatheringTokenGold", ("Item_Wallet_Medium",), "Item_Wallet_Medium", "KakarikoVillage",
+         "the Skulltula house: 10 tokens", EVERYTHING, None),   # (tokens: the logic does not count them yet)
+    Gift("skulltula_house_20", "GatheringTokenGold", ("Item_AgonyStone",), "Item_AgonyStone", "KakarikoVillage",
+         "the Skulltula house: 20 tokens", EVERYTHING, None),
+    Gift("skulltula_house_30", "GatheringTokenGold", ("Item_Wallet_Large",), "Item_Wallet_Large", "KakarikoVillage",
+         "the Skulltula house: 30 tokens", EVERYTHING, None),
+    Gift("skulltula_house_50", "GatheringTokenGold", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "KakarikoVillage",
+         "the Skulltula house: 50 tokens", EVERYTHING, None),
+    Gift("forest_stage_skull", "LostWood_ScrubForestStageElder_SkullMaskFirst", ("Item_StickBag_Medium", "Item_StickBag_Large"),
+         "Item_StickBag_Medium", "LostWood", "the Forest Stage: the Skull Mask", CHILD, None),
+    Gift("forest_stage_truth", "LostWood_ScrubForestStageElder_TrueMaskFirst", ("Item_NutBag_Medium", "Item_NutBag_Large"),
+         "Item_NutBag_Medium", "LostWood", "the Forest Stage: the Mask of Truth", GROWN, None),
+    Gift("bowling_bag", "MiniGame_BombchuBowling", ("Item_BombBag_Medium", "Item_BombBag_Large"), "Item_BombBag_Large", "Market",
+         "Bombchu Bowling: the bag", CHILD_BOMBS, None),
+    Gift("bowling_heart", "MiniGame_BombchuBowling", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "Market",
+         "Bombchu Bowling: the Piece of Heart", CHILD_BOMBS, None),
+    Gift("diving", "MiniGame_Diving", ("Item_Scale_Silver",), SSC, "ZoraDomain", "the Zoras' diving game", CHILD_BOMBS, None),
+    Gift("fishing_child", "MiniGame_Fishing", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "HyruleField", "the fishing pond, as a child", CHILD, None),
+    Gift("fishing_adult", "MiniGame_Fishing", ("Item_Scale_Gold",), "Item_Scale_Gold", "HyruleField", "the fishing pond, as an adult", GROWN, None),
+    Gift("frogs", "MiniGame_FrogTenors", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "ZoraRiver", "the frogs of Zora's River", GROWN, "frogs"),
+    Gift("gallery_market", "MiniGame_HitTarget", ("Item_BulletBag_Medium", "Item_BulletBag_Large"), "Item_BulletBag_Large", "Market",
+         "the Market's shooting gallery", CHILD, None),
+    Gift("gallery_kakariko", "MiniGame_HitTarget", ("Item_Quiver_Medium", "Item_Quiver_Large"), "Item_Quiver_Medium", "KakarikoVillage",
+         "Kakariko's shooting gallery", GROWN | {BOW}, None),
+    Gift("cucco_lady", "Minigame_CatchCucco", ("Item_Bottle",), "Item_Bottle", "KakarikoVillage", "the cucco lady", CHILD, None),
+    Gift("archery_heart", "Minigame_HorsebackArchery", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "GerudoFortress",
+         "horseback archery: 1000 points", GROWN | {BOW}, None),
+    Gift("archery_quiver", "Minigame_HorsebackArchery", ("Item_Quiver_Medium", "Item_Quiver_Large"), "Item_Quiver_Large", "GerudoFortress",
+         "horseback archery: 1500 points", GROWN | {BOW}, None),
+    Gift("rolling_goron", "Npc_Goron_006_Child", ("Item_BombBag_Medium", "Item_BombBag_Large"), "Item_BombBag_Medium", "GoronCity",
+         "the rolling Goron", CHILD_BOMBS, None),
+    Gift("roof_man", "Npc_Hylia_001_Adult", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "KakarikoVillage",
+         "the man on the roof", GROWN, None),   # (the Hookshot, said its owner, not sure: it is Dampe's, an adult's)
+    Gift("skull_kid_song", "Npc_SkullKid_Child", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "LostWood", "the Skull Kid: Saria's Song", CHILD, None),
+    Gift("skull_kid_game", "Npc_SkullKid_Child_02", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "LostWood", "the Skull Kids' memory game", CHILD, None),
+    Gift("dog_lady", "SubEvent_FindRichard", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "Market", "the dog lady", CHILD, None),
+    Gift("light_arrows", "Dm_TimeTemple_0130", ("Item_Arrow_Light",), "Item_Arrow_Light", "Market", "Zelda: the Light Arrows",
+         MEDALS3 | DESERT | {LENS, HOVER, SG, BOW, MS} | QUEST_GATES, "light"),
+)
+
+
+def gift_hash(key):
+    """a gift's place among the chests' hashes: its own, the same in every seed (no chest's is this high)"""
+    return 0xF1F7000000000000 | zlib.crc32(key.encode())
+
+
+def quest_need(need, area):
+    """what a chest or a Gold Skulltula asks for (by the rules made before Quest rewards) with the gifts' two gating
+    items named: the bracelet wherever bombs are, and in Dodongo's Cavern; the Silver Scale wherever an adult is"""
+    need = set(need)
+    if BB in need or area == "DodongoCavern":
+        need.add(BR)
+    if need >= ADULT:
+        need.add(SSC)
+    return frozenset(need)
+
+
 def rule(area, event):
     """what a chest of this area with this event asks for; an area the rules do not know: everything"""
     default, by_event = RULES.get(area, (PROGRESSION, {}))
@@ -715,11 +807,12 @@ def skulltula_rule(h, area):
     return SKULLTULA_RULES.get(h, rule(area, "") | SKULLTULA_ASKS)
 
 
-def gate_skulltulas(rng, gives, drops, skulls, needs, skull_needs, fixed, share=SKULLTULA_GATING_SHARE):
+def gate_skulltulas(rng, gives, drops, skulls, needs, skull_needs, fixed, share=SKULLTULA_GATING_SHARE, never=()):
     """Some of the gating items the logic put in chests (gives) moved to Gold Skulltulas that still drop their token
     (skulls: hashes, in a fixed order; drops: the ones that do not), each only if every gating item can still be
     got by the rules. The chest it leaves gives the token. needs and skull_needs: what a chest and a Skulltula ask
     for; fixed: [(what it asks for, the item)] of the gating items in chests that stay.
+    never: gating items that are not tried (one not seen dropped by a Skulltula yet).
     Returns (what the chests give, what the Skulltulas drop, the spheres, how many were moved)."""
     gives, drops = dict(gives), dict(drops)
     where = {i: (False, h) for h, i in gives.items() if i in PROGRESSION}   # item -> (on a Skulltula, the hash)
@@ -732,6 +825,7 @@ def gate_skulltulas(rng, gives, drops, skulls, needs, skull_needs, fixed, share=
     rng.shuffle(free)
     order = sorted(where)
     rng.shuffle(order)
+    order = [i for i in order if i not in never]   # (after the shuffle: the seeds made before `never` keep theirs)
     moved = 0
     for item in order:
         if not free or rng.random() >= share:
@@ -1277,6 +1371,13 @@ def gift_item(data, old, new):
     """An event flow (a BFEVFL file) with every sub-flow call's parameter that is the string `old` made the string
     `new`: the new bytes (longer by the new string, the file's size in its header raised), or None when no call has
     it. The other strings and every other pointer are as they were."""
+    return gift_items(data, {old: new})[0]
+
+
+def gift_items(data, swaps):
+    """gift_item for several items of one flow at once: swaps is {old: new}. All are found before any is changed, so
+    that one gift's new item is not taken for another's old one (a flow with two gifts whose items changed places).
+    Returns (the new bytes, or None when no call has any of them; the olds that were found)."""
     u16 = lambda at: struct.unpack_from("<H", data, at)[0]
     u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
     if data[:6] != b"BFEVFL" or u16(0x20) != 1 or struct.unpack_from("<I", data, 0x1c)[0] != len(data):
@@ -1299,20 +1400,22 @@ def gift_item(data, old, new):
             continue
         for k in range(u16(params + 2)):
             item = u64(params + 0x10 + 8 * k)
-            if data[item] == 5 and u16(item + 2) == 1 and text(u64(item + 0x10)) == old:   # (5: a string of its own, not a name passed on)
-                where.append(item + 0x10)
+            if data[item] == 5 and u16(item + 2) == 1 and text(u64(item + 0x10)) in swaps:   # (5: a string of its own, not a name passed on)
+                where.append((item + 0x10, swaps[text(u64(item + 0x10))], text(u64(item + 0x10))))
     if not where:
-        return None
+        return None, set()
     out = bytearray(data)
+    at = {}
+    for pointer, new, _ in where:
+        if new not in at:   # (each new name once, at the file's end)
+            out += b"\0" * (-len(out) % 8)
+            at[new] = len(out)
+            name = new.encode("utf-8")
+            out += struct.pack("<H", len(name)) + name + b"\0"
+        struct.pack_into("<Q", out, pointer, at[new])
     out += b"\0" * (-len(out) % 8)
-    at = len(out)
-    name = new.encode("utf-8")
-    out += struct.pack("<H", len(name)) + name + b"\0"
-    out += b"\0" * (-len(out) % 8)
-    for pointer in where:
-        struct.pack_into("<Q", out, pointer, at)
     struct.pack_into("<I", out, 0x1c, len(out))
-    return bytes(out)
+    return bytes(out), {old for _, _, old in where}
 
 
 def size_entry(size, extra=264):
@@ -1416,7 +1519,7 @@ def dictionaries(romfs, zs):
 def settings(game):
     """the randomizer's lines of the options file (0 where it does not say)"""
     got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
-           "rando_skip_intro": 0, "rando_skulltulas": 0}
+           "rando_skip_intro": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -1464,17 +1567,20 @@ AREA_NAMES = {
 }
 
 
-def tracker_lines(chests, skulls):
-    """The tracker file's lines. chests and skulls: {area (the Banc folder): how many of them take part}. A line for
-    the whole game, then one for each area that has any, by its name; no more than the menu has rows for."""
-    def what(c, k):
+def tracker_lines(chests, skulls, gifts=None):
+    """The tracker file's lines. chests, skulls and gifts: {area (the Banc folder): how many of them take part}. A
+    line for the whole game, then one for each area that has any, by its name; no more than the menu has rows for."""
+    gifts = gifts or {}
+
+    def what(c, k, g):
         parts = (["%d chest%s" % (c, "" if c == 1 else "s")] if c else []) + (["%d Gold Skulltula%s" % (k, "" if k == 1 else "s")] if k else [])
+        parts += ["%d gift%s" % (g, "" if g == 1 else "s")] if g else []
         return ", ".join(parts) or "nothing"
 
-    areas = sorted(set(chests) | set(skulls), key=lambda a: AREA_NAMES.get(a, a).lower())
-    areas = [a for a in areas if chests.get(a, 0) or skulls.get(a, 0)]
-    rows = [("The whole game", what(sum(chests.values()), sum(skulls.values())))]
-    rows += [(AREA_NAMES.get(a, a), what(chests.get(a, 0), skulls.get(a, 0))) for a in areas]
+    areas = sorted(set(chests) | set(skulls) | set(gifts), key=lambda a: AREA_NAMES.get(a, a).lower())
+    areas = [a for a in areas if chests.get(a, 0) or skulls.get(a, 0) or gifts.get(a, 0)]
+    rows = [("The whole game", what(sum(chests.values()), sum(skulls.values()), sum(gifts.values())))]
+    rows += [(AREA_NAMES.get(a, a), what(chests.get(a, 0), skulls.get(a, 0), gifts.get(a, 0))) for a in areas]
     if len(rows) > TRACKER_ROWS:   # (more areas than rows: the last row says so)
         rows = rows[:TRACKER_ROWS - 1] + [("And %d more areas" % (len(rows) - TRACKER_ROWS + 1), "see the spoiler")]
     return ["# The checks of this seed in each area, for the menu's Tracker tab: <name>|<what>"] + [
@@ -1513,7 +1619,7 @@ def place(rng, spots, which, keys_mode, needs=None):
     stays = collections.Counter()
     pool = []
     for h, (area, item, dungeon, why) in spots.items():
-        if not why and (which == 1 and dungeon or which == 2 and not dungeon):
+        if not why and dungeon is not None and (which == 1 and dungeon or which == 2 and not dungeon):   # (None: a gift, of neither kind)
             why = "not this Chests setting's"
         if not why and keys_mode == 0 and item in DUNGEON_ITEMS:
             why = "a dungeon's key, map or compass (Dungeon keys: Off)"
@@ -1580,6 +1686,9 @@ def main():
     p.add_argument("--skip-intro", action="store_true", help="as rando_skip_intro=1: a new game starts in Link's house, without the two opening cutscenes")
     p.add_argument("--skulltulas", type=int, choices=(0, 1, 2, 3), help="in place of rando_skulltulas: the Gold Skulltulas whose tokens change places "
                                                                         "with the chests' rupees and supplies. 1 dungeons, 2 overworld, 3 all")
+    p.add_argument("--quests", action="store_true", help="as rando_quests=1: what characters give takes part with the chests (GIFTS)")
+    p.add_argument("--frogs", action="store_true", help="as rando_frogs=1: with Quest rewards, the frogs of Zora's River take part too")
+    p.add_argument("--light-arrows", action="store_true", help="as rando_light_arrows=1: with Quest rewards, Zelda's Light Arrows take part too")
     p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already this seed's (the launcher, at Play)")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
     a = p.parse_args()
@@ -1612,6 +1721,9 @@ def main():
     a.skip_intro = a.skip_intro or ini["rando_skip_intro"] != 0
     a.skulltulas = a.skulltulas if a.skulltulas is not None else ini["rando_skulltulas"]
     a.skulltulas = a.skulltulas if 0 <= a.skulltulas <= 3 else 0
+    a.quests = a.quests or ini["rando_quests"] != 0
+    a.frogs = a.quests and (a.frogs or ini["rando_frogs"] != 0)
+    a.light_arrows = a.quests and (a.light_arrows or ini["rando_light_arrows"] != 0)
     # A test: <game folder>\rando\test_drops.txt, lines of "<an actor's hash> <an item>": that actor (a Gold Skulltula,
     # say) drops the item. For finding how the other kinds of check hold what they give; not a setting.
     drops = {}
@@ -1658,6 +1770,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -1748,16 +1861,27 @@ def main():
                     s[3] = s[3] or "is in two areas' files"
                 s[3] = s[3] or why
                 s[2] = s[2] or dungeon
+    # ---- Quest rewards: the gifts that take part, as spots among the chests' ----
+    gifts = collections.OrderedDict()   # its hash -> the Gift
+    if a.quests:
+        global PROGRESSION
+        PROGRESSION = PROGRESSION | QUEST_GATES
+        for g in GIFTS:
+            if g.when is None or g.when == "frogs" and a.frogs or g.when == "light" and a.light_arrows:
+                gifts[gift_hash(g.key)] = g
+                spots[gift_hash(g.key)] = [g.area, g.item, None, None, "gift", g.name, ""]
     # (a string seed: the same on every Python 3. The seeds made before --event-chests keep their shuffle without it)
     logic = a.event_chests and not a.no_logic   # (without the event chests no gating item moves: nothing to ask)
     rng = random.Random("stage2:%d:%d:%d%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else ""))
     needs = {h: rule(s[0], s[6]) for h, s in spots.items()}
+    if a.quests:   # (the rules with the gifts' two gating items named; a gift asks for what its line of GIFTS says)
+        needs = {h: gifts[h].need if h in gifts else quest_need(n, spots[h][0]) for h, n in needs.items()}
     try:
         gives, stays, spheres = place(rng, collections.OrderedDict((h, tuple(s[:4])) for h, s in spots.items()), which, keys_mode,
                                       needs if logic else None)
     except ValueError as e:
         sys.exit("%s. Nothing written. Try Chests: All, or --no-logic." % e)
-    unknown = sorted({s[0] for s in spots.values() if s[0] not in RULES})
+    unknown = sorted({s[0] for h, s in spots.items() if s[0] not in RULES and h not in gifts})
 
     # (the game's own count of each item is kept: every item given was some chest's)
     before = collections.Counter(spots[h][1] for h in gives)
@@ -1774,7 +1898,8 @@ def main():
             fixed = [(needs[h], spots[h][1]) for h in spots if h not in gives and spots[h][1] in PROGRESSION]
             gives, skull_drops, spheres, gated = gate_skulltulas(
                 random.Random("skulltulas gated:%d:%d:%d" % (seed, a.skulltulas, len(able))), gives, skull_drops,
-                able, needs, {h: skulltula_rule(h, skulls[h][0]) for h in able}, fixed)
+                able, needs, {h: quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0])
+                              for h in able}, fixed, never=(SSC,) if a.quests else ())
             print("Gold Skulltulas: %d gating item%s now dropped by one" % (gated, "" if gated == 1 else "s"))
         for h, item in skull_drops.items():
             drops.setdefault(h, item)   # (a test's drop for the same Skulltula stays)
@@ -1809,8 +1934,12 @@ def main():
         if new is not None:
             changed[rel] = new
             sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
-    moved = sum(1 for h, item in gives.items() if item != spots[h][1])
-    print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives), moved, len(changed)))
+    moved = sum(1 for h, item in gives.items() if item != spots[h][1] and h not in gifts)
+    print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives) - len(gifts), moved, len(changed)))
+    if a.quests:
+        print("Quest rewards: %d gifts take part%s%s, %d now give another item" % (
+            len(gifts), "" if a.frogs else " (not the frogs: their setting is off)", "" if a.light_arrows else " (not the Light Arrows: their setting is off)",
+            sum(1 for h, g in gifts.items() if gives[h] != g.item)))
     for why, n in stays.most_common():
         print("  left alone: %d (%s)" % (n, why))
     if len(drops) > len(skull_drops):
@@ -1892,18 +2021,25 @@ def main():
             len(pickups), "" if len(pickups) == 1 else "s", ", ".join(pickups)))
 
     # ---- TEST: a character's gift made another item ----
+    # ---- the gifts: each scene's flow made to give what the shuffle put there (and the tests' of test_gifts.txt) ----
     gift_files, gift_sizes = {}, {}
+    swaps = collections.OrderedDict()   # a flow -> {the item it names: the item it gives now}
+    for h, g in gifts.items():
+        if gives[h] != g.item:
+            swaps.setdefault(g.flow, {}).update((old, gives[h]) for old in g.olds)
     for flow, old, new in test_gifts:
+        swaps.setdefault(flow, {})[old] = new
+        print("TEST: %s gives %s in place of %s (rando\\test_gifts.txt)" % (flow, new, old))
+    for flow, change in swaps.items():
         rel = "%s/%s.bfevfl.zs" % (GIFT_FLOWS, flow)
         try:
-            was = gift_files.get(rel) or unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
-            now = gift_item(was, old, new)
+            now, found = gift_items(unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts), change)
         except (OSError, ValueError, struct.error) as e:
-            sys.exit("rando\\test_gifts.txt: %s: %s. Nothing written." % (flow, e))
-        if now is None:
-            sys.exit("rando\\test_gifts.txt: %s gives no %s. Nothing written." % (flow, old))
+            sys.exit("a gift's flow, %s: %s. Nothing written." % (flow, e))
+        if set(change) - found:
+            sys.exit("%s gives no %s (rando\\test_gifts.txt, or the game's flow is not the one the gifts were listed from). Nothing written." % (
+                flow, ", ".join(sorted(set(change) - found))))
         gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
-        print("TEST: %s gives %s in place of %s (rando\\test_gifts.txt)" % (flow, new, old))
 
     # ---- the size table ----
     folder = os.path.join(romfs, "System", "Resource")
@@ -1970,7 +2106,8 @@ def main():
             seed, which, keys_mode) + "\n".join(spoiler) + "\n")
     with open(os.path.join(mod, TRACKER), "w", encoding="utf-8", newline="\n") as f:   # (for the menu's Tracker tab)
         took = [h for h in able] if a.skulltulas else []
-        f.write("\n".join(tracker_lines(collections.Counter(spots[h][0] for h in gives), collections.Counter(skulls[h][0] for h in took))) + "\n")
+        f.write("\n".join(tracker_lines(collections.Counter(spots[h][0] for h in gives if h not in gifts), collections.Counter(skulls[h][0] for h in took),
+                                        collections.Counter(g.area for g in gifts.values()))) + "\n")
     with open(os.path.join(mod, "rando_manifest.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(written)) + "\n")
     with open(stamp_path, "w", encoding="utf-8") as f:   # (last: a run that stopped half way is made again)

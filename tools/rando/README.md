@@ -12,7 +12,8 @@ All need Python 3 with `zstandard` (the build's own requirement). Run them with 
 ## Playing a seed
 
 1. In the launcher's **Randomizer** page: turn Randomizer on,
-   set **Chests**, and **Major items** and **Dungeon keys** as wanted.
+   set **Chests**, and **Major items**, **Dungeon keys**, **Gold Skulltulas** and **Quest rewards** (with **Frogs**
+   and **Light Arrows**) as wanted.
 2. Press **Play** in the launcher. It runs `<game folder>\rando\rando_seed.py` (a copy the build puts there) with
    `--if-changed`, then starts the game. `mods\rando-seed\spoiler.txt` says what every chest held and holds now;
    `rando\last_run.txt` is what the script said.
@@ -348,15 +349,43 @@ not known without reading that format.
   given on the strength of the medium one. Without a bow, or without magic, they are not taken, as bombs are not
   without a bag.
 - **A character's gift is a name in a scene's flow, and can be made another item** (`gift_item`, and
-  `rando	est_gifts.txt`: `<flow> <the item it gives> <another>`). Nearly every item handed to Link goes through one
+  `rando\test_gifts.txt`: `<flow> <the item it gives> <another>`). Nearly every item handed to Link goes through one
   flow of the game's, `Dm_SY_GetInEvent` (and `GetPouchContent`): the scene's own flow calls it as a sub-flow with the
   item's name as a parameter, a string. 209 such calls were counted in the 640 flows read (the Goron's Bracelet,
   Zelda's Letter, the stones and medallions, the Great Fairies' gifts, every song, the trading sequence, bottles,
   scales, quivers). The new name is put at the file's end and the parameter made to point at it: the old string is
   the scene's actor's name too. Seen in play with Darunia (`Dm_Goron_0030`) made to give a Piece of Heart: the
   scene ran to its end, Link got the Piece of Heart with its text and no bracelet (he could not lift a Bomb Flower),
-  and Darunia was as ever after. Link still went through putting a bracelet on, with nothing in his hand. Not a
-  setting yet: Quest rewards is not placed. `tests/test_rando_gifts.py`.
+  and Darunia was as ever after. Link still went through putting a bracelet on, with nothing in his hand.
+  `tests/test_rando_gifts.py`.
+- **The Quest rewards setting** (`rando_quests`, `GIFTS`, `gift_items`; `--quests`). Every gift of the game's flows
+  was listed (164 lines in 89 scenes, by the sub-flow calls above and by the calls that hand the name on to
+  `NpcCommon` and the like: `ReceiveItem`, `ReveiveItem`, `TakenRewardActor`) and gone through with the game's owner,
+  who said which take part and what each needs: `<game folder>\rando\gifts_to_check.txt`. Left out by that: songs,
+  stones and medallions (their own settings), what is bought (Shops, later), rupee prizes and refills, the Dream
+  scrub, and for now the masks and the trading sequence (they may be optional checks later).
+  A gift that takes part is a spot among the chests': its item goes into the pool, and its scene's flow is made to
+  give what the shuffle put there. A prize of two sizes (a quiver, then a bigger one: the scene gives the one Link
+  has not) is one spot, both names made the new item; the two scenes that give a kind put one of each size in the
+  pool. 25 take part: Darunia, the Lost Woods target, the Skulltula house (10, 20, 30, 50), the Forest Stage (two),
+  Bombchu Bowling (two), the diving game, the fishing pond (two), the two shooting galleries, the cucco lady,
+  horseback archery (two), the rolling Goron, the man on the roof, the two Skull Kids, the dog lady; the frogs of
+  Zora's River with **Frogs** (`rando_frogs`) and Zelda's Light Arrows with **Light Arrows**
+  (`rando_light_arrows`), each off unless set.
+  Two of their items gate the game, so with the setting on they are gating items and the rules name them
+  (`quest_need`): the Goron's Bracelet wherever bombs are and in Dodongo's Cavern, the Silver Scale wherever an
+  adult is (Ruto's Letter). Off, the rules and every seed made before are as they were. The Skulltula house's four
+  ask for everything (the logic does not count tokens), so they only hold what the game can be finished without.
+  The Silver Scale is not given to a Gold Skulltula (not seen as a pick-up yet).
+  **Not in it yet**, each for what its flow asks before it gives (so another item would be given again and again, or
+  its own item found elsewhere would shut it): the six Great Fairies (`IsGet.Item_...`), the two tunics, Biggoron's
+  Sword and the lake scientist's Piece of Heart (what is in the pouch); and the two ocarinas (the scene puts them in
+  the pouch itself), the Gerudo's card (many scenes ask for it), Dampe's Piece of Heart (dropped as an actor).
+  **Seen without a player:** a seed with all 25 is written (19 flows) and the game starts and loads a save with it.
+  **Not seen in play yet:** any of these scenes but Darunia's giving another item; whether each gives only once (they
+  were chosen for having a flag of their own for that); a gift's item (a scale, a bag, a wallet, the Stone of
+  Agony, a bottle, the Light Arrows) coming out of a chest, though each has the chest items' base as the others do.
+  `tests/test_rando_quests.py`.
 - **Testing a pick-up without the player.** A save made with Link at the foot of the Great Deku Tree's first vines
   (his place is three floats at 0x1b4b0 of `progress.sav`), a map file with an `Enemy_Skulltula` of its Dynamic file
   made the item and put on the vines above him (a heart once taken, and a prop, are not made), and the stick pushed

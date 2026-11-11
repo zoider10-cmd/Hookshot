@@ -73,7 +73,7 @@ def sources(rows):
           "the build does not put the randomizer's script beside the game, where the launcher runs it")
     script = read("tools", "rando", "rando_seed.py")
     check(all('"%s"' % key in script for key in ("rando_on", "rando_seed", "rando_chests", "rando_skulltulas", "rando_keys", "rando_major", "rando_open_deku",
-                                                    "rando_open_forest", "rando_skip_intro")),
+                                                    "rando_open_forest", "rando_skip_intro", "rando_quests", "rando_frogs", "rando_light_arrows")),
           "rando_seed.py does not read the settings the menu keeps")
     check("hos_rando_init();" in main, "the game does not read the randomizer's settings at its start")
     check("oot_rando_read(f, r, &bad)" in side and '"hookshot_options.ini"' in side and "const OotRando *hos_rando(void)" in side,
