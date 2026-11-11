@@ -65,8 +65,13 @@ chests that start an event when opened (most of the big items).
   and gives the Fairy Ocarina, once.
 - **The logic does not count on an open way.** Its rules still ask for the sword and the Slingshot before anything
   out of the forest, and for the sword inside the Deku Tree: an open way is the player's to use, never the only way to
-  an item. To put early items out of the forest, the chests a child can open there with nothing have to be known
-  first.
+  an item.
+- **No chest out of the forest is a child's with nothing in hand.** The 36 chests of the child's maps outside the
+  dungeons were gone through in play on an open-forest game (seed HVBQ4-TY300-800RD): the only ones young Link opens
+  with no item at all are the five the rules already had (the Kokiri Sword's and the four of Mido's house) and the
+  graveyard's Hylian Shield chest, which is not shuffled. 23 need something, and 7 were not found (two in Kokiri
+  Forest, the four of Hyrule Field, Kakariko's). So an open way out adds no early place for the logic among the
+  chests: more early checks have to come from the other kinds (Gold Skulltulas, Heart Pieces, shops, gifts).
 - **The opening is the event flow `OpeningEvent`**: two entry points that each play a cutscene and go on (the
   narration, `Dm_Kokiri_0000`, and Navi's flight to Link's house, `Dm_Kokiri_0030`). Neither cutscene sets anything of
   the game; the clock, the first challenge step and the autosave are the flow's own steps. Skip opening changes two
@@ -185,8 +190,47 @@ By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron
   - The Lens of Truth comes with a magic meter.
 - Chests whose item depends on what Link has (the Hylian Shield's in the graveyard, the Deku Shield ones) are left
   alone: the game decides there between the item and a substitute.
-- Gold Skulltulas (`Enemy_Skulltula_Gold`) and Heart Pieces (`HeartPieceAnchor`) do not name an item in the map
-  files; shops and gifts are in event flows and actor parameters. They need another way than this one.
+- **A Gold Skulltula drops what the map tells it to, but only a pick-up can be picked up.** Its token comes from the
+  game's drop system (`DropTable_Token_Gold`: `Obj_Token_Gold`), and it has the key a chest names its item by: a
+  `Drop__DropActor` in its `Dynamic` block is dropped in the token's place (`add_drop`, and `rando	est_drops.txt`
+  to try one). Seen in play in the Deku Tree: with `Obj_Heart_Piece` the Skulltula dropped a Heart Piece and Link
+  collected it; with `Item_Boomerang` a tiny boomerang appeared, and with `TBox_Rupee_Purple` a rupee, and neither
+  could be collected by touching it or with the Boomerang. The untouched fourth dropped its token as usual.
+- Why: an item has two kinds of actor. A pick-up (`Obj_Heart_Piece`, `Obj_Rupee_*`, `Obj_Token_Gold`: `Obj_Item_Base`
+  and its attention, physics and pick-up event) is collected in the world. What a chest gives (`Item_*`, `TBox_*`:
+  `Item_EventObject_Base`) is only the model its get scene shows: no physics, nothing to touch. The thirteen gating
+  items have the second kind alone.
+- **An item's actor can be made a pick-up** (`pickup_pack`, and `rando\test_pickups.txt` to try one): in its pack
+  (`Pack/Actor/<item>.pack.zs`, a SARC archive of BYML parameter files) the actor takes `Obj_Item_Base` as its parent
+  in place of `Item_EventObject_Base`, its own table of game parameters names the base's as its parent, and the pack
+  gets the base's files. The size table's entry for a pack is its size rounded up to 32, and 312. The first try
+  crashed the game as the actor was made: the item's own table of game parameters took the base's place whole, and
+  the pick-up was left without `DropBoundParam` and `GamePhysicsControllerParam` (a rupee's table has the base's as
+  its parent). Found by running the game without a window on a copy of the saves, a save loaded by scripted presses
+  (`HOS_HEADLESS`, `HOS_INPUT_SCRIPT`, `--user`).
+- **The size table has an entry for each parameter file inside a pack too**, by the file's own name. The Bomb Bag's
+  table of game parameters, given a parent, no longer fitted its entry and the game stopped as the pack was read
+  (the Boomerang's, changed the same way, still fitted). A changed file's entry is raised by 4096 (`PART_GROWTH`):
+  with that the Great Deku Tree loads with `Item_BombBag_Small` and `Item_Boomerang` made pick-ups (run without a
+  window).
+- **Seen in play, made pick-ups from the gold token** (`PICKUP_BASE`): `Item_BombBag_Small`, `Item_Hammer` and
+  `Item_Boomerang`, each dropped by a Gold Skulltula of the Great Deku Tree, stay where the Skulltula died, are
+  collected by touching them (from a jump and from vines too, without Link falling) with their text, are brought in
+  by the Boomerang, and are still there after a save and a load. The Boomerang thrown afterwards behaves as ever.
+- **What an item is in the pouch is a file other packs carry a copy of**, under the same name: the item in the menu's
+  (`Pouch_*`) and the weapon in the hand's (`Weapon_*`). A child's game loads `Weapon_Boomerang` before a dropped
+  item's pack, and its copy was the one used: the Boomerang, alone of the three, had to be picked up with A until
+  the copies were changed too (`DefaultAutoGet`). Leaving the weapon's parts (`Boomerang`,
+  `gamebalance_AttackParam`) out of the item's table changed nothing, and was taken back.
+- Seen in play with `Item_Boomerang` made a pick-up: its own chest still gives it, with its scene. Dropped by a Gold
+  Skulltula it fell to the ground and Link picked it up, with a short animation over his head and no scene. A world
+  rupee (`Obj_Rupee_Purple`) flew out, fell, and was collected with its text. A Heart Piece dropped by a Skulltula on
+  a wall did not fall and could not be reached (it is collected with A from beside it): a Heart Piece hangs where it
+  is put, so it is no drop for a Skulltula out of reach.
+- The Deku Scrub before the Deku Tree's Slingshot room is beaten with the Slingshot here, not only by a Deku Shield
+  as in the original (seen in play).
+- Heart Pieces lying in the world are actors named `Obj_Heart_Piece` in the map files (14 of them), each with a
+  `HeartPieceAnchor` for its map icon; shops and gifts are in event flows and actor parameters. Not changed yet.
 
 Tested in game so far: Kokiri Forest (Mido's house's chests and the Kokiri Sword's), and seed 2068101879 (Chests: All,
 Major items: On, Dungeon keys: Off) played through the Forest Temple, the Water Temple (Iron Boots and Longshot

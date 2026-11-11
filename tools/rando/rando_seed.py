@@ -362,6 +362,297 @@ def fix(data, fixes=None):
     return out
 
 
+def add_drop(data, drops):
+    """data (a BYML map file) with each actor of `drops` ({hash: item}) given that item as what it drops: its Dynamic
+    block gets a Drop__DropActor (the key a chest names its item by; an enemy has the same one), or has the one it had
+    changed. The new bytes, or None when the file has none of those actors. The actor gets a Dynamic block of its own
+    at the end of the file, and an item name the file does not have goes into a copy of its string table there. An
+    actor without a Dynamic block, or a file that has no Drop__DropActor key, is an error: not written for yet."""
+    if not drops:
+        return None
+    found, keys, strings = chests(data)
+    key_at, _, root = struct.unpack_from("<III", data, 4)
+    todo = []
+    for name, kind, value, _ in entries(data, root, keys):
+        if name != "Actors" or kind != 0xC0:
+            continue
+        n = int.from_bytes(data[value + 1:value + 4], "little")
+        vals = value + 4 + (n + 3 & ~3)
+        for i in range(n):
+            if data[value + 4 + i] != 0xC1:
+                continue
+            ident, dyn = None, None
+            for k, t, v, where in entries(data, struct.unpack_from("<I", data, vals + 4 * i)[0], keys):
+                if k == "Hash" and t == 0xD5:
+                    ident = struct.unpack_from("<Q", data, v)[0]
+                elif k == "Dynamic" and t == 0xC1:
+                    dyn = (where, v)
+            if ident in drops:
+                if not dyn:
+                    raise ValueError("%#x has no Dynamic block to put a drop in" % ident)
+                todo.append((ident, dyn[0], dyn[1]))
+    if not todo:
+        return None
+    if "Drop__DropActor" not in keys:
+        raise ValueError("the file has no Drop__DropActor key")
+    drop_key = keys.index("Drop__DropActor")
+    out = bytearray(data)
+    out += b"\0" * (-len(out) % 4)
+    names = list(strings)
+    for h, _, _ in todo:
+        if drops[h] not in names:
+            names.append(drops[h])
+    if len(names) > len(strings):
+        at = len(out)
+        out += string_table(names)
+        struct.pack_into("<I", out, 8, at)
+    for h, where, node in todo:
+        n = int.from_bytes(data[node + 1:node + 4], "little")
+        rows = [bytes(data[node + 4 + 8 * k:node + 12 + 8 * k]) for k in range(n)]
+        rows = [r for r in rows if int.from_bytes(r[:3], "little") != drop_key]
+        rows.append(drop_key.to_bytes(3, "little") + bytes([0xA0]) + struct.pack("<I", names.index(drops[h])))
+        rows.sort(key=lambda r: int.from_bytes(r[:3], "little"))   # (a dictionary's keys are in the key table's order)
+        at = len(out)
+        out += bytes([0xC1]) + len(rows).to_bytes(3, "little") + b"".join(rows)
+        struct.pack_into("<I", out, where, at)
+    out = bytes(out)
+    again, _, _ = chests(out)
+    got = {c.hash: c.item for c in again}
+    if any(got.get(h) != drops[h] for h, _, _ in todo):
+        raise ValueError("a drop did not read back as written")
+    before = {c.hash: (c.item, c.event) for c in found}
+    if any(before[c.hash] != (c.item, c.event) for c in again if c.hash in before and c.hash not in drops):
+        raise ValueError("giving a drop changed another actor's")
+    return out
+
+
+# ---- an actor's pack (Pack/Actor/<name>.pack.zs): a SARC archive of its parameter files ----
+def sarc_hash(name, mult=101):
+    h = 0
+    for c in name.encode():
+        h = (h * mult + (c if c < 128 else c - 256)) & 0xFFFFFFFF
+    return h
+
+
+def sarc_read(data):
+    """a SARC archive's files, {name: bytes} (little-endian, as the game's are)"""
+    if data[:4] != b"SARC" or struct.unpack_from("<H", data, 6)[0] != 0xFEFF:
+        raise ValueError("not a little-endian SARC archive")
+    head, _, _, data_at = struct.unpack_from("<HHII", data, 4)
+    if data[head:head + 4] != b"SFAT":
+        raise ValueError("a SARC archive without its file table")
+    n = struct.unpack_from("<H", data, head + 6)[0]
+    nodes = head + 12
+    names = nodes + 16 * n + 8
+    out = collections.OrderedDict()
+    for i in range(n):
+        _, attr, a, b = struct.unpack_from("<IIII", data, nodes + 16 * i)
+        at = names + (attr & 0xFFFFFF) * 4
+        out[data[at:data.index(b"\0", at)].decode()] = bytes(data[data_at + a:data_at + b])
+    return out
+
+
+def sarc_write(files, mult=101, align=8):
+    """a SARC archive of {name: bytes}, as the game's own packs are laid out (the same bytes for the same files)"""
+    names, nodes, blob = bytearray(), [], bytearray()
+    for name, data in sorted(files.items(), key=lambda kv: sarc_hash(kv[0], mult)):
+        blob += b"\0" * (-len(blob) % align)
+        nodes.append((sarc_hash(name, mult), 0x01000000 | len(names) // 4, len(blob), len(blob) + len(data)))
+        blob += data
+        names += name.encode() + b"\0"
+        names += b"\0" * (-len(names) % 4)
+    head = 0x14 + 12 + 16 * len(nodes) + 8 + len(names)
+    data_at = head + (-head % align)
+    out = bytearray(b"SARC" + struct.pack("<HHIIHH", 0x14, 0xFEFF, data_at + len(blob), data_at, 0x0100, 0))
+    out += b"SFAT" + struct.pack("<HHI", 12, len(nodes), mult)
+    for node in nodes:
+        out += struct.pack("<IIII", *node)
+    out += b"SFNT" + struct.pack("<HH", 8, 0) + names
+    out += b"\0" * (data_at - len(out)) + blob
+    return bytes(out)
+
+
+def set_root_string(data, key, value):
+    """a BYML file with the string its root dictionary has under `key` changed: the new bytes. The new string goes
+    into a copy of the string table at the end of the file, as an item's name does in a map file."""
+    if data[:2] != b"YB":
+        raise ValueError("not a little-endian BYML")
+    key_at, str_at, root = struct.unpack_from("<III", data, 4)
+    keys, strings = table(data, key_at), table(data, str_at)
+    where = next((w for k, t, _, w in entries(data, root, keys) if k == key and t == 0xA0), None)
+    if where is None:
+        raise ValueError("the file's root has no string %s" % key)
+    out = bytearray(data)
+    out += b"\0" * (-len(out) % 4)
+    names = strings if value in strings else strings + [value]
+    if len(names) > len(strings):
+        at = len(out)
+        out += string_table(names)
+        struct.pack_into("<I", out, 8, at)
+    struct.pack_into("<I", out, where, names.index(value))
+    return bytes(out)
+
+
+def byml_parse(data):
+    """A little-endian BYML file as a tree that keeps every value's type, for writing it again changed: a dictionary
+    is ("dict", {key: node}), an array ("array", [node]), a string ("string", text), anything else (its type byte,
+    its bytes: 4, or the 8 a 64-bit value points at). Returns (the tree, the file's version)."""
+    if data[:2] != b"YB":
+        raise ValueError("not a little-endian BYML")
+    version = struct.unpack_from("<H", data, 2)[0]
+    key_at, str_at, root = struct.unpack_from("<III", data, 4)
+    keys = table(data, key_at) if key_at else []
+    strings = table(data, str_at) if str_at else []
+
+    def value(kind, at):
+        raw = struct.unpack_from("<I", data, at)[0]
+        if kind == 0xA0:
+            return ("string", strings[raw])
+        if kind in (0xC0, 0xC1):
+            return node(raw)
+        if kind in (0xD4, 0xD5, 0xD6):
+            return (kind, bytes(data[raw:raw + 8]))
+        if kind in (0xD0, 0xD1, 0xD2, 0xD3, 0xFF):
+            return (kind, bytes(data[at:at + 4]))
+        raise ValueError("a BYML value of a type not written again here (%#x)" % kind)
+
+    def node(at):
+        kind, n = data[at], int.from_bytes(data[at + 1:at + 4], "little")
+        if kind == 0xC1:
+            out = collections.OrderedDict()
+            for k in range(n):
+                e = at + 4 + 8 * k
+                out[keys[int.from_bytes(data[e:e + 3], "little")]] = value(data[e + 3], e + 4)
+            return ("dict", out)
+        if kind == 0xC0:
+            vals = at + 4 + (n + 3 & ~3)
+            return ("array", [value(data[at + 4 + k], vals + 4 * k) for k in range(n)])
+        raise ValueError("a BYML node of a type not written again here (%#x)" % kind)
+
+    return (node(root) if root else None), version
+
+
+def byml_build(tree, version):
+    """the bytes of a tree of byml_parse: the key and string tables sorted, every container written once"""
+    keys, strings = set(), set()
+
+    def gather(nd):
+        if nd[0] == "dict":
+            keys.update(nd[1])
+            for v in nd[1].values():
+                gather(v)
+        elif nd[0] == "array":
+            for v in nd[1]:
+                gather(v)
+        elif nd[0] == "string":
+            strings.add(nd[1])
+    gather(tree)
+    keys, strings = sorted(keys, key=lambda k: k.encode()), sorted(strings, key=lambda k: k.encode())
+    key_index, string_index = {k: i for i, k in enumerate(keys)}, {k: i for i, k in enumerate(strings)}
+    out = bytearray(16)
+    key_at = len(out)
+    out += string_table(keys)
+    str_at = len(out)
+    out += string_table(strings)
+
+    def emit(nd):
+        """(type byte, the 4 bytes that stand for the value where it is held)"""
+        if nd[0] == "string":
+            return 0xA0, struct.pack("<I", string_index[nd[1]])
+        if nd[0] == "dict":
+            rows = [(key_index[k], emit(v)) for k, v in nd[1].items()]
+            rows.sort(key=lambda r: r[0])
+            at = len(out)
+            out.extend(bytes([0xC1]) + len(rows).to_bytes(3, "little"))
+            for k, (kind, held) in rows:
+                out.extend(k.to_bytes(3, "little") + bytes([kind]) + held)
+            return 0xC1, struct.pack("<I", at)
+        if nd[0] == "array":
+            rows = [emit(v) for v in nd[1]]
+            at = len(out)
+            out.extend(bytes([0xC0]) + len(rows).to_bytes(3, "little") + bytes(k for k, _ in rows))
+            out.extend(b"\0" * (-len(out) % 4))
+            for _, held in rows:
+                out.extend(held)
+            return 0xC0, struct.pack("<I", at)
+        kind, raw = nd
+        if kind in (0xD4, 0xD5, 0xD6):
+            out.extend(b"\0" * (-len(out) % 8))
+            at = len(out)
+            out.extend(raw)
+            return kind, struct.pack("<I", at)
+        return kind, raw
+
+    _, held = emit(tree)
+    out[0:16] = b"YB" + struct.pack("<HII", version, key_at, str_at) + held
+    return bytes(out)
+
+
+# What an item's actor is made a pick-up from. Obj_Item_Base is what a Heart Piece and a rupee are made from: it falls
+# to the ground. A gold token is made from it too, with parts of its own: it stays where the Skulltula died, is
+# collected by touching it, and the Boomerang and the Hookshot bring it in, which is how every Skulltula's place was
+# made to be reached. So an item is made a pick-up from the token.
+PICKUP_BASE = "Obj_Token_Gold"
+# The token's effects and sounds come with it: a gold skull's outline around the item as it is got, in the item's own
+# chest too (seen in play). The item's actor cannot name others: an ELinkRef or SLinkRef of its own, empty or another
+# pick-up's or the token's very own, stopped the game as the actor was made, and an item given the token's parts one
+# by one without them was not there at all when its Skulltula died (all tried). What the token's two files say is
+# changed in the item's pack instead: each holds a name, and they get a plain pick-up's, the Deku Shield as it lies in
+# the world.
+PICKUP_EFFECTS = "Obj_Shield_Deku"
+
+
+def pickup_pack(item, item_pack, base_pack, base_name=PICKUP_BASE, effects_name=PICKUP_EFFECTS):
+    """An item's pack (a SARC archive) made into a pick-up's. Its actor takes the base's as its parent in place of
+    Item_EventObject_Base (the model a chest's get scene shows, with nothing to touch), and the pack gets the files
+    of the base's that it lacks. What the item has of its own (its model, its animation, what it is in the pouch)
+    stays over the base's, with two changes:
+      - its table of game parameters names the base's as its parent. An item's own table took the base's place
+        whole and left the pick-up without DropBoundParam and GamePhysicsControllerParam: the game stopped at the
+        missing one as the actor was made (a rupee's table has the base's as its parent);
+      - what it is in the pouch is got by touching it (DefaultAutoGet, as a token's and a rupee's are), not by
+        standing beside it and pressing A.
+    Seen in play with the Boomerang on Obj_Item_Base: its chest still gives it with its scene, and dropped by a Gold
+    Skulltula it fell and was picked up, with its text."""
+    files, base = sarc_read(item_pack), sarc_read(base_pack)
+    own = "Actor/%s.engine__actor__ActorParam.bgyml" % item
+    base_actor = "Actor/%s.engine__actor__ActorParam.bgyml" % base_name
+    base_table = "GameParameter/GameParameterTable/%s.engine__actor__GameParameterTable.bgyml" % base_name
+    if own not in files or base_actor not in base or base_table not in base:
+        raise ValueError("%s: its pack, or the base's, has no actor or no table of game parameters of that name" % item)
+    tree, version = byml_parse(files[own])
+    tree[1]["$parent"] = ("string", "Work/" + base_actor.replace(".bgyml", ".gyml"))
+    files[own] = byml_build(tree, version)
+
+    def part(key):
+        """the pack's file an entry of the actor's Components names, or "" """
+        ref = tree[1].get("Components", ("dict", {}))[1].get(key)
+        name = ref[1].lstrip("?") if ref and ref[0] == "string" else ""
+        return name if name in files else ""
+
+    name = part("GameParameterTableRef")
+    if name and name != base_table:
+        sub, sub_version = byml_parse(files[name])
+        if "$parent" not in sub[1]:
+            sub[1]["$parent"] = ("string", "Work/" + base_table.replace(".bgyml", ".gyml"))
+            files[name] = byml_build(sub, sub_version)
+    name = part("PouchContentRef")
+    if name:
+        sub, sub_version = byml_parse(files[name])
+        sub[1]["DefaultAutoGet"] = (0xD0, struct.pack("<I", 1))
+        files[name] = byml_build(sub, sub_version)
+    for name, data in base.items():
+        files.setdefault(name, data)
+    for kind in ("ELink", "SLink"):   # (the base's effects and sounds: another's, PICKUP_EFFECTS above)
+        name = "Component/%s/%s.engine__component__%sParam.bgyml" % (kind, base_name, kind)
+        if effects_name and name in files:
+            sub, sub_version = byml_parse(files[name])
+            if sub[1].get("UserName", ("", ""))[0] == "string":
+                sub[1]["UserName"] = ("string", effects_name)
+                files[name] = byml_build(sub, sub_version)
+    return sarc_write(files)
+
+
 def murmur3(data, seed=0):
     """MurmurHash3, 32 bits: the game's list of flags names each by this hash of its name"""
     c1, c2, h = 0xcc9e2d51, 0x1b873593, seed
@@ -472,13 +763,16 @@ def opening_skip(data):
     return bytes(out)
 
 
-def size_entry(size):
-    """what the game's size table holds for a map file of `size` bytes unpacked: the size rounded up to 32, and 264
-    (every map file looked at had exactly that)"""
-    return (size + 31 & ~31) + 264
+def size_entry(size, extra=264):
+    """what the game's size table holds for a file of `size` bytes unpacked: the size rounded up to 32, and 264 for a
+    map file (every one looked at had exactly that), 312 for an actor's pack (PACK_EXTRA: six looked at)"""
+    return (size + 31 & ~31) + extra
 
 
-def size_table_update(tbl, sizes):
+PACK_EXTRA = 312
+
+
+def size_table_update(tbl, sizes, extra=264):
     """The size table ("RESTBL": a header of 22 bytes, then a path's CRC32 and a size for each file, sorted by the
     CRC32) with the entries of `sizes` ({path without .zs: bytes unpacked}) raised to fit."""
     if tbl[:6] != b"RESTBL":
@@ -499,7 +793,27 @@ def size_table_update(tbl, sizes):
         at = 22 + lo * 8
         if lo >= count or struct.unpack_from("<I", tbl, at)[0] != crc:
             raise ValueError("%s is not in the size table" % path)
-        struct.pack_into("<I", out, at + 4, max(struct.unpack_from("<I", tbl, at + 4)[0], size_entry(size)))
+        struct.pack_into("<I", out, at + 4, max(struct.unpack_from("<I", tbl, at + 4)[0], size_entry(size, extra)))
+    return bytes(out)
+
+
+# The size table has an entry for each parameter file inside a pack too, by the file's own name, and the game takes
+# the memory for the file as it is read from it: the Bomb Bag's table of game parameters, given a parent, no longer
+# fitted its entry and the game stopped there as the pack was read (the Boomerang's, changed the same way, still
+# fitted its own). The game's entries follow no rule found (252 bytes: 5432; 568 bytes: 5896; 152 bytes: 5288), so a
+# changed file's entry is raised by this much, far more than any of them grows.
+PART_GROWTH = 4096
+
+
+def size_table_raise(tbl, paths, by=PART_GROWTH):
+    """the size table with the entries of `paths` raised by `by`; a path with no entry is left out"""
+    count = struct.unpack_from("<I", tbl, 14)[0]
+    index = {struct.unpack_from("<I", tbl, 22 + k * 8)[0]: 22 + k * 8 for k in range(count)}
+    out = bytearray(tbl)
+    for path in set(paths):
+        at = index.get(zlib.crc32(path.encode()) & 0xffffffff)
+        if at is not None:
+            struct.pack_into("<I", out, at + 4, struct.unpack_from("<I", tbl, at + 4)[0] + by)
     return bytes(out)
 
 
@@ -686,13 +1000,34 @@ def main():
     a.open_deku = a.open_deku or ini["rando_open_deku"] != 0
     a.open_forest = a.open_forest or ini["rando_open_forest"] != 0
     a.skip_intro = a.skip_intro or ini["rando_skip_intro"] != 0
+    # A test: <game folder>\rando\test_drops.txt, lines of "<an actor's hash> <an item>": that actor (a Gold Skulltula,
+    # say) drops the item. For finding how the other kinds of check hold what they give; not a setting.
+    drops = {}
+    try:
+        with open(os.path.join(game, "rando", "test_drops.txt"), encoding="utf-8") as f:
+            for line in f:
+                parts = line.split("#")[0].split()
+                if len(parts) == 2:
+                    drops[int(parts[0], 16)] = parts[1]
+    except (OSError, ValueError):
+        pass
+    # Another: <game folder>\rando\test_pickups.txt, an item's actor on each line (Item_Boomerang): its pack is made a
+    # pick-up's (pickup_pack), so that it can be collected where a Skulltula drops it.
+    pickups = []
+    try:
+        with open(os.path.join(game, "rando", "test_pickups.txt"), encoding="utf-8") as f:
+            pickups = sorted({line.split("#")[0].strip() for line in f} - {""})
+    except OSError:
+        pass
     flags = {}
     for name, on in (("deku", a.open_deku), ("forest", a.open_forest)):
         if on:
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else ""))
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") +
+                                                               (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
+                                                               (" test pickups " + ",".join(pickups) if pickups else ""))
     # (the seed in the game folder, made by an earlier version of the rules: made again as it was, not another one
     # under its save. A new seed, or other settings, take the rules of today)
     placement = PLACEMENT
@@ -743,7 +1078,7 @@ def main():
         except Exception as e:
             print("skipped %s: %s" % (rel, e))
             continue
-        if found:
+        if found or any(struct.pack("<Q", h) in data for h in drops):
             files[rel] = (data, found)
 
     # ---- the chests: one per hash (the same chest is in several files: child and adult, static and dynamic) ----
@@ -783,15 +1118,18 @@ def main():
         sys.exit("the shuffle lost or made an item: nothing written")
 
     # ---- the map files ----
-    changed, sizes, fixes_done = collections.OrderedDict(), {}, 0
+    changed, sizes, fixes_done, drops_done = collections.OrderedDict(), {}, 0, 0
     for rel, (data, found) in files.items():
         try:
             new = rewrite(data, gives)
             fixed = fix(new if new is not None else data)
+            dropped = add_drop(fixed if fixed is not None else new if new is not None else data, drops)
         except Exception as e:
             sys.exit("%s: %s. Nothing was written to the mod." % (rel, e))
         if fixed is not None:
             new, fixes_done = fixed, fixes_done + 1
+        if dropped is not None:
+            new, drops_done = dropped, drops_done + 1
         if new is not None:
             changed[rel] = new
             sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
@@ -799,6 +1137,9 @@ def main():
     print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives), moved, len(changed)))
     for why, n in stays.most_common():
         print("  left alone: %d (%s)" % (n, why))
+    if drops:
+        print("TEST: %d actor%s given an item to drop (rando\\test_drops.txt), in %d map file%s" % (
+            len(drops), "" if len(drops) == 1 else "s", drops_done, "" if drops_done == 1 else "s"))
     # ---- the open ways: the game's list of flags, with theirs starting put out ----
     flag_files = {}
     if flags:
@@ -828,6 +1169,42 @@ def main():
     elif a.event_chests:
         print("logic: OFF (--no-logic): the gating items are anywhere, and most seeds cannot be finished")
 
+    # ---- TEST: items' packs made pick-ups' ----
+    pack_files, pack_sizes, pack_parts = {}, {}, set()
+    if pickups:
+        def pack(name):
+            return unpack(open(os.path.join(romfs, "Pack", "Actor", name + ".pack.zs"), "rb").read(), zs, dicts)
+        try:
+            base = pack(PICKUP_BASE)
+            base_parts = sarc_read(base)
+            pouch = {}
+            for item in pickups:
+                old = pack(item)
+                new = pickup_pack(item, old, base)
+                old_parts = sarc_read(old)
+                pack_parts.update(name for name, data in sarc_read(new).items()   # (the files changed in it)
+                                  if data != old_parts.get(name, base_parts.get(name)))
+                pack_files["Pack/Actor/%s.pack.zs" % item] = new
+                pack_sizes["Pack/Actor/%s.pack" % item] = len(new)
+                pouch.update((name, data) for name, data in sarc_read(new).items()
+                             if "/PouchContentParam/" in name and data != old_parts.get(name, base_parts.get(name)))
+            # (A TRY, not seen in play. What an item is in the pouch is a file other packs carry a copy of, under the
+            # same name: the item in the menu's (Pouch_*) and the weapon in the hand's (Weapon_*). The Boomerang,
+            # made a pick-up just as the Megaton Hammer was, was not collected by touching it and the Hammer was:
+            # a child has the Boomerang's weapon, not the Hammer's. So the copies are changed with it.)
+            for n in sorted(os.listdir(os.path.join(romfs, "Pack", "Actor"))) if pouch else []:
+                if n.startswith(("Pouch_", "Weapon_")) and n.endswith(".pack.zs"):
+                    parts = sarc_read(pack(n[:-len(".pack.zs")]))
+                    same = [name for name in pouch if name in parts and parts[name] != pouch[name]]
+                    if same:
+                        parts.update((name, pouch[name]) for name in same)
+                        new = sarc_write(parts)
+                        pack_files["Pack/Actor/" + n] = new
+                        pack_sizes["Pack/Actor/" + n[:-len(".zs")]] = len(new)
+        except (OSError, ValueError, struct.error) as e:
+            sys.exit("rando\\test_pickups.txt: %s. Nothing written." % e)
+        print("TEST: %d item%s made a pick-up (rando\\test_pickups.txt): %s" % (len(pickups), "" if len(pickups) == 1 else "s", ", ".join(pickups)))
+
     # ---- the size table ----
     folder = os.path.join(romfs, "System", "Resource")
     tables = sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if "rsizetable" in n.lower())
@@ -836,7 +1213,9 @@ def main():
     new_tables = {}
     for n in tables:
         try:
-            new_tables["System/Resource/" + n] = size_table_update(unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts), sizes)
+            new_tables["System/Resource/" + n] = size_table_raise(size_table_update(
+                size_table_update(unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts), sizes), pack_sizes, PACK_EXTRA),
+                pack_parts)
         except Exception as e:
             sys.exit("the size table %s could not be updated (%s). Nothing written." % (n, e))
 
@@ -866,7 +1245,7 @@ def main():
         except (OSError, ValueError, struct.error) as e:
             sys.exit("%s: %s. Nothing written." % (OPENING, e))
         print("a new game starts without its two opening cutscenes")
-    for rel, data in list(changed.items()) + list(new_tables.items()) + list(flag_files.items()):
+    for rel, data in list(changed.items()) + list(new_tables.items()) + list(flag_files.items()) + list(pack_files.items()):
         out = os.path.join(mod, "romfs", *rel.split("/"))
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, "wb") as f:
