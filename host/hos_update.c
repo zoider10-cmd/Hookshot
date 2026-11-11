@@ -1,4 +1,4 @@
-/* (amd-fix, sharkiix version) The update check: at start, the latest release of github.com/Shakoquo/Hookshot is asked for (a few
+/* (amd-fix, sharkiix version) The update check: at start, the latest release of github.com/Shakoquo/Mako is asked for (a few
    seconds at most, nothing when offline). The official updater (NotRexed's builder --update) is not used: it would build the folder
    again without the AMD fixes.
 
@@ -29,11 +29,11 @@
 
 #include "../gpu/vk/vk_api.h"   /* (MKWVK_API_VERSION) */
 
-#define HOOKSHOT_FORK_BASE "mako-3.0"      /* (the exe: which graphics patches fit it) */
-#define HOOKSHOT_FORK_VERSION "mako-3.0.1"   /* (the release this folder was built from) */
+#define HOOKSHOT_FORK_BASE "mako-3.3"      /* (the exe: which graphics patches fit it) */
+#define HOOKSHOT_FORK_VERSION "mako-3.3"   /* (the release this folder was built from) */
 #define UPDATE_HOST L"api.github.com"
-#define UPDATE_PATH L"/repos/Shakoquo/Hookshot/releases/latest"
-#define RELEASES_PAGE L"https://github.com/Shakoquo/Hookshot/releases/latest"
+#define UPDATE_PATH L"/repos/Shakoquo/Mako/releases/latest"
+#define RELEASES_PAGE L"https://github.com/Shakoquo/Mako/releases/latest"
 
 /* (a line "name=value" of a text buffer: its value, trimmed) */
 static int value_in(const char *text, const char *name, char *out, size_t cap) {
@@ -228,8 +228,12 @@ void hos_update_check(void) {
     /* (a graphics patch for this exe?) */
     char manifest_url[1024], dll_url[1024], base[128] = "", api[32] = "", size[32] = "";
     int patch = 0;
-    if (asset_url(json, "hookshot_vk_update.txt", manifest_url, sizeof manifest_url) &&
-        asset_url(json, "hookshot_vk.dll", dll_url, sizeof dll_url)) {
+    /* (Mako 3.3: the release files' new names, mako_vk_update.txt + mako_vk.dll, or the old ones that every release up to
+       3.0.2 has and that games before 3.3 look for; the file saved beside the exe keeps its name, hookshot_vk.dll) */
+    if ((asset_url(json, "mako_vk_update.txt", manifest_url, sizeof manifest_url) &&
+         asset_url(json, "mako_vk.dll", dll_url, sizeof dll_url)) ||
+        (asset_url(json, "hookshot_vk_update.txt", manifest_url, sizeof manifest_url) &&
+         asset_url(json, "hookshot_vk.dll", dll_url, sizeof dll_url))) {
         char *m = https_get_url(manifest_url, 16 << 10, NULL);
         if (m) {
             value_in(m, "base", base, sizeof base);
@@ -306,13 +310,6 @@ static int read_value(const char *path, const char *name, char *out, size_t cap)
     return found;
 }
 
-static int safe_tag(const char *s) {
-    size_t n = strlen(s);
-    if (!n || n > 80) return 0;
-    for (size_t i = 0; i < n; i++)
-        if (!isalnum((unsigned char)s[i]) && !strchr("._+-", s[i])) return 0;
-    return 1;
-}
 
 static int pipe_tag(const char *cmd, char *tag, size_t cap) {
     FILE *p = popen(cmd, "r");

@@ -44,13 +44,14 @@ def main():
                  block(scale_source, "VkImage framegen_scale("))
     template = (ROOT / "tests/upscale_independent_test.cpp").read_text(encoding="utf-8")
     assert template.count("// PRODUCTION_FUNCTIONS") == 1
-    fixture = template.replace("// PRODUCTION_FUNCTIONS", functions)
+    fixture = template.replace("// PRODUCTION_FUNCTIONS", block(source, "void drop_pipe(") + "\n" + functions)
     with tempfile.TemporaryDirectory(prefix="upscale-independent-") as tmp:
         owned = Path(tmp).resolve()
         assert owned.parent == Path(tempfile.gettempdir()).resolve() and owned.name.startswith("upscale-independent-")
         cpp, exe = Path(tmp) / "fixture.cpp", Path(tmp) / "fixture.exe"
         cpp.write_text(fixture, encoding="utf-8")
-        subprocess.run([a.cxx, "-std=c++20", "-Wall", "-Wextra", "-Werror", str(cpp), "-o", str(exe)], check=True)
+        subprocess.run([a.cxx, "-std=c++20", "-Wall", "-Wextra", "-Werror", "-I" + str(ROOT / "gpu/vk"),
+                        str(cpp), "-o", str(exe)], check=True)
         for allow in ("0", "1"):
             env = os.environ.copy()
             env["RX_VK_FRAMEGEN"] = allow

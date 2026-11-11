@@ -1,8 +1,8 @@
 """The randomizer's settings (gpu/vk/oot_rando.h): the seed IDs and the options file's rando_ lines, compiled and run
 (tests/test_rando_settings.cpp), the header compiled as C too (the game side is C: host/oot_rando.c), and the sources
-checked for the rest of the path: the Insert menu has a Randomizer tab with a row for each setting and keeps them in
-the options file, the launcher's Randomizer page writes the same lines with the same choices, and the game side reads
-them at its start.
+checked for the rest of the path: the launcher's Randomizer page writes the lines with the header's choices and makes
+a seed's ID as the header does, the Insert menu (which has no Randomizer tab since Mako 3.3) keeps those lines when it
+saves and has the Fast forward row, and the game side reads them at its start.
 
     python -I -B tests/test_rando_settings.py [--cxx g++] [--cc gcc]
 """
@@ -39,31 +39,19 @@ def table():
 def sources(rows):
     menu, menu_h, launcher = read("gpu", "vk", "vk_menu.cpp"), read("gpu", "vk", "vk_menu.h"), read("launcher", "Launcher.cs")
     main, side = read("host", "hos_main.c"), read("host", "oot_rando.c")
-    # ---- the Insert menu ----
-    check("TAB_RANDO = 3" in menu and "TAB_COUNT = 4" in menu and '"CONTROLS", "RANDOMIZER"}' in menu, "the menu has no Randomizer tab")
-    check("int rando[OOT_RANDO_N] = {};" in menu_h and "int rando_on = 0;" in menu_h and "int rando_seed = 0;" in menu_h,
-          "the menu's options have no randomizer settings")
-    check("OOT_RANDO_SETTINGS(OOT_RANDO_MENU_ROW)" in menu and '{TAB_RANDO, "Randomizer", &opts.rando_on, 0, 1, 1,' in menu and
-          '{TAB_RANDO, "Seed", &opts.rando_seed, 0, OOT_RANDO_SEED_MAX, 1,' in menu, "the Randomizer tab lacks its rows")
-    key = menu[menu.index("const char* ini_key(const Row& r) {"):]
-    key = key[:key.index("\n}")]
-    check('return "rando_on";' in key and 'return "rando_seed";' in key and "return oot_rando_settings[i].key;" in key,
-          "the menu does not keep the randomizer's rows under the lines oot_rando.h reads")
-    init = menu[menu.index("void menu_init() {"):]
-    init = init[:init.index("\n}")]
-    check("oot_rando_read(f, &r, nullptr)" in init and "if (imported) save();" in init, "the menu does not take a rando_import line")
-    setter = menu[menu.index("void set_row(Row& r"):]
-    setter = setter[:setter.index("\n}")]
-    check(setter.index("r.tab == TAB_RANDO") < setter.index("opts.preset = 0;"), "a randomizer row changes the quality preset to Custom")
-    # (the menu is as tall as its longest tab, and one taller than the window is not shown: one row more than Graphics
-    # at most, which at the options page's width is as tall as the menu was before this tab)
-    rows_text = menu[menu.index("Row rows[] = {"):menu.index("constexpr int kCheatsRow")]
-    graphics = rows_text.count("{TAB_GRAPHICS,")
-    rando = rows_text.count("{TAB_RANDO,") - 1 + len(rows)   # (the macro's row is one for each setting)
-    check(rando <= graphics + 1, "the Randomizer tab has %d rows, the Graphics tab %d: the menu would be taller than it was" % (rando, graphics))
-    check("menu_hit::tab_slot_w(s, (int)w, TAB_COUNT)" in menu and
-          "menu_hit::options(mx, my, scale, mw, mh, TAB_COUNT," in menu, "the tab strip is not drawn and hit-tested for every tab")
-    check("hover_tab == 3" not in menu and "kTabPrev ? 3" not in menu, "the previous-tab arrow's hover is a tab's number")
+    api = None
+    # ---- the Insert menu: no Randomizer tab since Mako 3.3 (its menu was written anew), and it keeps the lines ----
+    check("TAB_RANDO" not in menu and "rando" not in menu_h, "the menu has randomizer rows again: this test and the launcher's page say it has none")
+    saving = menu[menu.index("void save() {"):]
+    saving = saving[:saving.index("\n}")]
+    check("if (!mine) others += line" in saving and "fputs(others.c_str(), f);" in saving,
+          "the menu no longer keeps the options file's lines that are not its own: the randomizer's would be dropped at its next save")
+    # (the fast forward is a row of the new menu, under a number of its own: 18 is 3.3's gyro)
+    api = read("gpu", "vk", "vk_api.h")
+    check('{TAB_GAMEPLAY, "Fast forward", &opts.fast_forward, 0, 2, 1, tx_fast_forward,' in menu and "HOS_OPT_FAST_FORWARD = 48" in api and
+          "HOS_OPT_GYRO = 18" in api, "the menu has no Fast forward row, or its option number is another's")
+    check("if (id == HOS_OPT_FAST_FORWARD) return opts.fast_forward;" in read("gpu", "vk", "vk_replay.cpp") and
+          "rx_option(HOS_OPT_FAST_FORWARD, 0)" in read("host", "nn_vi.c"), "the fast forward's setting does not reach the game's clock")
     # ---- the launcher: the same lines, labels and choices, in the same order ----
     block = launcher[launcher.index("static readonly object[][] RandoRows = {"):]
     block = block[:block.index("\n    };")]
@@ -89,9 +77,15 @@ def sources(rows):
     check("hos_rando_init();" in main, "the game does not read the randomizer's settings at its start")
     check("oot_rando_read(f, &r, &bad)" in side and '"hookshot_options.ini"' in side and "const OotRando *hos_rando(void)" in side,
           "host/oot_rando.c does not read the options file")
-    check("rando_seed.py" in side and "rando_seed.py" in menu and "not placed yet" in side and "not placed yet" in menu,
-          "the log and the menu no longer say what places the chests and that the other settings do nothing yet")
-    check((ROOT / "tools" / "rando" / "rando_seed.py").is_file(), "tools/rando/rando_seed.py, which the menu names, is gone")
+    check("rando_seed.py" in side and "not placed yet" in side, "the log no longer says what places the chests and that the other settings do nothing yet")
+    check((ROOT / "tools" / "rando" / "rando_seed.py").is_file(), "tools/rando/rando_seed.py, which the log names, is gone")
+    # ---- a seed's ID: made and read in the launcher as the header does (the menu's tab did it before) ----
+    check("static class RandoId {" in launcher and 'Text = "Copy seed ID"' in launcher and 'Text = "Paste seed ID"' in launcher and
+          'const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";' in launcher and "const int Bits = 75, Check = 8, Slots = 16, FormatVersion = 1;" in launcher,
+          "the launcher does not make, copy and paste a seed's ID as gpu/vk/oot_rando.h has it")
+    header = read("gpu", "vk", "oot_rando.h")
+    check('return "0123456789ABCDEFGHJKMNPQRSTVWXYZ";' in header and "OOT_RANDO_ID_VERSION = 1," in header and "OOT_RANDO_ID_SLOTS = 16," in header and
+          "OOT_RANDO_ID_BITS = 75," in header and "OOT_RANDO_ID_CHECK = 8," in header, "the header's seed ID is no longer the one the launcher makes")
 
 
 def main():

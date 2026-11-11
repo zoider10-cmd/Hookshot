@@ -139,7 +139,7 @@ def main():
             raise SystemExit(why)
     if 'void mkwvk_close_asked(void)' not in main_cpp or "prepare_stop();" not in main_cpp:
         raise SystemExit("closing the window no longer stops the preparation")
-    for fn in ("bool prepare_run(", "void predict_run(", "void precompile_run("):
+    for fn in ("bool prepare_run(", "bool warm_libraries(", "void predict_run(", "void precompile_run("):
         body = draw[draw.index(fn):]
         body = body[:body.index("\n}\n")]
         if body.count("prepare_stopped()") < 2:
@@ -147,7 +147,7 @@ def main():
     prep = draw[draw.index("bool prepare_run("):]
     prep = prep[:prep.index("\n}\n")]
     stop_at = prep.index("if (prepare_stopped()) {")
-    if prep.index('fwrite(&stamp', stop_at) < prep.index("return false;", stop_at):
+    if prep.index('prepared_write(', stop_at) < prep.index("return false;", stop_at):
         raise SystemExit("a stopped preparation writes the stamp that says it is all done")
     for host in ("host/display.c", "host/posix/display_sdl.c"):
         text = (ROOT / host).read_text(encoding="utf-8")

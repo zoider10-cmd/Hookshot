@@ -13,8 +13,9 @@ namespace HookshotBuilder;
 /// folder keeps).
 static class Updater
 {
-    const string Latest = "https://api.github.com/repos/Shakoquo/Hookshot/releases/latest";
+    const string Latest = "https://api.github.com/repos/Shakoquo/Mako/releases/latest";
     const string Asset = "HookshotBuilder.zip";
+    const string MakoAsset = "MakoBuilder.zip";                 // (Mako 3.3: the new name, taken first; releases up to 3.0.2 have the old one)
     const string SetupAsset = "HookshotBuilder.exe";            // (the setup, builder/setup/setup.c: a release holds it and its list)
     const string SetupList = "hookshot-setup.txt";              // (scripts/make_setup_parts.py)
     static readonly TimeSpan[] RetryDelays = { TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(12), TimeSpan.FromSeconds(20) };
@@ -62,7 +63,7 @@ static class Updater
         {
             try
             {
-                var list = await http.GetStringAsync("https://github.com/Shakoquo/Hookshot/releases/latest/download/" + SetupList);
+                var list = await http.GetStringAsync("https://github.com/Shakoquo/Mako/releases/latest/download/" + SetupList);
                 foreach (var line in list.Split('\n'))
                     if (line.StartsWith("tag ")) return line[4..].Trim();
             }
@@ -144,7 +145,7 @@ static class Updater
                 foreach (var asset in doc.RootElement.GetProperty("assets").EnumerateArray())
                 {
                     var assetName = asset.GetProperty("name").GetString();
-                    if (assetName == Asset)
+                    if (assetName == MakoAsset || (assetName == Asset && url == null))
                     {
                         url = asset.GetProperty("browser_download_url").GetString();
                         apiUrl = asset.GetProperty("url").GetString();
@@ -166,6 +167,10 @@ static class Updater
                 return;
             }
             var name = string.Concat(newTag.Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.'));
+            // (hookshot) the name is a folder under builders\ that the update replaces: "..", "." or a name with a leading dot
+            // would be the HookshotBuilder folder itself or not a version (the same rule as the setup's and Linux's lists)
+            if (name.Length == 0 || name.Length > 128 || name[0] == '.')
+                throw new InvalidOperationException("The latest release's tag is not a version name.");
             var cache = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HookshotBuilder", "update");
             Directory.CreateDirectory(cache);
             // (a release with the setup and its list: the setup downloads only the parts that changed since the version installed (a few MB

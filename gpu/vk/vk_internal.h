@@ -44,7 +44,7 @@ struct Device {
     uint32_t queue_family = 0;
     VkQueue queue = VK_NULL_HANDLE;
     // extensions in use
-    bool mesh_shader = false, external_memory_host = false, external_memory_fd = false, dma_buf_import = false, pipeline_library = false,
+    bool mesh_shader = false, mesh_queries = false, external_memory_host = false, external_memory_fd = false, dma_buf_import = false, pipeline_library = false,
          graphics_pipeline_library = false, custom_border_color = false, dynamic_state3 = false,
          depth_clip_control = false, null_descriptor = false, index_uint8 = false, push_descriptor = false,
          conditional_rendering = false, provoking_vertex = false, vertex_divisor = false, stencil_export = false, memory_budget = false,
@@ -57,11 +57,18 @@ struct Device {
          coop_matrix = false,   // (VK_KHR_cooperative_matrix with its feature)
          native_mma = false;    // (HMMA on it: the cooperative matrix test passed, vk_coopmat.cpp)
     bool eds3_polygon = false, eds3_clamp = false, eds3_blend = false, eds3_a2c = false;
+    bool swapchain_colorspace = false;   // (hookshot) VK_EXT_swapchain_colorspace: HDR10 surfaces are listed
+    bool hdr = false;                    // (hookshot) the swapchain is HDR10 (ST 2084, Rec. 2020): framegen_hdr writes it
     bool mesh_fallback = false;   // (hookshot) no VK_EXT_mesh_shader: task and mesh programs as compute shaders (vk_shader.cpp)
+    bool task_mesh_fallback = false;
+    bool uses_mesh_fallback(bool has_task) const {
+        return mesh_fallback || (task_mesh_fallback && has_task);
+    }
     VkPhysicalDeviceVulkan12Features vk12{};
     VkPhysicalDeviceVulkan13Features vk13{};
     VkShaderStageFlags sg32_stages = 0;   // (stages that run at 32 lanes when asked: the size the translated programs assume)
-    uint32_t sg_max = 32;                 // (hookshot: the most lanes a stage that is not held to 32 may run with)
+    uint32_t subgroup_size = 32, subgroup_max = 32;   // (the lanes a stage not pinned runs at, and the most it can have)
+    VkDriverId driver_id{};
     uint32_t max_push_descriptors = 0;
     // no window (HOS_HEADLESS): presents go to an image of their own, which RX_VK_SHOTS can write out
     bool offscreen = false;
@@ -71,6 +78,9 @@ struct Device {
     VkFormat swap_format = VK_FORMAT_UNDEFINED;
     VkExtent2D swap_extent{};
     std::vector<VkImage> swap_images;
+    std::vector<VkImageView> swap_views;   // (hookshot) a view of each, for Dear ImGui's overlays (VK_NULL_HANDLE: none)
+    VkFormat swap_view_format = VK_FORMAT_UNDEFINED;   // (their format: the UNORM one of an sRGB swapchain when it can be)
+    bool swap_mutable = false;   // (VK_KHR_swapchain_mutable_format: an sRGB swapchain's images viewed as UNORM)
     std::vector<VkSemaphore> swap_rendered;   // present waits belong to acquired images, not frame slots
     std::mutex present_mu;   // (the swapchain: presents and resizes)
     std::atomic<uint64_t> swap_resize{0};   // (a new window size, width << 32 | height: the next present makes the swapchain)
@@ -93,6 +103,11 @@ struct BufferRef {
 };
 bool memory_init();                                   // vk_memory.cpp
 void memory_cpu_owned(uint64_t guest, uint64_t size);   // (hookshot: words the replay writes on the CPU, left out of write-backs)
+// (hookshot) The replay's own CPU writes of guest memory, by GPU address: every one goes through guest_cpu_write (or, for a
+// write made in pieces, host->gpu_write and then guest_cpu_wrote over the whole range), so that the write-back diff's shadows
+// hear of it before this submission's write-back (vk_memory.cpp, "the write-back's diff"). tests/test_wb_diff_cpu_writes.py
+int guest_cpu_write(uint64_t gpu, const void* src, uint64_t n);
+void guest_cpu_wrote(uint64_t gpu, uint64_t n);
 void memory_table_begin();                         // (hookshot: a recording's page table changes held back for its upload commands)
 bool memory_table_flush();
 uint64_t memory_guest_pages();                        // (hookshot: the device address of guest memory's page table, 0: none)
@@ -101,6 +116,25 @@ BufferRef gpu_buffer(uint64_t gpu, uint64_t size);   // (empty when no pool hold
 /// A range as a binding of the replay sees it: the pool's VRAM mirror when it has one (vk_memory.cpp), else the
 /// imported pool. written: the GPU may write it (copied back to guest memory at the submission's end).
 BufferRef gpu_buffer_bind(uint64_t gpu, uint64_t size, bool written);
+BufferRef stream_copy(const void* src, uint64_t n);   // vk_draw.cpp: bytes in the recording's stream, as a binding
+// (Mako saccades) A read binding whose caller can copy the bytes instead (uniform and index buffers): when its 16 MB
+// chunk is not imported yet, the background thread imports it and the binding comes back empty for this draw, rather
+// than the replay thread stalling 5-30 ms in the driver while the player walks into new areas (RX_VK_IMPORT_DEFER=0: off).
+extern thread_local int tl_import_defer;
+// (what bound the range an on-demand import was made for, in its log line)
+extern thread_local const char* tl_bind_site;
+struct BindSite {
+    const char* prev;
+    int defer;
+    BindSite(const char* s, bool may_defer) : prev(tl_bind_site), defer(may_defer) {
+        tl_bind_site = s;
+        tl_import_defer += defer;
+    }
+    ~BindSite() {
+        tl_bind_site = prev;
+        tl_import_defer -= defer;
+    }
+};
 /// Changes when a read binding remembered earlier must be looked up again (a pool left, a mirror was made, a new submission)
 uint64_t gpu_bind_stamp();
 /// Around each submission's recording: mirrors wanted since the last one are made (begin), what the GPU wrote into
@@ -115,6 +149,8 @@ void memory_end_submission(VkCommandBuffer cmd);
 /// The game made a memory pool (gpu address, bytes): imported in the background, before it is used
 /// RX_VK_CHECKPOINTS: the draws the GPU reached, logged once the device is lost (vk_draw.cpp)
 void checkpoints_report();
+/// The device is lost: that report once, then the process ends (vk_replay.cpp)
+[[noreturn]] void device_lost();
 /// VK_AMD_buffer_marker's buffer, for RX_VK_CHECKPOINTS on a device without the NV checkpoints (vk_draw.cpp)
 void buffer_markers_init();
 void coopmat_init();   // vk_coopmat.cpp (once the device is made)
@@ -177,6 +213,7 @@ uint64_t gpu_pool_start(uint64_t gpu); // (EvilOOT) and where it begins
 bool create_buffer_cached(uint64_t size, VkBufferUsageFlags usage, VkBuffer& buffer, VmaAllocation& allocation,
                           void** mapped, bool dedicated = false);   // (vk_vma.cpp: cached host memory, mapped)
 void flush_mapped(VmaAllocation allocation, uint64_t size);
+void flush_mapped_range(VmaAllocation allocation, uint64_t offset, uint64_t size);
 void invalidate_mapped(VmaAllocation allocation, uint64_t size);   // (the CPU is to read what the GPU wrote: a no-op in coherent memory)
 void memory_stamp_gpu(uint64_t guest, uint64_t size);   // (a GPU write: memory_stamp, and the pages noted)
 void memory_protect_gpu(uint64_t guest, uint64_t size);  // (RX_VK_PROTECT_BARE=1: pages a shader writes through a table pointer)
@@ -220,7 +257,7 @@ bool has_stencil(VkFormat f);
 
 // device memory (vk_vma.cpp, Vulkan Memory Allocator)
 bool vma_init(PFN_vkGetInstanceProcAddr gipa);
-bool create_image(const VkImageCreateInfo& ci, VkImage& image, VmaAllocation& allocation, bool dedicated = false);
+bool create_image(const VkImageCreateInfo& ci, VkImage& image, VmaAllocation& allocation, bool dedicated = false, bool target = false);
 void destroy_image(VkImage image, VmaAllocation allocation);
 /// What an allocation really takes (VkMemoryRequirements.size: padding, alignment, the driver's metadata), 0 for none
 uint64_t allocation_size(VmaAllocation allocation);
@@ -234,7 +271,11 @@ bool create_device_buffer(uint64_t size, VkBufferUsageFlags usage, VkBuffer& buf
 /// Device-local memory this process uses and what the driver allows it now (VK_EXT_memory_budget), summed over the
 /// device-local heaps; false when unknown
 bool vram_usage(uint64_t* used, uint64_t* budget, uint64_t* block_free = nullptr);
+/// vram_usage asked of the driver now (VMA asks again for a new frame index), for the status line; false when the driver
+/// gives no budget (VK_EXT_memory_budget): used is then the game's own allocations
+bool vram_usage_now(uint64_t* used, uint64_t* budget);
 void vma_log_heaps();
+void vma_log_image_blocks();   // (the image pools' blocks: what they hold, and their free ranges)
 PFN_vkGetInstanceProcAddr instance_proc();   // vk_main.cpp
 
 bool create_swapchain(uint32_t width, uint32_t height);
@@ -294,30 +335,60 @@ inline int64_t prof_now() {
     static const int64_t freq = [] { LARGE_INTEGER f; QueryPerformanceFrequency(&f); return f.QuadPart; }();
     return perf_ticks_to_ns(t.QuadPart, freq);
 }
-struct ProfScope {
-    int phase;
-    int64_t t0;
-    explicit ProfScope(int p) : phase(p), t0(prof_now()) {}
-    ~ProfScope() { prof_ns[phase] += prof_now() - t0; }
+// (hookshot) The per-draw phases (PROF_HOT) run a few thousand times a frame, and each timer is two counter reads: ~25k
+// reads a frame were ~2% of the replay thread. One draw in eight is timed, picked at random per thread, and counted eight
+// times: the outermost PROF_HOT on the thread picks, and those nested in it follow, so a phase never reads more than the
+// one around it. What is slow and rare inside (a program or pipeline made, a texture created or uploaded, a wait) is timed
+// by PROF / PROF_EXACT and counted once as it is, sampled draw or not: the PROF_HOT scopes around it weigh only the rest.
+// Every scope timed (prof_full): RX_VK_PROF_ALL=1, RX_VK_SLOW_LOG, and while RX_VK_BENCH replays its frame.
+inline std::atomic<int> prof_full{getenv("RX_VK_PROF_ALL") || getenv("RX_VK_SLOW_LOG") ? 1 : 0};
+struct ProfThread {
+    uint32_t rng;    // (xorshift32, seeded at the thread's first pick)
+    int open, k;     // (the PROF_HOT scopes open, and the outermost one's weight: 0 not timed)
+    int64_t exact;   // (the nanoseconds PROF / PROF_EXACT timed on this thread so far)
 };
-// (hookshot) The per-draw phases run a few thousand times a frame, and each timer is two counter reads: ~25k reads a frame
-// were ~2% of the replay thread. One in eight of them is timed, picked at random per thread, and counted eight times, so the
-// frame line's per-phase totals stay unbiased estimates of the same sums. RX_VK_PROF_ALL=1: every one timed, as before.
-inline int prof_weight() {
-    static const bool all = getenv("RX_VK_PROF_ALL") != nullptr;
-    if (all) return 1;
-    static thread_local uint32_t s = 0x9E3779B9u ^ (uint32_t)(uintptr_t)&s;
-    s ^= s << 13, s ^= s >> 17, s ^= s << 5;
-    return (s & 7) ? 0 : 8;
+inline thread_local ProfThread prof_t;
+struct ProfScope {
+    int phase;   // (-1: PROF_EXACT, no phase of its own)
+    int64_t t0, x0;
+    explicit ProfScope(int p) : phase(p), t0(prof_now()), x0(prof_t.exact) {}
+    ~ProfScope() {
+        const int64_t dt = prof_now() - t0;
+        if (phase >= 0) prof_ns[phase] += dt;
+        prof_t.exact = x0 + dt;   // (what was exact inside is part of dt: not counted twice)
+    }
+};
+/// A thread's first state: splitmix64 of a counter, so the threads' sequences are unrelated; never 0, xorshift's fixed point
+inline uint32_t prof_seed() {
+    static std::atomic<uint64_t> threads{0};
+    uint64_t z = (threads.fetch_add(1, std::memory_order_relaxed) + 1) * 0x9E3779B97F4A7C15ull;
+    z = (z ^ z >> 30) * 0xBF58476D1CE4E5B9ull;
+    z = (z ^ z >> 27) * 0x94D049BB133111EBull;
+    return (uint32_t)((z ^ z >> 31) >> 32) | 1u;
+}
+inline int prof_pick(ProfThread& t) {   // (the weight: 8 one time in eight, else 0; 1 when every scope is timed)
+    if (prof_full.load(std::memory_order_relaxed)) return 1;
+    if (!t.rng) t.rng = prof_seed();
+    t.rng ^= t.rng << 13, t.rng ^= t.rng >> 17, t.rng ^= t.rng << 5;
+    return t.rng >> 29 ? 0 : 8;   // (the top bits: xorshift's low ones are its weakest)
 }
 struct ProfScopeHot {
     int phase, k;
-    int64_t t0;
-    explicit ProfScopeHot(int p) : phase(p), k(prof_weight()), t0(k ? prof_now() : 0) {}
+    int64_t t0, x0;
+    explicit ProfScopeHot(int p) : phase(p) {
+        ProfThread& t = prof_t;
+        if (!t.open++) t.k = prof_pick(t);
+        k = t.k, x0 = t.exact, t0 = k ? prof_now() : 0;
+    }
     ~ProfScopeHot() {
-        if (k) prof_ns[phase] += (prof_now() - t0) * k;
+        ProfThread& t = prof_t;
+        const int64_t x = t.exact - x0;   // (timed exactly inside: once, as it is)
+        if (k) prof_ns[phase] += (prof_now() - t0 - x) * k + x;
+        else if (x) prof_ns[phase] += x;
+        t.open--;
     }
 };
 } // namespace mkwvk
 #define PROF(phase) ::mkwvk::ProfScope prof_scope_##phase(::mkwvk::phase)
 #define PROF_HOT(phase) ::mkwvk::ProfScopeHot prof_scope_##phase(::mkwvk::phase)   // (the per-draw phases: sampled, above)
+#define PROF_EXACT() ::mkwvk::ProfScope prof_scope_exact(-1)   // (a slow, rare path inside them: timed exactly, above)

@@ -150,12 +150,47 @@ static int log_take_locked(char **out) {
     return n;
 }
 
+/* (hookshot) A batch goes out in one write. stderr is unbuffered (hos_main.c), so each line was a write of its own: 30-90 a
+   second in play, every one extending the log file. With the game on a slow disk (a SATA SSD, 90% full) those writes kept
+   the disk busy: its 4 KB reads took 10-200 ms where they take 0.4 ms, and what the game read from it meanwhile (a page of
+   its own code, a file of the game's) waited as long: the long frames of a session. */
 static void log_write(char **lines, int n) {
-    for (int i = 0; i < n; i++) {
-        fputs(lines[i], stderr);
-        free(lines[i]);
+    size_t total = 0;
+    for (int i = 0; i < n; i++) total += strlen(lines[i]);
+    char *all = n > 1 ? (char *)malloc(total + 1) : NULL;
+    if (all) {
+        size_t at = 0;
+        for (int i = 0; i < n; i++) {
+            const size_t len = strlen(lines[i]);
+            memcpy(all + at, lines[i], len);
+            at += len;
+            free(lines[i]);
+        }
+        fwrite(all, 1, total, stderr);
+        free(all);
+    } else {   /* (one line, or no memory for the batch: line by line) */
+        for (int i = 0; i < n; i++) {
+            fputs(lines[i], stderr);
+            free(lines[i]);
+        }
     }
     fflush(stderr);
+}
+
+/* (hookshot) and the writer waits a little after the line it is woken for, so the lines of that time go out together: a few
+   writes a second however many lines there are. A queue half full goes out at once, before a burst can fill it (a full
+   queue has the thread that logs write the line itself). HOS_LOG_BATCH_MS=<ms> (default 250, at most 2000; 0: the lines
+   there are at each wake, as before). Nothing waiting is lost: every way out writes the queue first (log_flush,
+   log_crash_filter), and the writer holds no lock while it waits */
+enum { LOG_BATCH_FULL = 1024 };
+static DWORD log_batch_ms(void) {
+    static int ms = -1;
+    if (ms < 0) {
+        const char *e = getenv("HOS_LOG_BATCH_MS");
+        const int v = e && *e ? atoi(e) : 250;
+        ms = v < 0 ? 0 : v > 2000 ? 2000 : v;
+    }
+    return (DWORD)ms;
 }
 
 static DWORD WINAPI log_main(void *p) {
@@ -165,6 +200,10 @@ static DWORD WINAPI log_main(void *p) {
     for (;;) {
         AcquireSRWLockExclusive(&log_lock);
         while (!log_count) SleepConditionVariableSRW(&log_cv, &log_lock, INFINITE, 0);
+        /* (log_queue wakes it at each line: until the time is up or the queue half full) */
+        const ULONGLONG until = GetTickCount64() + log_batch_ms();
+        for (ULONGLONG now; log_count < LOG_BATCH_FULL && (now = GetTickCount64()) < until;)
+            SleepConditionVariableSRW(&log_cv, &log_lock, (DWORD)(until - now), 0);
         const int n = log_take_locked(batch);
         AcquireSRWLockExclusive(&log_write_lock);
         ReleaseSRWLockExclusive(&log_lock);
@@ -560,24 +599,40 @@ static const NameSpec *match_name_spec(const NameSpec *s, int n, const char *nam
    (MKW waits for the last frame's GPU work before it submits the next), and on a core shared with game threads
    it ran ~1.7x slower than alone. Only on machines with 8+ logical processors; HOS_RESERVE_CORE=0: none.
    (hookshot) On a CPU with cores of more than one kind, the last core of the fastest kind: the last core of all is an
-   efficiency core on Intel's hybrid CPUs (an i7-12700K's logical processors 16-19), the slowest place for the replay.
-   EfficiencyClass is higher the faster the core, and the same for every core of a CPU of one kind (the last core, as
-   before). The first processor group's cores only: the masks here are one group's. */
+   efficiency core on Intel's hybrid CPUs (an i7-12700K's logical processors 16-19), the slowest place for the replay
+   (an i7-13700K's Kokiri Forest: 48.7 fps with it there, 60 on a performance core). EfficiencyClass is higher the faster
+   the core, and the same for every core of a CPU of one kind (the last core, as before). Only with 4+ cores of the
+   fastest kind (8+ logical processors always have them on a CPU of one kind): a laptop's 2 performance cores and 8
+   efficiency ones (i5-1235U) would keep one of the two from the game; then none is kept. The calling thread's
+   processor group's cores: the masks the affinity calls take are its group's. Windows only: Linux keeps the last core,
+   as before. */
 /* (the choice: the cores' logical processor masks and EfficiencyClass, n of them; 0 for none. tests/test_reserved_core.py) */
 static uint64_t pick_reserved_core(const uint64_t *masks, const unsigned char *classes, int n) {
     uint64_t last = 0;
-    int best = -1;
-    for (int i = 0; i < n; i++)
-        if (masks[i] && ((int)classes[i] > best || ((int)classes[i] == best && masks[i] > last))) best = classes[i], last = masks[i];
+    int best = -1, fast = 0, logical = 0;
+    for (int i = 0; i < n; i++) {
+        if (!masks[i]) continue;
+        logical += __builtin_popcountll(masks[i]);
+        if ((int)classes[i] > best) {
+            best = classes[i], last = masks[i], fast = 1;
+        } else if ((int)classes[i] == best) {
+            fast++;
+            if (masks[i] > last) last = masks[i];
+        }
+    }
+    if (logical < 8 || fast < 4) return 0;
     return last;
 }
 #if defined(_WIN32)
-static uint64_t last_fastest_core(int *logical) {
+/* (pick_reserved_core over the calling thread's group's cores; *cores: how many, 0 when they could not be read) */
+static uint64_t last_fastest_core(int *cores) {
     static uint64_t masks[256];
     static unsigned char classes[256];
     DWORD len = 0;
     int n = 0;
-    *logical = 0;
+    *cores = 0;
+    GROUP_AFFINITY ga;
+    const WORD group = GetThreadGroupAffinity(GetCurrentThread(), &ga) ? ga.Group : 0;
     if (GetLogicalProcessorInformationEx(RelationProcessorCore, NULL, &len) || GetLastError() != ERROR_INSUFFICIENT_BUFFER)
         return 0;
     char *buf = (char *)malloc(len);
@@ -585,15 +640,15 @@ static uint64_t last_fastest_core(int *logical) {
         for (DWORD at = 0; at < len && n < 256;) {
             const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *e = (const SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *)(buf + at);
             if (!e->Size) break;
-            if (e->Relationship == RelationProcessorCore && e->Processor.GroupCount && e->Processor.GroupMask[0].Group == 0) {
+            if (e->Relationship == RelationProcessorCore && e->Processor.GroupCount && e->Processor.GroupMask[0].Group == group) {
                 masks[n] = (uint64_t)e->Processor.GroupMask[0].Mask;
                 classes[n] = e->Processor.EfficiencyClass;
-                *logical += __builtin_popcountll(masks[n]);
                 n++;
             }
             at += e->Size;
         }
     free(buf);
+    *cores = n;
     return pick_reserved_core(masks, classes, n);
 }
 #endif
@@ -604,12 +659,9 @@ uint64_t hos_reserved_cpus(void) {
     if (getenv("HOS_RESERVE_CORE") && !atoi(getenv("HOS_RESERVE_CORE"))) return mask;
 #if defined(_WIN32)
     {
-        int logical = 0;
-        const uint64_t fast = last_fastest_core(&logical);
-        if (fast) {
-            if (logical >= 8) mask = fast;
-            return mask;
-        }
+        int cores = 0;
+        const uint64_t fast = last_fastest_core(&cores);
+        if (cores) return mask = fast;
     }
 #endif
     SYSTEM_LOGICAL_PROCESSOR_INFORMATION info[256];
@@ -1301,6 +1353,10 @@ void hos_vcore_back(void) {
     HosThread *t = cur;
     if (hos_vcores_on() && t && !t->vc_held) vc_acquire(t);
 }
+/* Lifted code calls this from its interrupt polls with the loop's guest registers still in host registers (a64_poll_cur,
+   mkw_glue.c: the poll hands over no context, so the compiler need not spill them). It, and everything it calls, must never
+   read or write the thread's guest context (Ctx) or run guest code: what it would see there may be older than the loop. A
+   stall dump of a thread spinning in a polled loop shows such older registers for the same reason. */
 void hos_vcore_checkpoint(void) {
     HosThread *t = cur;
     if (t && t->vc_kick) vc_yield(t, t->vc_kick == 1);

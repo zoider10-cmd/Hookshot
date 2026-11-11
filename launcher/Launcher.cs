@@ -20,18 +20,79 @@ using System.Windows.Forms;
 [assembly: System.Reflection.AssemblyTitle("Mako Launcher")]
 [assembly: System.Reflection.AssemblyProduct("Mako")]
 [assembly: System.Reflection.AssemblyCompany("sharkiix")]
-[assembly: System.Reflection.AssemblyVersion("3.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("3.3.0.0")]
+
+// A seed's ID, as gpu/vk/oot_rando.h makes and reads it (oot_rando_id, oot_rando_from_id): 15 characters, XXXXX-XXXXX-XXXXX,
+// of the seed's random part and every setting, with a checksum. Bits, low first: the format's version 4, the random part 31,
+// 16 settings of 2 bits in the table's order, the checksum 8.
+static class RandoId {
+    const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    const int Bits = 75, Check = 8, Slots = 16, FormatVersion = 1;
+
+    static void Put(byte[] bits, ref int n, uint value, int width) { for (int i = 0; i < width; i++) bits[n++] = (byte)(value >> i & 1); }
+    static uint Get(byte[] bits, ref int n, int width) { uint v = 0; for (int i = 0; i < width; i++) v |= (uint)bits[n++] << i; return v; }
+    static uint Sum(byte[] bits) {   // (FNV-1a over the bits before the checksum, folded to its width)
+        uint h = 0x811c9dc5u;
+        unchecked { for (int i = 0; i < Bits - Check; i++) h = (h ^ bits[i]) * 0x01000193u; }
+        return (h ^ h >> 8 ^ h >> 16 ^ h >> 24) & ((1u << Check) - 1);
+    }
+
+    public static string Make(int seed, int[] choices) {
+        var bits = new byte[Bits];
+        int n = 0;
+        Put(bits, ref n, FormatVersion, 4);
+        Put(bits, ref n, (uint)seed & 0x7fffffffu, 31);
+        for (int i = 0; i < Slots; i++) Put(bits, ref n, i < choices.Length && choices[i] > 0 && choices[i] < 4 ? (uint)choices[i] : 0, 2);
+        Put(bits, ref n, Sum(bits), Check);
+        var sb = new StringBuilder();
+        for (int c = 0; c < Bits / 5; c++) {
+            int at = c * 5;
+            if (c > 0 && c % 5 == 0) sb.Append('-');
+            sb.Append(Alphabet[(int)Get(bits, ref at, 5)]);
+        }
+        return sb.ToString();
+    }
+
+    // (null and the seed and its choices, or what is wrong with the text. counts: how many choices each setting has)
+    public static string Read(string text, int[] counts, out int seed, out int[] choices) {
+        seed = 0; choices = new int[counts.Length];
+        var bits = new byte[Bits];
+        int n = 0;
+        foreach (char raw in text) {
+            char ch = char.ToUpperInvariant(raw);
+            if (ch == '-' || ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') continue;
+            if (ch == 'O') ch = '0';
+            if (ch == 'I' || ch == 'L') ch = '1';
+            int at = Alphabet.IndexOf(ch);
+            if (at < 0) return "it has a character no seed ID has";
+            if (n == Bits) return "it is too long (a seed ID has 15 characters)";
+            Put(bits, ref n, (uint)at, 5);
+        }
+        if (n != Bits) return "it is too short (a seed ID has 15 characters)";
+        n = Bits - Check;
+        if (Get(bits, ref n, Check) != Sum(bits)) return "a typo? Its checksum does not match";
+        n = 0;
+        if (Get(bits, ref n, 4) != FormatVersion) return "it is from another version of the randomizer";
+        seed = (int)Get(bits, ref n, 31);
+        for (int i = 0; i < Slots; i++) {
+            int v = (int)Get(bits, ref n, 2);
+            if (v >= (i < counts.Length ? counts[i] : 1)) return "it has a setting this version does not have";
+            if (i < counts.Length) choices[i] = v;
+        }
+        return null;
+    }
+}
 
 static class Fork {
     public const string Name = "Mako";
     // (the update check compares the first number of the tags: the first Mako release must be numbered above amd-fix-2.1, or the
     // 2.x launchers players have would think it older and never offer it)
-    public const string Base = "mako-3.0";      // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
-    public const string Version = "mako-3.0.1"; // (HOOKSHOT_FORK_VERSION)
-    public const int Api = 7;                   // (gpu/vk/vk_api.h MKWVK_API_VERSION)
-    public const string Api_Url = "https://api.github.com/repos/Shakoquo/Hookshot/releases/latest";
-    public const string Page = "https://github.com/Shakoquo/Hookshot/releases/latest";
-    public const string Home = "https://github.com/Shakoquo/Hookshot";
+    public const string Base = "mako-3.3";      // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
+    public const string Version = "mako-3.3"; // (HOOKSHOT_FORK_VERSION)
+    public const int Api = 12;                  // (gpu/vk/vk_api.h MKWVK_API_VERSION)
+    public const string Api_Url = "https://api.github.com/repos/Shakoquo/Mako/releases/latest";
+    public const string Page = "https://github.com/Shakoquo/Mako/releases/latest";
+    public const string Home = "https://github.com/Shakoquo/Mako";
     public const string GameExe = "hookshot.exe";
     public static string Shown(string v) { var m = Regex.Match(v ?? "", @"\d+(\.\d+)*"); return m.Success ? "v" + m.Value : v; }
 }
@@ -343,28 +404,36 @@ class LauncherForm : Form {
     static readonly object[][] GraphicsRows = {
         new object[] { "quality_preset", "Quality preset", new[] { "Custom", "Minimum (4 GB)", "Low (6 GB)", "Balanced (8 GB)", "High (12 GB)", "Ultra (16 GB+)" }, new[] { 0, 1, 2, 3, 4, 5 },
             "Sets the settings below for your graphics card's memory. Changing one of them by hand makes it Custom." },
-        new object[] { "output_res", "Output resolution", new[] { "2048 x 1152 (the game's)", "2560 x 1440", "3840 x 2160 (4K)" }, new[] { 0, 1, 2 },
+        new object[] { "output_res", "Output resolution", new[] { "1280 x 720", "1600 x 900", "1920 x 1080", "2048 x 1152 (the game's)", "2560 x 1440", "3840 x 2160 (4K)" }, new[] { 6, 5, 3, 0, 1, 2 },
             "The size the game draws its whole picture at, menus included, before it is fitted to your screen. Higher is sharper and heavier." },
         new object[] { "resolution", "3D resolution", new[] { "Auto", "100%", "75%", "67%", "50%" }, new[] { 0, 1, 2, 3, 4 },
             "How sharp the 3D is drawn, as a share of the output resolution. Auto lowers it when the graphics card is busy." },
-        new object[] { "upscaling", "Upscaling", new[] { "Off", "Catmull-Rom", "Lanczos" }, new[] { 0, 1, 2 },
+        new object[] { "dlss", "Upscaler", new[] { "The game's own", "AMD FSR 3.1", "AMD FSR 4", "AMD FSR 4 Native AA" }, new[] { 0, 3, 4, 5 },
+            "What brings the 3D up to the output resolution. FSR 3.1 works on any graphics card. FSR 4 is sharper: RX 9000 cards, and AMD's FSR 4 files in the game folder. Native AA keeps the full resolution and only smooths the edges." },
+        new object[] { "upscaling", "Screen filter", new[] { "Off", "Catmull-Rom", "Lanczos" }, new[] { 0, 1, 2 },
             "The filter that fits the picture to your screen. Catmull-Rom is sharper, Lanczos sharper still." },
         new object[] { "sharpness", "Sharpness", new[] { "0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" }, new[] { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 },
             "Sharpens the picture on its way to the screen. Too much shows halos around edges." },
         new object[] { "frame_generation", "Frame generation", new[] { "Off", "2x", "3x", "4x", "5x", "6x", "7x", "8x" }, new[] { 0, 2, 3, 4, 5, 6, 7, 8 },
             "Shows extra in-between frames for smoother motion." },
+        new object[] { "frame_rate_cap", "Frame rate cap", new[] { "60 (the console's)", "90", "120", "144", "165", "240" }, new[] { 0, 1, 2, 3, 4, 5 },
+            "The most frames per second the game runs at. Above 60 needs a screen that shows them." },
+        new object[] { "amd_anti-lag_2", "AMD Anti-Lag 2", new[] { "Off", "On" }, new[] { 0, 1 },
+            "AMD graphics cards: less delay between your button and the screen. Has no effect while frame generation is on." },
         new object[] { "frame_pacing", "Frame pacing", new[] { "Off", "On" }, new[] { 0, 1 },
             "Spaces the frames evenly: steadier motion." },
+        new object[] { "vsync", "VSync", new[] { "Off", "On" }, new[] { 0, 1 },
+            "Waits for your screen before showing each frame: no tearing, at a little more delay." },
         new object[] { "fullscreen", "Display", new[] { "Window", "Fullscreen" }, new[] { 0, 1 },
             "Play in a window or full screen. Alt+Enter switches in game." },
         new object[] { "ultrawide", "Screen shape", new[] { "16:9", "Monitor's shape" }, new[] { 0, 1 },
             "Monitor's shape widens the camera to fill a screen wider than 16:9." },
         new object[] { "handheld_profile", "Handheld profile", new[] { "Off", "On" }, new[] { 0, 1 },
             "Runs the game as if the console were undocked: lower resolutions, lighter on the graphics card." },
-        new object[] { "fps_counter", "FPS counter", new[] { "Off", "On" }, new[] { 0, 1 },
-            "Shows the frames per second in a corner of the screen." },
     };
     static readonly object[][] GameRows = {
+        new object[] { "fps_counter", "FPS counter", new[] { "Off", "On" }, new[] { 0, 1 },
+            "Shows the frames per second in a corner of the screen." },
         new object[] { "game_speed", "Game speed", new[] { "Per frame", "Real time" }, new[] { 0, 1 },
             "Real time keeps the game at its normal speed even when the frame rate drops." },
         new object[] { "text_speed", "Text speed", new[] { "Normal", "2x", "4x", "Instant" }, new[] { 0, 1, 2, 3 },
@@ -374,8 +443,10 @@ class LauncherForm : Form {
         new object[] { "controller_in_background", "Controller in background", new[] { "Off", "On" }, new[] { 0, 1 },
             "Keeps the controller working when the game window is not in front." },
     };
-    // (the randomizer: the rows of the Insert menu's Randomizer tab, gpu/vk/oot_rando.h. The same keys, choices and order:
-    // tests/test_rando_settings.py checks them against that file. The seed's random part, rando_seed, is the New seed button's)
+    // (the randomizer: the settings of gpu/vk/oot_rando.h. The same keys, choices and order: tests/test_rando_settings.py
+    // checks them against that file. The seed's random part, rando_seed, is the New seed button's. The game's Insert menu
+    // has no Randomizer tab since Mako 3.3 (its menu was written anew): this page is where they are set, and where a
+    // seed's ID is copied and pasted)
     static readonly object[][] RandoRows = {
         new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
             "Turns the seed on. Chests, Dungeon keys and Major items are placed when Play is pressed; the other settings are not placed yet." },
@@ -493,11 +564,13 @@ class LauncherForm : Form {
         widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx + colW + 14, 112 + 2 * 70 + 11, 160, 40), Page = 3, Click = OnRandomCosmetics });
         // (beside the eleventh selector, in the sixth line's right half)
         widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx + colW + 12, 112 + 5 * 70 + 11, 130, 40), Page = 2, Click = OnNewSeed });
+        widgets.Add(new Btn { Text = "Copy seed ID", R = new RectangleF(cx, 556, 150, 40), Page = 2, Click = OnCopySeedId });
+        widgets.Add(new Btn { Text = "Paste seed ID", R = new RectangleF(cx + 160, 556, 150, 40), Page = 2, Click = OnPasteSeedId });
         var langItems = new string[Languages.Length]; var langValues = new int[Languages.Length];
         for (int i = 0; i < Languages.Length; i++) { langItems[i] = Languages[i][1]; langValues[i] = i; }
         langSel = new Selector { Key = "language", Label = "Language", Items = langItems, Values = langValues, Page = 1, Index = 0,
                                  HelpText = "The game's language: text and voices.",
-                                 R = new RectangleF(cx, 112 + 2 * 70, colW, 62) };   // (the third line: the four game selectors fill the first two)
+                                 R = new RectangleF(cx + colW + 14, 112 + 2 * 70, colW, 62) };   // (the third line's right half: the five game selectors end in its left)
         langSel.Changed = s => { if (!loading) SaveLanguage(); };
         widgets.Add(langSel);
         for (int i = 0; i < Fixes.Length; i++) {
@@ -724,9 +797,9 @@ class LauncherForm : Form {
                         StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 2) {   // (the randomizer: the seed beside its button, and what the page does not do yet)
             float half = (W - LeftW - 72 - 12) / 2f;   // (a selector's width: the button is in the right half of the sixth line)
-            string seed = randoSeed != 0 ? "Seed " + randoSeed : "No seed yet";
+            string seed = randoSeed != 0 ? SeedId() : "No seed yet";
             Theme.Text_(g, seed, Theme.Small, Theme.Dim, new RectangleF(x + half + 12 + 142, 112 + 5 * 70 + 11, half - 142, 40), StringAlignment.Near, StringAlignment.Center);
-            Theme.Text_(g, "Placed when Play is pressed. The seed's ID, to share it, is on the game's Randomizer tab (Insert or F1).",
+            Theme.Text_(g, "Placed when Play is pressed. The seed's ID holds the seed and every setting above: the same ID is the same seed.",
                         Theme.Small, Theme.Faint, new RectangleF(x, 528, W - LeftW - 72, 18), StringAlignment.Near, StringAlignment.Near);
         }
         if (PageNow == 3)
@@ -823,8 +896,8 @@ class LauncherForm : Form {
         var o = ReadOptions();
         // (the game's own defaults where the file has nothing yet: options.ini is written by the game's Insert menu)
         var defaults = new Dictionary<string, int> { { "quality_preset", 0 }, { "output_res", 0 }, { "resolution", 0 }, { "upscaling", 2 }, { "sharpness", 30 },
-            { "frame_generation", 2 }, { "frame_pacing", 1 }, { "fullscreen", 1 }, { "ultrawide", 0 }, { "handheld_profile", 0 },
-            { "fps_counter", 0 }, { "game_speed", 1 }, { "text_speed", 0 }, { "fast_forward", 0 }, { "controller_in_background", 0 } };
+            { "frame_generation", 2 }, { "frame_pacing", 1 }, { "vsync", 0 }, { "fullscreen", 1 }, { "ultrawide", 0 }, { "handheld_profile", 0 },
+            { "fps_counter", 0 }, { "dlss", 0 }, { "frame_rate_cap", 0 }, { "amd_anti-lag_2", 0 }, { "game_speed", 1 }, { "text_speed", 0 }, { "fast_forward", 0 }, { "controller_in_background", 0 } };
         foreach (var row in RandoRows) defaults[(string)row[0]] = 0;   // (the randomizer: off, every setting the game's own)
         foreach (var kv in defaults) SetSetting(kv.Key, o.ContainsKey(kv.Key) ? o[kv.Key] : kv.Value);
         randoSeed = o.ContainsKey("rando_seed") ? Math.Max(0, o["rando_seed"]) : 0;
@@ -892,6 +965,42 @@ class LauncherForm : Form {
 
     void OnNewSeed() {
         randoSeed = NewSeed();
+        randoDropImport = true;
+        SaveOptions();
+    }
+
+    // (the settings' choices in the table's order, without the on / off selector: what a seed ID holds)
+    int[] RandoChoices() {
+        var v = new int[RandoRows.Length - 1];
+        for (int i = 1; i < RandoRows.Length; i++) v[i - 1] = settings[(string)RandoRows[i][0]].Value;
+        return v;
+    }
+    string SeedId() { return RandoId.Make(randoSeed, RandoChoices()); }
+
+    void OnCopySeedId() {
+        if (randoSeed == 0) { randoSeed = NewSeed(); randoDropImport = true; SaveOptions(); }
+        try { Clipboard.SetText(SeedId()); }
+        catch (Exception ex) { MessageBox.Show(this, "The seed ID could not be copied:\n" + ex.Message, Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+    }
+
+    // (the clipboard's text as a seed ID: its seed and every setting, the randomizer on)
+    void OnPasteSeedId() {
+        string text = "";
+        try { text = Clipboard.ContainsText() ? Clipboard.GetText() : ""; } catch { }
+        int seed = 0; int[] v = null;
+        var counts = new int[RandoRows.Length - 1];
+        for (int i = 1; i < RandoRows.Length; i++) counts[i - 1] = ((string[])RandoRows[i][2]).Length;
+        string bad = "no text in the clipboard";
+        if (text.Trim().Length != 0) bad = RandoId.Read(text, counts, out seed, out v);
+        if (bad != null) {
+            MessageBox.Show(this, "That is not a seed ID: " + bad + ".", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        loading = true;
+        SetSetting("rando_on", 1);
+        for (int i = 1; i < RandoRows.Length; i++) SetSetting((string)RandoRows[i][0], v[i - 1]);
+        loading = false;
+        randoSeed = seed;
         randoDropImport = true;
         SaveOptions();
     }
@@ -1043,9 +1152,10 @@ class LauncherForm : Form {
                     string manifest = null;
                     foreach (Match a in Regex.Matches(json, "\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"")) {
                         string u = a.Groups[1].Value;
-                        if (u.EndsWith("/hookshot_vk_update.txt")) manifest = u;
-                        if (u.EndsWith("/hookshot_vk.dll")) dll = u;
-                        if (u.EndsWith("/HookshotBuilder.zip")) zip = u;
+                        // (Mako 3.3: the new names first; the old ones are what releases up to 3.0.2 have)
+                        if (u.EndsWith("/mako_vk_update.txt") || (manifest == null && u.EndsWith("/hookshot_vk_update.txt"))) manifest = u;
+                        if (u.EndsWith("/mako_vk.dll") || (dll == null && u.EndsWith("/hookshot_vk.dll"))) dll = u;
+                        if (u.EndsWith("/MakoBuilder.zip") || (zip == null && u.EndsWith("/HookshotBuilder.zip"))) zip = u;
                     }
                     if (zip != null) {
                         var zm = Regex.Match(json, "\"size\"\\s*:\\s*(\\d+)[^{}]*?\"browser_download_url\"\\s*:\\s*\"" + Regex.Escape(zip) + "\"");
@@ -1307,6 +1417,11 @@ class LauncherForm : Form {
 
     [STAThread]
     static void Main(string[] args) {
+        if (args.Length == 3 && args[0] == "--seed-id") {   // (tests/test_rando_settings.py: the ID of a seed and its choices, "3,0,0,...")
+            var parts = args[2].Length == 0 ? new string[0] : args[2].Split(',');
+            Console.Out.WriteLine(RandoId.Make(int.Parse(args[1]), Array.ConvertAll(parts, int.Parse)));
+            return;
+        }
         ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;   // (TLS 1.2: GitHub)
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);

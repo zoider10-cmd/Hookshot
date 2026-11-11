@@ -40,3 +40,5 @@ rando_inventory.txt
 rando_locations.txt
 rando_actors.txt
 rando_room.txt
+# ---- NVIDIA's DLSS SDK (scripts/ngx_sdk.py): NVIDIA's files, never committed ----
+ngx-sdk/

@@ -1,6 +1,7 @@
-/* (OoT randomizer) The randomizer's settings and its seed IDs, shared by the Insert menu's Randomizer tab
-   (gpu/vk/vk_menu.cpp), the game side (host/oot_rando.c) and tests/test_rando_settings.py. Plain C, no other header of
-   the project.
+/* (OoT randomizer) The randomizer's settings and its seed IDs, shared by the game side (host/oot_rando.c) and
+   tests/test_rando_settings.py; the launcher's Randomizer page (launcher/Launcher.cs: RandoRows, RandoId) has the same
+   table and the same IDs, written again in C#. The Insert menu had a Randomizer tab of these rows until Mako 3.3, whose
+   menu was written anew: the settings are the launcher's now. Plain C, no other header of the project.
 
    The settings are the rando_ lines of hookshot_options.ini (the launcher's Randomizer page writes them too):
      rando_on=0|1          the randomizer
@@ -30,9 +31,8 @@
 #include <string.h>
 
 /* X(NAME, label, ini key, help, choices...): choice 0 is the game's own; 4 choices at most (2 bits in a seed ID).
-   Append only: a setting's place is its place in a seed ID. Each is a row of the Insert menu's Randomizer tab, which
-   has room for 13 rows (gpu/vk/vk_menu.cpp), and a selector of the launcher's Randomizer page (launcher/Launcher.cs
-   RandoRows: the same keys and choices, kept in step by tests/test_rando_settings.py). */
+   Append only: a setting's place is its place in a seed ID. Each is a selector of the launcher's Randomizer page
+   (launcher/Launcher.cs RandoRows: the same keys and choices, kept in step by tests/test_rando_settings.py). */
 #define OOT_RANDO_SETTINGS(X) \
     X(CHESTS, "Chests", "rando_chests", \
       "Which treasure chests hold a shuffled item. All is every chest in the game.", \

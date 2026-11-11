@@ -1,5 +1,5 @@
-/* (OoT randomizer) The seed the game was started with: the Insert menu's Randomizer tab and the launcher's Randomizer
-   page keep its settings in hookshot_options.ini (gpu/vk/oot_rando.h has the lines and the seed IDs). They are read
+/* (OoT randomizer) The seed the game was started with: the launcher's Randomizer page keeps its settings in
+   hookshot_options.ini (the Insert menu had a Randomizer tab too, until Mako 3.3's menu; it keeps the lines when it saves) (gpu/vk/oot_rando.h has the lines and the seed IDs). They are read
    once here, at the start, so a change made while playing is the next start's. HOS_RANDO_SEED_ID=<seed ID> (test
    runs) is used in place of the file's seed. The log names the seed ID, so a report's log is enough to play the same
    seed.

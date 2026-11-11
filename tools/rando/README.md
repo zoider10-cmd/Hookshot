@@ -1,7 +1,7 @@
 # Randomizer tools
 
 Scripts that place a randomizer seed's items, run on the player's PC against their own extracted game
-(`<game folder>\romfs`). They read the settings of the game's **Randomizer** tab (`hookshot_options.ini`,
+(`<game folder>\romfs`). They read the settings of the launcher's **Randomizer** page (`hookshot_options.ini`,
 [gpu/vk/oot_rando.h](../../gpu/vk/oot_rando.h)) and write the seed as a RomFS mod, `<game folder>\mods\rando-seed`,
 which Mako loads in place of the game's own files ([host/mods.c](../../host/mods.c)). The game's files are never
 changed, and no game file belongs in this repository: the scripts' reports name the game's files and items, so
@@ -11,15 +11,19 @@ All need Python 3 with `zstandard` (the build's own requirement). Run them with 
 
 ## Playing a seed
 
-1. In the launcher's **Randomizer** page (or the game's menu, Insert or F1, **Randomizer** tab): turn Randomizer on,
+1. In the launcher's **Randomizer** page: turn Randomizer on,
    set **Chests**, and **Major items** and **Dungeon keys** as wanted.
 2. Press **Play** in the launcher. It runs `<game folder>\rando\rando_seed.py` (a copy the build puts there) with
    `--if-changed`, then starts the game. `mods\rando-seed\spoiler.txt` says what every chest held and holds now;
    `rando\last_run.txt` is what the script said.
 
 The launcher needs Python 3 on the PATH with `zstandard` for this. With the randomizer or Chests off, Play removes the
-seed's mod. A setting changed in the game's menu takes effect at the next Play from the launcher: starting
-`hookshot.exe` directly does not place anything.
+seed's mod. Starting `hookshot.exe` directly does not place anything.
+
+Since the merge of Mako 3.3 the game's own menu (Insert or F1) has no Randomizer tab: 3.3 wrote that menu anew, and
+the tab was not written again for it. The launcher's page has every setting, and **Copy seed ID** and **Paste seed
+ID** there do what the tab's Seed row did: an ID holds the seed and every setting, so the same ID is the same seed.
+The menu keeps the randomizer's lines of the options file when it saves.
 
 By hand, for trying things: `python -I tools/rando/rando_seed.py "<game folder>\romfs"`.
 

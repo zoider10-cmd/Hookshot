@@ -2,6 +2,7 @@
 // wants where the GPU has them: mesh shaders, host memory import, graphics pipeline libraries), the window's
 // swapchain, and the rx_* table (vk_api.h). The NVN replay itself is vk_replay.cpp.
 #include "vk_paths.h"
+#include "vk_damaged.h"
 #include "vk_loader.h"
 
 #include <atomic>
@@ -23,6 +24,10 @@
 #include "vk_internal.h"
 #include "gpu_choice.h"
 #include "vk_menu.h"
+#include "vk_dlss.h"
+#include "vk_fsr4.h"
+#include "vk_reflex.h"
+#include "vk_antilag.h"
 #include "vk_progress.h"
 
 namespace vkx {
@@ -37,7 +42,11 @@ VKX_DEVICE3(VKX_DEFINE)
 static PFN_vkGetInstanceProcAddr get_instance_proc;
 
 bool load_global() {
+#ifdef _WIN32   // (hookshot: the loader from System32 only, not from the current folder or PATH)
+    HMODULE m = LoadLibraryExA("vulkan-1.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+#else
     HMODULE m = LoadLibraryA("vulkan-1.dll");   // (linux: libvulkan.so.1, host/posix/win32_posix.c)
+#endif
     if (!m) return false;
     get_instance_proc = (PFN_vkGetInstanceProcAddr)(void*)GetProcAddress(m, "vkGetInstanceProcAddr");
     if (!get_instance_proc) return false;
@@ -114,8 +123,20 @@ bool create_instance() {
     app.apiVersion = VK_API_VERSION_1_3;
     VkInstanceCreateInfo ci{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
     ci.pApplicationInfo = &app;
-    ci.enabledExtensionCount = n_exts;
-    ci.ppEnabledExtensionNames = exts;
+    std::vector<const char*> ext_list(exts, exts + n_exts);
+    {   // (hookshot) what NVIDIA DLSS needs (vk_dlss.cpp; nothing in a build without it)
+        uint32_t n = 0;
+        vkEnumerateInstanceExtensionProperties(nullptr, &n, nullptr);
+        std::vector<VkExtensionProperties> all(n);
+        vkEnumerateInstanceExtensionProperties(nullptr, &n, all.data());
+        dlss_instance_extensions(ext_list, all);
+        // (hookshot) the HDR10 colour space for the Insert menu's HDR (the menu's settings are read after the instance is made, so
+        // whenever the driver has it; the SDR choice in create_swapchain keeps to the sRGB surface)
+        if (has_extension(all, VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME))
+            ext_list.push_back(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME), dev.swapchain_colorspace = true;
+    }
+    ci.enabledExtensionCount = (uint32_t)ext_list.size();
+    ci.ppEnabledExtensionNames = ext_list.data();
     // RX_VK_VALIDATION=1: the Khronos validation layer (when installed)
     const char* layer = "VK_LAYER_KHRONOS_validation";
     if (getenv("RX_VK_VALIDATION")) ci.enabledLayerCount = 1, ci.ppEnabledLayerNames = &layer;
@@ -127,8 +148,32 @@ bool create_instance() {
     return true;
 }
 
+// (Mako) an incomplete dump's three damaged textures given stand-ins, before the game reads any (vk_damaged.h)
+void stand_in_damaged_textures() {
+    if (getenv("MAKO_NO_STAND_IN")) return;
+    std::filesystem::path tex;
+    if (const char* d = getenv("MAKO_STAND_IN_DIR")) {   // (a test: that folder instead of the game's romfs\Tex)
+        tex = d;
+    } else {
+        char exe[MAX_PATH];
+        const DWORD n = game_module_path(exe, MAX_PATH);
+        if (!n || n >= MAX_PATH) return;
+        tex = std::filesystem::path(exe).parent_path() / "romfs" / "Tex";
+    }
+    std::error_code ec;
+    if (!std::filesystem::is_directory(tex, ec)) return;
+    const auto done = damaged::repair(tex);
+    for (const auto& f : done)
+        logf("vk: game file romfs\\Tex\\%s is damaged (an incomplete dump: a complete one is about 23.8 GB): %s%s", f.name.c_str(),
+             f.stand_in.empty() ? "nothing similar found, left as it is" : "in its place now ", f.stand_in.c_str());
+    if (!done.empty())
+        logf("vk: the damaged files are kept beside them as <name>.damaged; dump the game again for the original look "
+             "(MAKO_NO_STAND_IN=1: not done)");
+}
+
 bool pick_device() {
     menu_init();
+    stand_in_damaged_textures();
     uint32_t n = 0;
     vkEnumeratePhysicalDevices(dev.instance, &n, nullptr);
     std::vector<VkPhysicalDevice> all(n);
@@ -238,6 +283,12 @@ bool create_device() {
         optional(VK_AMD_BUFFER_MARKER_EXTENSION_NAME, dev.buffer_marker);
     optional(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, dev.device_fault);
     optional(VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME, dev.coop_matrix);
+    optional(VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_EXTENSION_NAME, dev.swap_mutable);   // (hookshot: the overlays, vk_imgui.cpp)
+    dlss_device_extensions(want, exts);   // (hookshot: NVIDIA DLSS's, vk_dlss.cpp)
+    bool fsr_descriptor_buffer = false;   // (hookshot, linux: only with a Vulkan FSR 4 library beside the game, vk_fsr4.cpp)
+    if (fsr4_wants_descriptor_buffer()) optional(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME, fsr_descriptor_buffer);
+    reflex_device_extensions(want, exts);   // (hookshot: NVIDIA Reflex's, vk_reflex.cpp)
+    antilag_device_extensions(want, exts);   // (hookshot: AMD Anti-Lag 2's, vk_antilag.cpp)
 
     // the queue: one family for graphics, compute and transfer
     vkGetPhysicalDeviceQueueFamilyProperties(dev.physical, &n, nullptr);
@@ -271,7 +322,8 @@ bool create_device() {
         VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
         p2.pNext = &dp;
         vkGetPhysicalDeviceProperties2(dev.physical, &p2);
-        want = dp.driverID == VK_DRIVER_ID_NVIDIA_PROPRIETARY;
+        want = false;   // (v2.0.9: off by default with the write-back diff until issue 1161's device lost is placed; was:
+        (void)dp;       //  NVIDIA's driver on Windows. RX_VK_PRESENT_QUEUE=1: on)
 #endif
         if (const char* e = getenv("RX_VK_PRESENT_QUEUE")) want = atoi(e) != 0;
         for (uint32_t i = 0; want && i < n && compute_family == UINT32_MAX; i++)
@@ -316,7 +368,12 @@ bool create_device() {
     if (dev.view_2d_of_3d) *tail = &v2d3d, tail = &v2d3d.pNext;
     VkPhysicalDeviceCooperativeMatrixFeaturesKHR coop{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR};
     if (dev.coop_matrix) *tail = &coop, tail = &coop.pNext;
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT};
+    if (fsr_descriptor_buffer) *tail = &descriptor_buffer, tail = &descriptor_buffer.pNext;
+    reflex_device_features(tail);   // (present ids, when NVIDIA Reflex's extensions are there)
+    antilag_device_features(tail);   // (AMD Anti-Lag 2's, when its extension is there)
     vkGetPhysicalDeviceFeatures2(dev.physical, &f);
+    descriptor_buffer.descriptorBufferCaptureReplay = VK_FALSE;
     dev.view_2d_of_3d = dev.view_2d_of_3d && v2d3d.sampler2DViewOf3D;
     coop.cooperativeMatrixRobustBufferAccess = VK_FALSE;
     dev.coop_matrix = dev.coop_matrix && coop.cooperativeMatrix &&
@@ -371,7 +428,9 @@ bool create_device() {
     {   // (hookshot, after TotK Recomp's vk_caps.c) NVN's programs are written for 32 lanes: the translator is told 32, and the lane
         // shuffles of OoT's networks and the lane masks of its mesh programs depend on it. NVIDIA's GPUs have no other size; AMD's
         // default to 64 where they like, and the networks' output came out as coloured noise (Hookshot issues 10 and 14)
+        VkPhysicalDeviceDriverProperties drv{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
         VkPhysicalDeviceSubgroupSizeControlProperties sc{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES};
+        sc.pNext = &drv;
         VkPhysicalDeviceSubgroupProperties sg{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
         sg.pNext = &sc;
         VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
@@ -379,9 +438,9 @@ bool create_device() {
         vkGetPhysicalDeviceProperties2(dev.physical, &p2);
         const bool pin = f13.subgroupSizeControl && sc.minSubgroupSize <= 32 && sc.maxSubgroupSize >= 32 && !getenv("RX_VK_NO_SUBGROUP_PIN");
         dev.sg32_stages = pin ? sc.requiredSubgroupSizeStages : 0;
-        // (RX_VK_SG32_MASK=<hex>, a test: only these of the stages are held to 32 lanes. 0x20 = what RX 6000 drivers allow)
-        if (const char* m = getenv("RX_VK_SG32_MASK")) dev.sg32_stages &= (VkShaderStageFlags)strtoul(m, nullptr, 16);
-        dev.sg_max = std::max(sg.subgroupSize, f13.subgroupSizeControl ? sc.maxSubgroupSize : 0u);
+        dev.subgroup_size = sg.subgroupSize;
+        dev.subgroup_max = sc.maxSubgroupSize > sg.subgroupSize ? sc.maxSubgroupSize : sg.subgroupSize;
+        dev.driver_id = drv.driverID;
         logf("vk: subgroups: default %u lanes, %u-%u, pinned to 32 on stages %#x", sg.subgroupSize, sc.minSubgroupSize, sc.maxSubgroupSize,
              (unsigned)dev.sg32_stages);
     }
@@ -391,10 +450,21 @@ bool create_device() {
     }
     mesh.multiviewMeshShader = mesh.primitiveFragmentShadingRateMeshShader = VK_FALSE;   // (not used)
     dev.mesh_shader = dev.mesh_shader && mesh.meshShader && mesh.taskShader;
+    // (task and mesh shader counts in pipeline statistics, a feature of their own: RADV has it off on RDNA2, and a query
+    // pool made with those counts all the same can hang the GPU)
+    dev.mesh_queries = dev.mesh_shader && mesh.meshShaderQueries;
     // (hookshot, issue 640) RDNA1 and older GPUs: no mesh shaders, but task and mesh programs run as compute shaders
     // that write their vertices to buffers, drawn through an ordinary graphics pipeline. It needs buffer device addresses.
     dev.mesh_fallback = !dev.mesh_shader && f12.bufferDeviceAddress && !getenv("RX_VK_NO_MESH_FALLBACK");
     if (dev.mesh_fallback) logf("vk: no mesh shaders: task and mesh programs run as compute shaders (issue 640 fallback)");
+    bool task_mesh_fallback = false;
+#ifdef _WIN32
+    // Navi 22 can time out on task + mesh draws in the AMD Windows driver (issue 996).
+    task_mesh_fallback = dev.props.vendorID == 0x1002 && dev.props.deviceID == 0x73df;
+#endif
+    if (const char* e = getenv("RX_VK_TASK_MESH_FALLBACK")) task_mesh_fallback = atoi(e) != 0;
+    dev.task_mesh_fallback = task_mesh_fallback && dev.mesh_shader && f12.bufferDeviceAddress && !getenv("RX_VK_NO_MESH_FALLBACK");
+    if (dev.task_mesh_fallback) logf("vk: task + mesh programs use the compute fallback (RX_VK_TASK_MESH_FALLBACK=0: native)");
     if (robust) logf("vk: robust buffer access %s", robust_ok ? "on" : "not supported");
     f.features.robustBufferAccess = robust_ok ? VK_TRUE : VK_FALSE;   // (off by default: the game's accesses stay in their buffers)
     dev.features = f.features;
@@ -420,6 +490,8 @@ bool create_device() {
     if (compute_family != UINT32_MAX) vkGetDeviceQueue(dev.device, compute_family, 0, &dev.present_queue), dev.present_family = compute_family;
     if (dev.buffer_marker) buffer_markers_init();
     coopmat_init();
+    reflex_device_created();
+    antilag_device_created();
     if (dev.push_descriptor) {
         VkPhysicalDevicePushDescriptorPropertiesKHR pp{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR};
         VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
@@ -431,6 +503,38 @@ bool create_device() {
 }
 
 } // namespace
+
+/// (hookshot) The UNORM format of an sRGB one (the same bytes, read and written as they are), else the format itself
+VkFormat unorm_of(VkFormat f) {
+    switch (f) {
+    case VK_FORMAT_B8G8R8A8_SRGB: return VK_FORMAT_B8G8R8A8_UNORM;
+    case VK_FORMAT_R8G8B8A8_SRGB: return VK_FORMAT_R8G8B8A8_UNORM;
+    case VK_FORMAT_A8B8G8R8_SRGB_PACK32: return VK_FORMAT_A8B8G8R8_UNORM_PACK32;
+    default: return f;
+    }
+}
+/// (hookshot) The views of the swapchain's images let go (before the swapchain they view: the device idle already)
+void swap_views_drop() {
+    for (auto view : dev.swap_views)
+        if (view) vkDestroyImageView(dev.device, view, nullptr);
+    dev.swap_views.clear();
+}
+/// (hookshot) A view of each of the swapchain's images, for Dear ImGui's overlays (vk_imgui.cpp), when they can be drawn into,
+/// in the format given (the swapchain's, or its UNORM one when the swapchain was made mutable)
+void swap_views_make(VkImageUsageFlags usage, VkFormat format) {
+    swap_views_drop();
+    dev.swap_views.assign(dev.swap_images.size(), VK_NULL_HANDLE);
+    dev.swap_view_format = format;
+    if (!(usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) return;
+    for (size_t i = 0; i < dev.swap_images.size(); i++) {
+        VkImageViewCreateInfo vi{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+        vi.image = dev.swap_images[i];
+        vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        vi.format = format;
+        vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        if (vkCreateImageView(dev.device, &vi, nullptr, &dev.swap_views[i]) != VK_SUCCESS) dev.swap_views[i] = VK_NULL_HANDLE;
+    }
+}
 
 bool create_swapchain(uint32_t width, uint32_t height) {
     VkSurfaceCapabilitiesKHR caps;
@@ -459,7 +563,31 @@ bool create_swapchain(uint32_t width, uint32_t height) {
     vkGetPhysicalDeviceSurfaceFormatsKHR(dev.physical, dev.surface, &n, formats.data());
     VkSurfaceFormatKHR fmt = formats[0];
     for (const auto& f : formats)   // (an UNORM target: the game's window textures are presented as they are)
-        if (f.format == VK_FORMAT_B8G8R8A8_UNORM || f.format == VK_FORMAT_R8G8B8A8_UNORM) fmt = f;
+        // (in sRGB: RADV on Wayland lists every format again with PASS_THROUGH_EXT and the compositor's colour spaces,
+        // and the last UNORM entry left the compositor an untagged surface, a grey picture. Still the last sRGB one, so
+        // a driver that lists only sRGB (NVIDIA, X11, Windows) keeps the format it had.)
+        if ((f.format == VK_FORMAT_B8G8R8A8_UNORM || f.format == VK_FORMAT_R8G8B8A8_UNORM) &&
+            f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            fmt = f;
+    // (hookshot) the Insert menu's HDR: a 10-bit HDR10 surface when the display lists one (Windows: "Use HDR" on in its display
+    // settings), the picture then written by framegen_hdr. Otherwise the SDR one above, said once
+    dev.hdr = false;
+    if (opts.hdr) {
+        for (const auto& f : formats)
+            if ((f.format == VK_FORMAT_A2B10G10R10_UNORM_PACK32 || f.format == VK_FORMAT_A2R10G10B10_UNORM_PACK32) &&
+                f.colorSpace == VK_COLOR_SPACE_HDR10_ST2084_EXT)
+                fmt = f, dev.hdr = true;
+        static bool told;
+        if (!told) {
+            told = true;
+            if (dev.hdr)
+                logf("vk: HDR: an HDR10 surface (format %d), paper white %d nits, peak %d nits", (int)fmt.format, opts.hdr_white,
+                     opts.hdr_peak);
+            else
+                logf("vk: HDR: the display lists no HDR10 surface%s: SDR",
+                     dev.swapchain_colorspace ? " (is HDR on in the display settings?)" : " (no VK_EXT_swapchain_colorspace)");
+        }
+    }
     // mailbox when the driver has it (latest frame, no tear). The game paces itself (nn_vi.c).
     n = 0;
     result = vkGetPhysicalDeviceSurfacePresentModesKHR(dev.physical, dev.surface, &n, nullptr);
@@ -471,7 +599,8 @@ bool create_swapchain(uint32_t width, uint32_t height) {
     if (result != VK_SUCCESS || modes.empty())
         logf("vk: querying present modes failed (VkResult %d, count %u); trying mandatory FIFO mode", (int)result, n);
     VkPresentModeKHR mode = VK_PRESENT_MODE_FIFO_KHR;
-    const bool force_fifo = getenv("RX_VK_FIFO") != nullptr;   // (as on a card or driver with vsync forced)
+    // (as on a card or driver with vsync forced; Mako: the Insert menu's VSync row the same)
+    const bool force_fifo = getenv("RX_VK_FIFO") != nullptr || opts.vsync;
     if (!force_fifo) {
         for (auto m : modes)
             if (m == VK_PRESENT_MODE_MAILBOX_KHR) mode = m;
@@ -499,6 +628,9 @@ bool create_swapchain(uint32_t width, uint32_t height) {
     // The renderer copies into swapchain images. Readback is optional and only available on surfaces that allow it.
     if (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
         ci.imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    // (hookshot) the overlays Dear ImGui draws (vk_imgui.cpp) render into it. Every surface allows it (the Vulkan spec)
+    if (caps.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+        ci.imageUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     ci.preTransform = caps.currentTransform;
     ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     if (!(caps.supportedCompositeAlpha & ci.compositeAlpha)) {
@@ -516,8 +648,32 @@ bool create_swapchain(uint32_t width, uint32_t height) {
     }
     ci.clipped = VK_TRUE;
     ci.oldSwapchain = dev.swapchain;
+    // (hookshot) an sRGB swapchain (some drivers list no UNORM format) made mutable when the driver can: the overlays draw
+    // through UNORM views, their colours as they are, as on a UNORM swapchain. Without it, vk_imgui.cpp makes them linear
+    const VkFormat view_formats[2] = {fmt.format, unorm_of(fmt.format)};
+    VkImageFormatListCreateInfo format_list{VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO};
+    const bool mutable_view = dev.swap_mutable && view_formats[1] != fmt.format && (ci.imageUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+    if (mutable_view) {
+        ci.flags |= VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR;
+        format_list.viewFormatCount = 2;
+        format_list.pViewFormats = view_formats;
+        format_list.pNext = ci.pNext;
+        ci.pNext = &format_list;
+    }
+    reflex_swapchain_info(ci);   // (NVIDIA Reflex: latency mode on)
     VkSwapchainKHR sc;
     result = vkCreateSwapchainKHR(dev.device, &ci, nullptr, &sc);
+    // Passing oldSwapchain retires it even when creation fails. Nothing may acquire from it again.
+    if (dev.swapchain) {
+        device_wait_idle_locked();   // (the present queue's presents of the old swapchain done too)
+        reflex_swapchain_destroyed();   // (no latency sleep or markers may use the destroyed chain)
+        swap_views_drop();   // (hookshot: the overlays' views of its images, before it)
+        for (auto semaphore : dev.swap_rendered) vkDestroySemaphore(dev.device, semaphore, nullptr);
+        vkDestroySwapchainKHR(dev.device, dev.swapchain, nullptr);
+        dev.swapchain = VK_NULL_HANDLE;
+        dev.swap_rendered.clear();
+        dev.swap_images.clear();
+    }
     if (result != VK_SUCCESS) {
         logf("vk: vkCreateSwapchainKHR failed (VkResult %d, extent %ux%u, format %d, usage %#x, mode %d, images %u)",
              (int)result, width, height, (int)fmt.format, ci.imageUsage, (int)mode, ci.minImageCount);
@@ -527,6 +683,12 @@ bool create_swapchain(uint32_t width, uint32_t height) {
         vkDestroySwapchainKHR(dev.device, sc, nullptr);
         return false;
     }
+    std::vector<VkImage> images(n);
+    if (vkGetSwapchainImagesKHR(dev.device, sc, &n, images.data()) != VK_SUCCESS || !n) {
+        vkDestroySwapchainKHR(dev.device, sc, nullptr);
+        return false;
+    }
+    images.resize(n);
     std::vector<VkSemaphore> rendered(n, VK_NULL_HANDLE);
     VkSemaphoreCreateInfo si{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     for (auto& semaphore : rendered) {
@@ -537,20 +699,15 @@ bool create_swapchain(uint32_t width, uint32_t height) {
             return false;
         }
     }
-    if (dev.swapchain) {
-        device_wait_idle_locked();   // (the present queue's presents of the old swapchain done too)
-        for (auto semaphore : dev.swap_rendered) vkDestroySemaphore(dev.device, semaphore, nullptr);
-        vkDestroySwapchainKHR(dev.device, dev.swapchain, nullptr);
-    }
     dev.swapchain = sc;
     dev.swap_rendered = std::move(rendered);
     dev.swap_format = fmt.format;
     dev.swap_extent = {width, height};
-    vkGetSwapchainImagesKHR(dev.device, sc, &n, nullptr);
-    dev.swap_images.resize(n);
-    vkGetSwapchainImagesKHR(dev.device, sc, &n, dev.swap_images.data());
+    dev.swap_images = std::move(images);
     logf("vk: swapchain %ux%u, %u images, %s", width, height, n,
          mode == VK_PRESENT_MODE_MAILBOX_KHR ? "mailbox" : mode == VK_PRESENT_MODE_IMMEDIATE_KHR ? "immediate" : "fifo");
+    swap_views_make(ci.imageUsage, mutable_view ? view_formats[1] : fmt.format);
+    reflex_swapchain_created(sc);   // (NVIDIA Reflex: its sleep mode on the new swapchain)
     return true;
 }
 
@@ -852,6 +1009,21 @@ void prepare_with_screen() {
             if (finished || paint_stop.load()) break;
             Sleep(33);
         }
+        // (the end: a fade to black over 0.4 s, so the game's first frame comes out of black, not cut in over the screen; none
+        // after a screen of under 1.5 s, a blink, or when the window is not shown (paint_stop: its presents wait))
+        const double shown = std::chrono::duration<double>(clock::now() - t0).count();
+        if (shown >= 1.5 && !paint_stop.load()) {
+            const auto f0 = clock::now();
+            for (;;) {
+                const double f = std::chrono::duration<double>(clock::now() - f0).count() / 0.4;
+                startup_fade_to((float)std::min(f, 1.0));
+                uint32_t w, h;
+                window_size(&w, &h);
+                if (w && h) present_image(nullptr, dev.swap_extent.width, dev.swap_extent.height, nullptr);
+                if (f >= 1 || paint_stop.load()) break;
+                Sleep(8);
+            }
+        }
         SetEvent(painted);
     });
     // (this thread: the window's messages on Windows, until the work is done)
@@ -866,9 +1038,10 @@ void prepare_with_screen() {
         if (WaitForSingleObject(prep_ended, 33) == WAIT_OBJECT_0) break;
     }
     worker.join();
-    paint_stop.store(true);
-    if (WaitForSingleObject(painted, 1000) == WAIT_OBJECT_0) painter.join();
-    else {   // (its present waits for the window to be seen: the game's own presents will, too)
+    // (the painter ends by itself once the work is finished, after its fade; it is told to stop only when it has not by then)
+    if (WaitForSingleObject(painted, 1500) == WAIT_OBJECT_0) painter.join();
+    else {
+        paint_stop.store(true);   // (its present waits for the window to be seen: the game's own presents will, too)
         logf("vk: start-up: the window is not being shown; the game starts without waiting for it");
         painter.detach();
     }
@@ -998,7 +1171,7 @@ int start(void* hwnd) {
 #else
     const MkwVkWindow* w = (const MkwVkWindow*)hwnd;
     prep_window = w;
-    if (w->version != MKWVK_WINDOW_VERSION) {
+    if (w->version < 1 || w->version > MKWVK_WINDOW_VERSION) {   // (1: no refresh_mhz)
         logf("vk: unsupported SDL window bridge version %u (expected %u)", w->version, MKWVK_WINDOW_VERSION);
         return 0;
     }
@@ -1060,7 +1233,10 @@ __attribute__((visibility("default")))
 #endif
 void mkwvk_close_asked(void) {
     using namespace mkwvk;
-    if (!prep_running.load() || prepare_stopped()) return;
+    if (!prep_running.load() || prepare_stopped()) {   // (in play: the pipelines compiled since the last save, kept)
+        pipeline_cache_save_at_exit();
+        return;
+    }
     logf("vk: the window was closed while the shaders were prepared: stopping, what is done is kept");
     prepare_stop();
     if (WaitForSingleObject(prep_ended, 10000) != WAIT_OBJECT_0) logf("vk: the preparation did not stop within 10 s: closing anyway");
@@ -1110,4 +1286,34 @@ const MkwVkRenderer* mkwvk_init(const MkwVkHost* h) {
 
 namespace mkwvk {
 HWND app_window() { return main_window; }   // (hookshot: the Insert menu's Fullscreen row)
+
+/// (hookshot) The refresh rate of the display the window is on, in mHz; 0 when not known (frame generation's Auto). Asked
+/// again once a second at most: the window may move to another display, and Windows' answer costs a few system calls
+int display_refresh_mhz() {
+    static std::atomic<int> cached{0};
+    static std::atomic<int64_t> asked_at{0};
+    const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    const int64_t last = asked_at.load(std::memory_order_relaxed);
+    if (last && now - last < 1000) return cached.load(std::memory_order_relaxed);
+    asked_at.store(now, std::memory_order_relaxed);
+    int mhz = 0;
+#ifdef _WIN32
+    MONITORINFOEXW mi{};
+    mi.cbSize = sizeof mi;
+    DEVMODEW dm{};
+    dm.dmSize = sizeof dm;
+    if (main_window && GetMonitorInfoW(MonitorFromWindow(main_window, MONITOR_DEFAULTTONEAREST), &mi) &&
+        EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency > 1)   // (0 and 1: the default)
+        // (whole Hz: a 59.94 Hz mode often says 59, and Auto would then make a frame too few a second. One under a
+        // multiple of 6 (24, 30, 60, 120, 144, 240 Hz) is taken as that rate's /1.001)
+        mhz = (dm.dmDisplayFrequency + 1) % 6 == 0 ? (int)((dm.dmDisplayFrequency + 1) * 1000000ull / 1001)
+                                                    : (int)dm.dmDisplayFrequency * 1000;
+#else
+    const MkwVkWindow* w = (const MkwVkWindow*)main_window;
+    if (w && w->version >= 2 && w->refresh_mhz) mhz = w->refresh_mhz(w->window);
+#endif
+    cached.store(mhz, std::memory_order_relaxed);
+    return mhz;
+}
 } // namespace mkwvk
