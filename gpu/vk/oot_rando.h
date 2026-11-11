@@ -20,8 +20,9 @@
    is copied from it.
 
    What is not here: the item placement. tools/rando/rando_seed.py reads rando_on, rando_seed, rando_chests,
-   rando_keys and rando_major and shuffles the chests as a mod (the launcher runs it at Play); the other settings are
-   not placed yet (host/oot_rando.c). */
+   rando_keys, rando_major, rando_open_deku, rando_open_forest and rando_skip_intro, shuffles the chests and makes the
+   last three's changes as a mod (the launcher runs it at Play); the other settings are not placed yet
+   (host/oot_rando.c). */
 #ifndef OOT_RANDO_H
 #define OOT_RANDO_H
 
@@ -63,6 +64,15 @@
       "Off", "Own dungeon", "Anywhere") \
     X(MAJOR, "Major items", "rando_major", \
       "The big items in chests (Kokiri Sword, Bow, Megaton Hammer and the like) are shuffled too, placed so the game can be finished. Needs Chests.", \
+      "Off", "On") \
+    X(OPEN_DEKU, "Open Deku Tree", "rando_open_deku", \
+      "A new game's way to the Great Deku Tree is open from the start: Mido lets Link by without a sword and a shield.", \
+      "Off", "On") \
+    X(OPEN_FOREST, "Open forest exit", "rando_open_forest", \
+      "A new game's way out of Kokiri Forest is open from the start: Link can leave before the Deku Tree is done.", \
+      "Off", "On") \
+    X(SKIP_INTRO, "Skip opening", "rando_skip_intro", \
+      "A new game starts in Link's house, without the narration and Navi's flight.", \
       "Off", "On")
 
 enum {

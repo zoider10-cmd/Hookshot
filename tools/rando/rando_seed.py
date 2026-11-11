@@ -1,7 +1,8 @@
 """Randomizer, stage 2: shuffles what the chests hold across the whole game, as a mod.
 
-Reads the Randomizer settings the game's menu and the launcher keep in <game folder>\\hookshot_options.ini (rando_on,
-rando_seed, rando_chests, rando_keys, rando_major) and writes changed map files and an updated size table to
+Reads the Randomizer settings the launcher keeps in <game folder>\\hookshot_options.ini (rando_on, rando_seed,
+rando_chests, rando_keys, rando_major, rando_open_deku, rando_open_forest, rando_skip_intro) and writes changed map
+files, an updated size table and, for the last three, the game's list of flags and its opening event to
 <game folder>\\mods\\rando-seed\\romfs\\..., which Mako loads in place of the game's own. The game's files are not
 touched. The same seed and settings give the same shuffle.
 
@@ -19,6 +20,10 @@ Settings:
                 shuffled among that dungeon's chests. Anywhere is treated as Own dungeon for now: the game counts a
                 small key for the dungeon it is picked up in, so one from another dungeon would be miscounted.
   Major items   On: the same as --event-chests, below.
+  Open Deku Tree, Open forest exit   On: a new game starts with that way of Kokiri Forest open (OPEN, below). The logic
+                does not count on either: its rules still ask for the sword and the Slingshot before anything out of
+                the forest, so an open way is the player's to use and never the only way to an item.
+  Skip opening   On: a new game starts in Link's house (OPENING, below).
 What it leaves alone: a mini-game's chests, a chest whose item depends on what Link already has, and, unless
 Major items is On or --event-chests is given, a chest that starts an event when opened (most of the big items: the Kokiri Sword, the Fairy
 Bow, the Megaton Hammer...).
@@ -69,6 +74,25 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
 FIXES_VERSION = 2   # (1: the eye switch took the Hookshot)
+# The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
+# the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
+# Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
+# invisible wall of KokiriForest_Child_Dynamic is there while its flag is set (its Presence), and the character acts on
+# the flag too: with the walls alone moved away both still stopped Link (seen in play). --open-deku and --open-forest
+# make the flag start put out, in the game's list of flags (FLAG_LIST): {the setting: {a flag: the value it starts
+# with}}. A flag is kept in a save, so this is a new game's; a save made before keeps the way as it was.
+OPEN = {
+    "deku": {"KokiriForest_Npc_Kokiri_Mido_Child_Blocker": False},
+    "forest": {"KokiriForest_Npc_Kokiri_007_Child_Blocker_00": False},
+}
+FLAG_LIST = "GameData"   # (the folder of the romfs: GameDataList.Product.<n>.byml.zs in it)
+# A new game's opening is the event flow OpeningEvent: two entry points that each play a cutscene and go on. Neither
+# cutscene sets anything of the game: Dm_Kokiri_0000 is the narration, Dm_Kokiri_0030 Navi's flight to Link's house.
+#   Opening_LoadingKokiriForest: event 7 (plays Dm_Kokiri_0000) -> 14 (is the forest loaded?) -> the fades
+#   Opening_Introduction: 5 -> the clock, the first challenge step, the camera -> 23 (a wait) -> 0 (plays
+#     Dm_Kokiri_0030) -> 17 (was it skipped?) -> 19 (the fade, Navi beside Link, the camera) -> the music, the autosave
+# --skip-intro starts the first at 14 and sends 23 on to 19: what the flow does after each cutscene, without it.
+OPENING = "Event/EventFlow/OpeningEvent.bfevfl.zs"
 PLAIN_EVENTS = ("KokiriForest_TreasureBox_NaviChatOff",)
 DUNGEON_ITEMS = ("Item_Dungeon_SmallKey", "Item_Dungeon_BossKey", "Item_Dungeon_Map", "Item_Dungeon_Compass")
 Chest = collections.namedtuple("Chest", "hash gyaml dyn_where dyn_at item params pos event")
@@ -338,6 +362,116 @@ def fix(data, fixes=None):
     return out
 
 
+def murmur3(data, seed=0):
+    """MurmurHash3, 32 bits: the game's list of flags names each by this hash of its name"""
+    c1, c2, h = 0xcc9e2d51, 0x1b873593, seed
+    whole = len(data) & ~3
+    for i in range(0, whole, 4):
+        k = int.from_bytes(data[i:i + 4], "little") * c1 & 0xffffffff
+        k = (k << 15 | k >> 17) * c2 & 0xffffffff
+        h ^= k
+        h = ((h << 13 | h >> 19) & 0xffffffff) * 5 + 0xe6546b64 & 0xffffffff
+    if len(data) > whole:
+        k = int.from_bytes(data[whole:], "little") * c1 & 0xffffffff
+        h ^= (k << 15 | k >> 17) * c2 & 0xffffffff
+    h ^= len(data)
+    h = (h ^ h >> 16) * 0x85ebca6b & 0xffffffff
+    h = (h ^ h >> 13) * 0xc2b2ae35 & 0xffffffff
+    return h ^ h >> 16
+
+
+def flag_defaults(data, flags):
+    """The game's list of flags (GameDataList: a BYML as the map files are, but big-endian, "BY") with the value each
+    flag of `flags` ({name: truth value}) starts a new game with: the new bytes, or None when they already start so.
+    A flag is a dictionary of Data.Bool, {DefaultValue, Hash (of its name), ...}; the value is in the dictionary
+    itself, so the file keeps its size. A name the list does not have as a truth value is an error."""
+    if data[:2] != b"BY":
+        raise ValueError("not a big-endian BYML (%r)" % data[:4])
+    key_at, _, root = struct.unpack_from(">III", data, 4)
+    count = lambda at: int.from_bytes(data[at + 1:at + 4], "big")
+    keys = []
+    for k in range(count(key_at)):
+        at = key_at + struct.unpack_from(">I", data, key_at + 4 + 4 * k)[0]
+        keys.append(data[at:data.index(b"\0", at)].decode("utf-8", "replace"))
+
+    def fields(at):
+        """a dictionary node's {key: (type, value, where its value is)}"""
+        if data[at] != 0xC1:
+            raise ValueError("no dictionary at %#x" % at)
+        out = {}
+        for k in range(count(at)):
+            e = at + 4 + 8 * k
+            key = int.from_bytes(data[e:e + 3], "big")
+            out[keys[key] if key < len(keys) else ""] = (data[e + 3], struct.unpack_from(">I", data, e + 4)[0], e + 4)
+        return out
+
+    kind, at, _ = fields(root).get("Data", (0, 0, 0))
+    kind, bools, _ = fields(at).get("Bool", (0, 0, 0)) if kind == 0xC1 else (0, 0, 0)
+    if kind != 0xC0 or data[bools] != 0xC0:
+        raise ValueError("the list has no Data.Bool")
+    want = {murmur3(name.encode()): name for name in flags}
+    if len(want) != len(flags):
+        raise ValueError("two of the flags have one hash")
+    n = count(bools)
+    values = bools + 4 + (n + 3 & ~3)
+    found = {}
+    for i in range(n):
+        if data[bools + 4 + i] != 0xC1:
+            continue
+        f = fields(struct.unpack_from(">I", data, values + 4 * i)[0])
+        h = f.get("Hash")
+        if not h or h[0] not in (0xD1, 0xD3) or h[1] not in want:
+            continue
+        v = f.get("DefaultValue")
+        if not v or v[0] != 0xD0:
+            raise ValueError("%s has no truth value to start with" % want[h[1]])
+        found[want[h[1]]] = (v[1] != 0, v[2])
+    missing = sorted(set(flags) - set(found))
+    if missing:
+        raise ValueError("the game's list has no flag " + ", ".join(missing))
+    if all(found[name][0] == bool(v) for name, v in flags.items()):
+        return None
+    out = bytearray(data)
+    for name, v in flags.items():
+        struct.pack_into(">I", out, found[name][1], int(bool(v)))
+    return bytes(out)
+
+
+def opening_skip(data):
+    """OpeningEvent (a BFEVFL file) with its two cutscenes passed over: the new bytes, of the same size. Every step
+    it relies on is checked first (see OPENING, above): a flow that is not the one this was written for is an error."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+    if data[:6] != b"BFEVFL" or u16(0x20) != 1:
+        raise ValueError("not an event flow file of one flowchart")
+    chart = u64(u64(0x28))
+    if data[chart:chart + 4] != b"EVFL" or u16(chart + 0x16) != 29 or u16(chart + 0x18) != 2:
+        raise ValueError("the opening's flowchart is not the one of 29 events and 2 entry points")
+    events, entries = u64(chart + 0x30), u64(chart + 0x40)
+    event = lambda i: events + 0x30 * i
+
+    def text(ptr):
+        return bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if ptr else ""
+
+    def plays(i):
+        """the cutscene an EventTransition step plays: the first string of its parameters that names a Dm_ flow"""
+        at = u64(event(i) + 0x10)
+        for k in range(u16(at + 2) if at else 0):
+            item = u64(at + 0x10 + 8 * k)
+            if data[item] in (0, 5) and u16(item + 2) == 1 and text(u64(item + 0x10)).startswith("Dm_"):
+                return text(u64(item + 0x10))
+        return ""
+
+    step = lambda i: (data[event(i) + 8], u16(event(i) + 0x0a))   # (its kind: 0 an action, 1 a switch; its next step)
+    if (u16(entries + 0x1c) != 7 or step(7) != (0, 14) or plays(7) != "Dm_Kokiri_0000" or data[event(14) + 8] != 1 or
+            step(23) != (0, 0) or step(0) != (0, 17) or plays(0) != "Dm_Kokiri_0030" or data[event(17) + 8] != 1 or step(19) != (0, 10)):
+        raise ValueError("the opening's steps are not the ones this was written for")
+    out = bytearray(data)
+    struct.pack_into("<H", out, entries + 0x1c, 14)        # (the first entry point starts after the narration)
+    struct.pack_into("<H", out, event(23) + 0x0a, 19)      # (the wait goes on to what follows Navi's cutscene)
+    return bytes(out)
+
+
 def size_entry(size):
     """what the game's size table holds for a map file of `size` bytes unpacked: the size rounded up to 32, and 264
     (every map file looked at had exactly that)"""
@@ -396,7 +530,8 @@ def dictionaries(romfs, zs):
 
 def settings(game):
     """the randomizer's lines of the options file (0 where it does not say)"""
-    got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0}
+    got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
+           "rando_skip_intro": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -518,6 +653,9 @@ def main():
     p.add_argument("--keys", type=int, choices=(0, 1, 2), help="in place of rando_keys: 0 off, 1 own dungeon, 2 anywhere (as 1)")
     p.add_argument("--event-chests", action="store_true", help="chests that start an event take part too: most of the big items, placed by the logic")
     p.add_argument("--no-logic", action="store_true", help="with --event-chests: the big items anywhere, whether the seed can be finished or not")
+    p.add_argument("--open-deku", action="store_true", help="as rando_open_deku=1: in a new game the way to the Deku Tree is open without a sword and a shield")
+    p.add_argument("--open-forest", action="store_true", help="as rando_open_forest=1: in a new game the forest can be left before the Deku Tree is done")
+    p.add_argument("--skip-intro", action="store_true", help="as rando_skip_intro=1: a new game starts in Link's house, without the two opening cutscenes")
     p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already this seed's (the launcher, at Play)")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
     a = p.parse_args()
@@ -544,7 +682,17 @@ def main():
         print("this seed was made with the big items shuffled: Major items is now On in the options, to keep it as it is")
     a.event_chests = a.event_chests or ini["rando_major"] != 0
     logic_now = a.event_chests and not a.no_logic
-    rest = " seed %d chests %d keys %d major %d logic %d\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now)
+    # (the options file's rando_open_deku and rando_open_forest too, so that the launcher's run at Play keeps them)
+    a.open_deku = a.open_deku or ini["rando_open_deku"] != 0
+    a.open_forest = a.open_forest or ini["rando_open_forest"] != 0
+    a.skip_intro = a.skip_intro or ini["rando_skip_intro"] != 0
+    flags = {}
+    for name, on in (("deku", a.open_deku), ("forest", a.open_forest)):
+        if on:
+            flags.update(OPEN[name])
+    # (the open ways are only named when one is open: the seeds made before them keep their stamp)
+    rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else ""))
     # (the seed in the game folder, made by an earlier version of the rules: made again as it was, not another one
     # under its save. A new seed, or other settings, take the rules of today)
     placement = PLACEMENT
@@ -651,6 +799,22 @@ def main():
     print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives), moved, len(changed)))
     for why, n in stays.most_common():
         print("  left alone: %d (%s)" % (n, why))
+    # ---- the open ways: the game's list of flags, with theirs starting put out ----
+    flag_files = {}
+    if flags:
+        folder = os.path.join(romfs, FLAG_LIST)
+        lists = sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if n.startswith("GameDataList.") and ".byml" in n.lower())
+        if not lists:
+            sys.exit("no list of flags in %s: the ways cannot be opened. Nothing written." % folder)
+        for n in lists:
+            try:
+                new = flag_defaults(unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts), flags)
+            except Exception as e:
+                sys.exit("%s: %s. Nothing written." % (n, e))
+            if new is not None:
+                flag_files[FLAG_LIST + "/" + n] = new
+        print("open ways in a new game: %s (%d flag%s start put out)" % (
+            " and ".join(n for n, on in (("the Deku Tree's", a.open_deku), ("the forest's way out", a.open_forest)) if on), len(flags), "" if len(flags) == 1 else "s"))
     print("map fixes for a shuffled game: %d file%s (the warp songs work in the Forest Temple's Stalfos room)%s" % (
         fixes_done, "" if fixes_done == 1 else "s", "" if fixes_done else ": NOT FOUND, that room can shut Link in without the Bow"))
     if logic:
@@ -696,7 +860,13 @@ def main():
         return
     removed = remove_old(mod)
     written = []
-    for rel, data in list(changed.items()) + list(new_tables.items()):
+    if a.skip_intro:
+        try:
+            flag_files[OPENING] = opening_skip(unpack(open(os.path.join(romfs, *OPENING.split("/")), "rb").read(), zs, dicts))
+        except (OSError, ValueError, struct.error) as e:
+            sys.exit("%s: %s. Nothing written." % (OPENING, e))
+        print("a new game starts without its two opening cutscenes")
+    for rel, data in list(changed.items()) + list(new_tables.items()) + list(flag_files.items()):
         out = os.path.join(mod, "romfs", *rel.split("/"))
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, "wb") as f:

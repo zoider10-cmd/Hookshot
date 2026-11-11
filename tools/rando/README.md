@@ -42,10 +42,36 @@ is not listed with it off, and is there again with it on.
 | Chests | Overworld / Dungeons / All: which chests take part. Their items are shuffled among them, across areas. |
 | Dungeon keys | Off: a dungeon's small keys, Boss Key, map and compass stay in their chests. Own dungeon: shuffled among that dungeon's chests. Anywhere: as Own dungeon for now. |
 | Major items | On: the chests that start an event take part too (most of the big items), placed by the logic. The same as `--event-chests`. |
+| Open Deku Tree | On: in a new game Mido lets Link by to the Great Deku Tree without a sword and a shield. |
+| Open forest exit | On: in a new game Link can leave Kokiri Forest before the Deku Tree is done. |
+| Skip opening | On: a new game starts in Link's house, without the narration and Navi's flight. |
 | The others | Not placed yet. |
 
 Left alone: mini-game chests, chests whose item depends on what Link already has, and, unless Major items is On,
 chests that start an event when opened (most of the big items).
+
+### A new game's open ways, and its opening
+
+- **The two closed ways of the forest are flags.** `KokiriForest_Npc_Kokiri_Mido_Child_Blocker` (Mido, until Link has a
+  sword and a shield) and `KokiriForest_Npc_Kokiri_007_Child_Blocker_00` (the Kokiri at the way out, until the Deku
+  Tree is done) start set and are put out by the story. Each has an invisible wall of `KokiriForest_Child_Dynamic` that
+  is there while it is set, and the character acts on it too: with the walls alone moved away both still stopped Link.
+- The seed's mod carries the game's list of flags (`GameData/GameDataList...byml.zs`: a BYML as the map files are, but
+  big-endian, each flag named by the MurmurHash3 of its name) with those two starting put out. One byte each; the file
+  keeps its size. A flag is kept in a save, so it is a new game's: a save made before keeps the way as it was.
+- Seen in play, on a new game with both open: Mido stands in the gate and says his first words about a sword and a
+  shield, but lets Link by, and after the Deku Tree is entered says what he says then; the Deku Tree lets Link in and
+  plays as usual. The Kokiri at the way out says what he says after the Deku Tree. Saria's scene on the bridge plays
+  and gives the Fairy Ocarina, once.
+- **The logic does not count on an open way.** Its rules still ask for the sword and the Slingshot before anything
+  out of the forest, and for the sword inside the Deku Tree: an open way is the player's to use, never the only way to
+  an item. To put early items out of the forest, the chests a child can open there with nothing have to be known
+  first.
+- **The opening is the event flow `OpeningEvent`**: two entry points that each play a cutscene and go on (the
+  narration, `Dm_Kokiri_0000`, and Navi's flight to Link's house, `Dm_Kokiri_0030`). Neither cutscene sets anything of
+  the game; the clock, the first challenge step and the autosave are the flow's own steps. Skip opening changes two
+  numbers of that file so both entry points go on to what follows their cutscene. Seen in play: a new game starts in
+  Link's house with both cutscenes passed over.
 
 ### The logic
 
@@ -188,5 +214,6 @@ and the seed was not finished.
 
 `tests/test_rando_cosmetics.py` checks its block reading and writing on made-up blocks, its colours, and that the
 launcher's page and the build match it.
+`tests/test_rando_newgame.py` checks the open ways' flags and the opening's change on made-up files.
 `tests/test_rando_seed.py` checks `rando_seed.py`'s file changes and its shuffle on made-up map files;
 `tests/test_rando_shutters.py` checks which chests `rando_shutters.py` marks, on made-up actors.

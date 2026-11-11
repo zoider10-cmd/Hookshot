@@ -449,7 +449,7 @@ class LauncherForm : Form {
     // seed's ID is copied and pasted)
     static readonly object[][] RandoRows = {
         new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
-            "Turns the seed on. Chests, Dungeon keys and Major items are placed when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
+            "Turns the seed on. Chests, Dungeon keys, Major items, the forest's two ways and the opening are made when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
         new object[] { "rando_chests", "Chests", new[] { "Off", "Overworld", "Dungeons", "All" }, new[] { 0, 1, 2, 3 },
             "Which treasure chests hold a shuffled item. All is every chest in the game." },
         new object[] { "rando_skulltulas", "Gold Skulltulas", new[] { "Off", "Dungeons", "Overworld", "All" }, new[] { 0, 1, 2, 3 },
@@ -470,6 +470,12 @@ class LauncherForm : Form {
             "Small keys and Boss Keys. Own dungeon: shuffled inside their dungeon. Anywhere: they can be in any place of the game." },
         new object[] { "rando_major", "Major items", new[] { "Off", "On" }, new[] { 0, 1 },
             "The big items in chests (Kokiri Sword, Bow, Megaton Hammer and the like) are shuffled too, placed so the game can be finished. Needs Chests." },
+        new object[] { "rando_open_deku", "Open Deku Tree", new[] { "Off", "On" }, new[] { 0, 1 },
+            "A new game's way to the Great Deku Tree is open from the start: Mido lets Link by without a sword and a shield." },
+        new object[] { "rando_open_forest", "Open forest exit", new[] { "Off", "On" }, new[] { 0, 1 },
+            "A new game's way out of Kokiri Forest is open from the start: Link can leave before the Deku Tree is done." },
+        new object[] { "rando_skip_intro", "Skip opening", new[] { "Off", "On" }, new[] { 0, 1 },
+            "A new game starts in Link's house, without the narration and Navi's flight." },
     };
     // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and
@@ -558,14 +564,15 @@ class LauncherForm : Form {
         float cx = LeftW + 36, cw = W - LeftW - 72, colW = (cw - 14) / 2;
         AddSelectors(GraphicsRows, 0, cx, colW);
         AddSelectors(GameRows, 1, cx, colW);
-        AddSelectors(RandoRows, 2, cx, colW);
+        AddSelectors(RandoRows, 2, cx, colW, null, 60, 54);   // (fourteen of them: closer lines, seven in all)
         AddSelectors(CosmeticRows, 3, cx, colW, cosmetics);
         // (beside the fifth selector, in the third line's right half)
         widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx + colW + 14, 112 + 2 * 70 + 11, 160, 40), Page = 3, Click = OnRandomCosmetics });
         // (beside the eleventh selector, in the sixth line's right half)
-        widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx + colW + 12, 112 + 5 * 70 + 11, 130, 40), Page = 2, Click = OnNewSeed });
-        widgets.Add(new Btn { Text = "Copy seed ID", R = new RectangleF(cx, 556, 150, 40), Page = 2, Click = OnCopySeedId });
-        widgets.Add(new Btn { Text = "Paste seed ID", R = new RectangleF(cx + 160, 556, 150, 40), Page = 2, Click = OnPasteSeedId });
+        // (under the selectors: the seed's three buttons, and its ID beside them)
+        widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx, 538, 116, 38), Page = 2, Click = OnNewSeed });
+        widgets.Add(new Btn { Text = "Copy seed ID", R = new RectangleF(cx + 126, 538, 136, 38), Page = 2, Click = OnCopySeedId });
+        widgets.Add(new Btn { Text = "Paste seed ID", R = new RectangleF(cx + 272, 538, 136, 38), Page = 2, Click = OnPasteSeedId });
         var langItems = new string[Languages.Length]; var langValues = new int[Languages.Length];
         for (int i = 0; i < Languages.Length; i++) { langItems[i] = Languages[i][1]; langValues[i] = i; }
         langSel = new Selector { Key = "language", Label = "Language", Items = langItems, Values = langValues, Page = 1, Index = 0,
@@ -603,12 +610,12 @@ class LauncherForm : Form {
         try { int round = 2; DwmSetWindowAttribute(Handle, 33, ref round, 4); } catch { }   // (Windows 11: rounded corners)
     }
 
-    void AddSelectors(object[][] rows, int page, float x0, float colW, Dictionary<string, Selector> into = null) {
+    void AddSelectors(object[][] rows, int page, float x0, float colW, Dictionary<string, Selector> into = null, int pitch = 70, int height = 62) {
         for (int i = 0; i < rows.Length; i++) {
             var row = rows[i];
             int col = i % 2, line = i / 2;
             var s = new Selector { Key = (string)row[0], Label = (string)row[1], Items = (string[])row[2], Values = (int[])row[3], HelpText = (string)row[4],
-                                   Page = page, R = new RectangleF(x0 + col * (colW + 14), 112 + line * 70, colW, 62) };
+                                   Page = page, R = new RectangleF(x0 + col * (colW + 14), 112 + line * pitch, colW, height) };
             if (into == null) { s.Changed = OnSetting; settings[s.Key] = s; }
             else { s.Changed = OnCosmetic; into[s.Key] = s; }
             widgets.Add(s);
@@ -796,11 +803,10 @@ class LauncherForm : Form {
             Theme.Text_(g, "Controls are set in game: press Insert or F1 for the menu.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + 3 * 70 + 6, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 2) {   // (the randomizer: the seed beside its button, and what the page does not do yet)
-            float half = (W - LeftW - 72 - 12) / 2f;   // (a selector's width: the button is in the right half of the sixth line)
             string seed = randoSeed != 0 ? SeedId() : "No seed yet";
-            Theme.Text_(g, seed, Theme.Small, Theme.Dim, new RectangleF(x + half + 12 + 142, 112 + 5 * 70 + 11, half - 142, 40), StringAlignment.Near, StringAlignment.Center);
+            Theme.Text_(g, seed, Theme.Small, Theme.Dim, new RectangleF(x + 420, 538, W - LeftW - 72 - 420, 38), StringAlignment.Near, StringAlignment.Center);
             Theme.Text_(g, "Placed when Play is pressed. The seed's ID holds the seed and every setting above: the same ID is the same seed.",
-                        Theme.Small, Theme.Faint, new RectangleF(x, 528, W - LeftW - 72, 18), StringAlignment.Near, StringAlignment.Near);
+                        Theme.Small, Theme.Faint, new RectangleF(x, 584, W - LeftW - 72, 18), StringAlignment.Near, StringAlignment.Near);
         }
         if (PageNow == 3)
             Theme.Text_(g, "Written when Play is pressed: about half a minute after a colour is changed, nothing after that. " +
