@@ -75,7 +75,7 @@ def sources(rows):
     check(all('"%s"' % key in script for key in ("rando_on", "rando_seed", "rando_chests", "rando_keys", "rando_major")),
           "rando_seed.py does not read the settings the menu keeps")
     check("hos_rando_init();" in main, "the game does not read the randomizer's settings at its start")
-    check("oot_rando_read(f, &r, &bad)" in side and '"hookshot_options.ini"' in side and "const OotRando *hos_rando(void)" in side,
+    check("oot_rando_read(f, r, &bad)" in side and '"hookshot_options.ini"' in side and "const OotRando *hos_rando(void)" in side,
           "host/oot_rando.c does not read the options file")
     check("rando_seed.py" in side and "not placed yet" in side, "the log no longer says what places the chests and that the other settings do nothing yet")
     check((ROOT / "tools" / "rando" / "rando_seed.py").is_file(), "tools/rando/rando_seed.py, which the log names, is gone")

@@ -87,6 +87,7 @@ ARGS = {
     "tests/test_target_overlap.py": ["--cxx", "g++"],
     "tests/test_menu_hit.py": ["--cxx", "g++"],
     "tests/test_rando_settings.py": ["--cxx", "g++", "--cc", "gcc"],
+    "tests/test_rando_saves.py": ["--cc", "gcc"],
     "tests/test_ui_record.py": ["--cxx", "{cxx}", "--headers", "{vulkan_headers}"],
     "tests/test_game_font.py": ["--cxx", "{cxx}"],
     "tests/test_menu_utf8.py": ["--cxx", "{cxx}"],

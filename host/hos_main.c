@@ -447,9 +447,11 @@ static void save_folder_import(const char *game_dir, const char *user_dir) {
     char stamp[64], target[MAX_PATH], backup[MAX_PATH], done[MAX_PATH];
     snprintf(stamp, sizeof stamp, "%04d-%02d-%02d %02dh%02d-%02d", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
     CreateDirectoryA(user_dir, NULL);
-    snprintf(target, sizeof target, "%s\\save", user_dir);
+    /* (into the saves this start plays with: the randomizer's own folder while it is on, oot_rando.c) */
+    const char *hos_save_folder(void);
+    snprintf(target, sizeof target, "%s\\%s", user_dir, hos_save_folder());
     CreateDirectoryA(target, NULL);
-    snprintf(target, sizeof target, "%s\\save\\5a3c9e1f0b7d24680000000000000001", user_dir);
+    snprintf(target, sizeof target, "%s\\%s\\5a3c9e1f0b7d24680000000000000001", user_dir, hos_save_folder());
     snprintf(backup, sizeof backup, "%s\\_backup %s", sf, stamp);
     if (sf_is_dir(target) && !sf_copy(target, backup)) {
         hos_log("save folder: the saves could not be backed up into %s: nothing imported", backup);

@@ -29,6 +29,13 @@ By hand, for trying things: `python -I tools/rando/rando_seed.py "<game folder>\
 
 **A seed being played changes under its save when the seed or a setting is changed.** Finish it, or keep its settings.
 
+**A seed's saves are apart from the normal game's.** With the randomizer on the game keeps its saves in
+`<game folder>/user/save_rando`, and in `user/save` with it off (`hos_save_folder`, host/oot_rando.c), so a save made
+in a seed is not loaded into a game whose chests are the game's own, nor the other way round. The launcher's **Saves**
+button opens the one the next Play uses, and a save dropped in `SAVE FOLDER` is imported into that one. Every seed
+shares the one randomizer folder. Saves made with the randomizer on before this (Mako 3.0.1 and the first 3.3 merge)
+are in `user/save`: copy that folder to `user/save_rando` once to go on with them.
+
 | Setting | What `rando_seed.py` does with it |
 |---|---|
 | Chests | Overworld / Dungeons / All: which chests take part. Their items are shuffled among them, across areas. |

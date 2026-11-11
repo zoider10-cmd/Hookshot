@@ -1,6 +1,7 @@
 /* nn::fs: mounts map to host folders.
      rom:      the game's RomFS (extracted by tools/nx.py romfs), read-only
-     save:     <user>/save/<uid>     (MountSaveData / MountSaveDataReadOnly)
+     save:     <user>/save/<uid>     (MountSaveData / MountSaveDataReadOnly; <user>/save_rando/<uid> while the randomizer
+                                     is on: hos_save_folder, oot_rando.c)
      cache:    <user>/cache/<index>  (MountCacheStorage)
      temp:     <user>/temp           (MountTemporaryStorage)
    hos_romfs_dir and hos_user_dir are set by hos_main.c. Reads are positional (ReadFile with an offset), so any number
@@ -252,21 +253,24 @@ static int user_mount(const char *name, const char *sub) {
 
 /* nn::fs::IsSaveDataExisting(ApplicationId, account::Uid const&) -> bool */
 HLE(_ZN2nn2fs18IsSaveDataExistingENS_13ApplicationIdERKNS_7account3UidE) {
+    const char *hos_save_folder(void);   /* oot_rando.c: "save", or "save_rando" while the randomizer is on */
     char root[HOS_FS_PATH];
-    snprintf(root, sizeof root, "%s\\save\\%016llx%016llx", hos_user_dir, (unsigned long long)G64(ARG(1) + 8),
+    snprintf(root, sizeof root, "%s\\%s\\%016llx%016llx", hos_user_dir, hos_save_folder(), (unsigned long long)G64(ARG(1) + 8),
              (unsigned long long)G64(ARG(1)));
     RET(GetFileAttributesA(root) != INVALID_FILE_ATTRIBUTES);
 }
 /* MountSaveData(char const*, account::Uid const&) */
 HLE(_ZN2nn2fs13MountSaveDataEPKcRKNS_7account3UidE) {
+    const char *hos_save_folder(void);
     char sub[64];
-    snprintf(sub, sizeof sub, "save\\%016llx%016llx", (unsigned long long)G64(ARG(1) + 8), (unsigned long long)G64(ARG(1)));
+    snprintf(sub, sizeof sub, "%s\\%016llx%016llx", hos_save_folder(), (unsigned long long)G64(ARG(1) + 8), (unsigned long long)G64(ARG(1)));
     RET(user_mount(gstr(ARG(0)), sub) ? 0 : R_NOT_MOUNTED);
 }
 /* MountSaveDataReadOnly(char const*, ApplicationId, account::Uid const&) */
 HLE(_ZN2nn2fs21MountSaveDataReadOnlyEPKcNS_13ApplicationIdERKNS_7account3UidE) {
+    const char *hos_save_folder(void);
     char sub[64];
-    snprintf(sub, sizeof sub, "save\\%016llx%016llx", (unsigned long long)G64(ARG(2) + 8), (unsigned long long)G64(ARG(2)));
+    snprintf(sub, sizeof sub, "%s\\%016llx%016llx", hos_save_folder(), (unsigned long long)G64(ARG(2) + 8), (unsigned long long)G64(ARG(2)));
     RET(user_mount(gstr(ARG(0)), sub) ? 0 : R_NOT_MOUNTED);
 }
 HLE(_ZN2nn2fs21MountTemporaryStorageEPKc) { RET(user_mount(gstr(ARG(0)), "temp") ? 0 : R_NOT_MOUNTED); }

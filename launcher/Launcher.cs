@@ -449,7 +449,7 @@ class LauncherForm : Form {
     // seed's ID is copied and pasted)
     static readonly object[][] RandoRows = {
         new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
-            "Turns the seed on. Chests, Dungeon keys and Major items are placed when Play is pressed; the other settings are not placed yet." },
+            "Turns the seed on. Chests, Dungeon keys and Major items are placed when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
         new object[] { "rando_chests", "Chests", new[] { "Off", "Overworld", "Dungeons", "All" }, new[] { 0, 1, 2, 3 },
             "Which treasure chests hold a shuffled item. All is every chest in the game." },
         new object[] { "rando_skulltulas", "Gold Skulltulas", new[] { "Off", "Dungeons", "Overworld", "All" }, new[] { 0, 1, 2, 3 },
@@ -582,7 +582,7 @@ class LauncherForm : Form {
         widgets.Add(new Btn { Text = "Licence (GPL-3)", R = new RectangleF(cx + 232, 470, 170, 40), Page = 5, Click = () => OpenUrl(Fork.Home + "/blob/HEAD/LICENSE") });
 
         // (bottom row: folders)
-        widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 130, 42), Click = () => OpenFolder(Path.Combine(dir, "user", "save")) });
+        widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 130, 42), Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
         widgets.Add(new Btn { Text = "Import saves", R = new RectangleF(cx + 140, 612, 150, 42), Click = OnImport });
         widgets.Add(new Btn { Text = "Game folder", R = new RectangleF(cx + 300, 612, 150, 42), Click = () => OpenFolder(dir) });
 
@@ -962,6 +962,10 @@ class LauncherForm : Form {
 
     // (a seed's random part, 1 to 2^31 - 2: 0 is "none yet", as in the Insert menu)
     static int NewSeed() { return new Random(Environment.TickCount ^ Guid.NewGuid().GetHashCode()).Next(1, int.MaxValue); }
+
+    // (the game keeps a seed's saves apart from its own: host/oot_rando.c hos_save_folder. The Saves button opens the ones
+    // the next Play uses)
+    string SaveFolder() { return settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0 ? "save_rando" : "save"; }
 
     void OnNewSeed() {
         randoSeed = NewSeed();
