@@ -37,6 +37,13 @@ shares the one randomizer folder. Saves made with the randomizer on before this 
 are in `user/save`: copy that folder to `user/save_rando` once to go on with them. Seen in play: a save made with the randomizer on
 is not listed with it off, and is there again with it on.
 
+**The Tracker tab.** The Insert menu (Insert or F1) has a Tracker tab: a row for the whole game and one for each
+area, with the treasure chests and Gold Skulltulas there that take part in the seed. The seed script writes it with
+the seed (`mods/rando-seed/tracker.txt`, a line `<name>|<what>` a row: `tracker_lines`) and the menu shows the lines
+as they are (`tracker_load`, gpu/vk/vk_menu.cpp; 48 rows at most), so it is the installed seed's, and says "No seed"
+with the randomizer off. It is what the seed has in an area, not what is left: the menu does not know what has been
+opened. Seen without a window (`RX_VK_MENU_SCRIPT`, `RX_VK_SHOT_MENU=1`); `tests/test_rando_tracker.py`.
+
 **More saves than the game's one.** The game keeps one save of the player's own (`slot_00`) and five it makes itself;
 its load menu lists no more. The launcher's **Save copies** button keeps the whole save folder under a name
 (`user/save_copies/<save folder>/<name>`) and puts a kept copy back, after keeping the saves that were there as

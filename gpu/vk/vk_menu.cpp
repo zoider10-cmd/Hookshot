@@ -61,7 +61,8 @@ enum MenuTab {
     TAB_GAMEPLAY = 1,
     TAB_CONTROLS = 2,
     TAB_DEBUG = 3,   // (the OoT debug tools of #785, a tab of their own)
-    TAB_COUNT = 4,
+    TAB_TRACKER = 4, // (the randomizer: what the seed placed in each area, kTrackerRows rows filled from a file)
+    TAB_COUNT = 5,
     TAB_MOTION = TAB_COUNT,   // (hookshot: not a tab of the strip, the Motion page that the Controls tab's Motion row
                               // opens: one past the strip's tabs, so a tab added before TAB_COUNT moves it along)
     TAB_PAGE = TAB_MOTION + 1   // (hookshot: the Controls page's rows, above its grid; no tab shows them)
@@ -83,7 +84,20 @@ struct Row {
                                   // frame generation)
     signed char cheat = -1;   // (a debug tool, on the Debug tab with the tools on: its index in the cheat_ tables, -1 none)
     bool heading = false;     // (a section's title on its tab, not a row: the selection steps over it)
+    signed char tracker = -1; // (a line of the Tracker tab: its index in tracker_name and tracker_value, -1 none)
 };
+// ---- (the randomizer) the Tracker tab: the checks the seed has in each area ----
+// tools/rando/rando_seed.py writes <game folder>\mods\rando-seed\tracker.txt with the seed: a line "<name>|<what>" for
+// each row, read here as it is (tracker_load, below ini_path). The rows are in the table, kTrackerRows of them; the
+// ones past the file's lines are not shown (row_shown). tests/test_rando_tracker.py
+constexpr int kTrackerRows = 48;
+char tracker_name[kTrackerRows][48];
+char tracker_value[kTrackerRows][72];
+int tracker_count = 0;
+void tracker_load();
+const char kTrackerHelp[] =
+    "The treasure chests and Gold Skulltulas of this area that take part in the randomizer's seed. It is what the seed "
+    "has there, not what is left: the game does not tell the menu what has been opened.";
 /// A row's hints from a table, the value lo first (nullptr: none for that value)
 const char* hint_in(const char* const* t, int n, int lo, int v, int variant) {
     return variant <= 0 && v - lo >= 0 && v - lo < n ? t[v - lo] : nullptr;
@@ -754,6 +768,57 @@ Row rows[] = {
     {TAB_DEBUG, "Sampler cache", &opts.sampler_cache, 0, 1, 1, tx_onoff,
      "What a sampler holds is kept beside it on the replay thread, so resolving a sampler that was not registered anew takes no "
      "lock. Helps while the game streams textures. Applies after restart.", nullptr, true},
+    // Tracker: a row for each line of the seed's tracker file (tracker_load), named and valued by it
+#define TRACKER_ROW(i) {TAB_TRACKER, tracker_name[i], nullptr, 0, 0, 0, nullptr, kTrackerHelp, nullptr, false, true, -1, false, i},
+    TRACKER_ROW(0)
+    TRACKER_ROW(1)
+    TRACKER_ROW(2)
+    TRACKER_ROW(3)
+    TRACKER_ROW(4)
+    TRACKER_ROW(5)
+    TRACKER_ROW(6)
+    TRACKER_ROW(7)
+    TRACKER_ROW(8)
+    TRACKER_ROW(9)
+    TRACKER_ROW(10)
+    TRACKER_ROW(11)
+    TRACKER_ROW(12)
+    TRACKER_ROW(13)
+    TRACKER_ROW(14)
+    TRACKER_ROW(15)
+    TRACKER_ROW(16)
+    TRACKER_ROW(17)
+    TRACKER_ROW(18)
+    TRACKER_ROW(19)
+    TRACKER_ROW(20)
+    TRACKER_ROW(21)
+    TRACKER_ROW(22)
+    TRACKER_ROW(23)
+    TRACKER_ROW(24)
+    TRACKER_ROW(25)
+    TRACKER_ROW(26)
+    TRACKER_ROW(27)
+    TRACKER_ROW(28)
+    TRACKER_ROW(29)
+    TRACKER_ROW(30)
+    TRACKER_ROW(31)
+    TRACKER_ROW(32)
+    TRACKER_ROW(33)
+    TRACKER_ROW(34)
+    TRACKER_ROW(35)
+    TRACKER_ROW(36)
+    TRACKER_ROW(37)
+    TRACKER_ROW(38)
+    TRACKER_ROW(39)
+    TRACKER_ROW(40)
+    TRACKER_ROW(41)
+    TRACKER_ROW(42)
+    TRACKER_ROW(43)
+    TRACKER_ROW(44)
+    TRACKER_ROW(45)
+    TRACKER_ROW(46)
+    TRACKER_ROW(47)
+#undef TRACKER_ROW
     // (Restart and Quit stay the table's last two: kRestartRow and kQuitRow count back from its end)
     {TAB_GAMEPLAY, "Restart", nullptr, 0, 0, 0, nullptr,
      "Starts the game again. Save your progress first. Press Enter or A twice to restart. Esc or B "
@@ -873,7 +938,7 @@ const char* cheat_confirm(int i) {
 constexpr int kRows = sizeof rows / sizeof rows[0];
 
 int cur_tab = TAB_GRAPHICS;
-int tab_selected[TAB_COUNT + 1] = {0, 0, 0, 0, 0};   // (and the Motion page's)
+int tab_selected[TAB_COUNT + 1] = {0, 0, 0, 0, 0, 0};   // (and the Motion page's)
 bool is_motion_row(const Row& r) { return r.tab == TAB_CONTROLS && !r.value && !strcmp(r.name, "Motion"); }
 
 // ---- the rows that take a restart: their values at the start (menu_init, the GPU's at menu_set_gpu_count) ----
@@ -920,11 +985,12 @@ int ask_sel = 0;   // (the restart question's choice: 0 Later, 1 Restart now)
 /// A row on its tab: the debug tools only with them on, the Upscaler only in a build with DLSS or FSR 4, or where AMD
 /// FSR 3.1 runs
 bool row_shown(int i) {
-    return (rows[i].cheat < 0 || cheats_on()) &&
+    return (rows[i].cheat < 0 || cheats_on()) && rows[i].tracker < tracker_count &&
            (rows[i].value != &opts.dlss || ur::upscaler_shown(dlss_built() || fsr4_built(), fsr3::supported())) &&
            (rows[i].value != &opts.dlss_model || ur::model_shown(dlss_built()));
 }
 int tab_row_count(int t) {
+    if (t == TAB_TRACKER) tracker_load();   // (the seed's file, read again at most once a second)
     int c = 0;
     for (int i = 0; i < kRows; i++) if (rows[i].tab == (MenuTab)t && row_shown(i)) c++;
     return c;
@@ -963,6 +1029,35 @@ std::string ini_path() {
     const DWORD n = game_module_path(exe, MAX_PATH);
     std::string dir(exe, n);
     return dir.substr(0, dir.find_last_of("\\/") + 1) + "hookshot_options.ini";
+}
+/// The Tracker tab's rows from the seed's file, or one row saying there is none; read again at most once a second
+void tracker_load() {
+    static ULONGLONG last = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (last && now - last < 1000) return;
+    last = now;
+    std::string path = ini_path();
+    path = path.substr(0, path.find_last_of("\\/") + 1) + "mods\\rando-seed\\tracker.txt";
+    int n = 0;
+    if (FILE* f = fopen(path.c_str(), "r")) {
+        char line[256];
+        while (n < kTrackerRows && fgets(line, sizeof line, f)) {
+            char* bar = strchr(line, '|');
+            if (line[0] == '#' || !bar) continue;
+            *bar = 0;
+            bar[1 + strcspn(bar + 1, "\r\n")] = 0;
+            snprintf(tracker_name[n], sizeof tracker_name[n], "%s", line);
+            snprintf(tracker_value[n], sizeof tracker_value[n], "%s", bar + 1);
+            n++;
+        }
+        fclose(f);
+    }
+    if (!n) {
+        snprintf(tracker_name[0], sizeof tracker_name[0], "No seed");
+        snprintf(tracker_value[0], sizeof tracker_value[0], "The randomizer is off");
+        n = 1;
+    }
+    tracker_count = n;
 }
 const char* ini_key(const Row& r) {
     if (r.value == &opts.output_res) return "output_res";   // (host/nn_applet.c reads it at the start)
@@ -1267,7 +1362,7 @@ float scroll_at[TAB_MOTION + 2];   // (the first row shown, eased toward the sel
                                    // the Controls page: kControlsSlot)
 constexpr int kControlsSlot = TAB_MOTION + 1;
 int wheel_rows[TAB_MOTION + 2];   // (the mouse wheel's notches since the last drawing, a slot each: scroll_rows scrolls by them)
-int scrolled_to[TAB_MOTION + 2] = {-1, -1, -1, -1, -1, -1};   // (the selection scroll_rows last brought into view)
+int scrolled_to[TAB_MOTION + 2] = {-1, -1, -1, -1, -1, -1, -1};   // (the selection scroll_rows last brought into view)
 float scroll_want[TAB_MOTION + 2];   // (where scroll_at is going: the wheel moves it, a new selection too)
 float ease_step = 0;     // (this drawing's share of the way: the time since the last one)
 
@@ -1499,7 +1594,7 @@ void draw_options(ui::Ctx& c) {
     ui::banner(c, hh);
     // the tabs in the banner: dark ink on the tan, the shown one light on a dark inset; the tab keys at their ends (a click there
     // is the previous or the next tab)
-    const char* const tab_titles[TAB_COUNT] = {"Graphics", "Gameplay", "Controls", "Debug"};
+    const char* const tab_titles[TAB_COUNT] = {"Graphics", "Gameplay", "Controls", "Debug", "Tracker"};
     float tw[TAB_COUNT], total = 0;
     for (int i = 0; i < TAB_COUNT; i++) tw[i] = ui::size_of(c.f.heading, 23 * s, tab_titles[i]).x + 56 * s, total += tw[i];
     float x = (c.w - total) * 0.5f;
@@ -1548,6 +1643,7 @@ void draw_options(ui::Ctx& c) {
     int prompts_n = cur_tab == TAB_MOTION ? 3 : 4;
     if (!selr.value) prompt_list[1] = {ui::kConfirm, confirms ? (pending == &selr ? "Confirm" : selr.name) : "Open"};
     if (cur_tab == TAB_MOTION) prompt_list[2] = {ui::kBack, "Back"};   // (Esc: to Controls)
+    if (selr.tracker >= 0) prompt_list[1] = {ui::kTabs, "Tabs"}, prompt_list[2] = {ui::kBack, "Close"}, prompts_n = 3;   // (nothing to change or open)
     if (selr.cheat >= 0) {   // (a debug tool: Change when Left and Right do something, then what confirm does)
         prompts_n = 1;
         if (selr.cheat <= 1 || selr.cheat == 7 || cheat_chooses(selr.cheat)) prompt_list[prompts_n++] = {ui::kLeftRight, "Change"};
@@ -1593,6 +1689,8 @@ void draw_options(ui::Ctx& c) {
             halves_cell(c, va, vb, "Off", "On", tool == "On", selected, false);
         } else if (r.cheat >= 0 && !tool.empty()) {   // (a debug tool with a value: arrows when Left and Right choose it)
             choice_cell(c, va, vb, tool, selected, cheat_chooses(r.cheat), cheat_chooses(r.cheat));
+        } else if (r.tracker >= 0) {   // (a line of the Tracker tab: what the seed's file says, nothing to change)
+            choice_cell(c, va, vb, tracker_value[r.tracker], selected, false, false);
         } else if (!r.value) {   // (a page, or Restart and Quit: Confirm until the second press)
             if (pending == &r) choice_cell(c, va, vb, "Press again to confirm", selected, false, false);
             else {
@@ -2651,7 +2749,7 @@ void menu_tick() {
             }
         } else if (r.cheat >= 0) cheat_press(r.cheat, press, changed);   // (a debug tool: on the Debug tab itself)
         else if (press[7] && is_motion_row(r)) cur_tab = TAB_MOTION, tab_selected[TAB_MOTION] = 0, press[7] = false, changed = true;
-        else if (press[7] && !r.value && can_bind()) page = 1, csel = 0, ccol = 0, changed = true;
+        else if (press[7] && !r.value && r.tracker < 0 && can_bind()) page = 1, csel = 0, ccol = 0, changed = true;
         if ((press[3] || press[4] || press[7]) && r.value) {   // (Enter, or A, as Right)
             if (press[7]) press[4] = true;
             set_row(r, *r.value + (press[4] ? r.step : -r.step), press[4] ? 1 : -1);

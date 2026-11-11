@@ -1388,6 +1388,43 @@ def set_option(game, key, value):
         f.write("\n".join(lines) + "\n")
 
 
+# ---- the tracker: the checks the seed has in each area, for the game's menu ----
+# The Insert menu's Tracker tab (gpu/vk/vk_menu.cpp: tracker_load) shows <game folder>\mods\rando-seed\tracker.txt as
+# it is: a row for each line "<name>|<what>", TRACKER_ROWS of them at most, a name of up to 47 characters and a
+# value of up to 71. Lines that start with # are not rows.
+TRACKER = "tracker.txt"
+TRACKER_ROWS = 48
+AREA_NAMES = {
+    "KokiriForest": "Kokiri Forest", "LostWood": "Lost Woods", "SacredForestMeadow": "Sacred Forest Meadow", "HyruleField": "Hyrule Field",
+    "Market": "Market", "HyruleCastle": "Hyrule Castle", "GanonCastle": "Ganon's Castle (outside)", "KakarikoVillage": "Kakariko Village",
+    "Graveyard": "Graveyard", "DeathMountainTrail": "Death Mountain Trail", "DeathMountainCrater": "Death Mountain Crater",
+    "GoronCity": "Goron City", "ZoraRiver": "Zora's River", "ZoraDomain": "Zora's Domain", "ZoraFountain": "Zora's Fountain",
+    "GerudoValley": "Gerudo Valley", "GerudoFortress": "Gerudo's Fortress", "HountedWasteland": "Haunted Wasteland",
+    "DesertColossus": "Desert Colossus", "InsideTheDekuTree": "Inside the Deku Tree", "DodongoCavern": "Dodongo's Cavern",
+    "InsideJabuJabuBelly": "Inside Jabu-Jabu's Belly", "BottomOfTheWell": "Bottom of the Well", "ForestTemple": "Forest Temple",
+    "FireTemple": "Fire Temple", "IceCavern": "Ice Cavern", "WaterTemple": "Water Temple", "ShadowTemple": "Shadow Temple",
+    "SpiritTemple": "Spirit Temple", "GerudoTrainingGround": "Gerudo Training Ground", "InsideGanonCastle": "Inside Ganon's Castle",
+    "DreamWorld": "Dream World",
+}
+
+
+def tracker_lines(chests, skulls):
+    """The tracker file's lines. chests and skulls: {area (the Banc folder): how many of them take part}. A line for
+    the whole game, then one for each area that has any, by its name; no more than the menu has rows for."""
+    def what(c, k):
+        parts = (["%d chest%s" % (c, "" if c == 1 else "s")] if c else []) + (["%d Gold Skulltula%s" % (k, "" if k == 1 else "s")] if k else [])
+        return ", ".join(parts) or "nothing"
+
+    areas = sorted(set(chests) | set(skulls), key=lambda a: AREA_NAMES.get(a, a).lower())
+    areas = [a for a in areas if chests.get(a, 0) or skulls.get(a, 0)]
+    rows = [("The whole game", what(sum(chests.values()), sum(skulls.values())))]
+    rows += [(AREA_NAMES.get(a, a), what(chests.get(a, 0), skulls.get(a, 0))) for a in areas]
+    if len(rows) > TRACKER_ROWS:   # (more areas than rows: the last row says so)
+        rows = rows[:TRACKER_ROWS - 1] + [("And %d more areas" % (len(rows) - TRACKER_ROWS + 1), "see the spoiler")]
+    return ["# The checks of this seed in each area, for the menu's Tracker tab: <name>|<what>"] + [
+        "%s|%s" % (name.replace("|", "/")[:47], value[:71]) for name, value in rows]
+
+
 def remove_old(mod):
     """the files a run before this one wrote (its list: rando_manifest.txt), and the folders they leave empty"""
     listing = os.path.join(mod, "rando_manifest.txt")
@@ -1396,7 +1433,7 @@ def remove_old(mod):
     n = 0
     with open(listing, encoding="utf-8") as f:
         rels = [line.strip() for line in f if line.strip()]
-    for rel in rels + ["spoiler.txt", "rando_stamp.txt", "rando_manifest.txt"]:
+    for rel in rels + ["spoiler.txt", TRACKER, "rando_stamp.txt", "rando_manifest.txt"]:
         path = os.path.normpath(os.path.join(mod, rel))
         if not path.startswith(os.path.normpath(mod) + os.sep) or not os.path.isfile(path):   # (only inside the mod's folder)
             continue
@@ -1663,7 +1700,7 @@ def main():
         sys.exit("the shuffle lost or made an item: nothing written")
 
     # ---- the Gold Skulltulas: their tokens and the chests' rupees and supplies change places ----
-    skull_drops = {}
+    skull_drops, able = {}, []
     if a.skulltulas:
         mine = [h for h, s in skulls.items() if a.skulltulas == 3 or s[3] == (a.skulltulas == 1)]   # (this setting's)
         able = [h for h in mine if skulls[h][2]]
@@ -1852,6 +1889,9 @@ def main():
     with open(os.path.join(mod, "spoiler.txt"), "w", encoding="utf-8") as f:
         f.write("seed %d, chests setting %d, dungeon keys setting %d\n(area: chest type, position, what it held -> what it holds now)\n" % (
             seed, which, keys_mode) + "\n".join(spoiler) + "\n")
+    with open(os.path.join(mod, TRACKER), "w", encoding="utf-8", newline="\n") as f:   # (for the menu's Tracker tab)
+        took = [h for h in able] if a.skulltulas else []
+        f.write("\n".join(tracker_lines(collections.Counter(spots[h][0] for h in gives), collections.Counter(skulls[h][0] for h in took))) + "\n")
     with open(os.path.join(mod, "rando_manifest.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(written)) + "\n")
     with open(stamp_path, "w", encoding="utf-8") as f:   # (last: a run that stopped half way is made again)
