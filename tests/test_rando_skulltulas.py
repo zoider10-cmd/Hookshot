@@ -86,7 +86,7 @@ def main():
 
     # ---- the tokens and the chests' rupees and supplies change places ----
     gives = collections.OrderedDict()
-    kinds = list(seed.SKULLTULA_ITEMS) * 6 + list(seed.SKULLTULA_ITEMS_NOT_YET) + ["Item_Hammer", "Item_Dungeon_SmallKey", "Obj_Heart_Piece", "TBox_Shield_Deku", "Item_Hookshot"]
+    kinds = list(seed.SKULLTULA_ITEMS) * 2 + list(seed.SKULLTULA_ITEMS_NOT_YET) + ["Item_Hammer", "Item_Dungeon_SmallKey", "Obj_Heart_Piece", "TBox_Shield_Deku", "Item_Hookshot"]
     for k in range(120):
         gives[k] = kinds[k % len(kinds)]
     skulls = [1000 + k for k in range(100)]

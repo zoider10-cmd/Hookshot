@@ -39,7 +39,7 @@
       "Which treasure chests hold a shuffled item. All is every chest in the game.", \
       "Off", "Overworld", "Dungeons", "All") \
     X(SKULLTULAS, "Gold Skulltulas", "rando_skulltulas", \
-      "Which Gold Skulltulas take part: their tokens change places with the chests' rupees and supplies. Needs Chests.", \
+      "Which Gold Skulltulas take part: their tokens change places with the chests' supplies (seeds, bombs, nuts, sticks). Needs Chests.", \
       "Off", "Dungeons", "Overworld", "All") \
     X(QUESTS, "Quest rewards", "rando_quests", \
       "What characters give you is shuffled: gifts, side quests, mini-games and the Gold Skulltula family's rewards.", \

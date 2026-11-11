@@ -46,7 +46,7 @@ restore is refused while the game runs (`SaveCopies`, launcher/Launcher.cs; `tes
 | Setting | What `rando_seed.py` does with it |
 |---|---|
 | Chests | Overworld / Dungeons / All: which chests take part. Their items are shuffled among them, across areas. |
-| Gold Skulltulas | Dungeons / Overworld / All: which Gold Skulltulas take part. Their tokens change places with the chests' rupees and supplies (`SKULLTULA_ITEMS`): a chest gives a token, a Skulltula drops the chest's item, made a pick-up. No gating item, key or Heart Piece goes to a Skulltula: the rules do not know their places yet. Needs Chests. |
+| Gold Skulltulas | Dungeons / Overworld / All: which Gold Skulltulas take part. Their tokens change places with the chests' Deku Scrub seeds and bomb, Bombchu, nut and stick bundles (`SKULLTULA_ITEMS`): a chest gives a token, a Skulltula drops the chest's item, made a pick-up. No gating item, key or Heart Piece goes to a Skulltula: the rules do not know their places yet. Needs Chests. |
 | Dungeon keys | Off: a dungeon's small keys, Boss Key, map and compass stay in their chests. Own dungeon: shuffled among that dungeon's chests. Anywhere: as Own dungeon for now. |
 | Major items | On: the chests that start an event take part too (most of the big items), placed by the logic. The same as `--event-chests`. |
 | Open Deku Tree | On: in a new game Mido lets Link by to the Great Deku Tree without a sword and a shield. |
@@ -255,18 +255,25 @@ By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron
   before. With the event each time (`PlayGetEventManyTimes`, and `GetType` "Large" where the pouch file names none:
   every item of the game's own that is got each time has both; `pickup_pack`'s `each_time`) four seeds in a row
   were each got with their text, and their Skulltulas stayed dead.
-- **Only the Deku Scrub's seed goes to a Skulltula for now** (`SKULLTULA_ITEMS`; the others in
-  `SKULLTULA_ITEMS_NOT_YET`). A rupee's pouch file is one every world rupee's pack has a copy of, and the first one
-  loaded is the one used; the bundles (bombs, arrows, nuts, sticks) have not been seen got each time. Tried on the
-  way, and no answer: getting a bundle as a token is got (`GetType` "Medium") with the event each time (still passed
-  by on vines), the token's animations (`ASRef`), what a world rupee thinks with (`AIInfoRef` DropItem: it fell),
-  making it from `Obj_Item_Base` (not there when its Skulltula died), and dropping a world rupee (`Obj_Rupee_*`) in a
-  chest rupee's place (it fell into water, and its Skulltula was back each time).
+- **What goes to a Skulltula** (`SKULLTULA_ITEMS`): the Deku Scrub's seed and the bomb, Bombchu, Deku Nut and Deku
+  Stick bundles. Seen in play with the event each time: Deku Nut bundles were each got with their text, and their
+  Skulltulas stayed dead. **A bundle Link has nothing to carry in is not got at all**: a bomb bundle without a Bomb
+  Bag, and a Deku Nut bundle in a game that had had no nuts yet, stayed where they were with nothing given, and
+  their Skulltulas were back when the room was entered again; the nuts were got once some had been bought. It is
+  there for later, as a token out of reach is, with no text to say why. The stick and Bombchu bundles have not been
+  seen.
+- **Kept from the Skulltulas** (`SKULLTULA_ITEMS_NOT_YET`): rupees, arrows and the magic jar. Their pouch file is one
+  the game's own pick-up of the same thing has a copy of, and the first one loaded is the one used. Tried on the way,
+  and no answer: getting a bundle as a token is got (`GetType` "Medium") with the event each time, the token's
+  animations (`ASRef`), what a world rupee thinks with (`AIInfoRef` DropItem: it fell), making it from
+  `Obj_Item_Base` (not there when its Skulltula died), and dropping a world rupee (`Obj_Rupee_*`) in a chest rupee's
+  place (it fell into water, and its Skulltula was back each time). The runs without a window of a bomb bundle on
+  vines, passed by whatever was changed, were on a save without a Bomb Bag: they showed nothing of those changes.
 - **Testing a pick-up without the player.** A save made with Link at the foot of the Great Deku Tree's first vines
   (his place is three floats at 0x1b4b0 of `progress.sav`), a map file with an `Enemy_Skulltula` of its Dynamic file
   made the item and put on the vines above him (a heart once taken, and a prop, are not made), and the stick pushed
   by `HOS_INPUT_LIVE` once the room is in: a real token and a first seed were got with their text as he climbed, a
-  green rupee and a bomb bundle were passed by.
+  green rupee and a bomb bundle were passed by (that save has no Bomb Bag: see above).
 - **Open: the Kokiri Sword's chest holding another item** still plays Link putting the sword on his back, and he can
   use the sword until the next load; it is not in the inventory.
 - Seen in play with `Item_Boomerang` made a pick-up: its own chest still gives it, with its scene. Dropped by a Gold

@@ -494,22 +494,25 @@ TOKEN = "Item_Token_Gold"
 # reached yet. No gating item and no dungeon's key (the rules know no Skulltula's place: many ask for the Boomerang,
 # the Hookshot or the night), and no Heart Piece (it hangs where it is put and is taken with A from beside it: one
 # dropped on a wall could not be reached, seen in play).
-# And for now only the Deku Scrub's seed, of the chests' rupees and supplies. A Skulltula is done with when its drop
-# is got as a token is: the drop's get event runs, and the drop is gone. The game runs an item's get event the first
-# time it is got and not again, so the second seed of a game was put in the pouch and stayed where it was, and its
-# Skulltula was back when the room was entered again, for another seed. With the event each time (pickup_pack's
-# each_time) four seeds in a row were each got with their text and their Skulltulas stayed dead (seen in play).
-# The others are kept from the Skulltulas until they are seen to do the same: a rupee's pouch file is one every
-# world rupee has a copy of, and a bomb bundle with the event each time and got as a token is ("Medium") was still
-# passed by on vines (without a window). What was tried on the way and did not help, or was no answer: the token's
-# animations; what a world rupee thinks with (AIInfoRef DropItem: it fell); made from Obj_Item_Base, a bomb bundle
-# was not there when its Skulltula died; a world rupee (Obj_Rupee_*) dropped in a chest rupee's place fell into
-# water, and its Skulltula was back each time.
-SKULLTULA_ITEMS = ("Item_ScrubBusinessSeed",)
-# (the others a Skulltula was given at first)
+# A Skulltula is done with when its drop is got as a token is: the drop's get event runs, and the drop is gone. The
+# game runs an item's get event the first time it is got and not again, so the second seed of a game was put in the
+# pouch and stayed where it was, and its Skulltula was back when the room was entered again, for another seed. With
+# the event each time (pickup_pack's each_time) four seeds in a row were each got with their text and their
+# Skulltulas stayed dead; so were Deku Nut bundles (seen in play).
+# A bundle Link has nothing to carry in is not got at all: a bomb bundle without a Bomb Bag, and a Deku Nut bundle in
+# a game that had had no nuts yet, stayed where they were with nothing given, and their Skulltulas were back when
+# the room was entered again (seen in play; the nuts were got once some had been bought). It is there for later, as
+# a token out of reach is. The stick and Bombchu bundles are given on the strength of the nuts: not seen yet.
+SKULLTULA_ITEMS = ("Item_ScrubBusinessSeed", "Item_BombBundle_Small", "Item_BombchuBundle_Small", "TBox_DekuNutBundle",
+                   "Item_DekuStickBundle_Small")
+# The others a Skulltula was given at first, kept from it: their pouch file is one the game's own pick-up of the same
+# thing has a copy of (a world rupee's, a world arrow bundle's, a magic jar's), and the first one loaded is the one
+# used, so the event each time may not be theirs, or would be every world rupee's too. What was tried on the way
+# with them and did not help, or was no answer: the token's animations; what a world rupee thinks with (AIInfoRef
+# DropItem: it fell); made from Obj_Item_Base, a bomb bundle was not there when its Skulltula died; a world rupee
+# (Obj_Rupee_*) dropped in a chest rupee's place fell into water, and its Skulltula was back each time.
 SKULLTULA_ITEMS_NOT_YET = ("TBox_Rupee_Green", "TBox_Rupee_Blue", "TBox_Rupee_Red", "TBox_Rupee_Purple", "TBox_Rupee_Gold",
-                           "Item_BombBundle_Small", "Item_BombchuBundle_Small", "TBox_ArrowBundle_Medium", "TBox_ArrowBundle_Large",
-                           "TBox_DekuNutBundle", "Item_DekuStickBundle_Small", "Tbox_MagicJar_Large")
+                           "TBox_ArrowBundle_Medium", "TBox_ArrowBundle_Large", "Tbox_MagicJar_Large")
 
 
 def skulltulas(data):
@@ -1428,7 +1431,8 @@ def main():
                             if n not in pickups and os.path.isfile(os.path.join(romfs, "Pack", "Actor", n + ".pack.zs"))]
             for item in pickups:
                 old = pack(item)
-                new = pickup_pack(item, old, base, each_time=item in SKULLTULA_ITEMS)
+                # (each time: what can be got more than once. A gating item is got once, and is as it was seen in play)
+                new = pickup_pack(item, old, base, each_time=item not in PROGRESSION)
                 old_parts = sarc_read(old)
                 pack_parts.update(name for name, data in sarc_read(new).items()   # (the files changed in it)
                                   if data != old_parts.get(name, base_parts.get(name)))
