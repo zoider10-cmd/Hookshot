@@ -889,6 +889,7 @@ class LauncherForm : Form {
         new[] { "ja", "日本語" }, new[] { "ko", "한국어" }, new[] { "zh-Hans", "简体中文" }, new[] { "zh-Hant", "繁體中文" },
     };
     // (env name, value when on, label, help, value when off; "" = no line, the game's default)
+    const int FixPitch = 80;   // (six switches over the bottom row of buttons; 92 while there were five)
     static readonly string[][] Fixes = {
         new[] { "RX_VK_WAIT_GPU", "", "No blue light flashes", "Each frame waits for the graphics card to finish the previous one. Stops the one-frame blue light flashes in Hyrule Field. Costs a few fps. Recommended.", "-1" },
         new[] { "HOOKSHOT_OCCLUSION_OFF", "1", "Occlusion tests off", "The game no longer guesses what is hidden: everything is drawn. Steadier sun glare on AMD cards, a little slower.", "" },
@@ -898,6 +899,10 @@ class LauncherForm : Form {
         new[] { "RX_VK_PREDICT_BG", "1", "Quick first start", "Off (recommended): after an update every effect is prepared before the title (up to ~40 min, once). On: the title comes much sooner, but expect stutters for hours.", "" },
         // (Mako) AMD FSR Redstone frame generation (gpu/vk/vk_redstone.h), off unless switched on: it takes video memory
         new[] { "RX_VK_REDSTONE", "1", "AMD FSR Redstone frame generation (RX 9000)", "AMD's AI frame generation instead of Mako's: cleaner motion, steady HUD. Needs an RX 9000, AMD's files (FSR tab), FSR 4 and Frame generation 2x. Best with 12 GB+.", "" },
+        // (a trial: gpu/vk/vk_memory.cpp capture_make's wait for a page the graphics card still writes back. With it the replay
+        // waited ~5.5 ms a frame in the Market reached from Hyrule Field, 45 fps for 60; without it the exposure can step for a
+        // frame, which is what the wait was made for)
+        new[] { "RX_VK_CAPTURE_WAIT", "0", "Faster in busy places (trial)", "The renderer stops waiting for the graphics card before it copies memory they share. More fps in the busiest places (the Market after Hyrule Field). May flash for a frame: off if it does.", "" },
     };
 
     [DllImport("user32.dll")] static extern bool ReleaseCapture();
@@ -981,7 +986,7 @@ class LauncherForm : Form {
         langSel.Changed = s => { if (!loading) SaveLanguage(); };
         widgets.Add(langSel);
         for (int i = 0; i < Fixes.Length; i++) {
-            var tg = new Toggle { Key = Fixes[i][0], Label = Fixes[i][2], HelpText = Fixes[i][3], Page = 5, R = new RectangleF(cx, 112 + i * 92, cw, 88) };
+            var tg = new Toggle { Key = Fixes[i][0], Label = Fixes[i][2], HelpText = Fixes[i][3], Page = 5, R = new RectangleF(cx, 112 + i * FixPitch, cw, FixPitch - 4) };
             tg.Changed = t => { if (!loading) SaveEnv(); };
             fixes[tg.Key] = tg; widgets.Add(tg);
         }
@@ -1227,7 +1232,7 @@ class LauncherForm : Form {
                         "The equipment menu's pictures of the tunics keep the game's colours.",
                         Theme.Small, Theme.Faint, new RectangleF(x, 112 + 3 * 70 + 6, W - LeftW - 72, 40), StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 5)
-            Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + Fixes.Length * 92, 500, 20),
+            Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + Fixes.Length * FixPitch, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 6) PaintFsr(g, x);
         if (PageNow == 7) {
