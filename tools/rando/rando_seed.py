@@ -48,6 +48,7 @@ Needs the zstandard package.
 """
 import argparse
 import collections
+import math
 import os
 import random
 import struct
@@ -1785,6 +1786,7 @@ def tracker_lines(chests, skulls, gifts=None):
 # all. The rules ask for too much, never too little (see RULES): a check not in logic may be within reach.
 CHECKS = "checks.txt"
 CHECK_ROWS = 320
+CHECK_NAME = 79   # (a check's name: as many characters as the menu keeps of it)
 CHECK_CODES = collections.OrderedDict((
     ("Item_Sword_Kokiri", "KS"), ("Item_Range_SlingShot", "SL"), ("Item_BombBag_Small", "BB"), ("Item_Boomerang", "BM"),
     ("Item_GlassTruth", "LT"), ("Item_Range_Bow", "BW"), ("Item_Hammer", "HM"), ("Item_HeavyBoot", "IB"), ("Item_HoverBoot", "HB"),
@@ -1836,18 +1838,118 @@ GIFT_PLACES = {
 }
 
 
+# ---- a chest's and a Gold Skulltula's name, made from the map files ----
+# The game names neither. What its map files do say is put together (check_name): what the chest held before the
+# shuffle (known to who knows the game, and nothing about what it holds now), whether it is the big kind, a Gold
+# Skulltula's night and its bean soil, and where: a dungeon's room by its number, a part of the map that has a name
+# of its own (Lake Hylia, Lon Lon Ranch, the Temple of Time: a LocationArea not the map's own), or the way out it
+# is near (a MapIconEntranceAnchor within EXIT_NEAR metres). "Chest (red rupee), room 10", "Big chest (Kokiri Sword)",
+# "Gold Skulltula, night, by the Lost Woods exit". Two of an area that come out the same are numbered, by place.
+# Nobody has gone through them: they tell one check from the next, and are not the names a player would give.
+ITEM_WORDS = {
+    "TBox_Rupee_Green": "green rupee", "TBox_Rupee_Blue": "blue rupee", "TBox_Rupee_Red": "red rupee", "TBox_Rupee_Purple": "purple rupee",
+    "TBox_Rupee_Silver": "silver rupee", "TBox_Rupee_Gold": "gold rupee", "Item_ScrubBusinessSeed": "Deku Seeds", "Obj_Heart_Piece": "Piece of Heart",
+    "Item_Token_Gold": "Skulltula token", "TBox_DekuNutBundle": "Deku Nuts", "TBox_ArrowBundle_Small": "arrows", "TBox_ArrowBundle_Medium": "arrows",
+    "TBox_ArrowBundle_Large": "arrows", "Item_BombchuBundle_Small": "Bombchus", "Item_BombBundle_Small": "bombs", "Tbox_MagicJar_Large": "magic jar",
+    "Item_StickBag_Large": "Deku Stick bag", "Item_NutBag_Large": "Deku Nut bag", "Item_DekuStickBundle_Small": "Deku Sticks",
+    "Item_Sword_Kokiri": "Kokiri Sword", "Item_Range_SlingShot": "Slingshot", "Item_BombBag_Small": "Bomb Bag", "Item_Boomerang": "Boomerang",
+    "Item_GlassTruth": "Lens of Truth", "Item_Range_Bow": "Bow", "Item_Hammer": "Megaton Hammer", "Item_HeavyBoot": "Iron Boots",
+    "Item_HoverBoot": "Hover Boots", "Item_Longshot": "Longshot", "Item_Gauntlet_Silver": "Silver Gauntlets", "Item_Shield_Mirror": "Mirror Shield",
+    "Item_Gauntlet_Gold": "Golden Gauntlets", "Item_Dungeon_SmallKey": "small key", "Item_Dungeon_BossKey": "boss key", "Item_Dungeon_Map": "map",
+    "Item_Dungeon_Compass": "compass",
+}
+EXIT_NEAR = 40.0
+MARKS = ("LocationArea", "MapIconEntranceAnchor")
+
+
+def spaced(name):
+    """an actor's or a place's name in words: "LonLonRanch" -> "Lon Lon Ranch", "Item_Arrow_Fire" -> "Arrow Fire" """
+    name = name.split("_", 1)[1] if name.split("_", 1)[0] in ("Item", "TBox", "Tbox", "Obj", "Weapon", "Armor") and "_" in name else name
+    out = ""
+    for k, ch in enumerate(name.replace("_", " ")):
+        out += (" " if k and ch.isupper() and out[-1:].islower() else "") + ch
+    return out
+
+
+def marks(data):
+    """What a map file has to name its checks by: [(hash, Gyaml, place, scale, {a Dynamic's name: its text, or its
+    number as it is written})] for its chests, Gold Skulltulas, LocationAreas and MapIconEntranceAnchors."""
+    if data[:2] != b"YB":
+        raise ValueError("not a little-endian BYML")
+    key_at, str_at, root = struct.unpack_from("<III", data, 4)
+    keys, strings = table(data, key_at), table(data, str_at)
+    out = []
+    for name, kind, value, _ in entries(data, root, keys):
+        if name != "Actors" or kind != 0xC0:
+            continue
+        n = int.from_bytes(data[value + 1:value + 4], "little")
+        vals = value + 4 + (n + 3 & ~3)
+        for i in range(n):
+            if data[value + 4 + i] != 0xC1:
+                continue
+            ident, gyaml, pos, scale, dyn = None, "", (), (), None
+            for k, t, v, _ in entries(data, struct.unpack_from("<I", data, vals + 4 * i)[0], keys):
+                if k == "Hash" and t == 0xD5:
+                    ident = struct.unpack_from("<Q", data, v)[0]
+                elif k == "Hash" and t == 0xD3:
+                    ident = v
+                elif k == "Gyaml" and t == 0xA0:
+                    gyaml = strings[v] if v < len(strings) else ""
+                elif k in ("Translate", "Scale") and t == 0xC0 and int.from_bytes(data[v + 1:v + 4], "little") == 3:
+                    three = tuple(round(x, 1) for x in struct.unpack_from("<3f", data, v + 8))
+                    pos, scale = (three, scale) if k == "Translate" else (pos, three)
+                elif k == "Dynamic" and t == 0xC1:
+                    dyn = v
+            if gyaml in MARKS or gyaml == SKULLTULA or gyaml.startswith("Obj_TBox"):
+                words = {}
+                for dk, dt, dv, _ in entries(data, dyn, keys) if dyn is not None else ():
+                    words[dk] = (strings[dv] if dv < len(strings) else "") if dt == 0xA0 else dv
+                out.append((ident, gyaml, pos, scale, words))
+    return out
+
+
+def check_name(kind, item, about, pos, exits=(), parts=()):
+    """A check's name. kind: "Chest" or "Gold Skulltula". item: what a chest held. about: what its actor says
+    ({"big", "room", "night", "soil"}). exits: [(place, where it leads)] and parts: [(place, how far it reaches, its
+    name)] of its area's maps."""
+    if kind == "Chest":
+        name = ("Big chest" if about.get("big") else "Chest") + (" (%s)" % (ITEM_WORDS.get(item) or spaced(item)) if item else "")
+    else:
+        name = kind + (", night" if about.get("night") else "") + (", bean soil" if about.get("soil") else "")
+    if isinstance(about.get("room"), int):
+        return name + ", room %d" % about["room"]
+    if len(pos) != 3:
+        return name
+    inside = sorted((math.hypot(pos[0] - p[0], pos[2] - p[2]), words) for p, reach, words in parts if math.hypot(pos[0] - p[0], pos[2] - p[2]) < reach)
+    if inside:
+        return name + ", " + AREA_NAMES.get(inside[0][1], spaced(inside[0][1]))
+    near = sorted((math.dist(pos, p), words) for p, words in exits if math.dist(pos, p) < EXIT_NEAR)
+    return name + (", by the %s exit" % AREA_NAMES.get(near[0][1], spaced(near[0][1])) if near else "")
+
+
 def check_lines(chests, skulls, gifts=()):
-    """The checks file's lines. chests and skulls: [(area (the Banc folder), position, ages, what its rule asks for)].
-    gifts: the same with the gift's name after, which is its line's kind. By the area's name, the chests first, then
-    the Gold Skulltulas by place, then the gifts by name; no more than the menu keeps."""
-    rows = [(AREA_NAMES.get(area, area).replace("|", "/")[:47], kind, area, ages, pos,
-             ",".join(code for item, code in CHECK_CODES.items() if item in need) or "-")
-            for kind, those in (("Chest", chests), ("Gold Skulltula", skulls)) for area, pos, ages, need in those if len(pos) == 3 and ages]
-    rows += [(AREA_NAMES.get(area, area).replace("|", "/")[:47], (name[:1].upper() + name[1:]).replace("|", "/")[:55], area, ages, pos,
-              ",".join(code for item, code in CHECK_CODES.items() if item in need) or "-") for area, pos, ages, need, name in gifts]
-    rows.sort(key=lambda r: (r[0].lower(), r[1] not in ("Chest", "Gold Skulltula"), r[1], r[4]))
+    """The checks file's lines. chests, skulls and gifts: [(area (the Banc folder), position, ages, what its rule asks
+    for, its name)]; a chest or a Gold Skulltula without a name is "Chest" or "Gold Skulltula". The name is the line's
+    kind; those of an area that are the same are numbered, by place. By the area's name, the chests first, then the
+    Gold Skulltulas, then the gifts, each by name; no more than the menu keeps."""
+    rows = []
+    for order, plain, those in ((0, "Chest", chests), (1, "Gold Skulltula", skulls), (2, "", gifts)):
+        for area, pos, ages, need, *name in those:
+            if len(pos) != 3 or not ages:
+                continue
+            name = name[0] if name else plain
+            rows.append([AREA_NAMES.get(area, area).replace("|", "/")[:47], (name[:1].upper() + name[1:]).replace("|", "/"), area, ages, pos,
+                         ",".join(code for item, code in CHECK_CODES.items() if item in need) or "-", order])
+    rows.sort(key=lambda r: (r[0].lower(), r[6], r[1], r[4]))
+    same = collections.Counter((r[0], r[1]) for r in rows if r[1] not in ("Chest", "Gold Skulltula"))
+    count = collections.Counter()
+    for r in rows:
+        if same[(r[0], r[1])] > 1 and r[6] < 2:   # (gifts of one place are told apart by their names already)
+            count[(r[0], r[1])] += 1
+            r[1] = r[1][:CHECK_NAME - 4] + " #%d" % count[(r[0], r[1])]
+        r[1] = r[1][:CHECK_NAME]
     return ["# The checks of this seed, one by one, for the Tracker tab: <area>|<kind>|<folder>|<ages>|<x> <y> <z>|<the rules ask for>"] + [
-        "%s|%s|%s|%s|%.1f %.1f %.1f|%s" % (name, kind, area, ages, pos[0], pos[1], pos[2], need) for name, kind, area, ages, pos, need in rows[:CHECK_ROWS]]
+        "%s|%s|%s|%s|%.1f %.1f %.1f|%s" % (name, kind, area, ages, pos[0], pos[1], pos[2], need) for name, kind, area, ages, pos, need, _ in rows[:CHECK_ROWS]]
 
 
 def remove_old(mod):
@@ -2037,7 +2139,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + " checks 3" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + " checks 4" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2081,6 +2183,9 @@ def main():
     # ---- every map file with chests ----
     files = collections.OrderedDict()   # rel -> (bytes, [Chest])
     maps = collections.defaultdict(set)  # a chest's or Gold Skulltula's hash -> the names of the map files that have it
+    about = {}                                 # the same -> what its actor says of it (check_name)
+    exits = collections.defaultdict(set)       # an area -> its ways out: (place, where it leads)
+    sub_areas = collections.defaultdict(set)   # an area -> its parts with a name of their own: (place, reach, name)
     skulls = collections.OrderedDict()  # hash -> [area, position, can be given a drop (in every file it is in), a dungeon's, a child's map has it]
     paths = []
     for top, dirs, names in os.walk(os.path.join(romfs, "Banc")):
@@ -2094,6 +2199,25 @@ def main():
         except Exception as e:
             print("skipped %s: %s" % (rel, e))
             continue
+        try:   # (what the file has to name its checks by: check_name)
+            folder = rel.split("/")[1] if rel.count("/") > 1 else "(Banc)"
+            for h, gyaml, pos, scale, words in marks(data):
+                leads = words.get("Location")
+                if gyaml in MARKS:
+                    if isinstance(leads, str) and leads and leads != folder and len(pos) == 3:
+                        if gyaml == "LocationArea":
+                            sub_areas[folder].add((pos, max(scale[0], scale[2], 60.0) if len(scale) == 3 else 60.0, leads))
+                        else:
+                            exits[folder].add((pos, leads))
+                elif h is not None:
+                    was = about.setdefault(h, {})
+                    was["big"] = was.get("big") or gyaml.startswith("Obj_TBox_A_02")
+                    was["night"] = was.get("night") or bool(words.get("Enemy_Skulltula_Gold_Nocturnal"))
+                    was["soil"] = was.get("soil") or bool(words.get("Enemy_Skulltula_Gold_IsMagicBeanSoil"))
+                    if "DefaultDungeonRoomIndex" in words:
+                        was["room"] = words["DefaultDungeonRoomIndex"]
+        except (ValueError, struct.error, IndexError):
+            pass
         here = skulltulas(data) if a.skulltulas else []
         if any(not can for _, _, can, _ in here):
             try:   # (a file that has to be written anew for its Skulltulas: can it be read whole?)
@@ -2418,8 +2542,11 @@ def main():
                                         collections.Counter(g.area for g in gifts.values()))) + "\n")
     with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\n") as f:   # (for the Tracker tab's Go there)
         skull_need = lambda h: quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0])
-        f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h]), needs[h]) for h in gives if h not in gifts],
-                                      [(skulls[h][0], skulls[h][1], check_ages(maps[h]), skull_need(h)) for h in took],
+        named = lambda kind, h, area, pos, item="": check_name(kind, item, about.get(h, {}), pos, exits[area], sub_areas[area])
+        f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h]), needs[h], named("Chest", h, spots[h][0], spots[h][5], spots[h][1]))
+                                       for h in gives if h not in gifts],
+                                      [(skulls[h][0], skulls[h][1], check_ages(maps[h]), skull_need(h), named("Gold Skulltula", h, skulls[h][0], skulls[h][1]))
+                                       for h in took],
                                       [(g.area, GIFT_PLACES[g.key][1], GIFT_PLACES[g.key][0], needs[h], g.name)
                                        for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES])) + "\n")
     with open(os.path.join(mod, "rando_manifest.txt"), "w", encoding="utf-8") as f:

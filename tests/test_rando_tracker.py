@@ -87,6 +87,34 @@ def main():
     check("for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES])) + " in script and
           'if (!strcmp(k->kind, "Chest") || !strcmp(k->kind, "Gold Skulltula")) snprintf(place' in menu,
           "the gifts that take part are not written with the checks, or a gift's row is its place and not its name")
+    # ---- a chest's and a Gold Skulltula's name ----
+    exits = [((100.0, 0.0, 0.0), "LostWood"), ((0.0, 0.0, 30.0), "HyruleField")]
+    parts = [((500.0, -50.0, 500.0), 199.0, "LakeHylia")]
+    name = seed.check_name
+    check(name("Chest", "TBox_Rupee_Red", {"room": 10}, (1.0, 2.0, 3.0), exits, parts) == "Chest (red rupee), room 10" and
+          name("Chest", "Item_Sword_Kokiri", {"big": True}, (-300.0, 0.0, 0.0), exits, parts) == "Big chest (Kokiri Sword)" and
+          name("Chest", "Item_Arrow_Fire", {}, (0.0, 0.0, 0.0), exits, parts) == "Chest (Arrow Fire), by the Hyrule Field exit" and
+          name("Chest", "Obj_Heart_Piece", {}, (450.0, 130.0, 420.0), exits, parts) == "Chest (Piece of Heart), Lake Hylia" and
+          name("Gold Skulltula", "", {"night": True}, (90.0, 5.0, 0.0), exits, parts) == "Gold Skulltula, night, by the Lost Woods exit" and
+          name("Gold Skulltula", "", {"soil": True, "room": 0}, (), exits, parts) == "Gold Skulltula, bean soil, room 0" and
+          name("Gold Skulltula", "", {}, (-300.0, 0.0, 0.0)) == "Gold Skulltula",
+          "a check's name is not what it held, its kind, its room, its part of the map or the way out it is near")
+    check(seed.spaced("LonLonRanch") == "Lon Lon Ranch" and seed.spaced("Item_BombBag_Small") == "Bomb Bag Small" and seed.spaced("Market") == "Market",
+          "a name is not put in words")
+    twins = seed.check_lines([("Market", (5.0, 0.0, 0.0), "C", seed.NONE, "Chest (red rupee)"), ("Market", (1.0, 0.0, 0.0), "C", seed.NONE, "Chest (red rupee)"),
+                              ("Market", (3.0, 0.0, 0.0), "C", seed.NONE, "Chest (blue rupee)"), ("ZoraRiver", (1.0, 0.0, 0.0), "C", seed.NONE, "Chest (red rupee)")],
+                             [("Market", (2.0, 0.0, 0.0), "C", seed.NONE, "x" * 120)],
+                             [("Market", (0.0, 0.0, 0.0), "C", seed.NONE, "bowling"), ("Market", (0.0, 0.0, 0.0), "C", seed.NONE, "bowling")])
+    kinds = [line.split("|")[1] for line in twins[1:]]
+    check(kinds == ["Chest (blue rupee)", "Chest (red rupee) #1", "Chest (red rupee) #2", "X" + "x" * 78, "Bowling", "Bowling", "Chest (red rupee)"] and
+          twins[2].endswith("|1.0 0.0 0.0|-"), "two checks of an area with one name are not numbered by place, or a name is longer than the menu keeps: %r" % kinds)
+    made = [name("Chest", item, {}, ()) for item in seed.ITEM_WORDS]
+    check(all(len(n) <= seed.CHECK_NAME - 40 for n in made) and set(seed.PROGRESSION) <= set(seed.ITEM_WORDS) and set(seed.DUNGEON_ITEMS) <= set(seed.ITEM_WORDS),
+          "a gating item or a dungeon's item has no words for a chest's name")
+    block = menu[menu.index("void tracker_load() {"):menu.index("tracker_check_count = checks;")]
+    check("named = lambda kind, h, area, pos, item=\"\": check_name(kind, item, about.get(h, {}), pos, exits[area], sub_areas[area])" in script and
+          "for h, gyaml, pos, scale, words in marks(data):" in script and "%79[^|]" in block,
+          "the checks are not written with their names, or the menu does not read a name whole")
     check(set(seed.CHECK_CODES) == set(seed.PROGRESSION | seed.QUEST_GATES) and len(set(seed.CHECK_CODES.values())) == len(seed.CHECK_CODES),
           "a gating item of the rules has no letters for the tracker, or two have the same")
     codes = re.findall(r'^    \{"([A-Z]{2})", "[^"]+", \{[^}]+\}\},$', menu, re.M)
@@ -107,10 +135,10 @@ def main():
           seed.check_ages({"A_Child_Static", "A_Adult_Static"}) == "CA" and seed.check_ages({"FireTemple_Static.bcett.byml.zs"}) == "CA" and
           seed.check_ages(set()) == "", "the ages whose map has a check are not read from its files' names")
     check('with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\\n") as f:' in script and seed.CHECKS == "checks.txt" and
-          '" checks 3" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
+          '" checks 4" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
     m = re.search(r"constexpr int kTrackerChecks = (\d+);", menu)
     check(m and int(m.group(1)) == seed.CHECK_ROWS, "the menu does not keep as many checks as the script may write")
-    check('"%47[^|]|%55[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]"' in menu and "char area[48], kind[56], folder[40], ages[4];" in menu and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
+    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]"' in menu and "char area[48], kind[80], folder[40], ages[4];" in menu and seed.CHECK_NAME == 79 and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
     check("if (press[3] || press[4]) tracker_pick[row] = (tracker_pick[row] + n + 1 + (press[4] ? 1 : -1)) % (n + 1), changed = true;" in menu and
           "else if (r.tracker >= 0) tracker_press(r.tracker, press, changed);" in menu,
           "Left and Right do not step through a row's checks and back to its own words")

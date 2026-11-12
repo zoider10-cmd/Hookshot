@@ -525,3 +525,13 @@ on the roof, Bombchu Bowling, the Market's gallery, the dog lady, the diving gam
 the two Piece of Heart scrubs. Not gone to yet: the Lost Woods target and the Forest Stage (an event was playing when
 they were asked for, and a go-to waits for none), and the adult's four (the fishing pond, Kakariko's gallery,
 horseback archery, the Temple of Time).
+
+## The names of the chests and Gold Skulltulas on the Tracker tab
+
+The game names neither, so the seed makes a name for each from what its map files say (`check_name`): what a chest
+held before the shuffle ("Chest (red rupee)", "Big chest (Kokiri Sword)": nothing about what it holds now), a Gold
+Skulltula's night and bean soil, and where: a dungeon's room by its number, a part of the map with a name of its own
+(Lake Hylia, Lon Lon Ranch), or the way out within 40 metres ("by the Lost Woods exit"). Two of an area that come
+out the same are numbered by place; one with nothing to say of it ("Gold Skulltula") is shown with its coordinates.
+The names tell one check from the next. Nobody has gone through them, and they are not what a player would call
+the spots.
