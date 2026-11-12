@@ -108,8 +108,10 @@ Lost Woods). A scrub's wares are named in its map file (`ScrubBusiness_ShopItemA
 matches, a sub-flow call with the item, its price and its text. The map's name is left: it is the sale's key. The
 call's item is changed, by the entry point it is under (`flow_reach`), since the two Pieces of Heart are one name
 in one flow. The price stays the scrub's. The scrubs that sell what can be bought again (seeds, nuts, bombs, arrows,
-potions) and the Dream World's are left. **Not seen in play yet**: a scrub selling another item, and that it sells
-it once. `tests/test_rando_scrubs.py`.
+potions) and the Dream World's are left. **Seen in play**: the Lost Woods' stick scrub, whose sale was the Bomb Bag in
+that seed, sold it for his 40 rupees with his own words about Deku Sticks (the text is the scrub's, not the
+item's), left at once and was not there again after the forest was left and come back to. **Not seen yet**: the
+other three, and whether Kokiri Forest's stick scrub still sells after the Lost Woods' has. `tests/test_rando_scrubs.py`.
 
 ### The logic
 

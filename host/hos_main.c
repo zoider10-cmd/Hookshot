@@ -757,6 +757,21 @@ static int oot_item_count(Ctx *c, const char *name) {
     return n > m ? n : m;
 }
 
+/* (the randomizer's fork) What Link carries a counted item in. The game takes none of an item whose holder he has not: a
+   Deku Seed added without a Bullet Bag was accepted (event status 2) and the count stayed 0, time after time; the same with
+   Deku Nuts (their bag is in no row of the Inventory page) and Deku Sticks. Seen in the log of a game where Unlock worked and
+   every amount stayed 0, the bags all 0 in the page's probe line. An amount raised from the page gives the smallest holder
+   first when he has none. */
+static const char *oot_item_holder(const char *name) {
+    static const char *const pairs[][2] = {
+        {"Item_DekuStick", "Item_StickBag_Small"}, {"Item_DekuNut", "Item_NutBag_Small"}, {"Item_Bomb", "Item_BombBag_Small"},
+        {"Item_Bombchu", "Item_BombBag_Small"}, {"Item_DekuSeed", "Item_BulletBag_Small"}, {"Item_Arrow_Normal", "Item_Quiver_Small"},
+    };
+    for (unsigned i = 0; i < sizeof pairs / sizeof pairs[0]; i++)
+        if (!strcmp(name, pairs[i][0])) return pairs[i][1];
+    return NULL;
+}
+
 static void oot_inventory_edit(Ctx *c, int action) {
     const unsigned item = (unsigned)(action - OOT_CHEAT_ITEM_ACTION) / 256, op = (unsigned)(action - OOT_CHEAT_ITEM_ACTION) % 256;
     if (item >= OOT_ITEM_COUNT) return;
@@ -779,6 +794,19 @@ static void oot_inventory_edit(Ctx *c, int action) {
             }
         }
         delta = 1;
+    }
+    {   /* (an amount raised: its holder first, when Link has none of that kind. Any size counts) */
+        const char *holder = delta > 0 ? oot_item_holder(name) : NULL;
+        if (holder) {
+            char other[64];
+            int held = oot_pouch_count(c, holder);
+            const size_t stem = strlen(holder) - 5;   /* (..._Small: the same name with _Medium and _Large) */
+            snprintf(other, sizeof other, "%.*sMedium", (int)stem, holder);
+            if (oot_pouch_count(c, other) > 0) held = 1;
+            snprintf(other, sizeof other, "%.*sLarge", (int)stem, holder);
+            if (oot_pouch_count(c, other) > 0) held = 1;
+            if (held == 0) hos_log("cheats: inventory %s first, to carry %s in (event status %d)", holder, name, oot_pouch_change(c, holder, 1));
+        }
     }
     int result = -1;
     if (is_mask && delta < 0) {   /* remove under whichever spelling holds it */
