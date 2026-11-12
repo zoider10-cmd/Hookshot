@@ -18,6 +18,24 @@
    RELEASING: a full release (anything in host/, nx2/, game patches, vk_api.h, an upstream merge) sets HOOKSHOT_FORK_BASE and
    HOOKSHOT_FORK_VERSION below to the new tag and players rebuild once. A graphics-only fix (gpu/vk/** alone) keeps them, and its
    release (tag = the new version) carries hookshot_vk.dll + hookshot_vk_update.txt with base = HOOKSHOT_FORK_BASE. */
+#include <stdlib.h>
+
+/* (Mako) 1 when release tag is not newer than have, by their numbers ("mako-3.4.1" < "mako-3.5-mq-test"): a test build ahead
+   of the public release is never offered the older one */
+static int not_newer(const char *tag, const char *have) {
+    while (*tag && (*tag < '0' || *tag > '9')) tag++;
+    while (*have && (*have < '0' || *have > '9')) have++;
+    if (!*tag || !*have) return 0;
+    for (;;) {
+        const long a = strtol(tag, (char **)&tag, 10), b = strtol(have, (char **)&have, 10);
+        if (a != b) return a < b;
+        const int ta = *tag == '.' && tag[1] >= '0' && tag[1] <= '9', tb = *have == '.' && have[1] >= '0' && have[1] <= '9';
+        if (!ta && !tb) return 1;   /* (the same number) */
+        if (!ta || !tb) return !ta;   /* (3.4 vs 3.4.1: the shorter is older) */
+        tag++, have++;
+    }
+}
+
 #ifdef _WIN32
 #include "hos_paths.h"
 #include <windows.h>
@@ -29,8 +47,8 @@
 
 #include "../gpu/vk/vk_api.h"   /* (MKWVK_API_VERSION) */
 
-#define HOOKSHOT_FORK_BASE "mako-3.4"      /* (the exe: which graphics patches fit it) */
-#define HOOKSHOT_FORK_VERSION "mako-3.4"   /* (the release this folder was built from) */
+#define HOOKSHOT_FORK_BASE "mako-3.5"      /* (the exe: which graphics patches fit it) */
+#define HOOKSHOT_FORK_VERSION "mako-3.5"   /* (the release this folder was built from) */
 #define UPDATE_HOST L"api.github.com"
 #define UPDATE_PATH L"/repos/Shakoquo/Mako/releases/latest"
 #define RELEASES_PAGE L"https://github.com/Shakoquo/Mako/releases/latest"
@@ -220,7 +238,7 @@ void hos_update_check(void) {
         if (e && e > k && (size_t)(e - k) < sizeof tag) memcpy(tag, k, (size_t)(e - k)), tag[e - k] = 0;
     }
     fprintf(stderr, "update: this folder is %s (exe %s), the latest release is %s\n", have, HOOKSHOT_FORK_BASE, tag[0] ? tag : "?");
-    if (!tag[0] || !strcmp(tag, have) || !strcmp(tag, skipped)) {
+    if (!tag[0] || !strcmp(tag, have) || !strcmp(tag, skipped) || not_newer(tag, have)) {
         free(json);
         return;
     }
@@ -390,7 +408,7 @@ void hos_update_check(void) {
         return;
     }
     fprintf(stderr, "update: this folder is %s, the latest release is %s\n", have, tag);
-    if (!strcmp(tag, have) || !strcmp(tag, skipped)) return;
+    if (!strcmp(tag, have) || !strcmp(tag, skipped) || not_newer(tag, have)) return;
     snprintf(path, sizeof path, "%shookshot_version.txt", dir);
     const int has_builder = installed_builder(builder, sizeof builder) ||
                             (read_value(path, "builder", builder, sizeof builder) && access(builder, X_OK) == 0);

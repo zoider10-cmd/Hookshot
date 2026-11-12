@@ -31,6 +31,7 @@ int hos_mods_has(const char *prefix, const char *suffix);   /* mods.c */
 #define FONT_PATH "font2/scalable/external.nin_ounce_nvn2.bfotf.zs"   /* (as hos_mods_romfs's keys: lower case) */
 #define TEXTURES_PATH "ui/layout2archive/common.product.100.nin_ounce_nvn2.bntx.zs"
 #define LAYOUTS_PATH "ui/layout2archive/common.product.100.nin_ounce_nvn2.blarc.zs"
+#define TITLE_PATH "ui/layout2archive/title.product.100.nin_ounce_nvn2.bntx.zs"   /* (Mako: the Master Quest logo) */
 #define SIZES_PATH "system/resource/resourcesizetable."   /* (then the version, ".rsizetable.zs") */
 #define MAGIC 0x18029a7fu
 #define PAD_BASE 0xF700
@@ -91,6 +92,8 @@ static int choose_face(const char *dir) {
     hos_log("prompts: auto: controller \"%s\": %s", name[0] ? name : "(none)", faces[face]);
     return face;
 }
+
+int hos_master_quest(void);   /* (Mako) master_quest.c: Master Quest on (its title logo: prompts/mq/, nx2/mq_logo.py) */
 
 static uint32_t rd32le(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
 static void wr32le(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v, p[1] = (uint8_t)(v >> 8), p[2] = (uint8_t)(v >> 16), p[3] = (uint8_t)(v >> 24); }
@@ -317,19 +320,66 @@ static int write_patched(const char *game, const char *out, const char *keypath,
     return ok;
 }
 
+/* the always-written runs (Switch button 0xff) of an HPTX file (t: read_all's) */
+static void hptx_always(const uint8_t *t, long tn, Run **runs, size_t *nruns, size_t *cap_runs) {
+    const uint32_t count = rd32le(t + 4);
+    size_t at = 8;
+    for (uint32_t e = 0; e < count && at + 8 <= (size_t)tn; e++) {
+        const int sw = t[at];
+        const uint32_t nr = rd32le(t + at + 4);
+        at += 8;
+        for (uint32_t r = 0; r < nr && at + 8 <= (size_t)tn; r++) {
+            const uint32_t off = rd32le(t + at), len = rd32le(t + at + 4);
+            if (len > (size_t)tn - at - 8) break;
+            if (sw == 0xff) add_run(runs, nruns, cap_runs, off, len, t + at + 8);
+            at += 8 + len;
+        }
+    }
+}
+
+/* (Mako) prompts/mq/Title.bntx.zs: the game's Title textures (prompts/mq/Title.bntx) with the Master Quest logo
+   (prompts/mq/title.bin); only with Master Quest on */
+static int build_title(char *out, size_t cap) {
+    char dir[MAX_PATH], path[MAX_PATH], keypath[MAX_PATH];
+    if (!hos_master_quest() || !game_dir(dir, sizeof dir)) return 0;
+    snprintf(path, sizeof path, "%sprompts/mq/title.bin", dir);
+    long tn;
+    uint8_t *t = read_all(path, "HPTX", &tn);
+    if (!t) {
+        hos_log("master quest: no %s: the game's own logo (built before Master Quest, or without its logo)", path);
+        return 0;
+    }
+    size_t nruns = 0, cap_runs = 256;
+    Run *runs = (Run *)malloc(cap_runs * sizeof *runs);
+    hptx_always(t, tn, &runs, &nruns, &cap_runs);
+    snprintf(out, cap, "%sprompts/mq/Title.bntx.zs", dir);
+    snprintf(path, sizeof path, "%sprompts/mq/Title.bntx", dir);
+    snprintf(keypath, sizeof keypath, "%sprompts/mq/Title.key", dir);
+    const int ok = nruns && write_patched(path, out, keypath, fnv(0xcbf29ce484222325ull, t, (size_t)tn), runs, nruns);
+    hos_log("master quest: the title logo%s", ok ? "" : ": could not be written");
+    free(runs);
+    free(t);
+    return ok;
+}
+
 static int build_textures(char *out, size_t cap) {
     char dir[MAX_PATH], path[MAX_PATH];
     int face;
     if (!setup(dir, sizeof dir, &face)) return 0;
     snprintf(path, sizeof path, "%sprompts/%s/textures.bin", dir, faces[face]);
-    long tn;
+    long tn = 0, mn = 0;
     uint8_t *t = read_all(path, "HPTX", &tn);
-    if (!t) return 0;   /* (built without the textures: the game's) */
+    /* (Mako) the Master Quest logo's blocks, after the face's (the logo and the icons do not meet) */
+    snprintf(path, sizeof path, "%sprompts/mq/common.bin", dir);
+    uint8_t *mq = hos_master_quest() ? read_all(path, "HPTX", &mn) : NULL;
+    if (!t && !mq) return 0;   /* (built without the textures: the game's) */
     int bind[HOS_SW_N];
     for (int b = 0; b < HOS_SW_N; b++) bind[b] = hos_binding(HOS_BIND_PAD, b, 0);
-    uint64_t h = fnv(fnv(fnv(0xcbf29ce484222325ull, &face, sizeof face), bind, sizeof bind), t, (size_t)tn);
+    uint64_t h = fnv(fnv(0xcbf29ce484222325ull, &face, sizeof face), bind, sizeof bind);
+    if (t) h = fnv(h, t, (size_t)tn);
+    if (mq) h = fnv(fnv(h, "mq", 2), mq, (size_t)mn);
     /* the runs these controls choose */
-    const uint32_t count = rd32le(t + 4);
+    const uint32_t count = t ? rd32le(t + 4) : 0;
     size_t at = 8, nruns = 0, cap_runs = 256;
     Run *runs = (Run *)malloc(cap_runs * sizeof *runs);
     for (uint32_t e = 0; e < count && at + 8 <= (size_t)tn; e++) {
@@ -344,15 +394,17 @@ static int build_textures(char *out, size_t cap) {
             at += 8 + len;
         }
     }
+    if (mq) hptx_always(mq, mn, &runs, &nruns, &cap_runs);
     snprintf(out, cap, "%sprompts/Common.bntx.zs", dir);
     snprintf(path, sizeof path, "%sprompts/Common.bntx", dir);
     char keypath[MAX_PATH];
     snprintf(keypath, sizeof keypath, "%sprompts/Common.key", dir);
     const int ok = write_patched(path, out, keypath, h, runs, nruns);
-    hos_log("prompts: %s textures, %zu runs for this pad's controls%s", faces[face], nruns,
-            ok ? "" : ": could not be written");
+    hos_log("prompts: %s textures, %zu runs for this pad's controls%s%s", faces[face], nruns,
+            mq ? " and the Master Quest logo" : "", ok ? "" : ": could not be written");
     free(runs);
     free(t);
+    free(mq);
     return ok;
 }
 
@@ -501,8 +553,26 @@ static int build(char *out, size_t cap) {
 /* mods.c: the file for a RomFS path the prompts replace (key: lower case, '/'), 1 with one. Asked only when no mod has
    the file: a mod's own wins */
 int hos_prompts_romfs(const char *key, char *out, size_t cap) {
-    static volatile LONG state[3];   /* the font, the textures, the layouts: 0 not built, 1 being built, 2 built, 3 none */
-    static char path[3][MAX_PATH];
+    /* (Mako) Master Quest's dungeons: prompts/mq/banc/<scene>/<file> (nx2/mq_banc.py: chests' contents, the bosses' hearts), in
+       place of the game's while Master Quest is on */
+    /* (Mako) the Master Quest preview ends with the Deku Tree: the Kokiri Emerald's scene (Dm_Kokiri_0130, after the blue warp) asks
+       the menu for its last page (gpu/vk/vk_menu.cpp preview_end: black, More coming, Back to Launcher) */
+    if (!strncmp(key, "event/eventflow/dm_kokiri_0130.", 31) && hos_master_quest()) {
+        SetEnvironmentVariableA("MAKO_MQ_PREVIEW_END", "1");
+        hos_log("master quest: the preview's end (the Kokiri Emerald's scene)");
+        return 0;
+    }
+    if (!strncmp(key, "banc/", 5)) {
+        char dir[MAX_PATH];
+        if (!hos_master_quest() || !game_dir(dir, sizeof dir)) return 0;
+        snprintf(out, cap, "%sprompts/mq/%s", dir, key);
+        if (GetFileAttributesA(out) == INVALID_FILE_ATTRIBUTES) return 0;
+        static volatile LONG told;
+        if (InterlockedIncrement(&told) <= 64) hos_log("master quest: %s", key);
+        return 1;
+    }
+    static volatile LONG state[4];   /* the font, the textures, the layouts, the title: 0 not built, 1 being built, 2 built, 3 none */
+    static char path[4][MAX_PATH];
     const size_t kn = strlen(key);
     if (!strncmp(key, SIZES_PATH, sizeof SIZES_PATH - 1) && kn > 14 && !strcmp(key + kn - 14, ".rsizetable.zs")) {
         char dir[MAX_PATH];   /* (the game's size table with room for the faces' fonts, larger than its: nx2/prompt_assets.py) */
@@ -511,9 +581,10 @@ int hos_prompts_romfs(const char *key, char *out, size_t cap) {
         snprintf(out, cap, "%sprompts/rsizetable.zs", dir);
         return GetFileAttributesA(out) != INVALID_FILE_ATTRIBUTES;
     }
-    const int which = !strcmp(key, FONT_PATH) ? 0 : !strcmp(key, TEXTURES_PATH) ? 1 : !strcmp(key, LAYOUTS_PATH) ? 2 : -1;
+    const int which = !strcmp(key, FONT_PATH) ? 0 : !strcmp(key, TEXTURES_PATH) ? 1 : !strcmp(key, LAYOUTS_PATH) ? 2 :
+                      !strcmp(key, TITLE_PATH) ? 3 : -1;
     if (which < 0) return 0;
-    static int (*const builders[3])(char *, size_t) = {build, build_textures, build_layouts};
+    static int (*const builders[4])(char *, size_t) = {build, build_textures, build_layouts, build_title};
     if (InterlockedCompareExchange(&state[which], 1, 0) == 0)
         InterlockedExchange(&state[which], builders[which](path[which], MAX_PATH) ? 2 : 3);
     while (state[which] == 1) Sleep(1);

@@ -33,7 +33,7 @@ def need(where, text, needles):
 def check_source():
     tex = (ROOT / "gpu/vk/vk_texture.cpp").read_text(encoding="utf-8")
     vma = (ROOT / "gpu/vk/vk_vma.cpp").read_text(encoding="utf-8")
-    # (the compaction is opt-in)
+    # (the compaction is on by default since Mako 3.5; RX_VK_COMPACT=0 turns it off)
     need("vk_texture.cpp: compact_on()", block(tex, "bool compact_on()"), ['getenv("RX_VK_COMPACT")'])
     # (a texture that is not a render target's goes to the textures' pool only when they are compacted, in a branch before the
     # render targets' pool and blocks, which stay as they are)

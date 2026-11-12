@@ -213,6 +213,7 @@ std::unordered_map<Key, std::unique_ptr<Texture>, KeyHash> textures;
 std::unordered_multimap<uint64_t, Texture*> by_gpu;
 uint64_t frame_no = 1;
 uint64_t total_bytes = 0;
+uint64_t made_bytes = 0;   // (Mako: every texture image made so far, bytes: the idle eviction's clock of new content, texture_frame)
 
 // (RX_VK_LOG_REMADE=1) Textures evicted and made again within 600 frames, and those of them that were then sampled
 // empty (storage the GPU rendered, not uploaded): what the eviction's minimum age below is measured by
@@ -276,8 +277,9 @@ std::mutex pool_mu;
 std::unordered_map<uint64_t, std::vector<Pooled>> target_pool;   // by pool_key_of
 uint64_t pool_bytes, pool_n, st_pool_reused, st_pool_made, st_pool_destroyed;
 bool pool_pressed;   // (VRAM near what the driver allows: texture_frame's budget)
-bool compact_on() {   // (hookshot, RX_VK_COMPACT=1: the textures in a pool of their own, compacted: compact_step)
-    static const bool v = getenv("RX_VK_COMPACT") && atoi(getenv("RX_VK_COMPACT")) != 0;
+bool compact_on() {   // (hookshot, RX_VK_COMPACT: the textures in a pool of their own, compacted: compact_step. Mako 3.5: on unless RX_VK_COMPACT=0;
+    // off, the budget counted free space in every block as room for textures and VRAM climbed to the driver's limit, a freeze)
+    static const bool v = !getenv("RX_VK_COMPACT") || atoi(getenv("RX_VK_COMPACT")) != 0;
     return v;
 }
 uint64_t pool_cap() {
@@ -2124,6 +2126,7 @@ Texture* create(const Key& key, const nvn_tex* t, VkFormat vf, bool astc, int bw
     static const bool by_estimate = getenv("RX_VK_COUNT_BY_ESTIMATE") != nullptr;
     if (!x.sparse && !by_estimate) x.pad = std::max(x.bytes, allocation_size(x.allocation)) - x.bytes;
     total_bytes += x.bytes + x.pad;
+    if (!as_target) made_bytes += x.bytes;   // (textures to sample alone: render targets are made as the camera turns, paused or not)
     InitRedirect redirect;   // (a parallel replay's worker: into the earliest open segment's init command buffer)
     // into GENERAL, and cleared (a target the game renders into before writing it all reads zeros, not garbage)
     VkCommandBuffer cmd = upload_cmd();
@@ -3492,7 +3495,7 @@ VkBufferView texel_buffer_view(const nvn_tex* t, const nvn_view* v, bool storage
     return view;
 }
 
-// ---- (hookshot) VRAM compacted (RX_VK_COMPACT=1; off by default) ----
+// ---- (hookshot) VRAM compacted (on by default since Mako 3.5; RX_VK_COMPACT=0 turns it off) ----
 // An evicted texture's memory stays inside its 128 MB block, and the driver counts the block whole: after some play 0.6 to
 // 1.6 GB of what the driver counts is such free space (3 to 4 GB after the cache was emptied), and evicting more gives
 // none of it back. With RX_VK_COMPACT=1 the textures that are not render targets have a pool of their own (vk_vma.cpp; the targets have theirs) and, when RX_VK_COMPACT_MB (512)
@@ -4044,6 +4047,32 @@ void texture_frame(uint64_t completed) {
         logf("vk: finalized textures the GPU drew once, kept for being made again: %zu (%llu KB):%s", finalized_kept_n,
              (unsigned long long)(finalized_kept >> 10), n ? line : "");
     }
+    // (Mako 3.4.2) under the budget too, a texture uploaded from the game's memory (the GPU never drew it) that went unused for
+    // RX_VK_IDLE_EVICT_S seconds (180; 0: kept until the budget asks, as before) while the game made RX_VK_IDLE_EVICT_MB (256) of
+    // other textures goes: a place left behind. The cache held 3.4 GB of them on a 16 GB card for a working set of ~200 MB, VRAM
+    // at 12-13.5 of 14.2 GB with FSR 4 and Redstone, and the long hitches came near that limit. The new textures' condition keeps
+    // a paused game's scene (nothing new is made behind the pause screen) and a long stay in one place. Coming back, they are
+    // uploaded again from the game's memory (new ASTC ones may wait a frame: upload_defer). The presents' times and the bytes
+    // made by then, sampled every 10 presents, say which present was long enough ago
+    static const uint64_t idle_ns = (uint64_t)(getenv("RX_VK_IDLE_EVICT_S") ? std::max(0, atoi(getenv("RX_VK_IDLE_EVICT_S"))) : 180) *
+                                    1000000000ull;
+    static const uint64_t idle_new = (uint64_t)(getenv("RX_VK_IDLE_EVICT_MB") ? std::max(0, atoi(getenv("RX_VK_IDLE_EVICT_MB"))) : 256)
+                                     << 20;
+    struct Stamp { uint64_t present, ns, made; };
+    static std::deque<Stamp> stamps;
+    uint64_t idle_before = 0;   // (a texture last used before this present is idle; 0: none)
+    if (idle_ns) {
+        const uint64_t now = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                 std::chrono::steady_clock::now().time_since_epoch()).count();
+        stamps.push_back({frame_no, now, made_bytes});
+        while (stamps.size() > 1 && now - stamps[1].ns >= idle_ns) stamps.pop_front();
+        const Stamp& old = stamps.front();
+        if (now - old.ns >= idle_ns && made_bytes - old.made >= idle_new) idle_before = old.present;
+    }
+    const auto idle_upload = [&](const Texture* tex, uint64_t last) {
+        return idle_before && last < idle_before && !tex->gpu_written && !tex->sparse;
+    };
+    static uint64_t n_idle, b_idle, idle_logged_at;
     const uint64_t need_unused = sweep ? std::max<uint64_t>(120, min_unused) : min_unused;
     const uint64_t need_dead = dead_targets ? std::min(need_unused, dead_min_unused) : need_unused;
     static uint64_t n_dead, b_dead, dead_logged_at;
@@ -4083,7 +4112,8 @@ void texture_frame(uint64_t completed) {
                      tex->height, tex->nvn_format, (unsigned long long)(frame_no - last));
         }
         if (!overwritten && tex->gpu_written && !tex->released && !evict_rendered && frame_no - last < keep_rendered) continue;
-        if (sweep && !overwritten) continue;
+        if (sweep && !overwritten && !idle_upload(tex, last)) continue;
+        if (sweep && !overwritten) n_idle++, b_idle += tex->bytes;   // (an idle upload, above)
         // (hookshot) nor a live texture the GPU drew whose texels cannot be written back into its memory (ASTC kept as BC3, sparse,
         // past the write-back's size, ...): its image is the only copy, and one made again over that storage is not uploaded (the
         // memory counts as the GPU's), so it showed whatever its new memory held: the rainbow/garbled textures that spread over play
@@ -4169,6 +4199,11 @@ void texture_frame(uint64_t completed) {
         } else {
             ++it;
         }
+    }
+    if (n_idle && frame_no >= idle_logged_at + 600) {   // (Mako: the idle uploads let go so far, every 600 presents at most)
+        idle_logged_at = frame_no;
+        logf("vk: textures unused for %llu s while the game made others, let go: %llu so far (%llu MB)",
+             (unsigned long long)(idle_ns / 1000000000ull), (unsigned long long)n_idle, (unsigned long long)(b_idle >> 20));
     }
     if (n_dead && frame_no >= dead_logged_at + 600) {   // (the dead transient targets let go so far, every 600 presents)
         dead_logged_at = frame_no;
@@ -4258,6 +4293,12 @@ bool texels_fit(const nvn_tex* t, const NVNcopyRegion* r, uint64_t row, uint64_t
 /// ReadTexels / WriteTexels: the CPU's copy of a region in guest memory (block linear, the Switch 2 GOB swizzle).
 /// A write also stamps the pages, so the image is uploaded again; a texture the GPU wrote is read from guest memory
 /// as it is (its newest texels are in the image: not yet read back).
+bool texture_drawn_at(uint64_t gpu) {
+    auto [a, b] = by_gpu.equal_range(gpu);
+    for (auto it = a; it != b; ++it)
+        if (it->second->gpu_written) return true;
+    return false;
+}
 void texture_read_texels(const nvn_tex* t, unsigned level, unsigned layer0, const NVNcopyRegion* r, uint8_t* data,
                          uint64_t row, uint64_t img, bool write) {
     if (!t || !t->gpu || !r) return;

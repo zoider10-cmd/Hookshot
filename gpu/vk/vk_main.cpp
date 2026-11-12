@@ -995,8 +995,9 @@ void prepare_with_screen() {
         if (update) prep_skip[0].store(true), prep_skip[1].store(true);
         const bool prepared = !update && prepare_run(prep_progress, false);
         if (!prepared) prep_skip[0].store(true);
-        if (prepared && !prepare_stopped() && predict_deferred()) {   // (Mako: those in play, behind the game)
-            predict_defer();
+        if (prepared && !prepare_stopped() && (predict_deferred() || predict_skipped())) {   // (Mako: in play: behind the game, or when drawn)
+            if (predict_deferred()) predict_defer();
+            else predict_skip_log();
             prep_skip[1].store(true);
         } else if (prepared && !prepare_stopped()) {   // (a first start only: the pipelines the notes predict, into the driver's cache)
             prep_done.store(0), prep_total.store(0);
@@ -1138,6 +1139,7 @@ bool started_up() {
         }
         part = 1;
         if (prepared && predict_deferred()) predict_defer(), bar.skip(1);   // (Mako: the game builds them in play)
+        else if (prepared && predict_skipped()) predict_skip_log(), bar.skip(1);   // (Mako 3.4.1: when first drawn, as in 3.3)
         else if (prepared) predict_run(progress);
         part = 2;
         bar.reach(2);
@@ -1198,6 +1200,7 @@ bool started_up() {
         const bool update = prepare_is_update();   // (an update: what the notes name now, the rest in play)
         if (!update && prepare_run(progress, false)) {
             if (predict_deferred()) predict_defer();   // (Mako: in play, behind the game)
+            else if (predict_skipped()) predict_skip_log();   // (Mako 3.4.1: when first drawn, as in 3.3)
             else predict_run(progress);
         }
         if (update) state_list_run();

@@ -28,6 +28,8 @@ typedef unsigned long DWORD;
 static const char *game_exe;
 static DWORD hos_game_path_a(char *out, DWORD n) { snprintf(out, n, "%s", game_exe); return (DWORD)strlen(out); }
 static void hos_log(const char *f, ...) { (void)f; }
+/* (host/master_quest.c: the launcher's Master Quest button sets HOS_MASTER_QUEST=1) */
+int hos_master_quest(void) { const char *e = getenv("HOS_MASTER_QUEST"); return e && e[0] == '1'; }
 @HOST@
 int main(int argc, char **argv) {
     if (argc < 2) return 2;
@@ -75,6 +77,8 @@ def main():
           "host/hos_main.c: the SAVE FOLDER import does not go into the saves this start plays with")
     check('string SaveFolder() { return settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0 ? "save_rando" : "save"; }' in launcher and
           'OpenFolder(Path.Combine(dir, "user", SaveFolder()))' in launcher, "the launcher's Saves button does not open the folder the next Play uses")
+    check('if (hos_master_quest()) return "save_mq";' in side and 'if (hos_master_quest() && !_stricmp(mods[i].name, "rando-seed")) {' in read("host", "mods.c"),
+          "Master Quest does not keep its saves apart, or loads the randomizer's seed over its own dungeons")
     check('return on ? "save_rando" : "save";' in side, "host/oot_rando.c: the two folders are not save and save_rando, which the launcher opens")
 
     # ---- the function, run ----
@@ -105,6 +109,10 @@ def main():
         # (a seed ID from the environment, as test runs give one, turns the randomizer on: oot_rando_from_id)
         check(folder("rando_on=0\n", env={"HOS_RANDO_SEED_ID": "HVBQ4-TY300-800RD"}) == "save_rando", "a seed ID from the environment: the randomizer's saves")
         check(folder("rando_on=0\n", env={"HOS_RANDO_SEED_ID": "not an id"}) == "save", "a seed ID that is not one leaves the game's own saves")
+        # (Master Quest, Mako 3.5: its own saves, whatever the randomizer's switch says, and the normal ones without it)
+        check(folder("rando_on=1\nrando_seed=7\n", env={"HOS_MASTER_QUEST": "1"}) == "save_mq" and folder("rando_on=0\n", env={"HOS_MASTER_QUEST": "1"}) == "save_mq",
+              "Master Quest does not keep its own saves")
+        check(folder("rando_on=1\nrando_seed=7\n", env={"HOS_MASTER_QUEST": "0"}) == "save_rando", "the randomizer's saves are not its own when Master Quest is off")
     print("PASS: the randomizer's saves")
 
 

@@ -66,14 +66,15 @@ def patch_life(source):
     end = source.find("\n}", start)
     if end < 0 or source[start:end].count(LIFE_CAS) != 2:
         return None
-    # x19 is the actor. Confirm its type and life pointer before protecting this write.
-    guard = ("    if ((uint32_t)c->x[12] < (uint32_t)c->x[11] && hos_oot_hearts_enabled() &&\n"
+    # x19 is the actor. Confirm its type and life pointer before changing this write: the hearts cheat keeps the life, Mako's
+    # Master Quest multiplies the loss (host/master_quest.c hos_oot_life_damage)
+    guard = ("    if ((uint32_t)c->x[12] < (uint32_t)c->x[11] &&\n"
              "        hos_oot_is_player(c, c->x[19]) &&\n"
              "        c->x[13] == recomp_load64(c,c->x[19] + 7184) + 8)\n"
-             "        c->x[12] = c->x[11];\n")
+             "        c->x[12] = hos_oot_life_damage((uint32_t)c->x[11], (uint32_t)c->x[12]);\n")
     body = source[start:end].replace(LIFE_CAS, guard + LIFE_CAS)
     return (source[:start] + body + source[end:]).replace(
-        '#include "a64.h"\n', '#include "a64.h"\nextern int hos_oot_hearts_enabled(void);\n'
+        '#include "a64.h"\n', '#include "a64.h"\nextern uint64_t hos_oot_life_damage(uint32_t old, uint32_t now);\n'
         'extern int hos_oot_is_player(Ctx *c, uint64_t actor);\n', 1)
 
 

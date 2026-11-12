@@ -251,6 +251,8 @@ static int user_mount(const char *name, const char *sub) {
     return mount(name, root, 1);
 }
 
+const char *hos_save_dir(void);   /* (Mako) master_quest.c: "save", or "save_mq" in Master Quest */
+
 /* nn::fs::IsSaveDataExisting(ApplicationId, account::Uid const&) -> bool */
 HLE(_ZN2nn2fs18IsSaveDataExistingENS_13ApplicationIdERKNS_7account3UidE) {
     const char *hos_save_folder(void);   /* oot_rando.c: "save", or "save_rando" while the randomizer is on */

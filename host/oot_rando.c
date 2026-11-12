@@ -60,6 +60,10 @@ const char *hos_save_folder(void) {
         rando_read(&r, 0);
         on = r.on != 0;
     }
+    /* (Mako 3.5) Master Quest keeps its saves apart too (master_quest.c: save_mq), and comes first: it is a game of its own,
+       started from its own button, whatever the randomizer's switch says */
+    int hos_master_quest(void);
+    if (hos_master_quest()) return "save_mq";
     return on ? "save_rando" : "save";
 }
 

@@ -8081,6 +8081,17 @@ bool predict_deferred() {
     const char* e = getenv("RX_VK_PREDICT_BG");   // (Mako: off by default; the launcher's Quick first start sets 1)
     return e && atoi(e) == 1;
 }
+// (Mako 3.4.1) Without RX_VK_PREDICT_BG (or with 0) the predicted pipelines are not built at all, as in Mako 3.3: each pipeline
+// is built in play when first drawn. Building them all before the title (RX_VK_PREDICT_BG=2, what 3.4 did by default) took
+// 40 min on a fast PC and 3 to 11 hours on players' PCs (65,000 pipelines at 3 to 6 a second), in the builder's last step
+bool predict_skipped() {
+    const char* e = getenv("RX_VK_PREDICT_BG");
+    return !e || (atoi(e) != 1 && atoi(e) != 2);
+}
+void predict_skip_log() {
+    logf("vk: the predicted pipelines are not built ahead: each is built in play when first drawn, as in Mako 3.3 "
+         "(RX_VK_PREDICT_BG=1: behind the game; =2: all before the title, hours on most PCs)");
+}
 void predict_defer() {
     if (FILE* f = fopen(predict_owed_path().c_str(), "wb")) fputs("1\n", f), fclose(f);
     logf("vk: the predicted pipelines are built in play, behind the game (RX_VK_PREDICT_BG=1; without it: before the title)");

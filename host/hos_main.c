@@ -390,6 +390,7 @@ static int sf_copy(const char *from, const char *to) {
     return ok;
 }
 /* a folder holding slot_XX folders with a progress.sav in them */
+const char *hos_save_dir(void);   /* (Mako) master_quest.c: "save", or "save_mq" in Master Quest */
 static int sf_is_save_root(const char *dir) {
     char pattern[MAX_PATH];
     snprintf(pattern, sizeof pattern, "%s\\slot_*", dir);

@@ -469,8 +469,8 @@ static class Fork {
     public const string Name = "Mako";
     // (the update check compares the first number of the tags: the first Mako release must be numbered above amd-fix-2.1, or the
     // 2.x launchers players have would think it older and never offer it)
-    public const string Base = "mako-3.4";      // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
-    public const string Version = "mako-3.4"; // (HOOKSHOT_FORK_VERSION)
+    public const string Base = "mako-3.5";      // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
+    public const string Version = "mako-3.5"; // (HOOKSHOT_FORK_VERSION)
     public const int Api = 15;                  // (gpu/vk/vk_api.h MKWVK_API_VERSION)
     public const string Api_Url = "https://api.github.com/repos/Shakoquo/Mako/releases/latest";
     public const string Page = "https://github.com/Shakoquo/Mako/releases/latest";
@@ -550,6 +550,7 @@ static class Theme {
 abstract class Widget {
     public RectangleF R;
     public int Page = -1;        // (-1: always shown; else the tab it belongs to)
+    public int HideOn = -1;      // (an always-shown widget left out on this page)
     public float Hover;          // (0..1, eased toward the mouse)
     public bool Enabled = true;
     public virtual string Help { get { return null; } }
@@ -563,6 +564,8 @@ abstract class Widget {
 class Btn : Widget {
     public enum Kind { Ghost, Primary, Play, Link }
     public string Text; public Kind Style; public Action Click; public Font Font = Theme.Strong;
+    public bool Gold;   // (Mako: the Master Quest Play button)
+    public Image Logo;  // (Mako: the left panel's Master Quest button: its logo on a dark button)
     public override void Down(PointF p, LauncherForm ui) { if (Click != null) Click(); }
     public override void Paint(Graphics g, LauncherForm ui) {
         float h = Hover;
@@ -586,15 +589,18 @@ class Btn : Widget {
     }
     void PaintPlay(Graphics g, LauncherForm ui) {
         float t = ui.Time, h = Hover;
+        if (Gold) { PaintGold(g); return; }
         float pulse = 0.5f + 0.5f * (float)Math.Sin(t * 2.2);
         // (the glow under it, breathing)
         for (int i = 8; i >= 1; i--) {
             var gr = RectangleF.Inflate(R, i * 2.2f, i * 2.2f);
             using (var p = Theme.Round(gr, 16 + i * 2))
-            using (var b = new SolidBrush(Theme.A(Theme.Blue, (int)((5 + 6 * pulse + 8 * h) * (Enabled ? 1 : 0.2f))))) g.FillPath(b, p);
+            using (var b = new SolidBrush(Theme.A(Gold ? Theme.Amber : Theme.Blue, (int)((5 + 6 * pulse + 8 * h) * (Enabled ? 1 : 0.2f))))) g.FillPath(b, p);
         }
         using (var path = Theme.Round(R, 16)) {
-            using (var br = new LinearGradientBrush(R, Theme.Mix(Color.FromArgb(30, 110, 255), Theme.Cyan, h * 0.4f), Theme.Mix(Color.FromArgb(22, 70, 200), Theme.Blue, h),
+            Color top0 = Gold ? Color.FromArgb(232, 168, 52) : Color.FromArgb(30, 110, 255), top1 = Gold ? Color.FromArgb(255, 214, 120) : Theme.Cyan;
+            Color bot0 = Gold ? Color.FromArgb(150, 92, 18) : Color.FromArgb(22, 70, 200), bot1 = Gold ? Theme.Amber : Theme.Blue;
+            using (var br = new LinearGradientBrush(R, Theme.Mix(top0, top1, h * 0.4f), Theme.Mix(bot0, bot1, h),
                                                     LinearGradientMode.Vertical)) g.FillPath(br, path);
             // (a shine sweeping across now and then)
             float sweep = (t % 4.5f) / 1.3f;
@@ -620,7 +626,32 @@ class Btn : Widget {
         using (var b = new SolidBrush(Enabled ? Color.White : Theme.A(Color.White, 120)))
             Theme.Spaced(g, Text, Theme.Play, b, R.X + R.Width / 2, R.Y + R.Height / 2 - Theme.Play.Size * 0.62f, 6);
     }
-    public override bool Animating { get { return Style == Kind.Play; } }
+    public override bool Animating { get { return Style == Kind.Play && !Gold; } }
+    // (Mako: the Master Quest Play button, plain: a deep gold, lighter under the mouse)
+    void PaintGold(Graphics g) {
+        float h = Hover;
+        if (Logo != null) {
+            using (var path = Theme.Round(R, 14)) {
+                using (var br = new LinearGradientBrush(R, Theme.Mix(Color.FromArgb(26, 22, 18), Color.FromArgb(40, 33, 24), h), Color.FromArgb(14, 12, 10),
+                                                        LinearGradientMode.Vertical)) g.FillPath(br, path);
+                using (var pen = new Pen(Theme.Mix(Color.FromArgb(150, 118, 62), Color.FromArgb(226, 184, 106), h), 1.2f)) g.DrawPath(pen, path);
+            }
+            float lh = R.Height - 8, lw = lh * Logo.Width / Logo.Height;
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.DrawImage(Logo, R.X + 14, R.Y + 4, lw, lh);
+            using (var b = new SolidBrush(Theme.Mix(Color.FromArgb(226, 184, 106), Color.FromArgb(255, 222, 160), h)))
+                Theme.Spaced(g, Text, Theme.Pick(15f, FontStyle.Bold, "Bahnschrift", "Segoe UI Semibold", "Segoe UI"), b,
+                             R.X + 14 + lw + (R.Width - 14 - lw) / 2, R.Y + R.Height / 2 - 9.5f, 4);
+            return;
+        }
+        using (var path = Theme.Round(R, 14)) {
+            using (var br = new LinearGradientBrush(R, Theme.Mix(Color.FromArgb(196, 146, 62), Color.FromArgb(214, 166, 80), h),
+                                                    Theme.Mix(Color.FromArgb(150, 104, 36), Color.FromArgb(170, 122, 48), h), LinearGradientMode.Vertical)) g.FillPath(br, path);
+            using (var pen = new Pen(Color.FromArgb(70 + (int)(60 * h), 255, 236, 190), 1f)) g.DrawPath(pen, path);
+        }
+        using (var b = new SolidBrush(Color.White))
+            Theme.Spaced(g, Text, Theme.Pick(20f, FontStyle.Bold, "Bahnschrift", "Segoe UI Black", "Segoe UI"), b, R.X + R.Width / 2, R.Y + R.Height / 2 - 12.5f, 5);
+    }
 }
 
 // (a setting: its name above, the choice below, arrows on the right; a click on the choice opens the list)
@@ -697,12 +728,29 @@ class Toggle : Widget {
     }
 }
 
+// (Mako) one of the Master Quest page's trials: a card, gold when chosen
+class GoldChoice : Widget {
+    public string Title, Sub; public Func<bool> IsOn; public Action Click;
+    public override void Down(PointF p, LauncherForm ui) { if (Click != null) Click(); }
+    public override void Paint(Graphics g, LauncherForm ui) {
+        bool on = IsOn != null && IsOn();
+        var gold = Color.FromArgb(226, 184, 106);
+        using (var path = Theme.Round(R, 10)) {
+            using (var b = new SolidBrush(on ? Theme.A(gold, 22) : Theme.Mix(Theme.Card, Theme.CardHi, Hover))) g.FillPath(b, path);
+            using (var pen = new Pen(on ? gold : Theme.Mix(Theme.Line, Theme.A(gold, 160), Hover), on ? 1.4f : 1f)) g.DrawPath(pen, path);
+        }
+        Theme.Text_(g, Title, Theme.Value, on ? gold : Theme.Text, new RectangleF(R.X + 18, R.Y, 60, R.Height), StringAlignment.Near, StringAlignment.Center);
+        Theme.Text_(g, Sub, Theme.Small, on ? Theme.Text : Theme.Dim, new RectangleF(R.X + 62, R.Y, R.Width - 70, R.Height), StringAlignment.Near, StringAlignment.Center);
+    }
+}
+
 class TabW : Widget {
     public string Text; public int Index;
     public override void Down(PointF p, LauncherForm ui) { ui.ShowPage(Index); }
     public override void Paint(Graphics g, LauncherForm ui) {
         bool on = ui.PageNow == Index;
-        Theme.Text_(g, Text, Theme.Tab, on ? Color.White : Theme.Mix(Theme.Dim, Theme.Text, Hover), R, StringAlignment.Center, StringAlignment.Center);
+        Color c = on ? Color.White : Theme.Mix(Theme.Dim, Theme.Text, Hover);
+        Theme.Text_(g, Text, Theme.Tab, c, R, StringAlignment.Center, StringAlignment.Center);
     }
 }
 
@@ -755,7 +803,7 @@ class LauncherForm : Form {
     Selector langSel;
     Btn updateButton, playButton, fsrButton;
     string fsrLine = ""; Color fsrLineColor = Theme.Dim; bool fsrBusy;
-    Image logo;
+    Image logo, mqLogo;
     Bitmap backdrop;
     readonly System.Windows.Forms.Timer timer;
     readonly Stopwatch clock = Stopwatch.StartNew();
@@ -797,8 +845,8 @@ class LauncherForm : Form {
             "The filter that fits the picture to your screen. Catmull-Rom is sharper, Lanczos sharper still." },
         new object[] { "sharpness", "Sharpness", new[] { "0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" }, new[] { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 },
             "Sharpens the picture on its way to the screen. Too much shows halos around edges." },
-        new object[] { "frame_generation", "Frame generation", new[] { "Off", "2x", "3x", "4x", "5x", "6x", "7x", "8x" }, new[] { 0, 2, 3, 4, 5, 6, 7, 8 },
-            "Shows extra in-between frames for smoother motion." },
+        new object[] { "frame_generation", "Frame generation", new[] { "Off", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "AMD Redstone 2x" }, new[] { 0, 2, 3, 4, 5, 6, 7, 8, 2 },
+            "Shows extra in-between frames for smoother motion. AMD Redstone 2x: AMD's AI frame generation instead of Mako's, for RX 9000 cards with AMD's files (FSR tab) and FSR 4. Best with 12 GB+." },
         new object[] { "frame_rate_cap", "Frame rate cap", new[] { "60 (the console's)", "90", "120", "144", "165", "240" }, new[] { 0, 1, 2, 3, 4, 5 },
             "The most frames per second the game runs at. Above 60 needs a screen that shows them." },
         new object[] { "amd_anti-lag_2", "AMD Anti-Lag 2", new[] { "Off", "On" }, new[] { 0, 1 },
@@ -881,6 +929,12 @@ class LauncherForm : Form {
         new object[] { "cosmetic_magic", "Magic meter", TunicColours, TunicValues,
             "The colour of the magic meter under the hearts." },
     };
+    // (Mako) the Master Quest page (host/master_quest.c): started by its own Play button (HOS_MASTER_QUEST=1), its saves apart
+    // (user\save_mq), its title logo made at build time from the player's files (prompts/mq, nx2/mq_logo.py)
+    static readonly object[][] MqRows = {
+        new object[] { "master_quest_damage", "Damage Link takes", new[] { "x2 (3DS)", "x3", "x4" }, new[] { 2, 3, 4 },
+            "How much harder enemies, falls and hazards hit in Master Quest. The 3DS Master Quest uses x2." },
+    };
     static readonly string[] PresetKeys = { "resolution", "upscaling", "sharpness", "frame_pacing", "game_speed", "handheld_profile" };   // (as the game's presets: frame generation is the player's)
     static readonly string[][] Languages = {
         new[] { "en-US", "English (US)" }, new[] { "en-GB", "English (UK)" }, new[] { "fr", "Français (France)" }, new[] { "fr-CA", "Français (Canada)" },
@@ -899,9 +953,8 @@ class LauncherForm : Form {
         // (Mako) Ducky's controller workaround: HOS_NO_SDL=1 leaves SDL out (host/pad_sdl.c), pads only through XInput
         new[] { "HOS_NO_SDL", "1", "Basic controller mode (tip by Ducky)", "Controller not detected, double inputs or wrong buttons? Reads only Xbox-style (XInput) pads: a PlayStation pad then needs Steam or DS4Windows. No motion aiming.", "" },
         // (Mako) the predicted pipelines behind the game (gpu/vk/vk_draw.cpp predict_background); off: all before the title
-        new[] { "RX_VK_PREDICT_BG", "1", "Quick first start", "Off (recommended): after an update every effect is prepared before the title (up to ~40 min, once). On: the title comes much sooner, but expect stutters for hours.", "" },
+        new[] { "RX_VK_PREDICT_BG", "1", "Quick first start", "Off (recommended): effects are prepared the first time they appear, as in Mako 3.3 (short hitches the first time only). On: they are also prepared behind the game while you play, which costs some fps for a while.", "" },
         // (Mako) AMD FSR Redstone frame generation (gpu/vk/vk_redstone.h), off unless switched on: it takes video memory
-        new[] { "RX_VK_REDSTONE", "1", "AMD FSR Redstone frame generation (RX 9000)", "AMD's AI frame generation instead of Mako's: cleaner motion, steady HUD. Needs an RX 9000, AMD's files (FSR tab), FSR 4 and Frame generation 2x. Best with 12 GB+.", "" },
     };
 
     [DllImport("user32.dll")] static extern bool ReleaseCapture();
@@ -942,16 +995,22 @@ class LauncherForm : Form {
         updateButton = new Btn { Text = "Check again", R = new RectangleF(236, 448, 116, 30), Font = Theme.Label, Enabled = false };
         updateButton.Click = OnUpdateButton;
         widgets.Add(updateButton);
-        playButton = new Btn { Text = "PLAY", Style = Btn.Kind.Play, R = new RectangleF(32, 512, 336, 76), Click = OnPlay };
+        playButton = new Btn { Text = "PLAY", Style = Btn.Kind.Play, R = new RectangleF(32, 504, 336, 62), Click = OnPlay };
         widgets.Add(playButton);
-        widgets.Add(new Btn { Text = "Made by sharkiix  ·  based on Hookshot", Style = Btn.Kind.Link, R = new RectangleF(32, 626, 300, 24),
+        // (Mako) Master Quest's own Play, under it: its logo on the button (prompts/mq/logo.png, made by the build from the player's files)
+        try {
+            string mqPath = Path.Combine(dir, "prompts", "mq", "logo.png");
+            if (File.Exists(mqPath)) mqLogo = Image.FromStream(new MemoryStream(File.ReadAllBytes(mqPath)));
+        } catch { }
+        widgets.Add(new Btn { Text = "MASTER QUEST", Style = Btn.Kind.Play, Gold = true, Logo = mqLogo, R = new RectangleF(32, 576, 336, 64), Click = () => OnPlay(true) });
+        widgets.Add(new Btn { Text = "Made by sharkiix  ·  based on Hookshot", Style = Btn.Kind.Link, R = new RectangleF(32, 648, 300, 24),
                               Click = () => OpenUrl(Fork.Home) });
 
         // (tabs)
-        string[] names = { "Recommended", "Graphics", "Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About" };
+        string[] names = { "Recommended", "Graphics", "Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About", "Master Quest" };
         float tx = LeftW + 36;
         using (var g = CreateGraphics()) {
-            // (eight tabs with the randomizer's two: the room around each name is made smaller until they fit the page's width)
+            // (nine tabs with the randomizer's two and Master Quest: the room around each name is made smaller until they fit the page's width)
             float room = W - LeftW - 72, text = 0, pad = 26, gap = 6;
             foreach (string name in names) text += g.MeasureString(name, Theme.Tab).Width;
             if (text + names.Length * pad + (names.Length - 1) * gap > room) {
@@ -981,7 +1040,7 @@ class LauncherForm : Form {
         for (int i = 0; i < Languages.Length; i++) { langItems[i] = Languages[i][1]; langValues[i] = i; }
         langSel = new Selector { Key = "language", Label = "Language", Items = langItems, Values = langValues, Page = 2, Index = 0,
                                  HelpText = "The game's language: text and voices.",
-                                 R = new RectangleF(cx + colW + 14, 112 + 2 * 70, colW, 62) };   // (the third line's right half: the five game selectors end in its left)
+                                 R = new RectangleF(cx + GameRows.Length % 2 * (colW + 14), 112 + GameRows.Length / 2 * 70, colW, 62) };   // (after the Game rows)
         langSel.Changed = s => { if (!loading) SaveLanguage(); };
         widgets.Add(langSel);
         for (int i = 0; i < Fixes.Length; i++) {
@@ -996,12 +1055,27 @@ class LauncherForm : Form {
         widgets.Add(new Btn { Text = "Project page on GitHub", R = new RectangleF(cx, 470, 220, 40), Page = 7, Click = () => OpenUrl(Fork.Home) });
         widgets.Add(new Btn { Text = "Licence (GPL-3)", R = new RectangleF(cx + 232, 470, 170, 40), Page = 7, Click = () => OpenUrl(Fork.Home + "/blob/HEAD/LICENSE") });
 
+        // (Mako) the Master Quest page: its logo (PaintMasterQuest), its Play button, the damage, its saves
+        widgets.Add(new Btn { Text = "PLAY MASTER QUEST", Style = Btn.Kind.Play, Gold = true, R = new RectangleF(cx + (cw - 420) / 2, 452, 420, 70),
+                              Page = 8, Click = () => OnPlay(true) });
+        AddSelectors(MqRows, 99, cx, colW);   // (the damage kept and saved as a setting; shown as the three cards below)
+        string[][] trials = { new[] { "x2", "As on 3DS" }, new[] { "x3", "Hard" }, new[] { "x4", "Very hard" } };
+        float cardW = (cw - 24) / 3;
+        for (int i = 0; i < trials.Length; i++) {
+            int at = i;
+            widgets.Add(new GoldChoice { Title = trials[i][0], Sub = trials[i][1], Page = 8, R = new RectangleF(cx + i * (cardW + 12), 544, cardW, 58),
+                                         IsOn = () => settings["master_quest_damage"].Index == at,
+                                         Click = () => settings["master_quest_damage"].Set(at, true) });
+        }
+        widgets.Add(new Btn { Text = "Open the Master Quest saves", Style = Btn.Kind.Link, R = new RectangleF(cx + cw - 230, 622, 230, 26), Page = 8,
+                              Click = () => { Directory.CreateDirectory(Path.Combine(dir, "user", "save_mq")); OpenFolder(Path.Combine(dir, "user", "save_mq")); } });
+
         // (bottom row: folders)
-        widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 104, 42), Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
-        widgets.Add(new Btn { Text = "Import saves", R = new RectangleF(cx + 112, 612, 128, 42), Click = OnImport });
-        widgets.Add(new Btn { Text = "Game folder", R = new RectangleF(cx + 248, 612, 124, 42), Click = () => OpenFolder(dir) });
+        widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 104, 42), HideOn = 8, Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
+        widgets.Add(new Btn { Text = "Import saves", R = new RectangleF(cx + 112, 612, 128, 42), HideOn = 8, Click = OnImport });
+        widgets.Add(new Btn { Text = "Game folder", R = new RectangleF(cx + 248, 612, 124, 42), HideOn = 8, Click = () => OpenFolder(dir) });
         // (kept copies of the saves, of the folder the Randomizer setting names: more than the game's one save of the player's own)
-        widgets.Add(new Btn { Text = "Save copies", R = new RectangleF(cx + 380, 612, 122, 42),
+        widgets.Add(new Btn { Text = "Save copies", R = new RectangleF(cx + 380, 612, 122, 42), HideOn = 8,
                               Click = () => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } });
 
         // (Mako) the Recommended tab: this PC read once, and its Apply button
@@ -1056,7 +1130,7 @@ class LauncherForm : Form {
         float dt = 1 / 60f;
         Time = (float)clock.Elapsed.TotalSeconds;
         foreach (var w in widgets) {
-            bool visible = w.Page < 0 || w.Page == PageNow;
+            bool visible = (w.Page < 0 && w.HideOn != PageNow) || w.Page == PageNow;
             float target = visible && w.Enabled && w.R.Contains(mouse) ? 1 : 0;
             w.Hover += (target - w.Hover) * 0.22f;
             w.Tick();
@@ -1114,7 +1188,9 @@ class LauncherForm : Form {
         using (var b = new SolidBrush(Theme.A(Theme.Dim, 160))) Theme.Spaced(g, "MAKO LAUNCHER", Theme.Caps, b, LeftW + (W - LeftW) / 2f, 13, 4);
 
         // (tabs underline and the page)
-        using (var b = new LinearGradientBrush(new RectangleF(tabX, 88, Math.Max(1, tabW), 3), Theme.Blue, Theme.Cyan, 0f))
+        if (PageNow == 8) PaintMqScene(g);
+        using (var b = new LinearGradientBrush(new RectangleF(tabX, 88, Math.Max(1, tabW), 3), PageNow == 8 ? Color.FromArgb(196, 150, 70) : Theme.Blue,
+                                               PageNow == 8 ? Color.FromArgb(232, 196, 128) : Theme.Cyan, 0f))
             using (var p = Theme.Round(new RectangleF(tabX + 10, 88, Math.Max(1, tabW - 20), 3), 1.5f)) g.FillPath(b, p);
         using (var pen = new Pen(Color.FromArgb(24, 120, 170, 255))) g.DrawLine(pen, LeftW + 36, 92, W - 36, 92);
 
@@ -1135,7 +1211,7 @@ class LauncherForm : Form {
             Theme.Text_(g, helpShown, Theme.Small, Theme.A(Theme.Text, (int)(230 * helpFade)), new RectangleF(r.X + 30, r.Y, r.Width - 40, r.Height),
                         StringAlignment.Near, StringAlignment.Center);
         }
-        foreach (var w in widgets) if (w.Page < 0) w.Paint(g, this);
+        foreach (var w in widgets) if (w.Page < 0 && w.HideOn != PageNow) w.Paint(g, this);
     }
 
     static float Ease(float t) { t = Math.Max(0, Math.Min(1, t)); return 1 - (1 - t) * (1 - t) * (1 - t); }
@@ -1218,7 +1294,7 @@ class LauncherForm : Form {
         float x = LeftW + 36;
         if (PageNow == 0) PaintRecommended(g, x);
         if (PageNow == 2)
-            Theme.Text_(g, "Controls are set in game: press Insert or F1 for the menu.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + ((GameRows.Length + 1) / 2) * 70 + 6, 500, 20),
+            Theme.Text_(g, "Controls are set in game: press Insert or F1 for the menu.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + (GameRows.Length + 2) / 2 * 70 + 6, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 3) {   // (the randomizer: the seed beside its button, and what the page does not do yet)
             string seed = randoSeed != 0 ? SeedId() : "No seed yet";
@@ -1234,6 +1310,7 @@ class LauncherForm : Form {
             Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + Fixes.Length * FixPitch, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 6) PaintFsr(g, x);
+        if (PageNow == 8) PaintMasterQuest(g, x);
         if (PageNow == 7) {
             var r = new RectangleF(x, 112, W - LeftW - 72, 340);
             using (var p = Theme.Round(r, 14)) {
@@ -1252,6 +1329,49 @@ class LauncherForm : Form {
         }
     }
 
+    // (Mako) the Master Quest page's backdrop: dark, a little warm light behind the logo. Still, drawn once
+    Bitmap mqBack;
+    void PaintMqScene(Graphics g) {
+        var area = new RectangleF(LeftW + 1, 96, W - LeftW - 1, H - 96);
+        if (mqBack == null) {
+            mqBack = new Bitmap((int)area.Width, (int)area.Height);
+            using (var bg = Graphics.FromImage(mqBack)) {
+                bg.SmoothingMode = SmoothingMode.AntiAlias;
+                var r = new RectangleF(0, 0, area.Width, area.Height);
+                using (var br = new LinearGradientBrush(r, Theme.Bg1, Color.FromArgb(14, 12, 12), LinearGradientMode.Vertical)) bg.FillRectangle(br, r);
+                using (var path = new GraphicsPath()) {
+                    path.AddEllipse(r.Width / 2 - 260, 0, 520, 340);
+                    using (var pb = new PathGradientBrush(path) { CenterColor = Color.FromArgb(26, 255, 200, 120), SurroundColors = new[] { Color.FromArgb(0, 255, 200, 120) } })
+                        bg.FillPath(pb, path);
+                }
+            }
+        }
+        g.DrawImageUnscaled(mqBack, (int)area.X, (int)area.Y);
+    }
+
+    // (Mako) the Master Quest page: the logo the build made from the player's files, the line under it
+    void PaintMasterQuest(Graphics g, float x) {
+        float cw = W - LeftW - 72, mid = x + cw / 2;
+        var lr = new RectangleF(mid - 208, 100, 416, 320);
+        if (mqLogo != null) {   // (its own proportions, centred in that space)
+            float lw = Math.Min(416f, 300f * mqLogo.Width / mqLogo.Height), lh = lw * mqLogo.Height / mqLogo.Width;
+            lr = new RectangleF(mid - lw / 2, 100 + (310 - lh) / 2, lw, lh);
+        }
+        if (mqLogo != null) {
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.DrawImage(mqLogo, lr);
+        } else {
+            using (var b = new SolidBrush(Color.FromArgb(232, 196, 128)))
+                Theme.Spaced(g, "MASTER QUEST", Theme.Pick(30f, FontStyle.Bold, "Constantia", "Georgia"), b, mid, lr.Y + 120, 4);
+            Theme.Text_(g, "The logo appears once the game is built with this version.", Theme.Small, Theme.Faint,
+                        new RectangleF(x, lr.Y + 176, cw, 20), StringAlignment.Center, StringAlignment.Center);
+        }
+        Theme.Text_(g, "Enemies hit harder. Master Quest keeps its own saves, apart from the normal game's.", Theme.Small, Theme.Dim,
+                    new RectangleF(x, 426, cw, 20), StringAlignment.Center, StringAlignment.Center);
+        Theme.Text_(g, "DIFFICULTY", Theme.Caps, Theme.Faint, new RectangleF(x, 526, 300, 16), StringAlignment.Near, StringAlignment.Center);
+        Theme.Text_(g, "Applies at the next start.", Theme.Small, Theme.Faint, new RectangleF(x, 622, 300, 26), StringAlignment.Near, StringAlignment.Center);
+    }
+
     // ---- mouse ----
     protected override void OnMouseMove(MouseEventArgs e) {
         mouse = e.Location;
@@ -1263,7 +1383,7 @@ class LauncherForm : Form {
     Widget At(PointF p) {
         for (int i = widgets.Count - 1; i >= 0; i--) {
             var w = widgets[i];
-            if ((w.Page < 0 || w.Page == PageNow) && w.Hit(p)) return w;
+            if (((w.Page < 0 && w.HideOn != PageNow) || w.Page == PageNow) && w.Hit(p)) return w;
         }
         return null;
     }
@@ -1311,10 +1431,13 @@ class LauncherForm : Form {
         Selector s;
         if (!settings.TryGetValue(key, out s)) return;
         if (key == "frame_generation" && value == 1) value = 2;
+        if (key == "frame_generation" && value == 2 && IsRedstone()) return;   // (2x stays AMD's when it was)
         int best = 0;
         for (int i = 0; i < s.Values.Length; i++) if (Math.Abs(s.Values[i] - value) < Math.Abs(s.Values[best] - value)) best = i;
         if (s.Index < 0) s.Index = best; else s.Set(best, false);
     }
+
+    bool IsRedstone() { Selector s; return settings.TryGetValue("frame_generation", out s) && s.Index == s.Items.Length - 1; }
 
     void LoadAll() {
         loading = true;
@@ -1322,7 +1445,8 @@ class LauncherForm : Form {
         // (the game's own defaults where the file has nothing yet: options.ini is written by the game's Insert menu)
         var defaults = new Dictionary<string, int> { { "quality_preset", 0 }, { "output_res", 0 }, { "resolution", 0 }, { "upscaling", 2 }, { "sharpness", 30 },
             { "frame_generation", 0 }, { "frame_pacing", 1 }, { "vsync", 0 }, { "fullscreen", 1 }, { "ultrawide", 0 }, { "handheld_profile", 0 },
-            { "fps_counter", 0 }, { "dlss", 0 }, { "frame_rate_cap", 0 }, { "amd_anti-lag_2", 0 }, { "game_speed", 1 }, { "text_speed", 0 }, { "fast_forward", 0 }, { "controller_in_background", 0 } };
+            { "fps_counter", 0 }, { "dlss", 0 }, { "frame_rate_cap", 0 }, { "amd_anti-lag_2", 0 }, { "game_speed", 1 }, { "text_speed", 0 }, { "fast_forward", 0 }, { "controller_in_background", 0 },
+            { "master_quest_damage", 2 } };
         foreach (var row in RandoRows) defaults[(string)row[0]] = 0;   // (the randomizer: off, every setting the game's own)
         foreach (var kv in defaults) SetSetting(kv.Key, o.ContainsKey(kv.Key) ? o[kv.Key] : kv.Value);
         randoSeed = o.ContainsKey("rando_seed") ? Math.Max(0, o["rando_seed"]) : 0;
@@ -1337,6 +1461,9 @@ class LauncherForm : Form {
             fixes[f[0]].On = env.TryGetValue(f[0], out v) ? v == f[1] : f[1].Length == 0;
             fixes[f[0]].Snap();
         }
+        string rs;
+        if (env.TryGetValue("RX_VK_REDSTONE", out rs) && rs == "1" && settings["frame_generation"].Value == 2)
+            settings["frame_generation"].Index = settings["frame_generation"].Items.Length - 1;
         string lang = ReadLanguage();
         for (int i = 0; i < Languages.Length; i++) if (string.Equals(Languages[i][0], lang, StringComparison.OrdinalIgnoreCase)) langSel.Index = i;
         loading = false;
@@ -1353,6 +1480,7 @@ class LauncherForm : Form {
         }
         loading = false;
         SaveOptions();
+        if (s.Key == "frame_generation") SaveEnv();
     }
 
     void OnCosmetic(Selector s) { if (!loading) SaveCosmetics(); }
@@ -1494,6 +1622,8 @@ class LauncherForm : Form {
                 string v = fixes[f[0]].On ? f[1] : f[4];
                 if (v.Length > 0) lines.Add(f[0] + "=" + v);
             }
+            lines.RemoveAll(l => { var t = l.Trim(); return !t.StartsWith("#") && t.StartsWith("RX_VK_REDSTONE="); });
+            if (IsRedstone()) lines.Add("RX_VK_REDSTONE=1");
             if (lines.Count == 0 && File.Exists(envPath)) File.Delete(envPath);
             else if (lines.Count > 0) File.WriteAllLines(envPath, lines.ToArray(), new UTF8Encoding(false));
         } catch (Exception ex) {
@@ -2085,7 +2215,8 @@ class LauncherForm : Form {
                         "Import saves", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
-    void OnPlay() {
+    void OnPlay() { OnPlay(false); }
+    void OnPlay(bool masterQuest) {
         string exe = Path.Combine(dir, Fork.GameExe);
         if (!File.Exists(exe)) {
             MessageBox.Show(this, "The game is not in this folder:\n" + dir + "\n\nThe launcher must sit beside it.", Fork.Name,
@@ -2098,6 +2229,7 @@ class LauncherForm : Form {
         try {
             var psi = new ProcessStartInfo(exe) { WorkingDirectory = dir, UseShellExecute = false };
             psi.EnvironmentVariables["HOOKSHOT_NO_UPDATE_CHECK"] = "1";   // (the launcher did it)
+            psi.EnvironmentVariables["HOS_MASTER_QUEST"] = masterQuest ? "1" : "0";   // (Mako: host/master_quest.c, its own saves)
             Process.Start(psi);
             Close();
         } catch (Exception ex) { MessageBox.Show(this, "The game could not start:\n" + ex.Message, Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Error); }

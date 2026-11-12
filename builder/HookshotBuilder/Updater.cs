@@ -74,9 +74,25 @@ static class Updater
 
     /// What to update to: the track's newest (latest) for a release as before, a nightly, or after a switch of track (even
     /// an older version); for a release candidate only when it is newer, so it is never taken back to an older release
+    /// (Mako) a not newer than b by their numbers ("mako-3.4.1" vs "mako-3.5-mq-test"); false when either has none
+    static bool MakoNotNewer(string a, string b)
+    {
+        var x = System.Text.RegularExpressions.Regex.Match(a, @"\d+(\.\d+)*");
+        var y = System.Text.RegularExpressions.Regex.Match(b, @"\d+(\.\d+)*");
+        if (!x.Success || !y.Success) return false;
+        string[] p = x.Value.Split('.'), q = y.Value.Split('.');
+        for (var i = 0; i < Math.Max(p.Length, q.Length); i++)
+        {
+            long u = i < p.Length ? long.Parse(p[i]) : 0, v = i < q.Length ? long.Parse(q[i]) : 0;
+            if (u != v) return u < v;
+        }
+        return true;
+    }
+
     public static string? Target(string? latest, string? tools, string track)
     {
         if (latest == null) return tools;
+        if (tools != null && MakoNotNewer(latest, tools)) return tools;   // (Mako: a test build ahead of the public release keeps itself)
         if (tools == null || track != Candidate || TrackOf(tools) != Candidate) return latest;
         return Newer(latest, tools) ? latest : tools;
     }

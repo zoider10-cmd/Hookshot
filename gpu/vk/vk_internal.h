@@ -322,6 +322,8 @@ void predict_run(void (*progress)(size_t done, size_t total), bool background = 
 // (Mako) the predicted pipelines in play, behind the game (RX_VK_PREDICT_BG, on unless =0): predict_deferred() says so,
 // predict_defer() marks them owed (instead of predict_run before the title), predict_background() builds what is owed
 bool predict_deferred();
+bool predict_skipped();   // (Mako 3.4.1: not built ahead at all unless RX_VK_PREDICT_BG is 1 or 2)
+void predict_skip_log();
 void predict_defer();
 void predict_background();
 void prepare_guess(size_t out[3]);   // (the three parts' counts from the files, before they run: PrepareBar)

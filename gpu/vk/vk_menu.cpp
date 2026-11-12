@@ -1391,7 +1391,7 @@ void save() {
             const char* eq = strchr(line, '=');
             if (!eq || eq == line) continue;
             const std::string key(line, (size_t)(eq - line));
-            bool mine = key == "microphone_device" || key == "options_version";
+            bool mine = key == "microphone_device" || key == "options_version" || key == "memory_budget";   // (Mako: memory_budget was kept AND written again: one more line each save)
             for (const Row& r : rows)
                 if (!mine && r.value && key == ini_key(r)) mine = true;
             if (!mine) others += line, others += others.back() == '\n' ? "" : "\n";
@@ -2503,6 +2503,48 @@ void draw_ask(ui::Ctx& c) {
     ui::prompt_bar(c, prompt_list, 3);
 }
 
+/// (Mako) Master Quest preview: the end of what is made. The host sets MAKO_MQ_PREVIEW_END=1 in the process's environment when
+/// the Kokiri Emerald's scene starts (host/prompts.c); the menu then stays open on this page, black, its one button back to the
+/// launcher
+bool preview_end = false;
+bool preview_end_asked() {
+    static int64_t next = 0;
+    const int64_t now = prof_now();
+    if (now < next) return false;
+    next = now + 250000000;   // (a look every quarter second)
+    char v[8];
+    return GetEnvironmentVariableA("MAKO_MQ_PREVIEW_END", v, sizeof v) > 0 && v[0] == '1';
+}
+void back_to_launcher() {   // (Mako Launcher.exe beside the game, then the window closes as the player would close it)
+    char path[MAX_PATH];
+    DWORD n = GetModuleFileNameA(nullptr, path, MAX_PATH);
+    while (n > 0 && path[n - 1] != '\\' && path[n - 1] != '/') n--;
+    if (n > 1 && n + 20 < MAX_PATH) {
+        path[n - 1] = 0;   // (the game's folder)
+        char cmd[MAX_PATH + 24];
+        snprintf(cmd, sizeof cmd, "\"%s\\Mako Launcher.exe\"", path);
+        STARTUPINFOA si{};
+        si.cb = sizeof si;
+        PROCESS_INFORMATION pi{};
+        if (CreateProcessA(nullptr, cmd, nullptr, nullptr, FALSE, 0, nullptr, path, &si, &pi)) {
+            CloseHandle(pi.hThread), CloseHandle(pi.hProcess);
+            logf("menu: master quest preview over: back to the launcher");
+        } else logf("menu: master quest preview over: the launcher could not start (%lu)", GetLastError());
+    }
+    if (const HWND window = app_window()) PostMessageA(window, WM_CLOSE, 0, 0);
+}
+void draw_preview_end(ui::Ctx& c) {
+    const float s = c.s, mid = c.w * 0.5f;
+    ui::text_mid_centre(c, c.f.heading, 34 * s, mid, c.h * 0.40f, ui::kInkBright, "More coming.");
+    ui::text_mid_centre(c, c.f.body, 22 * s, mid, c.h * 0.40f + 48 * s, ui::kSoft, "Thanks for playing the Master Quest preview!");
+    const float bw = 300 * s, bh = 50 * s;
+    const ImVec2 a(mid - bw * 0.5f, c.h * 0.40f + 110 * s), b = a + ImVec2(bw, bh);
+    ui::button(c, a, b, "Back to Launcher", true);
+    hits.add(a.x, a.y, b.x, b.y, menu_hit::kButton, 0);
+    const ui::Prompt prompt_list[] = {{ui::kConfirm, "Back to Launcher"}};
+    ui::prompt_bar(c, prompt_list, 1);
+}
+
 void draw_menu(ui::Ctx& c);
 /// The menu's text sizes at this window's unit, baked ahead by vk_imgui.cpp a few a frame: the first open then draws with no
 /// glyphs to make (it took 2.6 ms at 1080p)
@@ -2562,7 +2604,9 @@ void draw_menu(ui::Ctx& c) {
     menu_ox = std::floor((c.w - k.w) * 0.5f);
     const int vtx0 = c.d->VtxBuffer.Size, cmd0 = c.d->CmdBuffer.Size;
     hits.clear(0, 0, k.w, k.h);
-    if (page == 5) draw_ask(k);
+    if (page == 6) c.d->AddRectFilled(ImVec2(0, 0), ImVec2(c.w, c.h), ui::rgba(0, 0, 0, 255));   // (Mako: the preview's end, black)
+    if (page == 6) draw_preview_end(k);
+    else if (page == 5) draw_ask(k);
     else if (page == 1) draw_controls(k);
     else if (page == 3) draw_teleport(k);
     else if (page == 4) draw_inventory(k);
@@ -3405,6 +3449,11 @@ void menu_tick() {
     // (Menu shortcut "Insert, F1 or Esc": Esc on a closed menu opens it, the keyboard's alone (the
     // gamepad's back is Esc only while it is open, above). The press that opened it does not go back a page below. No
     // control can be bound to Esc, so nothing in play changes; the window gives the captured mouse back on the close)
+    if (!preview_end && preview_end_asked()) preview_end = true, logf("menu: master quest preview over: its last page");
+    if (preview_end) {   // (Mako) the preview's end: open on its page, nothing closes it
+        press[0] = press[6] = press[5] = false;
+        if (!open_now.load() || page != 6) open_now = true, page = 6, listening = 0, pending = nullptr, changed = true;
+    }
     const bool esc_opens = opts.menu_shortcut == 2 && press[5] && !open_now.load();
     if (esc_opens) press[5] = false;
     if ((press[0] || press[6]) && open_now.load() && page == 5) {
@@ -3420,7 +3469,15 @@ void menu_tick() {
         if (open_now.load()) dlss_probe(), fsr4_probe();   // (whether the Upscaler row can offer DLSS and FSR here: asked once)
         if (open_now.load()) refresh_mics();   // (the microphones as they are now)
     }
-    if (open_now.load() && page == 5) {   // (hookshot) the restart question: Later (the default) or Restart now
+    if (open_now.load() && page == 6) {   // (Mako) the preview's end: its one button, a click or A / Enter
+        if (mouse && (ptr.pressed & HOS_MOUSE_LEFT) && hits.at((float)mx, (float)my).part == menu_hit::kButton) press[7] = true;
+        if (press[7]) {
+            save();
+            pipeline_cache_save(true);
+            back_to_launcher();
+            press[7] = false;
+        }
+    } else if (open_now.load() && page == 5) {   // (hookshot) the restart question: Later (the default) or Restart now
         if (mouse) {   // (a button under the cursor chosen, a click on it pressed, a right click is Later; no list: the wheel does nothing)
             const menu_hit::Hit hit = hits.at((float)mx, (float)my);
             if (hit.part == menu_hit::kButton && (moved || ptr.pressed) && hit.index != ask_sel) ask_sel = hit.index, changed = true;

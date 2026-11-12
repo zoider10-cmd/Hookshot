@@ -167,6 +167,13 @@ void hos_mods_init(const char *image_path) {
     }
     qsort(mods, (size_t)nmods, sizeof *mods, mod_cmp);
     for (int i = 0; i < nmods; i++) {
+        /* (Mako 3.5) Master Quest has dungeons of its own (nx2/mq_banc.py): the randomizer's seed is made from the normal game's
+           map files and would put those back over them. It is left out there, and Master Quest's saves are its own (save_mq) */
+        int hos_master_quest(void);
+        if (hos_master_quest() && !_stricmp(mods[i].name, "rando-seed")) {
+            hos_log("mods: %s is left out in Master Quest (a seed is of the normal game's dungeons)", mods[i].name);
+            continue;
+        }
         char dir[MAX_PATH];
         snprintf(dir, sizeof dir, "%s\\romfs", mods[i].path);
         const int files = index_romfs(dir, "", 0);

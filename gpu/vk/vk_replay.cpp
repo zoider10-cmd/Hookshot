@@ -3831,9 +3831,34 @@ void vmap_changing(uint64_t gpu, uint64_t size) {
 }
 void write_texels(const nvn_tex* t, unsigned level, unsigned layer0, const NVNcopyRegion* r, const uint8_t* src,
                   uint64_t row, uint64_t img) {
-    finish();   // (after the submits before it read the texture)
-    std::lock_guard lk(replay_mu);
+    // (Mako) It waited for every submission before it and the GPU (finish) each time: 479 ms on sead::MainThread at the
+    // start, and at a cutscene's start the thread holding its virtual core through it kept the game's loader threads
+    // waiting (2 s each, textures ~10 s late). The console's WriteTexels is a CPU copy: the game waits on its own fences
+    // for GPU work on the texture. Now only a texture the GPU drew into waits for the replay; the others are written at
+    // once (an image uploaded before is checked again at its next use). MAKO_TEXELS_FINISH=1: every time, as before
+    static const bool always = getenv("MAKO_TEXELS_FINISH") != nullptr;
+    const auto t0 = std::chrono::steady_clock::now();
+    if (always) finish();
+    std::unique_lock lk(replay_mu);
+    const auto t1 = std::chrono::steady_clock::now();
+    bool waited = always;
+    if (!always && t && texture_drawn_at(t->gpu)) {
+        lk.unlock();
+        finish();
+        lk.lock();
+        waited = true;
+    }
+    const auto t2 = std::chrono::steady_clock::now();
     texture_read_texels(t, level, layer0, r, const_cast<uint8_t*>(src), row, img, true);
+    {
+        auto ms = [](auto a, auto b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+        const auto t3 = std::chrono::steady_clock::now();
+        static std::atomic<int> told{0};
+        if (ms(t0, t3) >= 50.0 && told++ < 60)
+            logf("vk: WriteTexels %.0f ms: the replay's lock %.0f, %s %.0f, the copy %.0f (%ux%u NVN %#x)", ms(t0, t3),
+                 ms(t0, t1), waited ? "the replay and GPU" : "no wait", ms(t1, t2), ms(t2, t3),
+                 t ? t->d.width : 0, t ? t->d.height : 0, t ? t->d.format : 0);
+    }
 }
 void stats(int64_t* draws, int64_t* skipped, int64_t* pipelines) {
     int64_t v[4] = {0, 0, 0, 0};

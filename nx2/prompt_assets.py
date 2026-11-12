@@ -963,6 +963,17 @@ def main():
             if a.dump:
                 dump(a.dump, face, textures, tex, layers)
         print(f"prompts: {face}", file=sys.stderr)
+    if textures:   # (Mako) the Master Quest title logo, shown when the mode is on (nx2/mq_logo.py)
+        try:
+            import mq_logo
+            mq_logo.build(a.romfs, a.out, dictionary, textures, log=lambda s: print(s, file=sys.stderr))
+        except Exception as e:   # (the logo is extra: the prompts are made without it)
+            print(f"master quest: no logo ({type(e).__name__}: {e})", file=sys.stderr)
+    try:   # (Mako) Master Quest's dungeon changes (nx2/mq_banc.py), served only while the mode is on
+        import mq_banc
+        mq_banc.build(a.romfs, a.out, log=lambda s: print(s, file=sys.stderr))
+    except Exception as e:
+        print(f"master quest: no dungeon changes ({type(e).__name__}: {e})", file=sys.stderr)
     ring = ring_entries(blarc)
     if ring or hint:
         with open(os.path.join(a.out, "Common.blarc"), "wb") as f:
