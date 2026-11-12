@@ -2332,6 +2332,13 @@ SONG_FLOWS = tuple(g.flow for g in SONGS) + (
     "AllSage", "BottomOfTheWell", "SageOfWater", "Npc_Hylia_007_Adult", "Npc_Hylia_009_Adult", "Npc_Hylia_009_Child", "Npc_Hylia_051_Adult",
     "Npc_Hylia_Sheik_Adult", "Npc_Kokiri_009_Child", "Npc_Kokiri_011_Child", "Npc_Kokiri_012_Child", "Npc_Kokiri_013_Child",
     "Npc_Kokiri_Fado_Child", "Npc_Kokiri_Mido_Child")
+# The ocarina's own flow gives a lesson's song too, before the lesson's scene of the song got: when the notes have
+# been played back, its two learning entry points add the song of the lesson's kind to the pouch
+# (EventTriggerAddOrRemovePouchContent, one step for each song). Found in play: Malon's lesson, shuffled to the Song of
+# Storms, gave that and Epona's Song. So those steps are made to add the song the lesson gives now, and only those:
+# the rest of that flow is where a song is played, and names the song that is meant.
+SONG_PLAY_FLOW = "Dm_SY_Ocarina"
+SONG_PLAY_ENTRIES = ("LearningOcarinaPlayAuto", "LearningOcarinaPlayAutoForSeek")
 SONG_WORDS = ("", "IsGet.", "HavePlayedGetEvent.")   # (a song's name, its flag, and the flag of its scene)
 SONG_STONES = tuple("Component/AIScheduleParam/Obj_Graveyard_Tombstone_A_0%d.game__component__AIScheduleParam.bgyml" % k for k in (1, 2))
 
@@ -2636,7 +2643,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + (" songs 1" if a.songs else "") + " checks 9" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + (" songs 2" if a.songs else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -3000,6 +3007,17 @@ def main():
         missed = sorted(old for old, new in now_gives.items() if old != new and old not in taught)
         if missed:
             sys.exit("no lesson gives %s (the game's flows are not the ones the songs were listed from). Nothing written." % ", ".join(missed))
+        if words:   # (the ocarina's own flow: what it adds when a lesson's notes have been played back)
+            rel = "%s/%s.bfevfl.zs" % (GIFT_FLOWS, SONG_PLAY_FLOW)
+            adds = {(entry, old): new for old, new in now_gives.items() if old != new for entry in SONG_PLAY_ENTRIES}
+            try:
+                now, found = gift_items(unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts), adds, kinds=(0,))
+            except (OSError, ValueError, struct.error) as e:
+                sys.exit("the ocarina's flow, %s: %s. Nothing written." % (SONG_PLAY_FLOW, e))
+            missed = sorted(old for old, new in now_gives.items() if old != new and not any((entry, old) in found for entry in SONG_PLAY_ENTRIES))
+            if missed:
+                sys.exit("the ocarina's flow adds no %s when a lesson is done (not the flow the songs were listed from). Nothing written." % ", ".join(missed))
+            gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
         for rel in SONG_STONES if words else ():
             try:
                 now = song_stone(open(os.path.join(romfs, *rel.split("/")), "rb").read(), now_gives)

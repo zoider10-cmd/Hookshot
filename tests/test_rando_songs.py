@@ -144,7 +144,7 @@ def main():
 
     # ---- the script, the menu and the game ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_songs": 0' in script and '(" songs 1" if a.songs else "")' in script and
+    check('"rando_songs": 0' in script and '(" songs 2" if a.songs else "")' in script and
           "logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic" in script and '":songs" if a.songs else ""' in script,
           "the script does not read the setting, does not name it in the seed's stamp, or leaves the logic off with it")
     check("(frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs else None)" in script and "now, found = gift_items(was, words, kinds=(0, 1, 4))" in script and
@@ -152,6 +152,12 @@ def main():
           "the songs are not bound to the lessons, their flows are not gone through, or the royal tomb's stones are left")
     check("if gives[h] != g.item and g.flow and h not in lessons:" in script and "(tuple(SONG_GATES) if a.songs else ())" in script,
           "a lesson is changed as a plain gift too, or a gating song can be a Gold Skulltula's")
+    # (found in play: the ocarina's own flow added the lesson's own song as well)
+    check("adds = {(entry, old): new for old, new in now_gives.items() if old != new for entry in SONG_PLAY_ENTRIES}" in script and
+          "gift_items(unpack(open(os.path.join(romfs, *rel.split(\"/\")), \"rb\").read(), zs, dicts), adds, kinds=(0,))" in script and
+          S.SONG_PLAY_FLOW == "Dm_SY_Ocarina" and S.SONG_PLAY_ENTRIES == ("LearningOcarinaPlayAuto", "LearningOcarinaPlayAutoForSeek") and
+          S.SONG_PLAY_FLOW not in S.SONG_FLOWS,
+          "the ocarina's flow still adds a lesson's own song, or is changed where a song is played")
     menu = (ROOT / "gpu" / "vk" / "vk_menu.cpp").read_text(encoding="utf-8")
     items = (ROOT / "gpu" / "vk" / "oot_cheat_items.h").read_text(encoding="utf-8")
     rows = {"ZL": "Zelda's Lullaby", "EP": "Epona's Song", "SR": "Saria's Song", "ST": "Song of Time", "SO": "Song of Storms", "RQ": "Requiem of Spirit",
