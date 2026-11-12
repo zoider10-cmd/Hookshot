@@ -2294,6 +2294,14 @@ class LauncherForm : Form {
     }
 
     [STAThread]
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int how);
+    // (a name for the folder that a mutex's name can hold: no backslash, the same however the path's letters are cased)
+    public static string OnceName(string dir) {
+        uint h = 0x811c9dc5u;
+        unchecked { foreach (char c in dir.TrimEnd('\\').ToLowerInvariant()) h = (h ^ c) * 0x01000193u; }
+        return h.ToString("x8");
+    }
     static void Main(string[] args) {
         if (args.Length == 3 && args[0] == "--seed-id") {   // (tests/test_rando_settings.py: the ID of a seed and its choices, "3,0,0,...")
             var parts = args[2].Length == 0 ? new string[0] : args[2].Split(',');
@@ -2304,6 +2312,24 @@ class LauncherForm : Form {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         string dir = args.Length > 0 && Directory.Exists(args[0]) ? Path.GetFullPath(args[0]) : AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
+        // (one launcher a game folder: each keeps the settings it read and writes the whole options file when one changes,
+        // so of two open the last to save put back what the other had changed. Seen: the Randomizer found Off, and with it
+        // the Saves and Save copies buttons showing the normal game's folder, its list of copies empty. A second start
+        // brings the first one's window to the front and ends)
+        bool first;
+        var once = new Mutex(true, "MakoLauncher_" + OnceName(dir), out first);
+        if (!first) {
+            try {
+                int me = Process.GetCurrentProcess().Id;
+                foreach (var other in Process.GetProcessesByName(Process.GetCurrentProcess().ProcessName))
+                    if (other.Id != me && other.MainWindowHandle != IntPtr.Zero) {
+                        ShowWindow(other.MainWindowHandle, 9);   // (9: restored, if it was minimized)
+                        SetForegroundWindow(other.MainWindowHandle);
+                    }
+            } catch { }
+            return;
+        }
         Application.Run(new LauncherForm(dir));
+        GC.KeepAlive(once);
     }
 }
