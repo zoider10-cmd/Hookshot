@@ -264,14 +264,18 @@ SCRUBS = (
 # language archives (Mals/<language>.Product.<n>.sarc.zs), a file a subject (EventFlowMsg/Enemy_Event.msbt: UTF-8, a
 # line's tags the byte 0x0E, then its group, type and size as 16-bit numbers, then its bytes). No line of the scrubs'
 # is without its item, so the words before "It's <price> rupees. Wanna buy it?" of a sale that sells another item are
-# made SCRUB_WORDS, with spaces to the same length: the file, its archive and the size table's entry keep their sizes.
-# The price and the question, with their tags, are as they were. English only (the two English archives): the other
-# languages keep the scrub's own words. The two Pieces of Heart are one line.
+# made SCRUB_WORDS. The line is shorter then, and the file is written anew with it (msbt_set): it and its archive are
+# smaller, never bigger, so the size table's entry still holds them. The price and the question, with their tags, are
+# as they were. English only (the two English archives): the other languages keep the scrub's own words. The two
+# Pieces of Heart are one line. The stick scrub has two: ..._02 is what he says the first time, two pages ("Do you
+# know about Deku sticks? ..." and "And this bag can carry a lot of Deku sticks! It's ..."; seen in play, the first
+# of them left as it was), made the one page.
 SCRUB_TEXT = "EventFlowMsg/Enemy_Event.msbt"
 SCRUB_LANGS = ("USen", "EUen")
 SCRUB_WORDS = "I've got something special for you."
-SCRUB_LINES = {"scrub_heart_field": "Enemy_Scrub_Business_Heart_01", "scrub_heart_secret": "Enemy_Scrub_Business_Heart_01",
-               "scrub_sticks": "Enemy_Scrub_Business_DekuStickPouch_01", "scrub_nuts": "Enemy_Scrub_Business_DekuNutsPouch_01"}
+SCRUB_LINES = {"scrub_heart_field": ("Enemy_Scrub_Business_Heart_01",), "scrub_heart_secret": ("Enemy_Scrub_Business_Heart_01",),
+               "scrub_sticks": ("Enemy_Scrub_Business_DekuStickPouch_01", "Enemy_Scrub_Business_DekuStickPouch_02"),
+               "scrub_nuts": ("Enemy_Scrub_Business_DekuNutsPouch_01",)}
 
 
 def msbt_text(data, label):
@@ -306,10 +310,38 @@ def msbt_text(data, label):
     return body + start, body + end
 
 
+def msbt_set(data, label, text):
+    """The text file with the line `label` made the bytes `text` (its closing zero byte is added): the file written
+    anew, the texts after it moved, the sections' and the file's sizes set. The other lines and sections are as they
+    were."""
+    start, end = msbt_text(data, label)
+    out = bytearray(data[:0x20])
+    at = 0x20
+    for _ in range(struct.unpack_from("<H", data, 0x0e)[0]):
+        kind, size = data[at:at + 4], struct.unpack_from("<I", data, at + 4)[0]
+        body = at + 0x10
+        sec = bytearray(data[body:body + size])
+        if kind == b"TXT2":
+            n = struct.unpack_from("<I", sec, 0)[0]
+            offs = [struct.unpack_from("<I", sec, 4 + 4 * i)[0] for i in range(n)] + [size]
+            index = next(i for i in range(n) if body + offs[i] == start)
+            texts = [bytes(sec[offs[i]:offs[i + 1]]) for i in range(n)]
+            texts[index] = bytes(text) + b"\0"
+            sec = bytearray(struct.pack("<I", n) + bytes(4 * n))
+            for i, t in enumerate(texts):
+                struct.pack_into("<I", sec, 4 + 4 * i, len(sec))
+                sec += t
+        fill = data[body + size:body + (size + 15 & ~15)][:1] or b"\xab"   # (what the file fills a section's end with)
+        out += kind + struct.pack("<I", len(sec)) + data[at + 8:at + 0x10] + sec + fill * (-len(sec) % 16)
+        at = body + (size + 15 & ~15)
+    struct.pack_into("<I", out, 0x12, len(out))
+    return bytes(out)
+
+
 def scrub_words(data, label, words=SCRUB_WORDS):
-    """The text file with the sale line `label` saying `words` before its price ("It's ..."): the new bytes, of the
-    same length (spaces fill what the scrub's own words took), or None when it says so already. The tags at the
-    line's start and everything from "It's" on are as they were."""
+    """The text file with the sale line `label` saying `words` before its price ("It's ..."): the new bytes (the
+    file is shorter by what the scrub's own words were longer: msbt_set), or None when it says so already. The tags
+    at the line's start and everything from "It's" on are as they were; a line of two pages is one."""
     start, end = msbt_text(data, label)
     a = start
     while a + 8 <= end and data[a] == 0x0E:   # (the tags the line starts with)
@@ -317,15 +349,16 @@ def scrub_words(data, label, words=SCRUB_WORDS):
     b = data.find(b"It's", a, end)
     if b < 0:
         raise ValueError("the line %s names no price" % label)
-    sep = data[b - 1:b] if b > a and data[b - 1:b] in (b" ", b"\n") else b""
-    room = b - a - len(sep)
-    new = words.encode("utf-8")
-    if len(new) > room:
-        raise ValueError("the line %s has no room for the words (%d bytes, %d to fill)" % (label, len(new), room))
-    new = new + b" " * (room - len(new)) + sep
-    if data[a:b] == new:
+    last = end
+    while last > b and data[last - 1] == 0:   # (its closing zero byte, and what fills the section after the last line)
+        last -= 1
+    sep = b"\n" if data[b - 1:b] == b"\n" else b" "
+    new = bytes(data[start:a]) + words.encode("utf-8") + sep + bytes(data[b:last])
+    if len(new) > last - start:
+        raise ValueError("the line %s would grow: the words are longer than the scrub's own" % label)
+    if new == bytes(data[start:last]):
         return None
-    return bytes(data[:a]) + new + bytes(data[b:])
+    return msbt_set(data, label, new)
 
 
 def gift_hash(key):
@@ -1927,7 +1960,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words" if a.scrubs else "") +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2215,7 +2248,7 @@ def main():
                 flow, ", ".join(sorted(str(k) for k in set(change) - found))))
         gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
     # ---- a scrub that sells another item no longer names its own (English) ----
-    lines = sorted({SCRUB_LINES[g.key] for h, g in gifts.items() if g.key in SCRUB_LINES and gives[h] != g.item})
+    lines = sorted({label for h, g in gifts.items() if g.key in SCRUB_LINES and gives[h] != g.item for label in SCRUB_LINES[g.key]})
     for lang in SCRUB_LANGS if lines else ():
         folder = os.path.join(romfs, "Mals")
         for n in sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if n.startswith(lang + ".") and n.endswith(".sarc.zs")):
@@ -2229,8 +2262,8 @@ def main():
                 now = sarc_write(parts)
             except (OSError, KeyError, ValueError, struct.error) as e:
                 sys.exit("the scrubs' words, Mals/%s: %s. Nothing written." % (n, e))
-            if len(now) != len(was):
-                sys.exit("the scrubs' words, Mals/%s: the archive would change its size. Nothing written." % n)
+            if len(now) > len(was):   # (smaller it may be: the size table's entry is for the bigger one)
+                sys.exit("the scrubs' words, Mals/%s: the archive would grow. Nothing written." % n)
             if now != was:
                 gift_files["Mals/" + n] = now
     if lines:

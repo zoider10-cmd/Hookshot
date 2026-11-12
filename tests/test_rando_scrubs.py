@@ -10,10 +10,11 @@ Checked here, without the game, on a made-up flow of two entry points:
 - the table: four sales, each of the scrubs' flow and of an entry point, waiting for the Deku Scrubs setting and not
   for Quest rewards; no two of one entry point name the same item; the upgrades put the bigger size in the pool
   (Quest rewards' Forest Stage puts in the middle ones);
-- a scrub's words (scrub_words), on a made-up text file: the words before a sale line's price are made the plain
-  ones, with spaces to the same length, so the file keeps its size; the tags the line starts with, the price, its
-  tags and the question are as they were, and so is every other line; done again it changes nothing; a line with no
-  room, a line without a price and a label the file has not are errors;
+- a scrub's words (scrub_words, msbt_set), on a made-up text file: the words before a sale line's price are made
+  the plain ones and the file is written anew, shorter, its size in its header; the tags the line starts with, the
+  price, its tags and the question are as they were, and so is every other line, wherever it now is; a line of two
+  pages becomes one; done again it changes nothing; a line that would grow, a line without a price and a label the
+  file has not are errors;
 - the script reads the setting, names it in the seed's stamp, and gives the scrubs their place among the chests with
   or without Quest rewards.
 
@@ -191,37 +192,46 @@ def main():
     heart = head + b"Ohhh, a " + tag(0, 3, b"\x02\0") + b"Piece of Heart" + tag(0, 3, b"\xff\xff") + b". Shimmery glimmery! " + price
     other = head + b"Squee! Get out of here, then!"
     short = head + b"Hm.\n" + price
-    lines = [("Other", other), ("Enemy_Scrub_Business_DekuStickPouch_01", own), ("Short", short), ("Enemy_Scrub_Business_Heart_01", heart)]
+    pages = (head + b"Do you know about " + tag(0, 3, b"\x02\0") + b"Deku sticks" + tag(0, 3, b"\xff\xff") + b"? They're sticks." + tag(0, 4) + head +
+             b"And this bag can carry a lot of Deku sticks! " + price)
+    lines = [("Other", other), ("Enemy_Scrub_Business_DekuStickPouch_01", own), ("Short", short), ("Enemy_Scrub_Business_Heart_01", heart),
+             ("Enemy_Scrub_Business_DekuStickPouch_02", pages), ("Last", other)]
     data = text_file(lines)
+
+    def line_of(file, label):
+        a, b = seed.msbt_text(file, label)
+        return file[a:b].rstrip(b"\0\xab")
+
     for label, raw in lines:
-        a, b = seed.msbt_text(data, label)
-        check(data[a:b].rstrip(b"\0") == raw, "the line %s is not found where it is" % label)
-    new = seed.scrub_words(data, "Enemy_Scrub_Business_DekuStickPouch_01")
-    a, b = seed.msbt_text(new, "Enemy_Scrub_Business_DekuStickPouch_01")
-    line = new[a:b].rstrip(b"\0")
+        check(line_of(data, label) == raw, "the line %s is not found where it is" % label)
     words = seed.SCRUB_WORDS.encode()
-    check(len(new) == len(data) and line.startswith(head + words) and line.endswith(b"\n" + price) and
-          line[len(head) + len(words):-len(price) - 1].strip(b" ") == b"" and b"Deku sticks" not in line,
-          "the sale's words are not the plain ones before its price, as long as they were: %r" % line)
-    check(all(new[x:y] == data[x:y] for x, y in (seed.msbt_text(data, l) for l in ("Other", "Short", "Enemy_Scrub_Business_Heart_01"))),
-          "another line was changed")
+    new = seed.scrub_words(data, "Enemy_Scrub_Business_DekuStickPouch_01")
+    check(line_of(new, "Enemy_Scrub_Business_DekuStickPouch_01") == head + words + b"\n" + price,
+          "the sale's words are not the plain ones before its price: %r" % line_of(new, "Enemy_Scrub_Business_DekuStickPouch_01"))
+    check(len(new) < len(data) and len(new) % 16 == 0 and struct.unpack_from("<I", new, 0x12)[0] == len(new),
+          "the file is not written anew, shorter, with its size in its header")
+    check(all(line_of(new, label) == raw for label, raw in lines if label != "Enemy_Scrub_Business_DekuStickPouch_01"), "another line was changed")
     check(seed.scrub_words(new, "Enemy_Scrub_Business_DekuStickPouch_01") is None, "done again, the line changes")
     both = seed.scrub_words(new, "Enemy_Scrub_Business_Heart_01")
-    a, b = seed.msbt_text(both, "Enemy_Scrub_Business_Heart_01")
-    check(len(both) == len(data) and both[a:b].startswith(head + words) and both[a:b].rstrip(b"\0").endswith(b" " + price) and b"Piece of Heart" not in both[a:b],
-          "a line whose own words have tags in them is not made plain")
-    for label, why in (("Short", "a line with no room for the words"), ("Other", "a line without a price"), ("NoSuch", "a label the file has not")):
+    check(line_of(both, "Enemy_Scrub_Business_Heart_01") == head + words + b" " + price, "a line whose own words have tags in them is not made plain")
+    two = seed.scrub_words(both, "Enemy_Scrub_Business_DekuStickPouch_02")
+    check(line_of(two, "Enemy_Scrub_Business_DekuStickPouch_02") == head + words + b" " + price and line_of(two, "Last") == other,
+          "a line of two pages is not made the one plain page, or the line after it is not whole")
+    check(seed.msbt_set(data, "Last", other) == data, "a file set to what it has is not as it was")
+    for label, why in (("Short", "a line that would grow"), ("Other", "a line without a price"), ("NoSuch", "a label the file has not")):
         try:
             seed.scrub_words(data, label)
             check(False, "%s is taken" % why)
         except ValueError:
             pass
-    check(set(seed.SCRUB_LINES) == {g.key for g in seed.SCRUBS}, "a scrub's sale has no line of text named for it")
+    check(set(seed.SCRUB_LINES) == {g.key for g in seed.SCRUBS} and all(isinstance(v, tuple) and v for v in seed.SCRUB_LINES.values()),
+          "a scrub's sale has no line of text named for it")
+    check("Enemy_Scrub_Business_DekuStickPouch_02" in seed.SCRUB_LINES["scrub_sticks"], "the stick scrub's first words, of two pages, are left")
 
     # ---- the script ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_scrubs": 0' in script and '(" scrubs 1 words" if a.scrubs else "")' in script, "the script does not read the setting, or does not name it in the seed's stamp")
-    check("if len(now) != len(was):" in script and 'gift_files["Mals/" + n] = now' in script and "if g.key in SCRUB_LINES and gives[h] != g.item" in script,
+    check('"rando_scrubs": 0' in script and '(" scrubs 1 words 2" if a.scrubs else "")' in script, "the script does not read the setting, or does not name it in the seed's stamp")
+    check("if len(now) > len(was):" in script and 'gift_files["Mals/" + n] = now' in script and "if g.key in SCRUB_LINES and gives[h] != g.item" in script,
           "a changed sale's words are not written with the seed, or an archive of another size would be")
     check("if a.scrubs:   # (Deku Scrubs: with or without Quest rewards)" in script and "((g.entry, old) if g.entry else old, gives[h]) for old in g.olds" in script,
           "the scrubs wait for Quest rewards, or their sales are not swapped by their entry points")
