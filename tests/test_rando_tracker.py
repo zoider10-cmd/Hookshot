@@ -84,7 +84,7 @@ def main():
                              "Kakariko Village|The cucco lady|KakarikoVillage|C|-73.9 99.5 82.9|KS,SL",
                              "Lost Woods|A Business Scrub: the Deku Nut upgrade|LostWood|CA|7.3 82.9 -85.6|KS,SL"],
           "a gift's line is not its area, its name, its folder, its ages, its place and what it asks for, after the area's chests and Gold Skulltulas: %r" % with_gifts[1:])
-    check("for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES])) + " in script and
+    check("for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES] +" in script and
           'if (!strcmp(k->kind, "Chest") || !strcmp(k->kind, "Gold Skulltula")) snprintf(place' in menu,
           "the gifts that take part are not written with the checks, or a gift's row is its place and not its name")
     # ---- a chest's and a Gold Skulltula's name ----
@@ -135,7 +135,7 @@ def main():
           seed.check_ages({"A_Child_Static", "A_Adult_Static"}) == "CA" and seed.check_ages({"FireTemple_Static.bcett.byml.zs"}) == "CA" and
           seed.check_ages(set()) == "", "the ages whose map has a check are not read from its files' names")
     check('with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\\n") as f:' in script and seed.CHECKS == "checks.txt" and
-          '" checks 4" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
+          '" checks 5" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
     m = re.search(r"constexpr int kTrackerChecks = (\d+);", menu)
     check(m and int(m.group(1)) == seed.CHECK_ROWS, "the menu does not keep as many checks as the script may write")
     check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]"' in menu and "char area[48], kind[80], folder[40], ages[4];" in menu and seed.CHECK_NAME == 79 and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")

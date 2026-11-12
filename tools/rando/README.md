@@ -535,3 +535,30 @@ Skulltula's night and bean soil, and where: a dungeon's room by its number, a pa
 out the same are numbered by place; one with nothing to say of it ("Gold Skulltula") is shown with its coordinates.
 The names tell one check from the next. Nobody has gone through them, and they are not what a player would call
 the spots.
+
+## Shops
+
+The Shops setting (`rando_shops`, `--shops`): four shelves of each of six shops (the Kokiri shop, the Bazaar, the
+Potion Shop, the Bombchu Shop, the Goron shop, the Zora shop: `SHOPS`) sell what the shuffle put there, once each.
+Not the Happy Mask Shop, and not the shelves a game buys from again and again or by its own scenes (shields,
+tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
+the same goods list, and both sell the shuffled items. `2`, Random prices: each item's price is rolled by the seed, 10
+to 200.
+
+How a shelf sells an item (found with a Boomerang put on the Kokiri shop's shelf, seen in play: on the shelf, named,
+bought and got):
+
+- the item is given a shelf actor, `Shop_Rando_<item>`: a pack of the shelf base's files and the item's
+  (`shop_pack`), and a row in each of the game's three lists of actors, `RSDB/ActorInfo`, `GameActorInfo`,
+  `PouchActorInfo` (`shop_rows`). Without the rows the actor was not made, and its keeper stopped the game when
+  spoken to;
+- the map file's shelf is made that actor (`shelf_actors`), and so is its place in the keeper's goods list, with one
+  in stock (`shop_goods`: the list is where the price is asked, the first try cost the Deku Stick's 10);
+- an item the game does not sell has no words under its name in a shop: its own description is put there, in every
+  language (`shop_caption`, the line `<name>_ShopCaption`).
+
+Each shelf is a check on the Tracker tab ("The Kokiri shop: shelf 2"), gone to at its keeper. What a shelf sold goes
+into the pool as the chests' kind of it, a red rupee for what no chest holds.
+
+NOT seen in play yet: a seed made with the setting (only the one Boomerang was); that a shelf is empty after its
+one sale and stays so; a rupee, a key or a Piece of Heart bought from a shelf; the adult's shops; the prices.

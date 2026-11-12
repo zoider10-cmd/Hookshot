@@ -259,6 +259,273 @@ SCRUBS = (
 )
 
 
+# ---- Shops: four shelves of each shop sell a shuffled item, once ----
+# What a shop sells is three things that say the same (found with a Boomerang put on the Kokiri shop's shelf):
+#   - the shelf's actor in the map file (Shop_DekuStick, with its place in the row, ShopItemIndex: none is 0): what
+#     is seen on the shelf and what is given;
+#   - the keeper's goods list (Component/ShopParam/<keeper>...ShopParam.bgyml in the keeper's pack, a copy in each of
+#     the keeper's packs: GoodsList, by the same place): the actor whose price is asked, and how many there are
+#     (StockNum; all of them without end but the masks, and the Kokiri shop's first nuts and stick);
+#   - the three lists of the game's actors (RSDB: ActorInfo, GameActorInfo, PouchActorInfo). A shelf actor that is not
+#     in them is not made, and its keeper, asked for his wares, stopped the game (seen in play).
+# A shelf actor is Shop_Item_Base with an item's own name, model, animation and place in the pouch, and a price
+# (Shop_Armor_Goron is that of the Goron Tunic). So an item of the chests is given one, Shop_Rando_<item>
+# (shop_pack), with its rows in the three lists (shop_rows), and put on the shelf (shelf_actors) and in the goods
+# list with one in stock (shop_goods). Seen in play: the Boomerang on the Kokiri shop's shelf, named, bought and
+# got; its price was the Deku Stick's, 10, the goods list still naming that, and it had no words under its name:
+# those are the line <the item's name>_ShopCaption of ActorMsg/PouchContent.msbt, which only what the game sells
+# has. An item without one is given its own description under that label, in every language (shop_caption).
+# Four shelves of each of six shops take part (SHOPS): not the Happy Mask Shop (its owner's word: the masks stay),
+# and not what a game needs to buy again and again or by its own scenes (the shields, the tunics, bombs, arrows,
+# the first nuts and stick, the potions and the fairy). What a shelf sold goes into the pool as the chests' own
+# kind of it (SHELF_ITEMS), a red rupee for what no chest holds. Child and adult have one shop each of a kind, with
+# the same goods: both sell the shuffled items, and what was bought as a child may be there again for the adult.
+# A shop's need is what its place asks for in the rules' words, meant to ask for too much.
+Shop = collections.namedtuple("Shop", "key params areas name need place ages slots")
+SHOPS = (
+    Shop("kokiri", ("Npc_Kokiri_001_Shop_Child", "Npc_Kokiri_001_Shop_Child_ShortStock"), ("KokiriForest",), "the Kokiri shop", NONE,
+         (-1.9, 110.7, -22.6), "CA", ((0, "Shop_Heart"), (1, "Shop_DekuSeedBundle_02"), (3, "Shop_DekuNutBundle_02"), (5, "Shop_DekuStickBundle_Medium"))),
+    Shop("general", ("Npc_Hylia_018_Shop", "Npc_Hylia_018_Shop_Adult"), ("Market", "KakarikoVillage"), "the Bazaar", CHILD,
+         (22.5, 100.4, 16.1), "C", ((0, "Shop_Heart"), (1, "Shop_MagicJar_Small"), (2, "Shop_DekuSeedBundle_02"), (7, "Shop_DekuStick"))),
+    Shop("medicine", ("Npc_Hylia_020_Shop",), ("Market", "KakarikoVillage"), "the Potion Shop", CHILD,
+         (23.6, 100.1, 6.0), "C", ((2, "Shop_Bottle_HalfMilk"), (5, "Shop_Bottle_Poe"), (6, "Shop_Bottle_Bug"), (7, "Shop_Bottle_Fish"))),
+    Shop("bombchu", ("Npc_Hylia_021_Shop",), ("Market",), "the Bombchu Shop", ADULT,
+         (-24.1, 100.4, 35.4), "C", ((4, "Shop_BombchuBundle_01"), (5, "Shop_BombchuBundle_07"), (6, "Shop_BombchuBundle_02"), (7, "Shop_BombchuBundle_08"))),
+    Shop("goron", ("Npc_Goron_011_Shop_Child",), ("GoronCity",), "the Goron shop", CHILD | {BB},
+         (-19.1, 97.9, -20.2), "CA", ((0, "Shop_Heart"), (2, "Shop_Bottle_Bug"), (6, "Shop_BombBundle_03"), (7, "Shop_BombBundle_04"))),
+    Shop("zora", ("Npc_Zora_011_Shop",), ("ZoraDomain",), "the Zora shop", ADULT,
+         (-29.5, 104.9, 20.0), "CA", ((2, "Shop_Bottle_Bug"), (5, "Shop_ArrowBundle_02"), (6, "Shop_Bottle_Fish"), (7, "Shop_ArrowBundle_03"))),
+)
+SHELF_ITEMS = (("Shop_DekuSeedBundle", "Item_ScrubBusinessSeed"), ("Shop_DekuNutBundle", "TBox_DekuNutBundle"), ("Shop_DekuStick", "Item_DekuStickBundle_Small"),
+               ("Shop_MagicJar", "Tbox_MagicJar_Large"), ("Shop_BombBundle", "Item_BombBundle_Small"), ("Shop_BombchuBundle", "Item_BombchuBundle_Small"),
+               ("Shop_ArrowBundle", "TBox_ArrowBundle_Medium"))
+SHELF_OTHER = "TBox_Rupee_Red"
+SHOP_BASE, SHOP_SAMPLE = "Shop_Item_Base", "Shop_ArrowBundle_01"
+SHOP_TABLES = ("ActorInfo", "GameActorInfo", "PouchActorInfo")
+SHOP_ROW, SHOP_ROW_HEAPS = "Shop_DekuStick", "Shop_Armor_Goron"   # (a shelf's rows to go by; the heaps of a shelf that is another item)
+SHOP_PARAM = "Component/ShopParam/%s.game__component__ShopParam.bgyml"
+SHOP_TEXT = "ActorMsg/PouchContent.msbt"
+ACTOR_FILE = "Actor/%s.engine__actor__ActorParam.bgyml"
+ACTOR_REF = "Work/Actor/%s.engine__actor__ActorParam.gyml"
+# A price: what the child's wallet holds at most (200 here), so that a shelf within reach can be bought.
+SHOP_PRICES = {"Obj_Heart_Piece": 100, "Item_Token_Gold": 50}
+SHOP_PRICE_BIG, SHOP_PRICE_RUPEE, SHOP_PRICE_OTHER = 150, 10, 30
+SHOP_BIG = ("Item_BombBag", "Item_Quiver", "Item_BulletBag", "Item_Wallet", "Item_Scale", "Item_StickBag", "Item_NutBag", "Item_Arrow_",
+            "Item_AgonyStone", "Item_Bottle", "Item_Dungeon")
+
+
+def shelf_item(actor):
+    """what goes into the pool for a shelf's own actor: the chests' kind of it, or a red rupee"""
+    return next((item for start, item in SHELF_ITEMS if actor.startswith(start)), SHELF_OTHER)
+
+
+def shop_actor(item):
+    """the shelf actor made for an item"""
+    return "Shop_Rando_" + item
+
+
+def shop_price(item, rng=None):
+    """what an item costs on a shelf; rng: rolled, 10 to 200 in tens"""
+    if rng is not None:
+        return rng.randrange(10, 201, 10)
+    if item in SHOP_PRICES:
+        return SHOP_PRICES[item]
+    if item in PROGRESSION | QUEST_GATES or item.startswith(SHOP_BIG):
+        return SHOP_PRICE_BIG
+    return SHOP_PRICE_RUPEE if "_Rupee_" in item else SHOP_PRICE_OTHER
+
+
+def shop_pack(item, item_pack, base_pack, sample_pack, price, pouch=None):
+    """An item's shelf actor: (its pack, the names of the three files it has that no other pack has, the name its
+    texts go by). The pack is the shelf base's files and the item's; its actor has the base's as its parent and the
+    item's own name, model, animation and place in the pouch; its table of game parameters is the item's entries,
+    the base's table as its parent, and a price of its own. pouch: pouch files to take in place of the item's ({name:
+    bytes}: the ones a pick-up's pack changed, of which the game uses the first copy it loads)."""
+    base, own, sample = sarc_read(base_pack), sarc_read(item_pack), sarc_read(sample_pack)
+    name = shop_actor(item)
+    chain = actor_chain(item, own)
+    if not chain:
+        raise ValueError("%s: its pack has no actor of that name" % item)
+    files = collections.OrderedDict(base)
+    for k, v in own.items():
+        files.setdefault(k, v)
+    for k, v in (pouch or {}).items():
+        if k in files:
+            files[k] = v
+
+    def part(key):
+        for _, tree, _ in chain:
+            ref = tree[1].get("Components", ("dict", {}))[1].get(key)
+            if ref and ref[0] == "string" and ref[1]:
+                return ref
+        return None
+
+    if not part("ModelInfoRef") or not part("PouchContentRef"):
+        raise ValueError("%s has no model or no place in the pouch: it cannot be put on a shelf" % item)
+    actor_name = ACTOR_FILE % name
+    table_name = "GameParameter/GameParameterTable/%s.engine__actor__GameParameterTable.bgyml" % name
+    price_name = "GameParameter/PriceParam/%s.game__pouchcontent__PriceParam.bgyml" % name
+    sample_actor, sample_table = ACTOR_FILE % SHOP_SAMPLE, "GameParameter/GameParameterTable/%s.engine__actor__GameParameterTable.bgyml" % SHOP_SAMPLE
+    sample_price = "GameParameter/PriceParam/%s.game__pouchcontent__PriceParam.bgyml" % SHOP_SAMPLE
+    if ACTOR_FILE % SHOP_BASE not in base or not {sample_actor, sample_table, sample_price} <= set(sample):
+        raise ValueError("the shelf base's pack or the sample shelf's is not what it was")
+    _, version = byml_parse(sample[sample_actor])
+    comps = collections.OrderedDict((key, part(key)) for key in ("ASInfoRef", "ASRef", "ActorNameRef", "AnimationRef", "ModelInfoRef", "PouchContentRef") if part(key))
+    comps["GameParameterTableRef"] = ("string", "?" + table_name)
+    files[actor_name] = byml_build(("dict", collections.OrderedDict((("$parent", ("string", ACTOR_REF % SHOP_BASE)),
+                                                                     ("Components", ("dict", collections.OrderedDict(sorted(comps.items()))))))), version)
+    entries = collections.OrderedDict()
+    table_ref = part("GameParameterTableRef")
+    if table_ref and ref_file(table_ref[1]) in own:
+        entries.update(byml_parse(own[ref_file(table_ref[1])])[0][1].get("Components", ("dict", {}))[1])
+    entries["PriceParam"] = ("string", "?" + price_name)
+    table, table_version = byml_parse(sample[sample_table])   # (the sample's: the shelf base's table as its parent)
+    table[1]["Components"] = ("dict", collections.OrderedDict(sorted(entries.items())))
+    files[table_name] = byml_build(table, table_version)
+    cost, cost_version = byml_parse(sample[sample_price])
+    cost[1]["BuyingPrice"] = (cost[1]["BuyingPrice"][0], struct.pack("<I", price))
+    files[price_name] = byml_build(cost, cost_version)
+    named = part("ActorNameRef")
+    return sarc_write(files), [actor_name, table_name, price_name], ref_file(named[1]).split("/")[-1].split(".")[0] if named else item
+
+
+def shop_rows(data, kind, item, price):
+    """One of the game's three lists of actors (kind: SHOP_TABLES) with the row of an item's shelf actor, in its place
+    by name: the item's own row in the list of actors (its model, with a shelf's heaps where they are larger) and
+    in the pouch's (with what it costs), a shelf's in the game's."""
+    tree, version = byml_parse(data)
+    by = {r[1]["__RowId"][1]: r for r in tree[1]}
+    need = (SHOP_ROW,) if kind == "GameActorInfo" else (item, SHOP_ROW_HEAPS if kind == "ActorInfo" else SHOP_ROW)
+    if any(n not in by for n in need):
+        raise ValueError("the game's %s has no row of %s" % (kind, " or of ".join(n for n in need if n not in by)))
+    number = lambda node, value: (node[0], struct.pack("<I", value))
+    if kind == "ActorInfo":
+        row = ("dict", collections.OrderedDict(by[item][1]))
+        for k in ("InstanceHeapSize", "PreActorRenderInfoHeapSize"):
+            if k in row[1] and k in by[SHOP_ROW_HEAPS][1]:
+                row[1][k] = number(row[1][k], max(struct.unpack("<I", row[1][k][1])[0], struct.unpack("<I", by[SHOP_ROW_HEAPS][1][k][1])[0]) + 32768)
+    elif kind == "GameActorInfo":
+        row = ("dict", collections.OrderedDict(by[SHOP_ROW][1]))
+    else:
+        row = collections.OrderedDict(by[item][1])
+        row["BuyingPrice"] = number(by[SHOP_ROW][1]["BuyingPrice"], price)
+        row["SellingPrice"] = number(by[SHOP_ROW][1]["SellingPrice"], 1)
+        row = ("dict", collections.OrderedDict(sorted(row.items())))
+    row[1]["__RowId"] = ("string", shop_actor(item))
+    rows = [r for r in tree[1] if r[1]["__RowId"][1] != shop_actor(item)] + [row]
+    rows.sort(key=lambda r: r[1]["__RowId"][1])
+    return byml_build((tree[0], rows), version)
+
+
+def shop_goods(data, sells):
+    """A keeper's goods list with the places of `sells` ({place: (the game's own shelf actor there, the new one)})
+    selling the new actor, one in stock, from the start (what the game waits for before it shows a shelf, and what
+    it takes off its price, are left out). ValueError: a place whose actor is not the one named."""
+    tree, version = byml_parse(data)
+    goods = tree[1].get("GoodsList")
+    if not goods or goods[0] != "array":
+        raise ValueError("no goods list")
+    stock = next((g[1]["StockNum"][0] for g in goods[1] if "StockNum" in g[1]), 0xD3)
+    for index, (old, new) in sells.items():
+        if index >= len(goods[1]) or goods[1][index][1].get("Actor", ("", ""))[1] != ACTOR_REF % old:
+            raise ValueError("the goods list's place %d is not %s" % (index, old))
+        entry = collections.OrderedDict((k, v) for k, v in goods[1][index][1].items() if k not in ("Release", "PriceOffset", "ConditionalPriceOffsetList"))
+        entry["Actor"] = ("string", ACTOR_REF % new)
+        entry["StockNum"] = (stock, struct.pack("<I", 1))
+        goods[1][index] = ("dict", collections.OrderedDict(sorted(entry.items())))
+    return byml_build(tree, version)
+
+
+def shelf_actors(data, sells):
+    """A map file with its shelves of `sells` ({(the game's own shelf actor, its place in the row): the new one})
+    made the new actor: (the file written anew, or None when it has none of them; how many)."""
+    tree, version = byml_parse(data)
+    actors = tree[1].get("Actors")
+    n = 0
+    for actor in actors[1] if actors and actors[0] == "array" else ():
+        gyaml = actor[1].get("Gyaml", ("", ""))[1]
+        index = actor[1].get("Dynamic", ("dict", {}))[1].get("ShopItemIndex")
+        new = sells.get((gyaml, struct.unpack("<I", index[1])[0] if index and isinstance(index[1], bytes) and len(index[1]) == 4 else 0))
+        if new and actor[1].get("Gyaml", ("", ""))[0] == "string":
+            actor[1]["Gyaml"] = ("string", new)
+            n += 1
+    return (byml_build(tree, version) if n else None), n
+
+
+def msbt_hash(label, groups):
+    """the group of a text file's labels that a label is in"""
+    h = 0
+    for ch in label.encode():
+        h = (h * 0x492 + ch) & 0xffffffff
+    return h % groups
+
+
+def msbt_add(data, label, text):
+    """The text file with another line, `label`, of the bytes `text` (its closing zero byte is added), the last of
+    its texts. A label it has is given the text (msbt_set). ValueError: a file with more than labels and texts (a
+    line's attributes are not known how to write)."""
+    try:
+        msbt_text(data, label)
+        return msbt_set(data, label, text)
+    except ValueError as e:
+        if "has no line" not in str(e):
+            raise
+    out = bytearray(data[:0x20])
+    at = 0x20
+    for _ in range(struct.unpack_from("<H", data, 0x0e)[0]):
+        kind, size = data[at:at + 4], struct.unpack_from("<I", data, at + 4)[0]
+        body = at + 0x10
+        sec = bytearray(data[body:body + size])
+        if kind == b"LBL1":
+            groups = struct.unpack_from("<I", sec, 0)[0]
+            labels, n = [[] for _ in range(groups)], 0
+            for g in range(groups):
+                count, off = struct.unpack_from("<II", sec, 4 + 8 * g)
+                for _k in range(count):
+                    ln = sec[off]
+                    labels[g].append(bytes(sec[off:off + 1 + ln + 4]))
+                    off += 1 + ln + 4
+                    n += 1
+            labels[msbt_hash(label, groups)].append(bytes([len(label.encode())]) + label.encode() + struct.pack("<I", n))
+            sec = bytearray(struct.pack("<I", groups) + bytes(8 * groups))
+            for g in range(groups):
+                struct.pack_into("<II", sec, 4 + 8 * g, len(labels[g]), len(sec))
+                sec += b"".join(labels[g])
+        elif kind == b"TXT2":
+            n = struct.unpack_from("<I", sec, 0)[0]
+            offs = [struct.unpack_from("<I", sec, 4 + 4 * i)[0] for i in range(n)] + [size]
+            texts = [bytes(sec[offs[i]:offs[i + 1]]) for i in range(n)] + [bytes(text) + b"\0"]
+            sec = bytearray(struct.pack("<I", n + 1) + bytes(4 * (n + 1)))
+            for i, t in enumerate(texts):
+                struct.pack_into("<I", sec, 4 + 4 * i, len(sec))
+                sec += t
+        else:
+            raise ValueError("a text file with a section %r: a line cannot be added" % bytes(kind))
+        fill = data[body + size:body + (size + 15 & ~15)][:1] or b"\xab"
+        out += kind + struct.pack("<I", len(sec)) + data[at + 8:at + 0x10] + sec + fill * (-len(sec) % 16)
+        at = body + (size + 15 & ~15)
+    struct.pack_into("<I", out, 0x12, len(out))
+    return bytes(out)
+
+
+def shop_caption(data, name):
+    """The pouch's text file with the words a shop shows under an item's name, <name>_ShopCaption, for an item that
+    has none: its own description (<name>_Caption), or what is said when it is got (<name>_GetCaption). None: it
+    has the line, or neither of the other two."""
+    try:
+        msbt_text(data, name + "_ShopCaption")
+        return None
+    except ValueError:
+        pass
+    for other in ("_Caption", "_GetCaption"):
+        try:
+            a, b = msbt_text(data, name + other)
+        except ValueError:
+            continue
+        return msbt_add(data, name + "_ShopCaption", bytes(data[a:b]).rstrip(b"\0"))
+    return None
+
+
 # ---- a scrub's words ----
 # A sale's text is the scrub's own, named in the sale's call (SellerMessageId): "This bag will allow you to carry more
 # Deku sticks. It's 40 rupees. Wanna buy it?" for a sale that is now a Bomb Bag (seen in play). The texts are in the
@@ -1611,6 +1878,7 @@ def size_entry(size, extra=264):
 
 
 PACK_EXTRA = 312
+SHOP_EXTRA = 65536   # (for a list of the game's actors and a language's archive, whose entries follow no rule looked for: far more than either grows)
 
 
 def size_table_update(tbl, sizes, extra=264):
@@ -1706,7 +1974,7 @@ def settings(game):
     """the randomizer's lines of the options file (0 where it does not say)"""
     got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
            "rando_skip_intro": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0,
-           "rando_start_rupees": 0, "rando_scrubs": 0}
+           "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -2055,6 +2323,8 @@ def main():
     p.add_argument("--frogs", action="store_true", help="as rando_frogs=1: with Quest rewards, the frogs of Zora's River take part too")
     p.add_argument("--light-arrows", action="store_true", help="as rando_light_arrows=1: with Quest rewards, Zelda's Light Arrows take part too")
     p.add_argument("--scrubs", action="store_true", help="as rando_scrubs=1: the Business Scrubs' four one-time sales take part with the chests (SCRUBS)")
+    p.add_argument("--shops", type=int, choices=(0, 1, 2), help="in place of rando_shops: four shelves of each shop sell a shuffled item, once (SHOPS). "
+                                                               "2: with rolled prices")
     p.add_argument("--start-rupees", action="store_true", help="as rando_start_rupees=1: a new game starts with %d rupees" % START_RUPEES)
     p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already this seed's (the launcher, at Play)")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
@@ -2088,6 +2358,8 @@ def main():
     a.skip_intro = a.skip_intro or ini["rando_skip_intro"] != 0
     a.start_rupees = a.start_rupees or ini["rando_start_rupees"] != 0
     a.scrubs = a.scrubs or ini["rando_scrubs"] != 0
+    a.shops = a.shops if a.shops is not None else ini["rando_shops"]
+    a.shops = a.shops if 0 <= a.shops <= 2 else 0
     a.skulltulas = a.skulltulas if a.skulltulas is not None else ini["rando_skulltulas"]
     a.skulltulas = a.skulltulas if 0 <= a.skulltulas <= 3 else 0
     a.quests = a.quests or ini["rando_quests"] != 0
@@ -2139,7 +2411,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + " checks 4" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d" % a.shops if a.shops else "") + " checks 5" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2268,6 +2540,13 @@ def main():
         for g in SCRUBS:
             gifts[gift_hash(g.key)] = g
             spots[gift_hash(g.key)] = [g.area, g.item, None, None, "scrub", g.name, ""]
+    shelves = collections.OrderedDict()   # a shop shelf's hash -> (its Shop, its place in the goods list, the game's own actor there)
+    if a.shops:   # (Shops: with or without the others)
+        for shop in SHOPS:
+            for k, (index, actor) in enumerate(shop.slots):
+                g = Gift("shop_%s_%d" % (shop.key, index), "", (), shelf_item(actor), shop.areas[0], "%s: shelf %d" % (shop.name, k + 1), shop.need, "shops", None)
+                gifts[gift_hash(g.key)], shelves[gift_hash(g.key)] = g, (shop, index, actor)
+                spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]
     # (a string seed: the same on every Python 3. The seeds made before --event-chests keep their shuffle without it)
     logic = a.event_chests and not a.no_logic   # (without the event chests no gating item moves: nothing to ask)
     rng = random.Random("stage2:%d:%d:%d%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else ""))
@@ -2337,7 +2616,7 @@ def main():
     moved = sum(1 for h, item in gives.items() if item != spots[h][1] and h not in gifts)
     print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives) - len(gifts), moved, len(changed)))
     if a.quests:
-        mine = [h for h, g in gifts.items() if g.when != "scrubs"]
+        mine = [h for h, g in gifts.items() if g.when not in ("scrubs", "shops")]
         print("Quest rewards: %d gifts take part%s%s, %d now give another item" % (
             len(mine), "" if a.frogs else " (not the frogs: their setting is off)", "" if a.light_arrows else " (not the Light Arrows: their setting is off)",
             sum(1 for h in mine if gives[h] != gifts[h].item)))
@@ -2387,13 +2666,14 @@ def main():
 
     # ---- TEST: items' packs made pick-ups' ----
     pack_files, pack_sizes, pack_parts, pack_new = {}, {}, set(), set()
+    pouch_changed = {}   # (the pouch files the pick-ups changed: a shelf actor's pack takes them too)
     if pickups:
         def pack(name):
             return unpack(open(os.path.join(romfs, "Pack", "Actor", name + ".pack.zs"), "rb").read(), zs, dicts)
         try:
             base = pack(PICKUP_BASE)
             base_parts = sarc_read(base)
-            pouch = {}
+            pouch = pouch_changed
             for item in list(pickups):   # (an item made from another: that one's pack has a copy of the same actor)
                 pickups += [n for n in pickup_family(item, pack(item))
                             if n not in pickups and os.path.isfile(os.path.join(romfs, "Pack", "Actor", n + ".pack.zs"))]
@@ -2436,7 +2716,7 @@ def main():
     gift_files, gift_sizes = {}, {}
     swaps = collections.OrderedDict()   # a flow -> {the item it names: the item it gives now}
     for h, g in gifts.items():
-        if gives[h] != g.item:
+        if gives[h] != g.item and g.flow:   # (a shop's shelf has no scene: its actor is the sale)
             swaps.setdefault(g.flow, {}).update(((g.entry, old) if g.entry else old, gives[h]) for old in g.olds)
     for flow, old, new in test_gifts:
         swaps.setdefault(flow, {})[old] = new
@@ -2473,6 +2753,94 @@ def main():
     if lines:
         print("Deku Scrubs: %d sale line%s no longer name the scrub's own item (English)" % (len(lines), "" if len(lines) == 1 else "s"))
 
+
+    # ---- Shops: the shelves that take part sell what the shuffle put there, once ----
+    shop_files, shop_packs, shop_new, shop_sizes, shop_parts = {}, {}, set(), {}, set()
+    if shelves:
+        def pack(name):
+            rel = "Pack/Actor/%s.pack.zs" % name
+            return pack_files[rel] if rel in pack_files else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
+        try:
+            roll = random.Random("shop prices:%d" % seed) if a.shops == 2 else None
+            prices = collections.OrderedDict((item, shop_price(item, roll)) for item in sorted({gives[h] for h in shelves}))
+            base, sample, names = pack(SHOP_BASE), pack(SHOP_SAMPLE), {}
+            for item, price in prices.items():
+                new, parts, names[item] = shop_pack(item, unpack(open(os.path.join(romfs, "Pack", "Actor", item + ".pack.zs"), "rb").read(), zs, dicts),
+                                                    base, sample, price, pouch_changed)
+                shop_files["Pack/Actor/%s.pack.zs" % shop_actor(item)] = new
+                shop_packs["Pack/Actor/%s.pack" % shop_actor(item)] = len(new)
+                shop_new.update(parts)
+            folder = os.path.join(romfs, "RSDB")
+            for kind in SHOP_TABLES:   # (the game's three lists of actors: a row for each shelf actor)
+                n = next((n for n in sorted(os.listdir(folder)) if n.startswith(kind + ".") and ".byml" in n.lower()), None)
+                if n is None:
+                    raise ValueError("the game has no list %s" % kind)
+                table = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
+                for item, price in prices.items():
+                    table = shop_rows(table, kind, item, price)
+                shop_files["RSDB/" + n] = table
+                shop_sizes["RSDB/" + (n[:-3] if n.lower().endswith(".zs") else n)] = len(table)
+            packs = sorted(n[:-len(".pack.zs")] for n in os.listdir(os.path.join(romfs, "Pack", "Actor")) if "Shop" in n and n.startswith("Npc_") and n.endswith(".pack.zs"))
+            for shop in SHOPS:   # (the goods lists, in every pack that has a copy, and the shelves of the map files)
+                sells = {index: (actor, shop_actor(gives[gift_hash("shop_%s_%d" % (shop.key, index))])) for index, actor in shop.slots}
+                for param in shop.params:
+                    name, found = SHOP_PARAM % param, 0
+                    for keeper in packs:
+                        parts = sarc_read(pack(keeper))
+                        if name not in parts:
+                            continue
+                        parts[name] = shop_goods(parts[name], sells)
+                        new = sarc_write(parts)
+                        pack_files["Pack/Actor/%s.pack.zs" % keeper] = new
+                        pack_sizes["Pack/Actor/%s.pack" % keeper] = len(new)
+                        shop_parts.add(name)
+                        found += 1
+                    if not found:
+                        raise ValueError("no pack has the goods list %s" % param)
+                on_shelf, found = {(actor, index): new for index, (actor, new) in sells.items()}, 0
+                for area in shop.areas:
+                    folder_map = os.path.join(romfs, "Banc", area)
+                    for n in sorted(os.listdir(folder_map)) if os.path.isdir(folder_map) else ():
+                        rel = "Banc/%s/%s" % (area, n)
+                        if ".bcett.byml" not in n.lower():
+                            continue
+                        data = changed[rel] if rel in changed else unpack(open(os.path.join(folder_map, n), "rb").read(), zs, dicts)
+                        if not any(actor.encode() in data for actor, _ in on_shelf):
+                            continue
+                        new, count = shelf_actors(data, on_shelf)
+                        if new is not None:
+                            changed[rel] = new
+                            sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
+                            found += count
+                if found < len(sells):
+                    raise ValueError("%s: the map files have %d of its %d shelves" % (shop.name, found, len(sells)))
+            folder = os.path.join(romfs, "Mals")   # (the words under an item's name, in every language)
+            for n in sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if n.endswith(".sarc.zs")):
+                rel = "Mals/" + n
+                parts = sarc_read(gift_files[rel] if rel in gift_files else unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts))
+                text = parts.get(SHOP_TEXT)
+                if text is None:
+                    continue
+                was = text
+                for name in sorted(set(names.values())):
+                    text = shop_caption(text, name) or text
+                if text != was:
+                    parts[SHOP_TEXT] = text
+                    gift_files[rel] = sarc_write(parts)
+                    shop_sizes[rel[:-3]] = len(gift_files[rel])
+        except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
+            sys.exit("the shops: %s. Nothing written." % e)
+        print("Shops%s: %d shelves of %d shops take part, each sold once: %s" % (
+            " (random prices)" if a.shops == 2 else "", len(shelves), len(SHOPS),
+            ", ".join("%s %d" % (ITEM_WORDS.get(item) or spaced(item), price) for item, price in prices.items())))
+
+    def shop_table(tbl):
+        """the size table with the shops' files: the new packs and their own files added, the keepers' packs' goods
+        lists raised, the lists of actors and the texts' archives made to fit"""
+        for path, size in shop_packs.items():
+            tbl = size_table_add(tbl, [path], size_entry(size, PACK_EXTRA))
+        return size_table_update(size_table_raise(size_table_add(tbl, shop_new), shop_parts), shop_sizes, SHOP_EXTRA)
+
     # ---- the size table ----
     folder = os.path.join(romfs, "System", "Resource")
     tables = sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if "rsizetable" in n.lower())
@@ -2481,9 +2849,9 @@ def main():
     new_tables = {}
     for n in tables:
         try:
-            new_tables["System/Resource/" + n] = size_table_update(size_table_add(size_table_raise(size_table_update(
+            new_tables["System/Resource/" + n] = shop_table(size_table_update(size_table_add(size_table_raise(size_table_update(
                 size_table_update(unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts), sizes), pack_sizes, PACK_EXTRA),
-                pack_parts - pack_new), pack_new), gift_sizes, FLOW_EXTRA)
+                pack_parts - pack_new), pack_new), gift_sizes, FLOW_EXTRA))
         except Exception as e:
             sys.exit("the size table %s could not be updated (%s). Nothing written." % (n, e))
 
@@ -2527,7 +2895,8 @@ def main():
         except (OSError, ValueError, struct.error) as e:
             sys.exit("%s: %s. Nothing written." % (SWORD_FLOW, e))
         print("the Kokiri Sword's chest holds another item: it opens without the cutscene of the sword")
-    for rel, data in list(changed.items()) + list(new_tables.items()) + list(flag_files.items()) + list(pack_files.items()) + list(gift_files.items()):
+    for rel, data in (list(changed.items()) + list(new_tables.items()) + list(flag_files.items()) + list(pack_files.items()) + list(gift_files.items()) +
+                      list(shop_files.items())):
         out = os.path.join(mod, "romfs", *rel.split("/"))
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, "wb") as f:
@@ -2548,7 +2917,8 @@ def main():
                                       [(skulls[h][0], skulls[h][1], check_ages(maps[h]), skull_need(h), named("Gold Skulltula", h, skulls[h][0], skulls[h][1]))
                                        for h in took],
                                       [(g.area, GIFT_PLACES[g.key][1], GIFT_PLACES[g.key][0], needs[h], g.name)
-                                       for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES])) + "\n")
+                                       for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES] +
+                                      [(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name) for h, (shop, _, _) in shelves.items() if h in gives])) + "\n")
     with open(os.path.join(mod, "rando_manifest.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(written)) + "\n")
     with open(stamp_path, "w", encoding="utf-8") as f:   # (last: a run that stopped half way is made again)

@@ -26,7 +26,7 @@
 
    What is not here: the item placement. tools/rando/rando_seed.py reads rando_on, rando_seed, rando_chests,
    rando_skulltulas, rando_quests (with rando_frogs and rando_light_arrows), rando_keys, rando_major, rando_open_deku,
-   rando_open_forest, rando_skip_intro, rando_start_rupees and rando_scrubs, shuffles the chests, the Gold Skulltulas' drops and some characters' gifts and
+   rando_open_forest, rando_skip_intro, rando_start_rupees, rando_scrubs and rando_shops, shuffles the chests, the Gold Skulltulas' drops and some characters' gifts and
    makes the open ways' and the opening's changes as a mod (the launcher runs it at Play); the other settings are not placed yet
    (host/oot_rando.c). */
 #ifndef OOT_RANDO_H
@@ -57,7 +57,7 @@
       "Heart Pieces and the other items lying in the world are shuffled.", \
       "Off", "On") \
     X(SHOPS, "Shops", "rando_shops", \
-      "Shop shelves sell shuffled items. Random prices also rolls what each one costs.", \
+      "Four shelves of each shop sell a shuffled item, once each (not the Happy Mask Shop). Random prices also rolls what each one costs. Needs Chests.", \
       "Off", "On", "Random prices") \
     X(SCRUBS, "Deku Scrubs", "rando_scrubs", \
       "The Business Scrubs' one-time sales (two Pieces of Heart, the Deku Stick and Deku Nut upgrades) take part with the chests. Needs Chests.", \

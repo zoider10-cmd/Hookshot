@@ -908,7 +908,7 @@ class LauncherForm : Form {
         new object[] { "rando_heart_pieces", "Heart Pieces", new[] { "Off", "On" }, new[] { 0, 1 },
             "Heart Pieces and the other items lying in the world are shuffled." },
         new object[] { "rando_shops", "Shops", new[] { "Off", "On", "Random prices" }, new[] { 0, 1, 2 },
-            "Shop shelves sell shuffled items. Random prices also rolls what each one costs." },
+            "Four shelves of each shop sell a shuffled item, once each (not the Happy Mask Shop). Random prices also rolls what each one costs. Needs Chests." },
         new object[] { "rando_scrubs", "Deku Scrubs", new[] { "Off", "On" }, new[] { 0, 1 },
             "The Business Scrubs' one-time sales (two Pieces of Heart, the Deku Stick and Deku Nut upgrades) take part with the chests. Needs Chests." },
         new object[] { "rando_dungeon_rewards", "Dungeon rewards", new[] { "Off", "Dungeons", "Anywhere" }, new[] { 0, 1, 2 },
