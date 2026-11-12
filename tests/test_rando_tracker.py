@@ -62,7 +62,7 @@ def main():
           "the rows past the file's lines are shown, or the file is not read for the tab")
     check("else if (press[7] && !r.value && r.tracker < 0 && can_bind()) page = 1" in menu and
           "choice_cell(c, va, vb, tracker_says(r.tracker), selected, steps, steps);" in menu and
-          "std::string words = tracker_value[row];" in menu,
+          "std::string words = all ? checks(told ? left : all) + (told ? \" left\" : \"\") : std::string(tracker_value[row]);" in menu,
           "a Tracker row opens the Controls page on confirm, or does not show the file's value")
     # ---- the checks one by one, and Go there ----
     lines = seed.check_lines([("ZoraRiver", (1.0, 2.0, 3.0), "CA", seed.ADULT), ("KokiriForest", (-27.04, 67.6, 65.2), "C", seed.NONE),
@@ -144,7 +144,7 @@ def main():
           "a search for the game's flags is still in the game, or the checks are reported with the randomizer off")
     check("if (id >= OOT_TRACKER_BASE && id < OOT_TRACKER_BASE + kTrackerChecks) {" in menu and
           'collected ? ": done" : state > 0 ? ": in logic" : state == 0 ? ": not in logic" : ""' in menu and
-          "if (done == 1) continue;   // (a check collected is not one to go for)" in menu and '" left, "' in menu and
+          "if (done == 1) continue;   // (a check collected is not one to go for)" in menu and '(n == 1 ? " check" : " checks")' in menu and
           "for (auto& done : tracker_done) done.store(-1, std::memory_order_relaxed);" in menu,
           "the tab does not say a check is done, counts one collected among those in logic, or takes a check for collected before the game says so")
     # ---- what the tab shows: all, the ones left, the ones left and in logic ----
@@ -176,7 +176,7 @@ def main():
     rows_named = set(re.findall(r'"([^"]+)"', "".join(re.findall(r", \{([^}]+)\}\},", block))))
     check(rows_named and rows_named <= names, "a gating item's row is not a row of the Inventory page: %r" % sorted(rows_named - names))
     check("if (k.needs[0] == '?' || item_counts[0].load(std::memory_order_relaxed) < 0) return -1;" in menu and
-          'state > 0 ? ": in logic" : state == 0 ? ": not in logic" : ""' in menu and '" in logic)"' in menu and
+          'state > 0 ? ": in logic" : state == 0 ? ": not in logic" : ""' in menu and 'words += ", " + std::to_string(in) + " in logic";' in menu and
           "if (selr.tracker >= 0 && !(tracker_line = tracker_hint(selr.tracker)).empty()) hint = tracker_line.c_str();" in menu,
           "the tab does not say whether a check is in logic, or says so of a check it knows nothing of")
     check(all(line.split("|")[0] in {t.split("|")[0] for t in seed.tracker_lines({"KokiriForest": 2, "ZoraRiver": 1}, {"KokiriForest": 1})}

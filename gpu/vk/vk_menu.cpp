@@ -100,7 +100,7 @@ char tracker_value[kTrackerRows][72];
 int tracker_count = 0;
 void tracker_load();
 const char kTrackerHelp[] =
-    "The treasure chests, Gold Skulltulas and gifts of this area that take part in the randomizer's seed. It is what the seed "
+    "The checks of this area that take part in the randomizer's seed: treasure chests, Gold Skulltulas, gifts and shop shelves. It is what the seed "
     "has there, not what is left: the game does not tell the menu what has been opened. Left and Right step through "
     "the area's checks one by one; with the debug tools on, confirm takes Link to the one shown. With the mouse: the "
     "arrows step, a click on the row's name goes there. Left: not collected yet, by the randomizer's own record of the items given since it began; on the first row, confirm twice to forget it (a new game), and Left and Right choose what the tab shows: every check, the ones left, or the ones left and in logic. In logic: Link carries all that the seed's rules ask for at "
@@ -165,19 +165,21 @@ std::string tracker_says(int row) {
     if (!k) {   // (its own words, how many of its checks are left and how many of those are in logic: the first row is the whole game's)
         if (!row && tracker_forget_asked && GetTickCount64() - tracker_forget_asked < kTrackerForgetMs)
             return "Press again to forget what is collected";
-        int in = 0, known = 0, left = 0, told = 0;
+        int in = 0, known = 0, left = 0, told = 0, all = 0;
         for (int i = 0; i < tracker_check_count; i++) {
             if (row && strcmp(tracker_checks[i].area, tracker_name[row])) continue;
+            all++;
             const int done = tracker_done[i].load(std::memory_order_relaxed);
             told += done >= 0, left += done != 1;
             if (done == 1) continue;   // (a check collected is not one to go for)
             const int state = tracker_in_logic(tracker_checks[i]);
             known += state >= 0, in += state > 0;
         }
-        std::string words = tracker_value[row];
-        if (told && known) words += " (" + std::to_string(left) + " left, " + std::to_string(in) + " in logic)";
-        else if (told) words += " (" + std::to_string(left) + " left)";
-        else if (known) words += " (" + std::to_string(in) + " in logic)";
+        // (how many are left and how many of those are in logic, and nothing of their kinds: its owner's word. The file's own
+        // words only where there is no check to count: no seed)
+        const auto checks = [](int n) { return std::to_string(n) + (n == 1 ? " check" : " checks"); };
+        std::string words = all ? checks(told ? left : all) + (told ? " left" : "") : std::string(tracker_value[row]);
+        if (all && known) words += ", " + std::to_string(in) + " in logic";
         if (!row && tracker_check_count) words += std::string(". Showing: ") + kTrackerShowWords[tracker_show];
         return words;
     }
