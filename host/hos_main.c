@@ -711,6 +711,7 @@ static const unsigned char oot_item_kinds[] = {OOT_CHEAT_ITEMS(OOT_NO_SECTION, O
 
 static int oot_item_count(Ctx *c, const char *name);
 static int oot_gamedata_bool(Ctx *c, uint32_t hash, int *value);
+static int oot_gamedata_set_bool(Ctx *c, uint32_t hash, int value);
 
 static void oot_inventory_refresh(Ctx *c, int64_t now) {
     void rx_option_set(int id, int value);
@@ -749,9 +750,29 @@ static int oot_mask_alias(const char *name, char *alias, size_t size) {
     return 0;
 }
 
+/* (the randomizer's fork) A song is not counted in the pouch: adding one there was accepted and nothing kept, with an
+   ocarina or without (seen in play: the Fairy Ocarina was given, the song still not). What the game's scenes ask of a
+   song is its flag, IsGet.Item_Melody_<song> (a plain truth value of the game's list of flags), so the Inventory page
+   reads and sets that. The flag's MurmurHash3, by the song's name after Item_Melody_; 0: not a song. */
+static uint32_t oot_song_flag(const char *name) {
+    static const struct { const char *song; uint32_t hash; } songs[] = {
+        {"ZeldaLullaby", 0x01c20002u}, {"EponaSong", 0xb492ac33u}, {"SariaSong", 0xd3f8bfccu}, {"SunSong", 0x165dd1adu},
+        {"TimeSong", 0x03b3450eu}, {"StormSong", 0x2b39dd4fu}, {"ForestMinuet", 0xdc0a0b54u}, {"FireBolero", 0x49041ab9u},
+        {"WaterSerenade", 0x3fa63986u}, {"ShadowNocturne", 0xc2fb95f4u}, {"SpiritRequiem", 0x802a36a8u}, {"LightPrelude", 0xd6320ba4u},
+    };
+    if (strncmp(name, "Item_Melody_", 12)) return 0;
+    for (unsigned i = 0; i < sizeof songs / sizeof songs[0]; i++)
+        if (!strcmp(name + 12, songs[i].song)) return songs[i].hash;
+    return 0;
+}
+
 static int oot_item_count(Ctx *c, const char *name) {
     char alias[64];
     const int n = oot_pouch_count(c, name);
+    if (oot_song_flag(name) && n >= 0) {   /* (a song: learned or not, by its flag) */
+        int learned = 0;
+        if (oot_gamedata_bool(c, oot_song_flag(name), &learned)) return learned ? 1 : n > 0;
+    }
     if (!oot_mask_alias(name, alias, sizeof alias)) return n;
     const int m = oot_pouch_count(c, alias);
     return n > m ? n : m;
@@ -826,6 +847,9 @@ static void oot_inventory_edit(Ctx *c, int action) {
     } else {
         result = oot_pouch_change(c, is_mask ? alias : name, delta);   /* (masks are added as Item_Mask_X, as the shop does) */
     }
+    if (oot_song_flag(name))   /* (a song: its flag is what is asked) */
+        hos_log("cheats: inventory %s: its flag IsGet.%s %s", name, name,
+                oot_gamedata_set_bool(c, oot_song_flag(name), delta > 0) ? (delta > 0 ? "set" : "put out") : "NOT FOUND");
     hos_log("cheats: inventory %s %+d (had %d, now %d, event status %d)", name, delta, have, oot_item_count(c, name), result);
 }
 
