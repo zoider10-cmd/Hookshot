@@ -147,6 +147,19 @@ def main():
           "if (done == 1) continue;   // (a check collected is not one to go for)" in menu and '" left, "' in menu and
           "for (auto& done : tracker_done) done.store(-1, std::memory_order_relaxed);" in menu,
           "the tab does not say a check is done, counts one collected among those in logic, or takes a check for collected before the game says so")
+    # ---- what the tab shows: all, the ones left, the ones left and in logic ----
+    check("if (tracker_done[i].load(std::memory_order_relaxed) == 1) return false;" in menu and
+          "return tracker_show != kTrackerShowReachable || tracker_in_logic(tracker_checks[i]) != 0;" in menu and
+          "if (tracker_show == kTrackerShowAll) return true;" in menu,
+          "a check collected is shown when those are hidden, one out of logic when only the reachable are, or one is hidden when all are shown")
+    check("if (!strcmp(tracker_checks[i].area, tracker_name[row]) && tracker_check_shown(i) && !--n) return &tracker_checks[i];" in menu and
+          "!(rows[i].tracker > 0 && tracker_row_hidden(rows[i].tracker)) &&" in menu and
+          "return row > 0 && tracker_show != kTrackerShowAll && tracker_row_checks(row, true) > 0 && !tracker_row_checks(row);" in menu,
+          "a check not shown is stepped to, or an area with none to show keeps its row, or the whole game's row is hidden")
+    check("tracker_show = (tracker_show + kTrackerShows + (press[4] ? 1 : -1)) % kTrackerShows;" in menu and
+          "for (int r = 1; r < kTrackerRows; r++) tracker_pick[r] = 0;" in menu and 'words += std::string(". Showing: ") + kTrackerShowWords[tracker_show];' in menu and
+          '{"all", "left to collect", "left and in logic"}' in menu,
+          "the first row's Left and Right do not choose what the tab shows, a row stays stepped to a check that is another now, or the row does not say what is shown")
     made = [name("Chest", item, {}, ()) for item in seed.ITEM_WORDS]
     check(all(len(n) <= seed.CHECK_NAME - 40 for n in made) and set(seed.PROGRESSION) <= set(seed.ITEM_WORDS) and set(seed.DUNGEON_ITEMS) <= set(seed.ITEM_WORDS),
           "a gating item or a dungeon's item has no words for a chest's name")

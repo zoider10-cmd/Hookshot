@@ -103,7 +103,7 @@ const char kTrackerHelp[] =
     "The treasure chests, Gold Skulltulas and gifts of this area that take part in the randomizer's seed. It is what the seed "
     "has there, not what is left: the game does not tell the menu what has been opened. Left and Right step through "
     "the area's checks one by one; with the debug tools on, confirm takes Link to the one shown. With the mouse: the "
-    "arrows step, a click on the row's name goes there. Left: not collected yet, by the randomizer's own record of the items given since it began; on the first row, confirm twice to forget it (a new game). In logic: Link carries all that the seed's rules ask for at "
+    "arrows step, a click on the row's name goes there. Left: not collected yet, by the randomizer's own record of the items given since it began; on the first row, confirm twice to forget it (a new game), and Left and Right choose what the tab shows: every check, the ones left, or the ones left and in logic. In logic: Link carries all that the seed's rules ask for at "
     "that check. The rules ask for more than a check may need, so one not in logic may still be within reach.";
 // The checks one by one: tools/rando/rando_seed.py writes <game folder>\mods\rando-seed\checks.txt beside the tracker's
 // file, a line "<area>|<kind>|<folder>|<ages>|<x> <y> <z>" for each chest and Gold Skulltula of the seed (tracker_load
@@ -132,16 +132,32 @@ int tracker_check_count = 0;
 static_assert(kTrackerChecks == OOT_TRACKER_MAX, "the game side reports as many checks as the menu keeps");
 std::atomic<signed char> tracker_done[kTrackerChecks];
 int tracker_pick[kTrackerRows];
-/// How many checks a row's area has, and (n from 1) its n-th: nullptr past them
-int tracker_row_checks(int row) {
+// What the tab shows (the first row's Left and Right): every check, only the ones left to collect, or only the ones left
+// that are in logic now. A check not shown is stepped over, and an area with none to show has no row.
+enum { kTrackerShowAll, kTrackerShowLeft, kTrackerShowReachable, kTrackerShows };
+int tracker_show = kTrackerShowAll;
+const char* const kTrackerShowWords[kTrackerShows] = {"all", "left to collect", "left and in logic"};
+/// A check is shown: not one collected when those are hidden, nor one out of logic when only the reachable are shown (one
+/// whose logic is not known is)
+bool tracker_check_shown(int i) {
+    if (tracker_show == kTrackerShowAll) return true;
+    if (tracker_done[i].load(std::memory_order_relaxed) == 1) return false;
+    return tracker_show != kTrackerShowReachable || tracker_in_logic(tracker_checks[i]) != 0;
+}
+/// How many checks a row's area has to show (every one of the area: any true), and (n from 1) its n-th shown: nullptr past them
+int tracker_row_checks(int row, bool any = false) {
     int n = 0;
-    for (int i = 0; i < tracker_check_count; i++) n += !strcmp(tracker_checks[i].area, tracker_name[row]);
+    for (int i = 0; i < tracker_check_count; i++) n += !strcmp(tracker_checks[i].area, tracker_name[row]) && (any || tracker_check_shown(i));
     return n;
 }
 const TrackerCheck* tracker_row_check(int row, int n) {
     for (int i = 0; i < tracker_check_count; i++)
-        if (!strcmp(tracker_checks[i].area, tracker_name[row]) && !--n) return &tracker_checks[i];
+        if (!strcmp(tracker_checks[i].area, tracker_name[row]) && tracker_check_shown(i) && !--n) return &tracker_checks[i];
     return nullptr;
+}
+/// An area's row is hidden: it has checks, and none of them to show
+bool tracker_row_hidden(int row) {
+    return row > 0 && tracker_show != kTrackerShowAll && tracker_row_checks(row, true) > 0 && !tracker_row_checks(row);
 }
 /// What a row says: its own words, or the check it is stepped to ("3 of 10: Chest, child's, at -27 68 65")
 std::string tracker_says(int row) {
@@ -162,6 +178,7 @@ std::string tracker_says(int row) {
         if (told && known) words += " (" + std::to_string(left) + " left, " + std::to_string(in) + " in logic)";
         else if (told) words += " (" + std::to_string(left) + " left)";
         else if (known) words += " (" + std::to_string(in) + " in logic)";
+        if (!row && tracker_check_count) words += std::string(". Showing: ") + kTrackerShowWords[tracker_show];
         return words;
     }
     const bool collected = tracker_done[k - tracker_checks].load(std::memory_order_relaxed) == 1;
@@ -1324,7 +1341,8 @@ int ask_sel = 0;   // (the restart question's choice: 0 Later, 1 Restart now)
 /// and menu_tick brings back one past the end
 bool row_shown(int i) {
     const int* v = rows[i].value;
-    return (rows[i].cheat < 0 || cheats_on()) && rows[i].tracker < tracker_count && (v != &opts.reflex || reflex_available()) &&
+    return (rows[i].cheat < 0 || cheats_on()) && rows[i].tracker < tracker_count && !(rows[i].tracker > 0 && tracker_row_hidden(rows[i].tracker)) &&
+           (v != &opts.reflex || reflex_available()) &&
            (v != &opts.antilag || antilag_available()) &&
            (v != &opts.dlss || ur::upscaler_shown(upscalers_available())) &&
            (v != &opts.dlss_model || ur::model_shown(dlss_why() == DLSS_OK)) &&
@@ -2182,7 +2200,8 @@ void draw_options(ui::Ctx& c) {
     if (selr.tracker >= 0) {   // (a line of the Tracker tab: its area's checks to step through, and the one shown to go to)
         prompts_n = 1;
         if (tracker_row_checks(selr.tracker)) prompt_list[prompts_n++] = {ui::kLeftRight, "Checks"};
-        if (!selr.tracker && tracker_check_count) prompt_list[prompts_n++] = {ui::kConfirm, "Forget"};   // (the whole game's row)
+        if (!selr.tracker && tracker_check_count)   // (the whole game's row: what the tab shows, and the record forgotten)
+            prompt_list[prompts_n++] = {ui::kLeftRight, "Show"}, prompt_list[prompts_n++] = {ui::kConfirm, "Forget"};
         if (tracker_pick[selr.tracker] && cheats_on()) prompt_list[prompts_n++] = {ui::kConfirm, "Go there"};
         prompt_list[prompts_n++] = {ui::kTabs, "Tabs"}, prompt_list[prompts_n++] = {ui::kBack, "Close"};
     }
@@ -2239,7 +2258,7 @@ void draw_options(ui::Ctx& c) {
         } else if (r.cheat >= 0 && !tool.empty()) {   // (a debug tool with a value: arrows when Left and Right choose it)
             choice_cell(c, va, vb, tool, selected, cheat_chooses(r.cheat), cheat_chooses(r.cheat));
         } else if (r.tracker >= 0) {   // (a line of the Tracker tab: what the seed's file says, or the check it is stepped to)
-            const bool steps = tracker_row_checks(r.tracker) > 0;
+            const bool steps = tracker_row_checks(r.tracker) > 0 || (!r.tracker && tracker_check_count > 0);
             choice_cell(c, va, vb, tracker_says(r.tracker), selected, steps, steps);
         } else if (!r.value) {   // (a page, or Restart and Quit: Confirm until the second press)
             if (pending == &r) choice_cell(c, va, vb, "Press again to confirm", selected, false, false);
@@ -3446,7 +3465,12 @@ void teleport_mouse(const MkwVkPointer& ptr, int mx, int my, bool* press, bool& 
 /// confirm, with the debug tools on, has the game take Link to the check shown: its place, a metre above it, with its
 /// folder and ages, goes into <game folder>\rando\goto_check.txt and the action to the game, and the menu closes
 void tracker_press(int row, const bool* press, bool& changed) {
-    if (!row && tracker_check_count) {   // (the whole game's row: confirm, and again within a moment, forgets what is collected)
+    if (!row && tracker_check_count) {   // (the whole game's row: Left and Right choose what the tab shows; confirm, and again within a moment, forgets what is collected)
+        if (press[3] || press[4]) {
+            tracker_show = (tracker_show + kTrackerShows + (press[4] ? 1 : -1)) % kTrackerShows;
+            for (int r = 1; r < kTrackerRows; r++) tracker_pick[r] = 0;   // (the rows' own words again: their checks are other ones now)
+            changed = true;
+        }
         if (press[7]) {
             const ULONGLONG now = GetTickCount64();
             if (tracker_forget_asked && now - tracker_forget_asked < kTrackerForgetMs) {
@@ -3849,7 +3873,7 @@ void menu_tick() {
                         press[hit.side < 0 ? 3 : 4] = true;   // (a tool's choice: its halves as Left and Right)
                     else if (d.tracker >= 0) {   // (a Tracker row: its value's halves step its checks, its name goes to the one shown)
                         if (hit.side != 0) press[hit.side < 0 ? 3 : 4] = true;
-                        else if (tracker_pick[d.tracker]) press[7] = true;
+                        else if (tracker_pick[d.tracker]) press[7] = true;   // (the first row's name does nothing: the record is not forgotten by a click)
                     } else if (!d.value) press[7] = true;   // (a page, a tool: as Enter)
                     else switch (menu_hit::row_click(true, d.hi - d.lo == d.step, hit.side, *d.value == d.hi)) {
                     case menu_hit::kClickConfirm: press[7] = true; break;
