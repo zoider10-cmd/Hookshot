@@ -93,6 +93,22 @@ chests that start an event when opened (most of the big items).
   numbers of that file so both entry points go on to what follows their cutscene. Seen in play: a new game starts in
   Link's house with both cutscenes passed over.
 
+**Heart Pieces** (`rando_heart_pieces`, `--heart-pieces`, `HEART`): the 14 Pieces of Heart lying in the world take
+part (the map files' `Obj_Heart_Piece` actors, and Gerudo Valley's `Obj_GerudoValley_Heart_Piece`). With the logic on,
+some gating items are moved to the pieces' places where the rules still let the game be finished; the chest such an
+item leaves gives the Piece of Heart. A piece holds its own piece or a gating item, nothing else.
+- The map's actor is given the item's name (`regyaml`), and the item is made a pick-up from the piece itself, not
+  from the token as a Gold Skulltula's drop is. Seen without a window at Lon Lon Ranch's piece: made from the token,
+  an arrow bundle was taken by touching it and was there again each time the map was entered; made from the piece,
+  the Megaton Hammer lay there with the piece's glint, was taken once and was not there the next two times the map
+  was entered. Not seen: a save and a load between, and the item's look from close by.
+- A gating item is one of a kind, so none is made from both the piece and the token. The bundles a pick-up can be are
+  left out: they are in many chests too, and a chest giving an item made from the piece has not been seen.
+- The rules: a piece asks for its area's rule, which asks for an adult everywhere a piece lies; Lon Lon Ranch's asks
+  for what a child out of the forest has (`HEART_RULES`). None has been walked to.
+- The pieces are checks of the tracker ("Piece of Heart, Lon Lon Ranch"). `RANDO_TEST_HEARTS="<hash>=<item>"` puts an
+  item at a piece's place, for a test.
+
 **Songs** (`rando_songs`, `--songs`, `SONGS`): the twelve songs are shuffled among the twelve lessons (Song spots;
 Anywhere, a song in any item's place, is not made yet and is the same). A lesson gives its song as a character gives
 a gift: its flow (`Dm_MelodyGet_...`) calls `GetPouchContent` with the song's name, so the name is changed as a gift's
