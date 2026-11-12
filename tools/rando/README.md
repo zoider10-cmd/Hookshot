@@ -96,8 +96,8 @@ chests that start an event when opened (most of the big items).
 **Starting rupees** (`rando_start_rupees`, `--start-rupees`): a new game starts with 200 rupees, a full child's wallet in
 this game. Link's rupees are a whole number of the game's list of starting values (`GameData/GameDataList`,
 `PlayerStatus.CurrentRupee`, 0 in a new game), set there as the open ways' flags are (`flag_defaults`, kind `Int`).
-Seen without a player: a seed with it is written and a new game starts in Link's house. The count itself has not
-been seen on screen yet. With it the seed's ID has a setting in each of its 16 places: the next one needs a longer ID.
+Seen in play: a new game's pause menu shows 200, a rupee picked up at the full wallet and spending both behave as
+ever. With it the seed's ID has a setting in each of its 16 places: the next one needs a longer ID.
 
 ### The logic
 
