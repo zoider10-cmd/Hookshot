@@ -542,8 +542,15 @@ The Shops setting (`rando_shops`, `--shops`): four shelves of each of six shops 
 Potion Shop, the Bombchu Shop, the Goron shop, the Zora shop: `SHOPS`) sell what the shuffle put there, once each.
 Not the Happy Mask Shop, and not the shelves a game buys from again and again or by its own scenes (shields,
 tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
-the same goods list, and both sell the shuffled items. `2`, Random prices: each item's price is rolled by the seed, 10
-to 200.
+the same goods list, and both sell the shuffled items.
+
+A shelf's price is always rolled by the seed, 1 to 1000 rupees (`shop_price`): `1`, Low prices, most of them low
+(more than half within the child's wallet); `2`, Any price, each as likely as another. Link pays what his wallet
+holds: 200 as a child, 500 with the Adult's Wallet, 1000 with the Giant's (its owner's numbers). So with Shops the
+two wallets are gating items: the two Gold Skulltula family's gifts that give them take part whether Quest rewards
+is on or not, the wallets are placed by the logic, a shelf asks for the wallet its price needs (`wallet_need`), and
+the tracker names it. Each shelf has an actor of its own (`Shop_Rando_<shop>_<place>`), so two shelves with one item
+have their own prices.
 
 How a shelf sells an item (found with a Boomerang put on the Kokiri shop's shelf, seen in play: on the shelf, named,
 bought and got):
@@ -560,5 +567,7 @@ bought and got):
 Each shelf is a check on the Tracker tab ("The Kokiri shop: shelf 2"), gone to at its keeper. What a shelf sold goes
 into the pool as the chests' kind of it, a red rupee for what no chest holds.
 
-NOT seen in play yet: a seed made with the setting (only the one Boomerang was); that a shelf is empty after its
-one sale and stays so; a rupee, a key or a Piece of Heart bought from a shelf; the adult's shops; the prices.
+Seen in play, with a seed made with the setting: the shuffled items on the shelves of the Kokiri shop and the Bazaar,
+each with its name, its price and its words; a green rupee bought for 150 gave one rupee, was sold out after, and
+stayed so when the shop was come back to. NOT seen yet: a wallet got and a price past 200 paid; a key or a Piece
+of Heart bought; the adult's shops.

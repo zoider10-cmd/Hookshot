@@ -1188,6 +1188,8 @@ constexpr LogicItem kLogicItems[] = {
     {"GG", "Golden Gauntlets", {"Golden Gauntlets"}},
     {"GB", "Goron's Bracelet", {"Goron's Bracelet", "Silver Gauntlets", "Golden Gauntlets"}},
     {"SS", "Silver Scale", {"Silver Scale", "Golden Scale"}},
+    {"AW", "Adult's Wallet", {"Adult's Wallet", "Giant's Wallet"}},
+    {"GW", "Giant's Wallet", {"Giant's Wallet"}},
 };
 int tracker_in_logic(const TrackerCheck& k, std::string* missing) {
     if (k.needs[0] == '?' || item_counts[0].load(std::memory_order_relaxed) < 0) return -1;

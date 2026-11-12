@@ -57,8 +57,8 @@
       "Heart Pieces and the other items lying in the world are shuffled.", \
       "Off", "On") \
     X(SHOPS, "Shops", "rando_shops", \
-      "Four shelves of each shop sell a shuffled item, once each (not the Happy Mask Shop). Random prices also rolls what each one costs. Needs Chests.", \
-      "Off", "On", "Random prices") \
+      "Four shelves of each shop sell a shuffled item, once each, at a rolled price of 1 to 1000 rupees. The wallets are shuffled too: a price asks for one that holds it. Needs Chests.", \
+      "Off", "Low prices", "Any price") \
     X(SCRUBS, "Deku Scrubs", "rando_scrubs", \
       "The Business Scrubs' one-time sales (two Pieces of Heart, the Deku Stick and Deku Nut upgrades) take part with the chests. Needs Chests.", \
       "Off", "On") \

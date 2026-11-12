@@ -115,7 +115,7 @@ def main():
     check("named = lambda kind, h, area, pos, item=\"\": check_name(kind, item, about.get(h, {}), pos, exits[area], sub_areas[area])" in script and
           "for h, gyaml, pos, scale, words in marks(data):" in script and "%79[^|]" in block,
           "the checks are not written with their names, or the menu does not read a name whole")
-    check(set(seed.CHECK_CODES) == set(seed.PROGRESSION | seed.QUEST_GATES) and len(set(seed.CHECK_CODES.values())) == len(seed.CHECK_CODES),
+    check(set(seed.CHECK_CODES) == set(seed.PROGRESSION | seed.QUEST_GATES | seed.SHOP_GATES) and len(set(seed.CHECK_CODES.values())) == len(seed.CHECK_CODES),
           "a gating item of the rules has no letters for the tracker, or two have the same")
     codes = re.findall(r'^    \{"([A-Z]{2})", "[^"]+", \{[^}]+\}\},$', menu, re.M)
     check(codes == list(seed.CHECK_CODES.values()), "the menu's gating items are not the script's letters: %r" % codes)

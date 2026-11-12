@@ -15,7 +15,8 @@ Four shelves of each of six shops sell what the shuffle put there, once. Checked
 - a map file's shelves (shelf_actors): by actor and place in the row (none is 0), the others left;
 - the words under an item's name (msbt_add, shop_caption): another line with the item's description, found by its
   label in the group the game's hash puts it in; the file's other lines as they were; done again, nothing;
-- a price is never more than the child's wallet holds, rolled or not;
+- a price is rolled, 1 to 1000: mostly low in the one way, evenly in the other, the same for the same seed; and
+  the wallet it asks for is the one that holds it (200 a child's, 500 the Adult's, 1000 the Giant's);
 - the script reads the setting, names it in the seed's stamp, and writes the shops' files with the seed.
 
     python -I -B tests/test_rando_shops.py
@@ -138,17 +139,26 @@ def main():
           "a shop has no area the tracker names, no ages, no place or no goods list")
     check(seed.shelf_item("Shop_DekuSeedBundle_02") == "Item_ScrubBusinessSeed" and seed.shelf_item("Shop_DekuStick") == "Item_DekuStickBundle_Small" and
           seed.shelf_item("Shop_ArrowBundle_03") == "TBox_ArrowBundle_Medium" and seed.shelf_item("Shop_Heart") == seed.SHELF_OTHER == "TBox_Rupee_Red" and
-          seed.shop_actor("Item_Hammer") == "Shop_Rando_Item_Hammer", "a shelf's item for the pool, or an item's shelf actor, is not what it was")
+          seed.shop_actor("Item_Hammer") == "Shop_Rando_Item_Hammer" and seed.shop_actor("kokiri_3") == "Shop_Rando_kokiri_3",
+          "a shelf's item for the pool, or a shelf actor's name, is not what it was")
     check(all(seed.shelf_item(actor) in seed.ITEM_WORDS for _, _, actor in slots), "what goes into the pool for a shelf has no words for the tracker")
 
     # ---- a price ----
-    roll = random.Random(1)
-    rolled = [seed.shop_price("Item_Hammer", roll) for _ in range(300)]
-    check(seed.shop_price("Item_Hammer") == seed.shop_price("Item_BombBag_Medium") == seed.SHOP_PRICE_BIG and seed.shop_price("Obj_Heart_Piece") == 100 and
-          seed.shop_price("TBox_Rupee_Purple") == seed.SHOP_PRICE_RUPEE and seed.shop_price("TBox_DekuNutBundle") == seed.SHOP_PRICE_OTHER,
-          "an item's price is not its kind's")
-    check(max([seed.SHOP_PRICE_BIG, seed.SHOP_PRICE_OTHER, seed.SHOP_PRICE_RUPEE] + list(seed.SHOP_PRICES.values()) + rolled) <= 200 and min(rolled) >= 10 and
-          len(set(rolled)) > 10 and all(p % 10 == 0 for p in rolled), "a price is more than the child's wallet holds, or is not rolled in tens")
+    low = [seed.shop_price(random.Random(k), 1) for k in range(4000)]
+    even = [seed.shop_price(random.Random(k), 2) for k in range(4000)]
+    check(seed.SHOP_PRICE_MAX == 1000 and all(1 <= p <= 1000 for p in low + even) and max(low) > 900 and max(even) > 990 and min(low + even) == 1,
+          "a price is not rolled from 1 to 1000")
+    share = lambda prices, most: sum(1 for p in prices if p <= most) / len(prices)
+    check(0.52 < share(low, 200) < 0.66 and 0.74 < share(low, 500) < 0.86 and 0.17 < share(even, 200) < 0.23 and 0.46 < share(even, 500) < 0.54,
+          "the low prices are not mostly within the child's wallet, or the others are not even: %.2f %.2f %.2f %.2f" % (
+              share(low, 200), share(low, 500), share(even, 200), share(even, 500)))
+    check(all(p < 10 or p % 5 == 0 for p in low) and seed.shop_price(random.Random(7), 1) == seed.shop_price(random.Random(7), 1),
+          "a low price is not in fives, or the same seed rolls another")
+    check([seed.wallet_need(p) for p in (1, 200, 201, 500, 501, 1000)] == [seed.NONE, seed.NONE, {seed.WM}, {seed.WM}, {seed.WL}, {seed.WL}] and
+          seed.SHOP_GATES == {"Item_Wallet_Medium", "Item_Wallet_Large"} and seed.WALLETS[0][0] == 200 and seed.WALLETS[1][0] == 500,
+          "a price does not ask for the wallet that holds it")
+    by_key = {g.key: g for g in seed.GIFTS}
+    check(sorted(by_key[k].item for k in seed.SHOP_WALLET_GIFTS) == sorted(seed.SHOP_GATES), "the gifts that take part with the shops are not the two that give the wallets")
 
     # ---- an item's shelf actor ----
     item, base, sample = packs()
@@ -257,16 +267,21 @@ def main():
 
     # ---- the script ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_shops": 0' in script and '(" shops %d" % a.shops if a.shops else "")' in script and 'a.shops = a.shops if 0 <= a.shops <= 2 else 0' in script,
+    check('"rando_shops": 0' in script and '(" shops %d prices 2" % a.shops if a.shops else "")' in script and 'a.shops = a.shops if 0 <= a.shops <= 2 else 0' in script,
           "the script does not read the setting, or does not name it in the seed's stamp")
     check('spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]' in script and "if gives[h] != g.item and g.flow:" in script,
           "the shelves are not spots among the chests', or a shelf is taken for a scene's gift")
-    check('shop_files["Pack/Actor/%s.pack.zs" % shop_actor(item)] = new' in script and 'shop_files["RSDB/" + n] = table' in script and
+    check('shop_files["Pack/Actor/%s.pack.zs" % actor] = new' in script and 'shop_files["RSDB/" + n] = table' in script and
           "parts[name] = shop_goods(parts[name], sells)" in script and "new, count = shelf_actors(data, on_shelf)" in script and
           "text = shop_caption(text, name) or text" in script and "list(shop_files.items())" in script and
           'new_tables["System/Resource/" + n] = shop_table(' in script,
           "a shelf actor's pack, its rows, the goods lists, the map's shelves or the words are not written with the seed, or the size table does not know them")
-    check('roll = random.Random("shop prices:%d" % seed) if a.shops == 2 else None' in script, "Random prices does not roll them by the seed")
+    check('roll = random.Random("shop prices:%d:%d" % (seed, a.shops))' in script and "price = shop_price(roll, a.shops)" in script and
+          "shop.need | wallet_need(price), \"shops\", None)" in script and "PROGRESSION = PROGRESSION | SHOP_GATES" in script and
+          "if g.key in SHOP_WALLET_GIFTS and gift_hash(g.key) not in gifts:" in script and "(tuple(SHOP_GATES) if a.shops else ())" in script,
+          "the prices are not rolled by the seed, a shelf does not ask for its price's wallet, or the wallets are not shuffled as gating items kept from the Skulltulas")
+    check('on_sale = collections.OrderedDict((shop_actor("%s_%d" % (shop.key, index)), (gives[h], shelf_prices[h]))' in script and
+          "table = shop_rows(table, kind, item, price, actor)" in script, "a shelf has not an actor of its own, with its own price")
     check("[(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name) for h, (shop, _, _) in shelves.items() if h in gives]" in script,
           "the shelves are not among the tracker's checks")
     print("PASS: Shops")
