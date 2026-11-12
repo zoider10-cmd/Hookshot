@@ -87,6 +87,8 @@ def main():
     check("if (press[3] || press[4]) tracker_pick[row] = (tracker_pick[row] + n + 1 + (press[4] ? 1 : -1)) % (n + 1), changed = true;" in menu and
           "else if (r.tracker >= 0) tracker_press(r.tracker, press, changed);" in menu,
           "Left and Right do not step through a row's checks and back to its own words")
+    check("if (hit.side != 0) press[hit.side < 0 ? 3 : 4] = true;" in menu and "else if (tracker_pick[d.tracker]) press[7] = true;" in menu,
+          "a click on a Tracker row's arrows goes to the check instead of stepping (seen in play), or its name does not go there")
     check("const TrackerCheck* k = press[7] && cheats_on() ? tracker_row_check(row, tracker_pick[row]) : nullptr;" in menu and
           '"rando\\\\goto_check.txt"' in menu and "cheat_action.store(kTrackerGoAction);" in menu and
           'fprintf(f, "%.2f %.2f %.2f %s %s\\n", k->pos[0], k->pos[1] + 1.0f, k->pos[2], k->folder, k->ages);' in menu,

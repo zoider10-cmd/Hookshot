@@ -102,7 +102,8 @@ void tracker_load();
 const char kTrackerHelp[] =
     "The treasure chests and Gold Skulltulas of this area that take part in the randomizer's seed. It is what the seed "
     "has there, not what is left: the game does not tell the menu what has been opened. Left and Right step through "
-    "the area's checks one by one; with the debug tools on, confirm takes Link to the one shown.";
+    "the area's checks one by one; with the debug tools on, confirm takes Link to the one shown. With the mouse: the "
+    "arrows step, a click on the row's name goes there.";
 // The checks one by one: tools/rando/rando_seed.py writes <game folder>\mods\rando-seed\checks.txt beside the tracker's
 // file, a line "<area>|<kind>|<folder>|<ages>|<x> <y> <z>" for each chest and Gold Skulltula of the seed (tracker_load
 // reads it too). A row steps through the checks of its area, the ones whose <area> is the row's name (tracker_pick: 0 the
@@ -3736,7 +3737,10 @@ void menu_tick() {
                     if (!d.value && d.cheat >= 0 && (cheat_chooses(d.cheat) || age_shown(d.cheat) || d.cheat <= 1 || d.cheat == 7) &&
                         hit.side != 0)
                         press[hit.side < 0 ? 3 : 4] = true;   // (a tool's choice: its halves as Left and Right)
-                    else if (!d.value) press[7] = true;   // (a page, a tool: as Enter)
+                    else if (d.tracker >= 0) {   // (a Tracker row: its value's halves step its checks, its name goes to the one shown)
+                        if (hit.side != 0) press[hit.side < 0 ? 3 : 4] = true;
+                        else if (tracker_pick[d.tracker]) press[7] = true;
+                    } else if (!d.value) press[7] = true;   // (a page, a tool: as Enter)
                     else switch (menu_hit::row_click(true, d.hi - d.lo == d.step, hit.side, *d.value == d.hi)) {
                     case menu_hit::kClickConfirm: press[7] = true; break;
                     case menu_hit::kClickRight: press[4] = true; break;     // (the right half as Right; a toggle's other half flips it)
