@@ -1226,6 +1226,8 @@ class LauncherForm : Form {
         // (help line)
         if (helpFade > 0.01f) {
             var r = new RectangleF(LeftW + 36, 548, W - LeftW - 72, 46);
+            // (over what the page has there, the Randomizer page's seed buttons: the words were read through them)
+            using (var p = Theme.Round(r, 10)) using (var b = new SolidBrush(Theme.A(Theme.Bg1, (int)(255 * helpFade)))) g.FillPath(b, p);
             using (var p = Theme.Round(r, 10)) using (var b = new SolidBrush(Theme.A(Theme.Blue, (int)(22 * helpFade)))) g.FillPath(b, p);
             using (var b = new SolidBrush(Theme.A(Theme.Cyan, (int)(255 * helpFade)))) g.FillEllipse(b, r.X + 14, r.Y + r.Height / 2 - 3, 6, 6);
             Theme.Text_(g, helpShown, Theme.Small, Theme.A(Theme.Text, (int)(230 * helpFade)), new RectangleF(r.X + 30, r.Y, r.Width - 40, r.Height),

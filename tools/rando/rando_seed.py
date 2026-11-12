@@ -329,7 +329,29 @@ WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,
 # of the pair above it and one below (seen in play). Such a shelf's actor is put this much higher in the map file.
 # The other gauntlets are taken to be made as they are; not seen.
 # Higher, the Silver Gauntlets stood on their shelf (seen in play); a Gold Skulltula's token was half in its board.
-SHELF_LIFT = {"Item_Gauntlet_Gold": 0.22, "Item_Gauntlet_Silver": 0.22, "Item_Gauntlet_Goron": 0.22, "Item_Token_Gold": 0.15}
+# The others by their model's box (the list of actors has it, ModelAabbMin): a model that reaches under its own
+# origin is put that much higher (shelf_lift): the token's reaches 0.19 under (0.15 was seen to stand well), the Megaton
+# Hammer's 0.28. The gauntlets' box is where they are worn, a metre up, and says nothing of the shelf: theirs is the
+# number here.
+SHELF_LIFT = {"Item_Gauntlet_Gold": 0.22, "Item_Gauntlet_Silver": 0.22, "Item_Gauntlet_Goron": 0.22}
+
+
+def shelf_lift(item, floor):
+    """how much higher an item's shelf actor is put: its own number, or what its model reaches under its origin
+    (floor: the lowest of its box, or None), when that is a hand's breadth and not a model made elsewhere"""
+    if item in SHELF_LIFT:
+        return SHELF_LIFT[item]
+    return round(-floor, 2) if floor is not None and -0.5 < floor < -0.02 else 0.0
+
+
+def model_floor(data, item):
+    """the lowest of an item's model's box in the game's list of actors (ActorInfo: ModelAabbMin.Y), or None"""
+    tree, _ = byml_parse(data)
+    for row in tree[1]:
+        if row[1].get("__RowId", ("", ""))[1] == item:
+            low = row[1].get("ModelAabbMin", ("dict", {}))[1].get("Y")
+            return struct.unpack("<f", low[1])[0] if low and low[0] == 0xD2 else None
+    return None
 
 
 # ---- Progressive items: what the rules ask for when an upgrade found gives the next one Link has not ----
@@ -2462,7 +2484,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 4" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + " checks 5" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + " checks 5" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2833,11 +2855,15 @@ def main():
                 shop_packs["Pack/Actor/%s.pack" % actor] = len(new)
                 shop_new.update(parts)
             folder = os.path.join(romfs, "RSDB")
+            lifts = {}
             for kind in SHOP_TABLES:   # (the game's three lists of actors: a row for each shelf actor)
                 n = next((n for n in sorted(os.listdir(folder)) if n.startswith(kind + ".") and ".byml" in n.lower()), None)
                 if n is None:
                     raise ValueError("the game has no list %s" % kind)
                 table = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
+                if kind == "ActorInfo":   # (how high each shelf's actor stands: by its item's model)
+                    lifts = {actor: shelf_lift(item, model_floor(table, item)) for actor, (item, _) in on_sale.items()}
+                    lifts = {actor: lift for actor, lift in lifts.items() if lift}
                 for actor, (item, price) in on_sale.items():
                     table = shop_rows(table, kind, item, price, actor)
                 shop_files["RSDB/" + n] = table
@@ -2869,7 +2895,7 @@ def main():
                         data = changed[rel] if rel in changed else unpack(open(os.path.join(folder_map, n), "rb").read(), zs, dicts)
                         if not any(actor.encode() in data for actor, _ in on_shelf):
                             continue
-                        new, count = shelf_actors(data, on_shelf, {actor: SHELF_LIFT[item] for actor, (item, _) in on_sale.items() if item in SHELF_LIFT})
+                        new, count = shelf_actors(data, on_shelf, lifts)
                         if new is not None:
                             changed[rel] = new
                             sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)

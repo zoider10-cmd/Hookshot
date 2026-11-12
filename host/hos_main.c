@@ -1558,6 +1558,11 @@ void hos_oot_pouch_add(Ctx *c) {
         if (!name[length]) break;
     }
     name[length] = 0;
+    /* (every content added, with where the call came from and its other arguments: the game gives a Bomb Bag with a
+       chest's bombs when Link has none, seen in play, and that add is to be told from a chest's own Bomb Bag) */
+    hos_log("rando: pouch add %s x%d (lr %#llx, x3 %#llx x4 %#llx x5 %#llx x6 %#llx x7 %#llx)", name, (int)(int32_t)c->x[2],
+            (unsigned long long)c->x[30], (unsigned long long)c->x[3], (unsigned long long)c->x[4], (unsigned long long)c->x[5],
+            (unsigned long long)c->x[6], (unsigned long long)c->x[7]);
     for (unsigned f = 0; f < sizeof families / sizeof families[0]; f++) {
         int spelling = -1, tiers = 0;
         for (int t = 0; t < 3; t++) {
