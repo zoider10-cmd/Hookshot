@@ -3017,7 +3017,27 @@ void build_descriptors(const NvnState& s, const Program& p) {
                 // end are whatever the constant buffer holds there, bound only when they look like a buffer
                 const bool plausible = d.count == 1 || (size && size <= (256ull << 20) && host->gpu_guest(base));
                 BindSite site_storage("storage", false);
-                BufferRef b = addr && plausible ? gpu_buffer_bind(base, n, d.is_written && !bare) : BufferRef{};
+                // (Mako §74) a small read-only one whose 16 MB chunk is not imported yet: copied into the recording's stream for
+                // this draw while the background thread imports the chunk, as uniform/index/vertex reads are (Mako saccades).
+                // Walking into Castle Town, ~30 such on-demand imports took 15-80 ms each on the replay thread (~0.6 s of
+                // stalls). The defer path only takes ranges no GPU-written pool overlaps. RX_VK_STORAGE_DEFER=0: off
+                static const bool storage_defer = !(getenv("RX_VK_STORAGE_DEFER") && atoi(getenv("RX_VK_STORAGE_DEFER")) == 0);
+                const bool may_copy = storage_defer && !d.is_written && !bare && !wide_n && addr && plausible && n <= (1ull << 20);
+                BufferRef b;
+                {
+                    BindSite site_defer("storage", may_copy);
+                    b = addr && plausible ? gpu_buffer_bind(base, n, d.is_written && !bare) : BufferRef{};
+                }
+                if (!b.buffer && may_copy && cur && cur->mapped && host->gpu_guest(base)) {
+                    const uint64_t at = stream_alloc(n, std::max<uint64_t>(salign, 16));
+                    if (at != UINT64_MAX && memory_read_as_submitted(base, cur->mapped + at, n)) {
+                        b = {cur->stream, at, n};
+                        static std::atomic<int64_t> copied{0};
+                        if (++copied % 2000 == 1)
+                            logf("vk: storage buffer %#llx +%#llx copied into the stream while its chunk is imported (%lld so far)",
+                                 (unsigned long long)base, (unsigned long long)n, (long long)copied.load());
+                    }
+                }
                 // (AyyBeeDee20738, PR 138) a table entry's region that does not fit its pool this moment bound nothing, and the next
                 // frame bound it again: its reads flipped between the data and 0, the picture between bright and dark. Smaller,
                 // down to 1 MB, rather than nothing (and past what is bound the shaders' search now goes on to the page table)

@@ -2391,8 +2391,19 @@ bool upload_defer(Texture& tex) {
     if (!budget_ns || !upload_defer_ok || tex.uploaded || !tex.astc || tex.gpu_written) return false;
     if (frame_upload_ns.load(std::memory_order_relaxed) < budget_ns) return false;
     static const bool again = getenv("RX_VK_DEFER_AGAIN") != nullptr;
-    if (!again && tex.deferred_at && tex.deferred_at != frame_no && frame_no - tex.deferred_at <= 8) return false;   // (left last time)
-    if (tex.deferred_at != frame_no) tex.deferred_at = frame_no;
+    // (Mako §74) Left for later for at most RX_VK_DEFER_FRAMES (3) frames after the first time, not once: with "once", every
+    // texture a burst frame left came in the very next frame whatever its budget, so an area's load still made one 100-200 ms
+    // frame (Castle Town: 346 left, the next frame's uploads 101 ms). Now the burst spreads over up to 4 frames of ~40 ms, and
+    // a texture still waits at most 3 frames (the ground no longer stays flat: the starvation the "once" rule fixed).
+    // deferred_at is the frame it was FIRST left; a texture left long ago (> 30 frames, never sampled since) starts afresh.
+    // RX_VK_DEFER_FRAMES=0: once, as before
+    static const uint64_t max_frames = getenv("RX_VK_DEFER_FRAMES") ? (uint64_t)std::max(0, atoi(getenv("RX_VK_DEFER_FRAMES"))) : 3u;
+    if (!again && tex.deferred_at) {
+        const uint64_t age = frame_no - tex.deferred_at;
+        if (age > 30) tex.deferred_at = 0;
+        else if (age > max_frames) return false;   // (waited its frames: uploaded now, whatever the budget)
+    }
+    if (!tex.deferred_at) tex.deferred_at = frame_no;
     st_deferred.fetch_add(1, std::memory_order_relaxed), st_deferred_frame.fetch_add(1, std::memory_order_relaxed);
     return true;
 }
@@ -2534,7 +2545,8 @@ Texture* texture_touch(Texture* tex, bool for_sampling) {
         }
         return tex;
     }
-    if (partial && getenv("RX_VK_LOG_PARTIAL")) {
+    static const bool log_partial = getenv("RX_VK_LOG_PARTIAL") != nullptr;   // (Mako §74: read once, not per re-upload)
+    if (partial && log_partial) {
         static int logged;
         if (logged++ < 200) {
             char line[512];
@@ -3707,7 +3719,10 @@ void texture_frame(uint64_t completed) {
             // behind the BAR. A load makes one again. RX_VK_STAGING_IDLE_S=<n>: that long, 0: kept)
             static const int64_t idle_s = getenv("RX_VK_STAGING_IDLE_S") ? atoll(getenv("RX_VK_STAGING_IDLE_S")) : 30;
             const bool stale = idle_s && std::chrono::steady_clock::now() - it->used_at > std::chrono::seconds(idle_s);
-            if (idle && (it->size > kArena || kept + it->size > keep || stale)) {
+            // (Mako §74: the first 64 MB one stays even when stale, on cards over 6 GB: every scene change made one again, 8-10 ms
+            // on the replay thread right when the area's uploads start, 17 times in an hour of the user's play)
+            const bool keep_first = stale && kept == 0 && it->size <= kArena && keep > kArena;
+            if (idle && (it->size > kArena || kept + it->size > keep || (stale && !keep_first))) {
                 destroy_buffer(it->buffer, it->allocation);
                 it = arenas.erase(it);
                 continue;

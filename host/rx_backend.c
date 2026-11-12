@@ -77,6 +77,16 @@ static int64_t collect_in(const uint64_t (*ranges)[2], int nranges, uint32_t **p
         uint64_t p1 = (hi + 4095) >> 12;
         if (p1 > A64_DIRTY_PAGES) p1 = A64_DIRTY_PAGES;
         for (uint64_t p = lo >> 12; p < p1;) {
+            if (!(p & 127) && p + 128 <= p1) {   /* (Mako §74: 128 pages a step while none is marked; the GPU ranges are GBs
+                                                    of mostly clean pages, collect_in was ~2% of the replay thread) */
+                uint64_t w[16], any = 0;
+                memcpy(w, &a64_dirty[p], 128);
+                for (int k = 0; k < 16; k++) any |= w[k];
+                if (!any) {
+                    p += 128;
+                    continue;
+                }
+            }
             if (!(p & 31) && p + 32 <= p1) {   /* (32 pages at a time while none is marked) */
                 uint64_t w[4];
                 memcpy(w, &a64_dirty[p], 32);

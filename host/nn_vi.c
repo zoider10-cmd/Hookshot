@@ -349,7 +349,9 @@ static void realtime_step(int64_t now) {
     {   /* (the Insert menu's Resolution: the fixed path's scale in 1/10000, live; HOS_RES_SCALE
            below stays over it) */
         const int scale = rx_option(3, 0);
-        if (scale > 0 && !getenv("HOS_RES_SCALE")) {
+        static int env_scale = -1;   /* (Mako §74: read once, not every present) */
+        if (env_scale < 0) env_scale = getenv("HOS_RES_SCALE") != NULL;
+        if (scale > 0 && !env_scale) {
             const float v = scale / 10000.0f;
             memcpy((void *)&hos_fixed_scale_bits, &v, 4);
         }

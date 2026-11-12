@@ -2254,7 +2254,9 @@ uint64_t mirror_budget() {
     // (the Insert menu's quality preset sets one, 256 MB at Minimum (4GB): it was never read, and an 8 GB card kept ~2 GB of
     // mirrors with the 4GB preset on, 2026-11-08)
     // (only on a card the preset is for: preset_caps_memory)
-    if (opts.mirror_mb > 0 && !getenv("RX_VK_MIRROR_MB") && preset_caps_memory()) return (uint64_t)opts.mirror_mb << 20;
+    // (Mako §74: the env is read once; a getenv on every call cost ~0.3% of the replay thread, a few calls a submission)
+    static const bool env_set = getenv("RX_VK_MIRROR_MB") != nullptr;
+    if (opts.mirror_mb > 0 && !env_set && preset_caps_memory()) return (uint64_t)opts.mirror_mb << 20;
     return b;
 }
 uint64_t mirror_bytes = 0, mirror_epoch = 0;

@@ -483,8 +483,13 @@ bool create_device() {
 #ifdef _WIN32
     // Navi 22 can time out on task + mesh draws in the AMD Windows driver (issue 996), and so can Navi 21: on an RX 6800 XT
     // (driver 0x800161) the native path lost the device within minutes at Hyrule Castle's entrance, while the fallback played
-    // 25 minutes there with none. Navi 21 is 0x73bf (RX 6800, 6800 XT, 6900 XT); Navi 22 is 0x73df (RX 6700 XT)
-    task_mesh_fallback = dev.props.vendorID == 0x1002 && (dev.props.deviceID == 0x73bf || dev.props.deviceID == 0x73df);
+    // 25 minutes there with none. Navi 21 is 0x73bf (RX 6800, 6800 XT, 6900 XT); Navi 22 is 0x73df (RX 6700 XT).
+    // (Mako 3.5.1) Navi 23 too: an RX 6600 (driver 0x800161) lost the device on the session's first task + mesh draws
+    // (OptimizeChangeBanc DrawMeshTasks 1..3, then a 5 s GPU wait). Navi 23 is 0x73e0, 0x73e1, 0x73e3, 0x73ef, 0x73ff (RX 6600,
+    // 6600 XT, 6650 XT); Navi 24 0x743f (RX 6400, 6500 XT), the same RDNA2 mesh path
+    const uint32_t id = dev.props.deviceID;
+    task_mesh_fallback = dev.props.vendorID == 0x1002 && (id == 0x73bf || id == 0x73df || id == 0x73e0 || id == 0x73e1 ||
+                                                          id == 0x73e3 || id == 0x73ef || id == 0x73ff || id == 0x743f);
 #endif
     if (mesh_mode == 1) task_mesh_fallback = false;   // (Native: the card's own mesh shaders for every draw)
     if (const char* e = getenv("RX_VK_TASK_MESH_FALLBACK")) task_mesh_fallback = atoi(e) != 0;
