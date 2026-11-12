@@ -599,3 +599,21 @@ The game does it in three adds (its log, twice): the chest's scene adds `Item_Bo
 otherwise than a chest's own item is (x4 2, x7 0 against 7 and 1); the bag is filled; the bundle is added. With the
 randomizer on the first is not made (`hos_oot_pouch_add` returns 1 and the add is left at once), so the bombs find no
 bag and are not kept. A Bomb Bag that is a chest's or a shelf's own item is added as the bundle is. NOT seen in play yet.
+
+## What is collected, on the Tracker tab: not working yet
+
+The parts are in: a chest's and a Gold Skulltula's line of `checks.txt` ends with the actor's hash; the game's side
+reports each check to the menu each second (`oot_tracker_refresh`: 1 collected, 0 not, -1 not known); the menu says
+"left" on an area's row and "done" on a check (`tracker_done`). What is missing is the game's word: every check is
+reported not known, and the menu says nothing of it.
+
+What was found, looking for it: each chest and Gold Skulltula has a flag of the game's keyed by its hash
+(`Data.Bool64bitKey`), and the game reads such a flag from a sorted table of 16-byte entries (the object at
+`0x84ea42a8`: count at +3160, entries at +3168, the value the first bit of the byte at +12). Read the same way, a
+chest opened in an unattended run changed nothing in its entry. So either a chest's being open is not that flag, or
+the value is kept elsewhere. Not found by: the manager's groups of flags, a search of the memory around its tables
+for the key kept twice, or the bits of the save's data (they are only what the last save wrote).
+
+Another way that needs none of it: the pouch manager's add (`hos_oot_pouch_add`) sees every item given, with how it
+was given (a chest's: from 0x828d50ac, x4 7, x7 1) and where Link stands. The seed knows what each check gives. So
+the check that gives that item nearest to Link can be marked, and kept in a file beside the save. Not built.

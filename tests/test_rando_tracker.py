@@ -62,7 +62,7 @@ def main():
           "the rows past the file's lines are shown, or the file is not read for the tab")
     check("else if (press[7] && !r.value && r.tracker < 0 && can_bind()) page = 1" in menu and
           "choice_cell(c, va, vb, tracker_says(r.tracker), selected, steps, steps);" in menu and
-          ": std::string(tracker_value[row]);" in menu,
+          "std::string words = tracker_value[row];" in menu,
           "a Tracker row opens the Controls page on confirm, or does not show the file's value")
     # ---- the checks one by one, and Go there ----
     lines = seed.check_lines([("ZoraRiver", (1.0, 2.0, 3.0), "CA", seed.ADULT), ("KokiriForest", (-27.04, 67.6, 65.2), "C", seed.NONE),
@@ -108,6 +108,29 @@ def main():
     kinds = [line.split("|")[1] for line in twins[1:]]
     check(kinds == ["Chest (blue rupee)", "Chest (red rupee) #1", "Chest (red rupee) #2", "X" + "x" * 78, "Bowling", "Bowling", "Chest (red rupee)"] and
           twins[2].endswith("|1.0 0.0 0.0|-"), "two checks of an area with one name are not numbered by place, or a name is longer than the menu keeps: %r" % kinds)
+    # ---- collected: a line ends with its actor's hash, and the game's side reads the flag of that key ----
+    keyed = seed.check_lines([("Market", (1.0, 2.0, 3.0), "C", seed.NONE, "Chest (red rupee)", 0x86f700bfe72c18fc)], [("Market", (4.0, 5.0, 6.0), "C", seed.NONE, "Gold Skulltula", 0x1f)],
+                             [("Market", (7.0, 8.0, 9.0), "C", seed.NONE, "the dog lady")])
+    check(keyed[1:] == ["Market|Chest (red rupee)|Market|C|1.0 2.0 3.0|-|86f700bfe72c18fc", "Market|Gold Skulltula|Market|C|4.0 5.0 6.0|-|000000000000001f",
+                        "Market|The dog lady|Market|C|7.0 8.0 9.0|-"], "a line does not end with its actor's hash, or a gift's has one: %r" % keyed[1:])
+    check('named("Chest", h, spots[h][0], spots[h][5], spots[h][1]), h)' in script and 'named("Gold Skulltula", h, skulls[h][0], skulls[h][1]), h)' in script,
+          "the chests' and the Gold Skulltulas' hashes are not written with the checks")
+    items = (ROOT / "gpu" / "vk" / "oot_cheat_items.h").read_text(encoding="utf-8")
+    m = re.search(r"#define OOT_TRACKER_MAX (\d+)", items)
+    check(m and int(m.group(1)) == seed.CHECK_ROWS and "#define OOT_TRACKER_BASE 8192" in items and
+          "static_assert(kTrackerChecks == OOT_TRACKER_MAX" in menu, "the game's side does not report as many checks as the script writes and the menu keeps")
+    host_text = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
+    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]|%31[0-9a-fA-F]"' in host_text and "if (got < 7) continue;" in host_text and
+          "keys[count++] = got >= 9 ? strtoull(hash, NULL, 16) : 0;" in host_text and "rx_option_set(OOT_TRACKER_BASE + i, done);" in host_text,
+          "the game's side does not take the lines the menu takes, in their order, with their hashes")
+    block = host_text[host_text.index("static int oot_flag64(Ctx *c, uint64_t key) {"):host_text.index("/* The seed's checks (<game folder>/mods/rando-seed/checks.txt")]
+    check("return -1;" in block and "recomp_load" not in block and "TEMP-" not in host_text and "if (!hos_rando_on()) return;" in host_text,
+          "a check is said collected or not before the flag that says so is known, or a search for it is still in the game")
+    check("if (id >= OOT_TRACKER_BASE && id < OOT_TRACKER_BASE + kTrackerChecks) {" in menu and
+          'collected ? ": done" : state > 0 ? ": in logic" : state == 0 ? ": not in logic" : ""' in menu and
+          "if (done == 1) continue;   // (a check collected is not one to go for)" in menu and '" left, "' in menu and
+          "for (auto& done : tracker_done) done.store(-1, std::memory_order_relaxed);" in menu,
+          "the tab does not say a check is done, counts one collected among those in logic, or takes a check for collected before the game says so")
     made = [name("Chest", item, {}, ()) for item in seed.ITEM_WORDS]
     check(all(len(n) <= seed.CHECK_NAME - 40 for n in made) and set(seed.PROGRESSION) <= set(seed.ITEM_WORDS) and set(seed.DUNGEON_ITEMS) <= set(seed.ITEM_WORDS),
           "a gating item or a dungeon's item has no words for a chest's name")
@@ -135,7 +158,7 @@ def main():
           seed.check_ages({"A_Child_Static", "A_Adult_Static"}) == "CA" and seed.check_ages({"FireTemple_Static.bcett.byml.zs"}) == "CA" and
           seed.check_ages(set()) == "", "the ages whose map has a check are not read from its files' names")
     check('with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\\n") as f:' in script and seed.CHECKS == "checks.txt" and
-          '" checks 5" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
+          '" checks 6" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
     m = re.search(r"constexpr int kTrackerChecks = (\d+);", menu)
     check(m and int(m.group(1)) == seed.CHECK_ROWS, "the menu does not keep as many checks as the script may write")
     check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]"' in menu and "char area[48], kind[80], folder[40], ages[4];" in menu and seed.CHECK_NAME == 79 and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")

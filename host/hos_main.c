@@ -1137,6 +1137,75 @@ static int oot_gamedata_set_bool(Ctx *c, uint32_t hash, int value) {
     return 0;
 }
 
+/* (the randomizer's fork) What the Tracker tab says is collected: NOT READ YET. A chest and a Gold Skulltula each have a
+   flag of the game's whose key is the actor's own 64-bit hash (GameDataList: Data.Bool64bitKey, 11657 of them; all 191
+   chests and 100 Skulltulas of the map files have one, some a second, the hash - 2 or + 2). The game's own reads
+   (f_80222cf0, f_80229040, build e0f3ccfa) take the object at 0x84ea42a8: how many at +3160, the entries at +3168, 16
+   bytes each, sorted by key, and the first bit of the byte at +12 as the value. Read so here, a chest opened without
+   a player (the Kokiri Forest chest 3f38f9b9a399e19a, its item given) changed nothing in its entry, nor in the one of
+   its hash - 2, in the half minute after; and the memory around the tables showed no key kept a second time. So the
+   flag that says a chest is open is not yet known, and every check is said not known (-1): the menu then says
+   nothing of what is left. (One bit of the save's data, 0x8388 into what the manager's +0xd40 points at, came on with
+   that chest; read as the flags in their order it gave 16, 12 and 35 collected in one new game: it is not them.) */
+static int oot_flag64(Ctx *c, uint64_t key) {
+    (void)c, (void)key;
+    return -1;
+}
+
+/* The seed's checks (<game folder>/mods/rando-seed/checks.txt, a line's last field the actor's hash where it has one), each
+   second: collected or not, to the menu, in the file's order (the lines the menu takes: gpu/vk/vk_menu.cpp tracker_load). */
+int hos_rando_on(void);   /* host/oot_rando.c */
+static void oot_tracker_refresh(Ctx *c, int64_t now) {
+    void rx_option_set(int id, int value);
+    static int64_t next, next_load;
+    static uint64_t keys[OOT_TRACKER_MAX];
+    static int count = -1;
+    if (now < next) return;
+    next = now + 1000000000LL;
+    if (!hos_rando_on()) return;
+    if (count < 0 || now >= next_load) {   /* (read again now and then: a seed made anew while the game runs is not, but costs nothing) */
+        next_load = now + 15000000000LL;
+        char path[MAX_PATH + 48];
+        const DWORD n = hos_game_path_a(path, MAX_PATH);
+        char *slash = n && n < MAX_PATH ? strrchr(path, '\\') : NULL;
+        char *other = n && n < MAX_PATH ? strrchr(path, '/') : NULL;
+        if (other > slash) slash = other;
+        count = 0;
+        if (slash) {
+            snprintf(slash, (size_t)(path + sizeof path - slash), "/mods/rando-seed/checks.txt");
+            FILE *f = fopen(path, "r");
+            char line[320];
+            while (f && count < OOT_TRACKER_MAX && fgets(line, sizeof line, f)) {
+                char area[48], kind[80], folder[40], ages[4], needs[64] = "", hash[32] = "";
+                float place[3];
+                if (line[0] == '#') continue;
+                const int got = sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]|%31[0-9a-fA-F]", area, kind, folder, ages,
+                                       &place[0], &place[1], &place[2], needs, hash);
+                if (got < 7) continue;
+                keys[count++] = got >= 9 ? strtoull(hash, NULL, 16) : 0;
+            }
+            if (f) fclose(f);
+        }
+    }
+    int collected = 0, known = 0;
+    for (int i = 0; i < count; i++) {
+        int done = keys[i] ? oot_flag64(c, keys[i]) : -1;
+        if (done == 0 && oot_flag64(c, keys[i] + 2) == 1) done = 1;
+        rx_option_set(OOT_TRACKER_BASE + i, done);
+        static signed char said[OOT_TRACKER_MAX];   /* (what was last said of each, + 2: a change goes to the log) */
+        if (said[i] != done + 2) {
+            if (said[i] && done == 1) hos_log("rando: tracker: check %d (%016llx) is collected", i, (unsigned long long)keys[i]);
+            said[i] = (signed char)(done + 2);
+        }
+        known += done >= 0, collected += done == 1;
+    }
+    static int told = -1;
+    if (told != collected + known * 1000) {
+        told = collected + known * 1000;
+        hos_log("rando: tracker: %d of the seed's %d checks have a flag of the game's, %d of them collected", known, count, collected);
+    }
+}
+
 /* Age toggle: flips Sequence_IsChildhood (what the Temple of Time event sets) and reloads the current map, or the
    Market when this map is not in oot_destinations, through the teleport so the other age's map and Link load. */
 static void oot_toggle_age(Ctx *c, uint64_t actor) {
@@ -1288,6 +1357,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     if (!action) action = __atomic_exchange_n(&hos_oot_live_action, 0, __ATOMIC_RELAXED);
     oot_teleport_followup(c);
     oot_inventory_refresh(c, now);
+    oot_tracker_refresh(c, now);
     oot_player_speed(c, components);
     if (action >= OOT_CHEAT_ITEM_ACTION && action < OOT_CHEAT_ITEM_ACTION + 256 * (int)OOT_ITEM_COUNT) {
         oot_inventory_edit(c, action);

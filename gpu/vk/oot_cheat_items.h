@@ -105,5 +105,9 @@
     "Armor_Child_Gauntlet_Goron", "Item_Wallet_Small"
 
 #define OOT_CHEAT_ITEM_BASE 4096   /* rx_option_set(OOT_CHEAT_ITEM_BASE + i, count) from the game side; -1 unknown */
+/* (the randomizer's fork) the Tracker tab's checks, in the order of the seed's checks file: rx_option_set(OOT_TRACKER_BASE + i, done)
+   from the game side: 1 collected, 0 not, -1 not known */
+#define OOT_TRACKER_BASE 8192
+#define OOT_TRACKER_MAX 320
 #define OOT_CHEAT_AGE_ID 4090      /* rx_option_set(OOT_CHEAT_AGE_ID, age) from the game side: 0 child, 1 adult, -1 unknown */
 #define OOT_CHEAT_ITEM_ACTION 3000 /* + item * 256 + op: op 0..127 adds op - 64; op 200 unlocks (1) or relocks (all) */

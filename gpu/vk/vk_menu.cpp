@@ -103,7 +103,7 @@ const char kTrackerHelp[] =
     "The treasure chests, Gold Skulltulas and gifts of this area that take part in the randomizer's seed. It is what the seed "
     "has there, not what is left: the game does not tell the menu what has been opened. Left and Right step through "
     "the area's checks one by one; with the debug tools on, confirm takes Link to the one shown. With the mouse: the "
-    "arrows step, a click on the row's name goes there. In logic: Link carries all that the seed's rules ask for at "
+    "arrows step, a click on the row's name goes there. Left: not collected yet, by the game's own word on a chest opened and a Gold Skulltula killed. In logic: Link carries all that the seed's rules ask for at "
     "that check. The rules ask for more than a check may need, so one not in logic may still be within reach.";
 // The checks one by one: tools/rando/rando_seed.py writes <game folder>\mods\rando-seed\checks.txt beside the tracker's
 // file, a line "<area>|<kind>|<folder>|<ages>|<x> <y> <z>" for each chest and Gold Skulltula of the seed (tracker_load
@@ -123,6 +123,11 @@ struct TrackerCheck {
 int tracker_in_logic(const TrackerCheck& k, std::string* missing = nullptr);
 TrackerCheck tracker_checks[kTrackerChecks];
 int tracker_check_count = 0;
+// What the game says of each check, in the file's order (host/hos_main.c oot_tracker_refresh, each second): 1 collected (a
+// chest opened, a Gold Skulltula killed: the game's own flag of that actor), 0 not, -1 not known (a gift, a shelf; or no
+// game loaded yet).
+static_assert(kTrackerChecks == OOT_TRACKER_MAX, "the game side reports as many checks as the menu keeps");
+std::atomic<signed char> tracker_done[kTrackerChecks];
 int tracker_pick[kTrackerRows];
 /// How many checks a row's area has, and (n from 1) its n-th: nullptr past them
 int tracker_row_checks(int row) {
@@ -138,27 +143,36 @@ const TrackerCheck* tracker_row_check(int row, int n) {
 /// What a row says: its own words, or the check it is stepped to ("3 of 10: Chest, child's, at -27 68 65")
 std::string tracker_says(int row) {
     const TrackerCheck* k = tracker_pick[row] ? tracker_row_check(row, tracker_pick[row]) : nullptr;
-    if (!k) {   // (its own words, and how many of its checks are in logic: the first row is the whole game's)
-        int in = 0, known = 0;
+    if (!k) {   // (its own words, how many of its checks are left and how many of those are in logic: the first row is the whole game's)
+        int in = 0, known = 0, left = 0, told = 0;
         for (int i = 0; i < tracker_check_count; i++) {
             if (row && strcmp(tracker_checks[i].area, tracker_name[row])) continue;
+            const int done = tracker_done[i].load(std::memory_order_relaxed);
+            told += done >= 0, left += done != 1;
+            if (done == 1) continue;   // (a check collected is not one to go for)
             const int state = tracker_in_logic(tracker_checks[i]);
             known += state >= 0, in += state > 0;
         }
-        return known ? std::string(tracker_value[row]) + " (" + std::to_string(in) + " in logic)" : std::string(tracker_value[row]);
+        std::string words = tracker_value[row];
+        if (told && known) words += " (" + std::to_string(left) + " left, " + std::to_string(in) + " in logic)";
+        else if (told) words += " (" + std::to_string(left) + " left)";
+        else if (known) words += " (" + std::to_string(in) + " in logic)";
+        return words;
     }
-    const int state = tracker_in_logic(*k);
+    const bool collected = tracker_done[k - tracker_checks].load(std::memory_order_relaxed) == 1;
+    const int state = collected ? -1 : tracker_in_logic(*k);
     char text[224], place[48] = "";   // (a check without a name of its own, from a file made before them: its place tells it from the next)
     if (!strcmp(k->kind, "Chest") || !strcmp(k->kind, "Gold Skulltula")) snprintf(place, sizeof place, " at %.0f %.0f %.0f", k->pos[0], k->pos[1], k->pos[2]);
     snprintf(text, sizeof text, "%d of %d: %s%s%s%s", tracker_pick[row], tracker_row_checks(row), k->kind,
              !strcmp(k->ages, "C") ? ", child's," : !strcmp(k->ages, "A") ? ", adult's," : "", place,
-             state > 0 ? ": in logic" : state == 0 ? ": not in logic" : "");
+             collected ? ": done" : state > 0 ? ": in logic" : state == 0 ? ": not in logic" : "");
     return text;
 }
 /// The help's last line for a row stepped to a check: in logic, or what Link still needs for it
 std::string tracker_hint(int row) {
     const TrackerCheck* k = tracker_pick[row] ? tracker_row_check(row, tracker_pick[row]) : nullptr;
     std::string missing;
+    if (k && tracker_done[k - tracker_checks].load(std::memory_order_relaxed) == 1) return "Done: the game has this one as collected.";
     const int state = k ? tracker_in_logic(*k, &missing) : -1;
     return state > 0 ? "In logic: Link carries all the seed's rules ask for here." : state == 0 ? "Not in logic. Still asked for: " + missing + "." : "";
 }
@@ -3152,6 +3166,7 @@ void menu_init() {
     if (done) return;
     done = true;
     for (auto& count : item_counts) count.store(-1, std::memory_order_relaxed);
+    for (auto& done : tracker_done) done.store(-1, std::memory_order_relaxed);
     bool has_options = false;
     const char* cheats = getenv("HOS_OOT_CHEATS");
     cheats_env = cheats && !strcmp(cheats, "1");
@@ -3363,6 +3378,12 @@ bool fps_take(int64_t now, int64_t shown, int64_t game, int64_t* next, int64_t* 
 void menu_option_set(int id, int value) {
     if (id == OOT_CHEAT_AGE_ID) {   // (Link's age: the Switch age row shows it)
         if (link_age.exchange(value, std::memory_order_relaxed) != value && page == 0 && cur_tab == TAB_DEBUG) menu_refresh = true;
+        return;
+    }
+    if (id >= OOT_TRACKER_BASE && id < OOT_TRACKER_BASE + kTrackerChecks) {   // (the game side's word on a check: collected or not)
+        const signed char state = (signed char)std::clamp(value, -1, 1);
+        if (tracker_done[id - OOT_TRACKER_BASE].exchange(state, std::memory_order_relaxed) != state && page == 0 && cur_tab == TAB_TRACKER)
+            menu_refresh = true;
         return;
     }
     if (id >= OOT_CHEAT_ITEM_BASE && id < OOT_CHEAT_ITEM_BASE + kItems) {   // (the game side's inventory counts)
