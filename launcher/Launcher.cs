@@ -880,7 +880,7 @@ class LauncherForm : Form {
     // seed's ID is copied and pasted)
     static readonly object[][] RandoRows = {
         new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
-            "Turns the seed on. Chests, Gold Skulltulas, Quest rewards (with Frogs and Light Arrows), Dungeon keys, Major items, the forest's two ways and the opening are made when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
+            "Turns the seed on. Chests, Gold Skulltulas, Quest rewards (with Frogs and Light Arrows), Deku Scrubs, Starting rupees, Dungeon keys, Major items, the forest's two ways and the opening are made when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
         new object[] { "rando_chests", "Chests", new[] { "Off", "Overworld", "Dungeons", "All" }, new[] { 0, 1, 2, 3 },
             "Which treasure chests hold a shuffled item. All is every chest in the game." },
         new object[] { "rando_skulltulas", "Gold Skulltulas", new[] { "Off", "Dungeons", "Overworld", "All" }, new[] { 0, 1, 2, 3 },
@@ -894,7 +894,7 @@ class LauncherForm : Form {
         new object[] { "rando_shops", "Shops", new[] { "Off", "On", "Random prices" }, new[] { 0, 1, 2 },
             "Shop shelves sell shuffled items. Random prices also rolls what each one costs." },
         new object[] { "rando_scrubs", "Deku Scrubs", new[] { "Off", "On" }, new[] { 0, 1 },
-            "What the Business Scrubs sell is shuffled." },
+            "The Business Scrubs' one-time sales (two Pieces of Heart, the Deku Stick and Deku Nut upgrades) take part with the chests. Needs Chests." },
         new object[] { "rando_dungeon_rewards", "Dungeon rewards", new[] { "Off", "Dungeons", "Anywhere" }, new[] { 0, 1, 2 },
             "The Spiritual Stones and Medallions. Dungeons: shuffled among the dungeons' ends. Anywhere: any item's place." },
         new object[] { "rando_keys", "Dungeon keys", new[] { "Off", "Own dungeon", "Anywhere" }, new[] { 0, 1, 2 },

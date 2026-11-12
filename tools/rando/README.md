@@ -99,6 +99,18 @@ this game. Link's rupees are a whole number of the game's list of starting value
 Seen in play: a new game's pause menu shows 200, a rupee picked up at the full wallet and spending both behave as
 ever. With it the seed's ID has a setting in each of its 16 places: the next one needs a longer ID.
 
+**Deku Scrubs** (`rando_scrubs`, `--scrubs`, `SCRUBS`): the Business Scrubs' four one-time sales take part with the
+chests, with or without Quest rewards: a Piece of Heart (Hyrule Field), another from the scrub with a secret (Death
+Mountain Crater), the Deku Stick upgrade (Kokiri Forest and the Lost Woods: one sale) and the Deku Nut upgrade (the
+Lost Woods). A scrub's wares are named in its map file (`ScrubBusiness_ShopItemActorName0..2`); its flow
+(`Enemy_Scrub_Business_Common`) puts that name in the game's data, compares it
+(`EventQueryIsGameDataString64`: the game can compare a name with one written in a flow) and makes the sale that
+matches, a sub-flow call with the item, its price and its text. The map's name is left: it is the sale's key. The
+call's item is changed, by the entry point it is under (`flow_reach`), since the two Pieces of Heart are one name
+in one flow. The price stays the scrub's. The scrubs that sell what can be bought again (seeds, nuts, bombs, arrows,
+potions) and the Dream World's are left. **Not seen in play yet**: a scrub selling another item, and that it sells
+it once. `tests/test_rando_scrubs.py`.
+
 ### The logic
 
 With Major items Off none of the items that gate the game moves, so the game's own order holds.

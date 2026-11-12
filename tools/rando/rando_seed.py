@@ -180,13 +180,15 @@ BR, SSC = "Item_Gauntlet_Goron", "Item_Scale_Silver"
 QUEST_GATES = frozenset((BR, SSC))
 CHILD_BOMBS = CHILD | {BB, BR}
 GROWN = ADULT | QUEST_GATES
-Gift = collections.namedtuple("Gift", "key flow olds item area name need when")
+Gift = collections.namedtuple("Gift", "key flow olds item area name need when entry", defaults=(None,))
 # key: its name in the seed (never changed: a gift's place in the shuffle). flow: the scene's flow. olds: the items
 # the flow names for this gift (a prize of sizes names two: the one Link has not got yet is given); each is made the
 # gift's new item. item: what goes into the pool for it. area: the Banc folder its rules and the tracker count it in.
 # need: what Link needs (meant to ask for too much, never too little; where the way to it is not known in the terms of
 # the rules it asks for everything: such a gift only ever holds what the game can be finished without).
-# when: None, or the setting of its own it waits for ("frogs", "light").
+# when: None, or the setting of its own it waits for ("frogs", "light"; "scrubs": Deku Scrubs, which does not wait
+# for Quest rewards). entry: None, or the one entry point of the flow whose calls are the gift's (two sales of one
+# flow that name the same item: the Business Scrubs' two Pieces of Heart).
 EVERYTHING = PROGRESSION | QUEST_GATES
 GIFTS = (
     Gift("darunia", "Dm_Goron_0030", ("Item_Gauntlet_Goron",), BR, "GoronCity", "Darunia's gift", CHILD, None),
@@ -230,6 +232,29 @@ GIFTS = (
     Gift("dog_lady", "SubEvent_FindRichard", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "Market", "the dog lady", CHILD, None),
     Gift("light_arrows", "Dm_TimeTemple_0130", ("Item_Arrow_Light",), "Item_Arrow_Light", "Market", "Zelda: the Light Arrows",
          MEDALS3 | DESERT | {LENS, HOVER, SG, BOW, MS} | QUEST_GATES, "light"),
+)
+# ---- Deku Scrubs: the Business Scrubs' one-time sales ----
+# A Business Scrub's wares are named in its map file (ScrubBusiness_ShopItemActorName0..2), and its flow
+# (Enemy_Scrub_Business_Common) finds the sale by that name: the name is put in the game's data and compared
+# (EventQueryIsGameDataString64), and the sale that matches is a sub-flow call with the item, its price and its
+# text. So the map's name is the sale's key and is left as it is; what is sold is the call's ActorName.
+# 21 scrubs outside the Dream World (the Dream's are left alone: the game's owner's word). Most sell what can be
+# bought again and again (seeds, nuts, bombs, arrows, potions): those stay. Four sales are made once, and are the
+# setting's: a Piece of Heart (Hyrule Field), another from the scrub with a secret (Death Mountain Crater), the Deku
+# Stick upgrade (Kokiri Forest and the Lost Woods: the same sale) and the Deku Nut upgrade (the Lost Woods). An
+# upgrade's sale names two sizes, the one Link has not; both are made the new item, and the bigger size goes into
+# the pool (the Forest Stage's gifts, with Quest rewards, put in the middle ones).
+# What each asks for is in the rules' words before Quest rewards; with it on, quest_need adds its two.
+SCRUB_FLOW = "Enemy_Scrub_Business_Common"
+SCRUBS = (
+    Gift("scrub_heart_field", SCRUB_FLOW, ("Obj_Heart_Piece",), "Obj_Heart_Piece", "HyruleField",
+         "a Business Scrub: a Piece of Heart", ADULT | {HAM}, "scrubs", "SimpleShopRoot_Enemy_Scrub_Business_Pouch"),
+    Gift("scrub_heart_secret", SCRUB_FLOW, ("Obj_Heart_Piece",), "Obj_Heart_Piece", "DeathMountainCrater",
+         "the Business Scrub with a secret: a Piece of Heart", ADULT | {HAM}, "scrubs", "Secret"),
+    Gift("scrub_sticks", SCRUB_FLOW, ("Item_StickBag_Medium", "Item_StickBag_Large"), "Item_StickBag_Large", "LostWood",
+         "a Business Scrub: the Deku Stick upgrade", CHILD, "scrubs", "SimpleShopRoot_Enemy_Scrub_Business_Pouch"),
+    Gift("scrub_nuts", SCRUB_FLOW, ("Item_NutBag_Medium", "Item_NutBag_Large"), "Item_NutBag_Large", "LostWood",
+         "a Business Scrub: the Deku Nut upgrade", CHILD, "scrubs", "SimpleShopRoot_Enemy_Scrub_Business_Pouch"),
 )
 
 
@@ -1386,10 +1411,51 @@ def gift_item(data, old, new):
     return gift_items(data, {old: new})[0]
 
 
+def flow_reach(data, entry):
+    """The events of a flow's flowchart that its entry point `entry` can come to (their indices), by every branch:
+    an action's and a sub-flow call's next, a switch's cases, a fork's branches and its join. ValueError: no such
+    entry point."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+    chart = u64(u64(0x28))
+    count, entries_n = u16(chart + 0x16), u16(chart + 0x18)
+    events, names, entries = u64(chart + 0x30), u64(chart + 0x38), u64(chart + 0x40)
+
+    def text(ptr):
+        return bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if 0 < ptr < len(data) - 2 else ""
+
+    first = [u16(entries + 0x20 * k + 0x1c) for k in range(entries_n) if names and text(u64(names + 8 + 16 * (k + 1) + 8)) == entry]
+    if not first:
+        raise ValueError("the flow has no entry point %s" % entry)
+    seen, stack = set(), list(first)
+    while stack:
+        i = stack.pop()
+        if i == 0xFFFF or i >= count or i in seen:
+            continue
+        seen.add(i)
+        e = events + 0x30 * i
+        kind = data[e + 8]
+        if kind in (0, 3, 4):
+            stack.append(u16(e + 0x0a))
+        elif kind == 1:
+            cases = u64(e + 0x18)
+            stack += [u16(cases + 8 * c + 4) for c in range(u16(e + 0x0a))]
+        elif kind == 2:
+            forks = u64(e + 0x10)
+            stack += [u16(forks + 2 * c) for c in range(u16(e + 0x0a))] + [u16(e + 0x0c)]
+    return seen
+
+
 def gift_items(data, swaps):
     """gift_item for several items of one flow at once: swaps is {old: new}. All are found before any is changed, so
     that one gift's new item is not taken for another's old one (a flow with two gifts whose items changed places).
-    Returns (the new bytes, or None when no call has any of them; the olds that were found)."""
+    A key (entry, old) in place of old is only that entry point's calls (flow_reach): two sales of one flow that
+    name the same item. Such a key comes before a plain one for the same name.
+    Returns (the new bytes, or None when no call has any of them; the keys that were found)."""
+    scoped = {}   # an entry point -> the events it comes to
+    for key in swaps:
+        if isinstance(key, tuple) and key[0] not in scoped:
+            scoped[key[0]] = flow_reach(data, key[0])
     u16 = lambda at: struct.unpack_from("<H", data, at)[0]
     u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
     if data[:6] != b"BFEVFL" or u16(0x20) != 1 or struct.unpack_from("<I", data, 0x1c)[0] != len(data):
@@ -1412,8 +1478,12 @@ def gift_items(data, swaps):
             continue
         for k in range(u16(params + 2)):
             item = u64(params + 0x10 + 8 * k)
-            if data[item] == 5 and u16(item + 2) == 1 and text(u64(item + 0x10)) in swaps:   # (5: a string of its own, not a name passed on)
-                where.append((item + 0x10, swaps[text(u64(item + 0x10))], text(u64(item + 0x10))))
+            if data[item] != 5 or u16(item + 2) != 1:   # (5: a string of its own, not a name passed on)
+                continue
+            name = text(u64(item + 0x10))
+            key = next(((entry, name) for entry, reach in scoped.items() if i in reach and (entry, name) in swaps), name)
+            if key in swaps:
+                where.append((item + 0x10, swaps[key], key))
     if not where:
         return None, set()
     out = bytearray(data)
@@ -1532,7 +1602,7 @@ def settings(game):
     """the randomizer's lines of the options file (0 where it does not say)"""
     got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
            "rando_skip_intro": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0,
-           "rando_start_rupees": 0}
+           "rando_start_rupees": 0, "rando_scrubs": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -1702,6 +1772,7 @@ def main():
     p.add_argument("--quests", action="store_true", help="as rando_quests=1: what characters give takes part with the chests (GIFTS)")
     p.add_argument("--frogs", action="store_true", help="as rando_frogs=1: with Quest rewards, the frogs of Zora's River take part too")
     p.add_argument("--light-arrows", action="store_true", help="as rando_light_arrows=1: with Quest rewards, Zelda's Light Arrows take part too")
+    p.add_argument("--scrubs", action="store_true", help="as rando_scrubs=1: the Business Scrubs' four one-time sales take part with the chests (SCRUBS)")
     p.add_argument("--start-rupees", action="store_true", help="as rando_start_rupees=1: a new game starts with %d rupees" % START_RUPEES)
     p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already this seed's (the launcher, at Play)")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
@@ -1734,6 +1805,7 @@ def main():
     a.open_forest = a.open_forest or ini["rando_open_forest"] != 0
     a.skip_intro = a.skip_intro or ini["rando_skip_intro"] != 0
     a.start_rupees = a.start_rupees or ini["rando_start_rupees"] != 0
+    a.scrubs = a.scrubs or ini["rando_scrubs"] != 0
     a.skulltulas = a.skulltulas if a.skulltulas is not None else ini["rando_skulltulas"]
     a.skulltulas = a.skulltulas if 0 <= a.skulltulas <= 3 else 0
     a.quests = a.quests or ini["rando_quests"] != 0
@@ -1785,7 +1857,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1" if a.scrubs else "") +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -1885,12 +1957,18 @@ def main():
             if g.when is None or g.when == "frogs" and a.frogs or g.when == "light" and a.light_arrows:
                 gifts[gift_hash(g.key)] = g
                 spots[gift_hash(g.key)] = [g.area, g.item, None, None, "gift", g.name, ""]
+    if a.scrubs:   # (Deku Scrubs: with or without Quest rewards)
+        for g in SCRUBS:
+            gifts[gift_hash(g.key)] = g
+            spots[gift_hash(g.key)] = [g.area, g.item, None, None, "scrub", g.name, ""]
     # (a string seed: the same on every Python 3. The seeds made before --event-chests keep their shuffle without it)
     logic = a.event_chests and not a.no_logic   # (without the event chests no gating item moves: nothing to ask)
     rng = random.Random("stage2:%d:%d:%d%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else ""))
     needs = {h: rule(s[0], s[6]) for h, s in spots.items()}
     if a.quests:   # (the rules with the gifts' two gating items named; a gift asks for what its line of GIFTS says)
-        needs = {h: gifts[h].need if h in gifts else quest_need(n, spots[h][0]) for h, n in needs.items()}
+        needs = {h: quest_need(gifts[h].need, gifts[h].area) if h in gifts else quest_need(n, spots[h][0]) for h, n in needs.items()}
+    elif gifts:    # (the scrubs alone)
+        needs = {h: gifts[h].need if h in gifts else n for h, n in needs.items()}
     try:
         gives, stays, spheres = place(rng, collections.OrderedDict((h, tuple(s[:4])) for h, s in spots.items()), which, keys_mode,
                                       needs if logic else None)
@@ -1952,9 +2030,13 @@ def main():
     moved = sum(1 for h, item in gives.items() if item != spots[h][1] and h not in gifts)
     print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives) - len(gifts), moved, len(changed)))
     if a.quests:
+        mine = [h for h, g in gifts.items() if g.when != "scrubs"]
         print("Quest rewards: %d gifts take part%s%s, %d now give another item" % (
-            len(gifts), "" if a.frogs else " (not the frogs: their setting is off)", "" if a.light_arrows else " (not the Light Arrows: their setting is off)",
-            sum(1 for h, g in gifts.items() if gives[h] != g.item)))
+            len(mine), "" if a.frogs else " (not the frogs: their setting is off)", "" if a.light_arrows else " (not the Light Arrows: their setting is off)",
+            sum(1 for h in mine if gives[h] != gifts[h].item)))
+    if a.scrubs:
+        mine = [h for h, g in gifts.items() if g.when == "scrubs"]
+        print("Deku Scrubs: %d one-time sales take part, %d now sell another item" % (len(mine), sum(1 for h in mine if gives[h] != gifts[h].item)))
     for why, n in stays.most_common():
         print("  left alone: %d (%s)" % (n, why))
     if len(drops) > len(skull_drops):
@@ -2048,7 +2130,7 @@ def main():
     swaps = collections.OrderedDict()   # a flow -> {the item it names: the item it gives now}
     for h, g in gifts.items():
         if gives[h] != g.item:
-            swaps.setdefault(g.flow, {}).update((old, gives[h]) for old in g.olds)
+            swaps.setdefault(g.flow, {}).update(((g.entry, old) if g.entry else old, gives[h]) for old in g.olds)
     for flow, old, new in test_gifts:
         swaps.setdefault(flow, {})[old] = new
         print("TEST: %s gives %s in place of %s (rando\\test_gifts.txt)" % (flow, new, old))
@@ -2060,7 +2142,7 @@ def main():
             sys.exit("a gift's flow, %s: %s. Nothing written." % (flow, e))
         if set(change) - found:
             sys.exit("%s gives no %s (rando\\test_gifts.txt, or the game's flow is not the one the gifts were listed from). Nothing written." % (
-                flow, ", ".join(sorted(set(change) - found))))
+                flow, ", ".join(sorted(str(k) for k in set(change) - found))))
         gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
 
     # ---- the size table ----
