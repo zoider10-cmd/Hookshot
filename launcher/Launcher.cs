@@ -24,28 +24,40 @@ using System.Windows.Forms;
 
 // A seed's ID, as gpu/vk/oot_rando.h makes and reads it (oot_rando_id, oot_rando_from_id): 15 characters, XXXXX-XXXXX-XXXXX,
 // of the seed's random part and every setting, with a checksum. Bits, low first: the format's version 4, the random part 31,
-// 16 settings of 2 bits in the table's order, the checksum 8.
+// 16 settings of 2 bits in the table's order, the checksum 8. And the longer one, 20 characters, made only when a setting
+// past the sixteenth is set: the version 2, the random part 31, 28 settings of 2 bits, a bit that is 0, the checksum 8.
 static class RandoId {
     const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
     const int Bits = 75, Check = 8, Slots = 16, FormatVersion = 1;
+    const int LongBits = 100, LongSlots = 28, LongVersion = 2;
 
     static void Put(byte[] bits, ref int n, uint value, int width) { for (int i = 0; i < width; i++) bits[n++] = (byte)(value >> i & 1); }
     static uint Get(byte[] bits, ref int n, int width) { uint v = 0; for (int i = 0; i < width; i++) v |= (uint)bits[n++] << i; return v; }
-    static uint Sum(byte[] bits) {   // (FNV-1a over the bits before the checksum, folded to its width)
+    static uint Sum(byte[] bits, int total) {   // (FNV-1a over the bits before the checksum, folded to its width)
         uint h = 0x811c9dc5u;
-        unchecked { for (int i = 0; i < Bits - Check; i++) h = (h ^ bits[i]) * 0x01000193u; }
+        unchecked { for (int i = 0; i < total - Check; i++) h = (h ^ bits[i]) * 0x01000193u; }
         return (h ^ h >> 8 ^ h >> 16 ^ h >> 24) & ((1u << Check) - 1);
     }
+    static uint Choice(int[] choices, int i) { return i < choices.Length && choices[i] > 0 && choices[i] < 4 ? (uint)choices[i] : 0; }
 
     public static string Make(int seed, int[] choices) {
-        var bits = new byte[Bits];
+        bool longer = false;
+        for (int i = Slots; i < LongSlots; i++) longer |= Choice(choices, i) != 0;
+        return Make(seed, choices, longer);
+    }
+
+    // (longer: the 20 characters, which hold the settings past the sixteenth; else the 15)
+    public static string Make(int seed, int[] choices, bool longer) {
+        int total = longer ? LongBits : Bits;
+        var bits = new byte[total];
         int n = 0;
-        Put(bits, ref n, FormatVersion, 4);
+        Put(bits, ref n, (uint)(longer ? LongVersion : FormatVersion), 4);
         Put(bits, ref n, (uint)seed & 0x7fffffffu, 31);
-        for (int i = 0; i < Slots; i++) Put(bits, ref n, i < choices.Length && choices[i] > 0 && choices[i] < 4 ? (uint)choices[i] : 0, 2);
-        Put(bits, ref n, Sum(bits), Check);
+        for (int i = 0; i < (longer ? LongSlots : Slots); i++) Put(bits, ref n, Choice(choices, i), 2);
+        n = total - Check;   // (the longer one's bit before the checksum stays 0)
+        Put(bits, ref n, Sum(bits, total), Check);
         var sb = new StringBuilder();
-        for (int c = 0; c < Bits / 5; c++) {
+        for (int c = 0; c < total / 5; c++) {
             int at = c * 5;
             if (c > 0 && c % 5 == 0) sb.Append('-');
             sb.Append(Alphabet[(int)Get(bits, ref at, 5)]);
@@ -56,7 +68,7 @@ static class RandoId {
     // (null and the seed and its choices, or what is wrong with the text. counts: how many choices each setting has)
     public static string Read(string text, int[] counts, out int seed, out int[] choices) {
         seed = 0; choices = new int[counts.Length];
-        var bits = new byte[Bits];
+        var bits = new byte[LongBits];
         int n = 0;
         foreach (char raw in text) {
             char ch = char.ToUpperInvariant(raw);
@@ -65,20 +77,24 @@ static class RandoId {
             if (ch == 'I' || ch == 'L') ch = '1';
             int at = Alphabet.IndexOf(ch);
             if (at < 0) return "it has a character no seed ID has";
-            if (n == Bits) return "it is too long (a seed ID has 15 characters)";
+            if (n == LongBits) return "it is too long (a seed ID has 15 or 20 characters)";
             Put(bits, ref n, (uint)at, 5);
         }
-        if (n != Bits) return "it is too short (a seed ID has 15 characters)";
-        n = Bits - Check;
-        if (Get(bits, ref n, Check) != Sum(bits)) return "a typo? Its checksum does not match";
+        if (n < Bits) return "it is too short (a seed ID has 15 or 20 characters)";
+        if (n != Bits && n != LongBits) return "it is not as long as a seed ID is (15 or 20 characters)";
+        int total = n;
+        bool longer = n == LongBits;
+        n = total - Check;
+        if (Get(bits, ref n, Check) != Sum(bits, total)) return "a typo? Its checksum does not match";
         n = 0;
-        if (Get(bits, ref n, 4) != FormatVersion) return "it is from another version of the randomizer";
+        if (Get(bits, ref n, 4) != (uint)(longer ? LongVersion : FormatVersion)) return "it is from another version of the randomizer";
         seed = (int)Get(bits, ref n, 31);
-        for (int i = 0; i < Slots; i++) {
+        for (int i = 0; i < (longer ? LongSlots : Slots); i++) {
             int v = (int)Get(bits, ref n, 2);
             if (v >= (i < counts.Length ? counts[i] : 1)) return "it has a setting this version does not have";
             if (i < counts.Length) choices[i] = v;
         }
+        if (longer && Get(bits, ref n, 1) != 0) return "it has a setting this version does not have";
         return null;
     }
 }

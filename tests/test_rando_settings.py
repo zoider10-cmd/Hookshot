@@ -84,11 +84,15 @@ def sources(rows):
     check((ROOT / "tools" / "rando" / "rando_seed.py").is_file(), "tools/rando/rando_seed.py, which the log names, is gone")
     # ---- a seed's ID: made and read in the launcher as the header does (the menu's tab did it before) ----
     check("static class RandoId {" in launcher and 'Text = "Copy seed ID"' in launcher and 'Text = "Paste seed ID"' in launcher and
-          'const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";' in launcher and "const int Bits = 75, Check = 8, Slots = 16, FormatVersion = 1;" in launcher,
+          'const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";' in launcher and "const int Bits = 75, Check = 8, Slots = 16, FormatVersion = 1;" in launcher and
+          "const int LongBits = 100, LongSlots = 28, LongVersion = 2;" in launcher and
+          "for (int i = Slots; i < LongSlots; i++) longer |= Choice(choices, i) != 0;" in launcher and
+          "if (n != Bits && n != LongBits) return" in launcher and "if (longer && Get(bits, ref n, 1) != 0) return" in launcher,
           "the launcher does not make, copy and paste a seed's ID as gpu/vk/oot_rando.h has it")
     header = read("gpu", "vk", "oot_rando.h")
     check('return "0123456789ABCDEFGHJKMNPQRSTVWXYZ";' in header and "OOT_RANDO_ID_VERSION = 1," in header and "OOT_RANDO_ID_SLOTS = 16," in header and
-          "OOT_RANDO_ID_BITS = 75," in header and "OOT_RANDO_ID_CHECK = 8," in header, "the header's seed ID is no longer the one the launcher makes")
+          "OOT_RANDO_ID_BITS = 75," in header and "OOT_RANDO_ID_CHECK = 8," in header and "OOT_RANDO_ID_LONG_VERSION = 2," in header and
+          "OOT_RANDO_ID_LONG_SLOTS = 28," in header and "OOT_RANDO_ID_LONG_BITS = 100," in header, "the header's seed ID is no longer the one the launcher makes")
 
 
 def main():

@@ -54,11 +54,79 @@ int main(int argc, char** argv) {
             a.v[i] = (int)((roll >> 16) % (uint32_t)oot_rando_settings[i].count);
         }
         oot_rando_id(&a, id);
-        CHECK("an ID is 15 characters in three groups", std::strlen(id) == 17 && id[5] == '-' && id[11] == '-');
+        bool past = false;   // (a setting past the sixteenth is set: the ID is the longer one)
+        for (int i = OOT_RANDO_ID_SLOTS; i < OOT_RANDO_N; i++) past = past || a.v[i] != 0;
+        if (past) CHECK("an ID with a setting past the sixteenth is 20 characters in four groups",
+                        std::strlen(id) == 23 && id[5] == '-' && id[11] == '-' && id[17] == '-');
+        else CHECK("an ID is 15 characters in three groups", std::strlen(id) == 17 && id[5] == '-' && id[11] == '-');
         CHECK("an ID loads", oot_rando_from_id(id, &b) == nullptr);
         CHECK("an ID gives back its seed and settings, the randomizer on", same(a, b));
         oot_rando_id(&b, other);
         CHECK("the same seed is the same ID", !std::strcmp(id, other));
+        // (the longer ID of the same seed: read as the same, whatever its settings)
+        char longer[OOT_RANDO_ID_TEXT];
+        OotRando c{};
+        oot_rando_id_as(&a, longer, 1);
+        CHECK("the longer ID is 20 characters in four groups", std::strlen(longer) == 23 && longer[5] == '-' && longer[11] == '-' && longer[17] == '-');
+        CHECK("the longer ID loads and gives back its seed and settings", oot_rando_from_id(longer, &c) == nullptr && same(a, c));
+        if (!past) {
+            oot_rando_id_as(&a, other, 0);
+            CHECK("a seed without a setting past the sixteenth keeps the ID it had", !std::strcmp(id, other));
+        }
+    }
+
+    // ---- the longer ID: what an ID made before the settings past the sixteenth says, and its own refusals ----
+    {
+        OotRando plain{}, back{}, kept_long{};
+        plain.seed = 424242, plain.v[0] = 1;
+        char known[OOT_RANDO_ID_TEXT], wide[OOT_RANDO_ID_TEXT];
+        oot_rando_id_as(&plain, known, 0);
+        oot_rando_id_as(&plain, wide, 1);
+        CHECK("the two IDs of a seed are not one text", std::strcmp(known, wide) != 0);
+        CHECK("both give the same seed", oot_rando_from_id(known, &back) == nullptr && back.seed == 424242 && back.v[0] == 1 &&
+                                         oot_rando_from_id(wide, &kept_long) == nullptr && same(back, kept_long));
+        const OotRando before_long = kept_long;
+        CHECK("between the two lengths", oot_rando_from_id(std::string(wide).substr(0, 21).c_str(), &kept_long) != nullptr && same(kept_long, before_long));
+        CHECK("longer than the longer one", oot_rando_from_id((std::string(wide) + "0").c_str(), &kept_long) != nullptr && same(kept_long, before_long));
+        int refused = 0, tried = 0;
+        for (size_t at = 0; wide[at]; at++) {
+            if (wide[at] == '-') continue;
+            std::string typo(wide);
+            typo[at] = typo[at] == 'Z' ? 'Y' : 'Z';
+            tried++;
+            refused += oot_rando_from_id(typo.c_str(), &kept_long) != nullptr;
+        }
+        CHECK("a typo in the longer ID is refused", refused == tried && same(kept_long, before_long));
+        uint8_t bits[OOT_RANDO_ID_LONG_BITS] = {};
+        auto text_of = [&](char* out) {
+            int n = OOT_RANDO_ID_LONG_BITS - OOT_RANDO_ID_CHECK;
+            oot_rando_put(bits, &n, oot_rando_check_of(bits, OOT_RANDO_ID_LONG_BITS), OOT_RANDO_ID_CHECK);
+            char* p = out;
+            for (int c = 0; c < OOT_RANDO_ID_LONG_BITS / 5; c++) {
+                int at = c * 5;
+                if (c && c % 5 == 0) *p++ = '-';
+                *p++ = oot_rando_alphabet()[oot_rando_get(bits, &at, 5)];
+            }
+            *p = 0;
+        };
+        int n = 0;
+        oot_rando_put(bits, &n, OOT_RANDO_ID_VERSION, 4);   // (20 characters that say they are the 15's)
+        text_of(wide);
+        CHECK("the longer ID with the shorter one's version", oot_rando_from_id(wide, &kept_long) != nullptr && same(kept_long, before_long));
+        n = 0;
+        oot_rando_put(bits, &n, OOT_RANDO_ID_LONG_VERSION, 4);
+        text_of(wide);
+        CHECK("the plainest longer ID loads", oot_rando_from_id(wide, &back) == nullptr && back.on && !back.seed);
+        n = 4 + 31 + 2 * (OOT_RANDO_ID_LONG_SLOTS - 1);   // (the last pair: a setting no version has yet)
+        oot_rando_put(bits, &n, 1, 2);
+        text_of(wide);
+        CHECK("the longer ID with a setting this version does not have", (int)OOT_RANDO_N >= (int)OOT_RANDO_ID_LONG_SLOTS ||
+                                                                         (oot_rando_from_id(wide, &kept_long) != nullptr && same(kept_long, before_long)));
+        n = 4 + 31 + 2 * (OOT_RANDO_ID_LONG_SLOTS - 1);
+        oot_rando_put(bits, &n, 0, 2);
+        oot_rando_put(bits, &n, 1, 1);   // (the bit that is 0)
+        text_of(wide);
+        CHECK("the longer ID with its spare bit set", oot_rando_from_id(wide, &kept_long) != nullptr && same(kept_long, before_long));
     }
 
     // ---- the ID is its seed's and its settings', not the on / off row's ----
