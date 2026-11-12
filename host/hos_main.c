@@ -769,6 +769,10 @@ static const char *oot_item_holder(const char *name) {
     };
     for (unsigned i = 0; i < sizeof pairs / sizeof pairs[0]; i++)
         if (!strcmp(name, pairs[i][0])) return pairs[i][1];
+    /* (the randomizer's fork) A song added without an ocarina was accepted and not kept, as a seed without a bag was
+       (seen in the log: Item_Melody_ZeldaLullaby +1, had 0, now 0, event status 2, time after time, in a new game).
+       Taken to be the same: a song is given the Fairy Ocarina first when Link has neither ocarina. Not seen yet. */
+    if (!strncmp(name, "Item_Melody_", 12)) return "Item_Ocarina_Fairy";
     return NULL;
 }
 
@@ -801,10 +805,14 @@ static void oot_inventory_edit(Ctx *c, int action) {
             char other[64];
             int held = oot_pouch_count(c, holder);
             const size_t stem = strlen(holder) - 5;   /* (..._Small: the same name with _Medium and _Large) */
-            snprintf(other, sizeof other, "%.*sMedium", (int)stem, holder);
-            if (oot_pouch_count(c, other) > 0) held = 1;
-            snprintf(other, sizeof other, "%.*sLarge", (int)stem, holder);
-            if (oot_pouch_count(c, other) > 0) held = 1;
+            if (!strcmp(holder, "Item_Ocarina_Fairy")) {   /* (a song's: either ocarina) */
+                if (oot_pouch_count(c, "Item_Ocarina_Time") > 0) held = 1;
+            } else {
+                snprintf(other, sizeof other, "%.*sMedium", (int)stem, holder);
+                if (oot_pouch_count(c, other) > 0) held = 1;
+                snprintf(other, sizeof other, "%.*sLarge", (int)stem, holder);
+                if (oot_pouch_count(c, other) > 0) held = 1;
+            }
             if (held == 0) hos_log("cheats: inventory %s first, to carry %s in (event status %d)", holder, name, oot_pouch_change(c, holder, 1));
         }
     }

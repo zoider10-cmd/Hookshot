@@ -280,21 +280,24 @@ SCRUBS = (
 # the first nuts and stick, the potions and the fairy). What a shelf sold goes into the pool as the chests' own
 # kind of it (SHELF_ITEMS), a red rupee for what no chest holds. Child and adult have one shop each of a kind, with
 # the same goods: both sell the shuffled items, and what was bought as a child may be there again for the adult.
-# A shop's need is what its place asks for in the rules' words, meant to ask for too much.
+# A shop's need is what its place asks for in the rules' words, meant to ask for too much. Its place, for the
+# tracker, is before its counter: three metres from its keeper, away from the shelves (the keeper's own place put
+# Link behind the Bombchu Shop's counter, where a wall he could not see kept him: seen in play), or the game's own
+# place for Link there (the Kokiri shop's ShopPosition_Link, the anchor before the Goron's and the Zora's keeper).
 Shop = collections.namedtuple("Shop", "key params areas name need place ages slots")
 SHOPS = (
     Shop("kokiri", ("Npc_Kokiri_001_Shop_Child", "Npc_Kokiri_001_Shop_Child_ShortStock"), ("KokiriForest",), "the Kokiri shop", NONE,
          (-1.9, 110.7, -22.6), "CA", ((0, "Shop_Heart"), (1, "Shop_DekuSeedBundle_02"), (3, "Shop_DekuNutBundle_02"), (5, "Shop_DekuStickBundle_Medium"))),
     Shop("general", ("Npc_Hylia_018_Shop", "Npc_Hylia_018_Shop_Adult"), ("Market", "KakarikoVillage"), "the Bazaar", CHILD,
-         (22.5, 100.4, 16.1), "C", ((0, "Shop_Heart"), (1, "Shop_MagicJar_Small"), (2, "Shop_DekuSeedBundle_02"), (7, "Shop_DekuStick"))),
+         (19.5, 100.4, 16.1), "C", ((0, "Shop_Heart"), (1, "Shop_MagicJar_Small"), (2, "Shop_DekuSeedBundle_02"), (7, "Shop_DekuStick"))),
     Shop("medicine", ("Npc_Hylia_020_Shop",), ("Market", "KakarikoVillage"), "the Potion Shop", CHILD,
-         (23.6, 100.1, 6.0), "C", ((2, "Shop_Bottle_HalfMilk"), (5, "Shop_Bottle_Poe"), (6, "Shop_Bottle_Bug"), (7, "Shop_Bottle_Fish"))),
+         (20.6, 100.1, 6.0), "C", ((2, "Shop_Bottle_HalfMilk"), (5, "Shop_Bottle_Poe"), (6, "Shop_Bottle_Bug"), (7, "Shop_Bottle_Fish"))),
     Shop("bombchu", ("Npc_Hylia_021_Shop",), ("Market",), "the Bombchu Shop", ADULT,
-         (-24.1, 100.4, 35.4), "C", ((4, "Shop_BombchuBundle_01"), (5, "Shop_BombchuBundle_07"), (6, "Shop_BombchuBundle_02"), (7, "Shop_BombchuBundle_08"))),
+         (-24.1, 100.4, 32.4), "C", ((4, "Shop_BombchuBundle_01"), (5, "Shop_BombchuBundle_07"), (6, "Shop_BombchuBundle_02"), (7, "Shop_BombchuBundle_08"))),
     Shop("goron", ("Npc_Goron_011_Shop_Child",), ("GoronCity",), "the Goron shop", CHILD | {BB},
-         (-19.1, 97.9, -20.2), "CA", ((0, "Shop_Heart"), (2, "Shop_Bottle_Bug"), (6, "Shop_BombBundle_03"), (7, "Shop_BombBundle_04"))),
+         (-16.6, 98.0, -20.2), "CA", ((0, "Shop_Heart"), (2, "Shop_Bottle_Bug"), (6, "Shop_BombBundle_03"), (7, "Shop_BombBundle_04"))),
     Shop("zora", ("Npc_Zora_011_Shop",), ("ZoraDomain",), "the Zora shop", ADULT,
-         (-29.5, 104.9, 20.0), "CA", ((2, "Shop_Bottle_Bug"), (5, "Shop_ArrowBundle_02"), (6, "Shop_Bottle_Fish"), (7, "Shop_ArrowBundle_03"))),
+         (-27.1, 104.9, 18.2), "CA", ((2, "Shop_Bottle_Bug"), (5, "Shop_ArrowBundle_02"), (6, "Shop_Bottle_Fish"), (7, "Shop_ArrowBundle_03"))),
 )
 SHELF_ITEMS = (("Shop_DekuSeedBundle", "Item_ScrubBusinessSeed"), ("Shop_DekuNutBundle", "TBox_DekuNutBundle"), ("Shop_DekuStick", "Item_DekuStickBundle_Small"),
                ("Shop_MagicJar", "Tbox_MagicJar_Large"), ("Shop_BombBundle", "Item_BombBundle_Small"), ("Shop_BombchuBundle", "Item_BombchuBundle_Small"),
@@ -325,7 +328,8 @@ WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,
 # An item whose model is not made to stand on a shelf: the Golden Gauntlets lay half under their shelf's board, one
 # of the pair above it and one below (seen in play). Such a shelf's actor is put this much higher in the map file.
 # The other gauntlets are taken to be made as they are; not seen.
-SHELF_LIFT = {"Item_Gauntlet_Gold": 0.22, "Item_Gauntlet_Silver": 0.22, "Item_Gauntlet_Goron": 0.22}
+# Higher, the Silver Gauntlets stood on their shelf (seen in play); a Gold Skulltula's token was half in its board.
+SHELF_LIFT = {"Item_Gauntlet_Gold": 0.22, "Item_Gauntlet_Silver": 0.22, "Item_Gauntlet_Goron": 0.22, "Item_Token_Gold": 0.15}
 
 
 def shelf_item(actor):
@@ -2435,7 +2439,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 3" % a.shops if a.shops else "") + " checks 5" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 4" % a.shops if a.shops else "") + " checks 5" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
