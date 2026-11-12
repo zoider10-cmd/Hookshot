@@ -132,10 +132,13 @@ int main(int argc, char** argv) {
         oot_rando_put(bits, &n, OOT_RANDO_ID_VERSION, 4);
         text_of(other);
         CHECK("the plainest ID loads", oot_rando_from_id(other, &got) == nullptr && got.on && !got.seed);
-        n = 4 + 31 + 2 * (OOT_RANDO_ID_SLOTS - 1);   // (the last pair: a setting no version has yet)
-        oot_rando_put(bits, &n, 1, 2);
-        text_of(other);
-        CHECK("a setting this version does not have", oot_rando_from_id(other, &kept) != nullptr && same(kept, before));
+        volatile int settings_now = OOT_RANDO_N;   // (volatile: a comparison of two constants is a warning, and warnings stop this build)
+        if (settings_now < OOT_RANDO_ID_SLOTS) {   // (with Starting rupees every pair of an ID is a setting's: none is left to try)
+            n = 4 + 31 + 2 * (OOT_RANDO_ID_SLOTS - 1);   // (the last pair: a setting no version has yet)
+            oot_rando_put(bits, &n, 1, 2);
+            text_of(other);
+            CHECK("a setting this version does not have", oot_rando_from_id(other, &kept) != nullptr && same(kept, before));
+        }
         if (oot_rando_settings[OOT_RANDO_QUESTS].count < 4) {
             std::memset(bits, 0, sizeof bits);
             n = 0;

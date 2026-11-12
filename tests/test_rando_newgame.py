@@ -93,6 +93,24 @@ def flags():
     both = seed.flag_defaults(data, {mido: False, kokiri: False})
     check(sum(a != b for a, b in zip(data, both)) == 2 and seed.flag_defaults(both, {other: True}) is None, "both ways' flags, and the others as they were")
     check(seed.flag_defaults(both, {mido: True, kokiri: True}) == data, "set again, the list is the game's own")
+    # ---- starting rupees: a whole number of the list (Data.Int), as the flags are truth values ----
+    check(seed.RUPEES == "PlayerStatus.CurrentRupee" and seed.START_RUPEES == 200, "the rupees a new game starts with are not 200 of Link's own")
+    script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
+    check('"rando_start_rupees": 0' in script and 'flag_defaults(new if new is not None else was, {RUPEES: START_RUPEES}, kind="Int")' in script and
+          '(" rupees %d" % START_RUPEES if a.start_rupees else "")' in script,
+          "the script does not read the setting, give the rupees after the flags in the same file, or name them in the seed's stamp")
+    rich = seed.flag_defaults(data, {mido: 200}, kind="Int")   # (the made-up list's one whole number has that name's hash, and starts at 5)
+    check(rich is not None and len(rich) == len(data) and sum(x != y for x, y in zip(data, rich)) == 1 and
+          seed.flag_defaults(rich, {mido: 200}, kind="Int") is None and seed.flag_defaults(rich, {mido: 5}, kind="Int") == data,
+          "a whole number of the list is not set to the number given, alone, in place")
+    check(seed.flag_defaults(rich, {mido: False}) is not None and seed.flag_defaults(seed.flag_defaults(rich, {mido: False}), {mido: 200}, kind="Int") is None,
+          "the flags set after the rupees undo them")
+    for bad in ({seed.RUPEES: -1}, {seed.RUPEES: True}, {seed.RUPEES: 1.5}, {seed.RUPEES: 1 << 31}):
+        try:
+            seed.flag_defaults(data, bad, kind="Int")
+            check(False, "a number the list cannot hold is taken: %r" % bad)
+        except ValueError:
+            pass
     for bad, why in (({"No_Such_Flag": False}, "a flag the list does not have"), ({mido: False, "No_Such_Flag": False}, "one of two")):
         try:
             seed.flag_defaults(data, bad)

@@ -63,7 +63,7 @@ def sources(rows):
     got = [(key, label, re.findall(r'"([^"]*)"', choices), [int(v) for v in values.split(",")], help_)
            for key, label, choices, values, help_ in found[1:]]
     check(got == want, "the launcher's Randomizer page and gpu/vk/oot_rando.h differ:\n  %r\n  %r" % (got, want))
-    check("AddSelectors(RandoRows, 3, cx, colW, null, 53, 50);" in launcher and '"Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About"' in launcher,
+    check("AddSelectors(RandoRows, 3, cx, colW, null, 47, 45);" in launcher and '"Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About"' in launcher,
           "the launcher does not show its Randomizer page")
     check('lines[i] = k + "=" + randoSeed;' in launcher and 'lines.RemoveAll(l => l.StartsWith("rando_import="))' in launcher,
           "the launcher does not keep the seed, or leaves an import that would undo its settings")
@@ -75,7 +75,7 @@ def sources(rows):
           "the build does not put the randomizer's script beside the game, where the launcher runs it")
     script = read("tools", "rando", "rando_seed.py")
     check(all('"%s"' % key in script for key in ("rando_on", "rando_seed", "rando_chests", "rando_skulltulas", "rando_keys", "rando_major", "rando_open_deku",
-                                                    "rando_open_forest", "rando_skip_intro", "rando_quests", "rando_frogs", "rando_light_arrows")),
+                                                    "rando_open_forest", "rando_skip_intro", "rando_quests", "rando_frogs", "rando_light_arrows", "rando_start_rupees")),
           "rando_seed.py does not read the settings the menu keeps")
     check("hos_rando_init();" in main, "the game does not read the randomizer's settings at its start")
     check("oot_rando_read(f, r, &bad)" in side and '"hookshot_options.ini"' in side and "const OotRando *hos_rando(void)" in side,

@@ -93,6 +93,12 @@ chests that start an event when opened (most of the big items).
   numbers of that file so both entry points go on to what follows their cutscene. Seen in play: a new game starts in
   Link's house with both cutscenes passed over.
 
+**Starting rupees** (`rando_start_rupees`, `--start-rupees`): a new game starts with 200 rupees, a full child's wallet in
+this game. Link's rupees are a whole number of the game's list of starting values (`GameData/GameDataList`,
+`PlayerStatus.CurrentRupee`, 0 in a new game), set there as the open ways' flags are (`flag_defaults`, kind `Int`).
+Seen without a player: a seed with it is written and a new game starts in Link's house. The count itself has not
+been seen on screen yet. With it the seed's ID has a setting in each of its 16 places: the next one needs a longer ID.
+
 ### The logic
 
 With Major items Off none of the items that gate the game moves, so the game's own order holds.

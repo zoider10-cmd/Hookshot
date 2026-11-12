@@ -21,7 +21,7 @@
 
    What is not here: the item placement. tools/rando/rando_seed.py reads rando_on, rando_seed, rando_chests,
    rando_skulltulas, rando_quests (with rando_frogs and rando_light_arrows), rando_keys, rando_major, rando_open_deku,
-   rando_open_forest and rando_skip_intro, shuffles the chests, the Gold Skulltulas' drops and some characters' gifts and
+   rando_open_forest, rando_skip_intro and rando_start_rupees, shuffles the chests, the Gold Skulltulas' drops and some characters' gifts and
    makes the open ways' and the opening's changes as a mod (the launcher runs it at Play); the other settings are not placed yet
    (host/oot_rando.c). */
 #ifndef OOT_RANDO_H
@@ -80,7 +80,10 @@
       "Off", "On") \
     X(LIGHT_ARROWS, "Light Arrows", "rando_light_arrows", \
       "With Quest rewards: the Light Arrows Zelda gives take part too, and can be anywhere.", \
-      "Off", "On")
+      "Off", "On") \
+    X(START_RUPEES, "Starting rupees", "rando_start_rupees", \
+      "A new game starts with 200 rupees in Link's wallet.", \
+      "Off", "200")
 
 enum {
 #define OOT_RANDO_ENUM(NAME, label, key, help, ...) OOT_RANDO_##NAME,

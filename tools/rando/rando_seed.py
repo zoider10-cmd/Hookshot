@@ -86,6 +86,13 @@ OPEN = {
     "forest": {"KokiriForest_Npc_Kokiri_007_Child_Blocker_00": False},
 }
 FLAG_LIST = "GameData"   # (the folder of the romfs: GameDataList.Product.<n>.byml.zs in it)
+# Starting rupees: the list's whole number PlayerStatus.CurrentRupee is what Link has, 0 in a new game. With the
+# setting on a new game starts with START_RUPEES of them (flag_defaults, kind "Int"). A game already begun keeps
+# what its save says.
+# 200 is what the child's wallet holds in this game (its owner's word; the original's held 99): a full wallet, and not
+# more than it can hold.
+RUPEES = "PlayerStatus.CurrentRupee"
+START_RUPEES = 200
 # A new game's opening is the event flow OpeningEvent: two entry points that each play a cutscene and go on. Neither
 # cutscene sets anything of the game: Dm_Kokiri_0000 is the narration, Dm_Kokiri_0030 Navi's flight to Link's house.
 #   Opening_LoadingKokiriForest: event 7 (plays Dm_Kokiri_0000) -> 14 (is the forest loaded?) -> the fades
@@ -1229,11 +1236,16 @@ def murmur3(data, seed=0):
     return h ^ h >> 16
 
 
-def flag_defaults(data, flags):
+def flag_defaults(data, flags, kind="Bool"):
     """The game's list of flags (GameDataList: a BYML as the map files are, but big-endian, "BY") with the value each
     flag of `flags` ({name: truth value}) starts a new game with: the new bytes, or None when they already start so.
     A flag is a dictionary of Data.Bool, {DefaultValue, Hash (of its name), ...}; the value is in the dictionary
-    itself, so the file keeps its size. A name the list does not have as a truth value is an error."""
+    itself, so the file keeps its size. A name the list does not have as a truth value is an error.
+    kind "Int": the list's whole numbers (Data.Int: PlayerStatus.CurrentRupee, the rupees Link has), `flags` then
+    {name: a number from 0 to 2147483647}."""
+    whole = kind == "Int"
+    if whole and any(not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= 0x7fffffff for v in flags.values()):
+        raise ValueError("a number to start with is not a whole number the list can hold")
     if data[:2] != b"BY":
         raise ValueError("not a big-endian BYML (%r)" % data[:4])
     key_at, _, root = struct.unpack_from(">III", data, 4)
@@ -1254,10 +1266,10 @@ def flag_defaults(data, flags):
             out[keys[key] if key < len(keys) else ""] = (data[e + 3], struct.unpack_from(">I", data, e + 4)[0], e + 4)
         return out
 
-    kind, at, _ = fields(root).get("Data", (0, 0, 0))
-    kind, bools, _ = fields(at).get("Bool", (0, 0, 0)) if kind == 0xC1 else (0, 0, 0)
-    if kind != 0xC0 or data[bools] != 0xC0:
-        raise ValueError("the list has no Data.Bool")
+    node, at, _ = fields(root).get("Data", (0, 0, 0))
+    node, bools, _ = fields(at).get(kind, (0, 0, 0)) if node == 0xC1 else (0, 0, 0)
+    if node != 0xC0 or data[bools] != 0xC0:
+        raise ValueError("the list has no Data.%s" % kind)
     want = {murmur3(name.encode()): name for name in flags}
     if len(want) != len(flags):
         raise ValueError("two of the flags have one hash")
@@ -1272,17 +1284,17 @@ def flag_defaults(data, flags):
         if not h or h[0] not in (0xD1, 0xD3) or h[1] not in want:
             continue
         v = f.get("DefaultValue")
-        if not v or v[0] != 0xD0:
-            raise ValueError("%s has no truth value to start with" % want[h[1]])
-        found[want[h[1]]] = (v[1] != 0, v[2])
+        if not v or v[0] != (0xD1 if whole else 0xD0):
+            raise ValueError("%s has no %s to start with" % (want[h[1]], "whole number" if whole else "truth value"))
+        found[want[h[1]]] = (v[1] if whole else v[1] != 0, v[2])
     missing = sorted(set(flags) - set(found))
     if missing:
         raise ValueError("the game's list has no flag " + ", ".join(missing))
-    if all(found[name][0] == bool(v) for name, v in flags.items()):
+    if all(found[name][0] == (v if whole else bool(v)) for name, v in flags.items()):
         return None
     out = bytearray(data)
     for name, v in flags.items():
-        struct.pack_into(">I", out, found[name][1], int(bool(v)))
+        struct.pack_into(">I", out, found[name][1], v if whole else int(bool(v)))
     return bytes(out)
 
 
@@ -1519,7 +1531,8 @@ def dictionaries(romfs, zs):
 def settings(game):
     """the randomizer's lines of the options file (0 where it does not say)"""
     got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
-           "rando_skip_intro": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0}
+           "rando_skip_intro": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0,
+           "rando_start_rupees": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -1689,6 +1702,7 @@ def main():
     p.add_argument("--quests", action="store_true", help="as rando_quests=1: what characters give takes part with the chests (GIFTS)")
     p.add_argument("--frogs", action="store_true", help="as rando_frogs=1: with Quest rewards, the frogs of Zora's River take part too")
     p.add_argument("--light-arrows", action="store_true", help="as rando_light_arrows=1: with Quest rewards, Zelda's Light Arrows take part too")
+    p.add_argument("--start-rupees", action="store_true", help="as rando_start_rupees=1: a new game starts with %d rupees" % START_RUPEES)
     p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already this seed's (the launcher, at Play)")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
     a = p.parse_args()
@@ -1719,6 +1733,7 @@ def main():
     a.open_deku = a.open_deku or ini["rando_open_deku"] != 0
     a.open_forest = a.open_forest or ini["rando_open_forest"] != 0
     a.skip_intro = a.skip_intro or ini["rando_skip_intro"] != 0
+    a.start_rupees = a.start_rupees or ini["rando_start_rupees"] != 0
     a.skulltulas = a.skulltulas if a.skulltulas is not None else ini["rando_skulltulas"]
     a.skulltulas = a.skulltulas if 0 <= a.skulltulas <= 3 else 0
     a.quests = a.quests or ini["rando_quests"] != 0
@@ -1769,7 +1784,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
@@ -1947,18 +1962,25 @@ def main():
             len(drops) - len(skull_drops), "" if len(drops) - len(skull_drops) == 1 else "s"))
     # ---- the open ways: the game's list of flags, with theirs starting put out ----
     flag_files = {}
-    if flags:
+    if flags or a.start_rupees:
         folder = os.path.join(romfs, FLAG_LIST)
         lists = sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if n.startswith("GameDataList.") and ".byml" in n.lower())
         if not lists:
-            sys.exit("no list of flags in %s: the ways cannot be opened. Nothing written." % folder)
+            sys.exit("no list of flags in %s: the ways cannot be opened, nor the rupees given. Nothing written." % folder)
         for n in lists:
             try:
-                new = flag_defaults(unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts), flags)
+                was = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
+                new = flag_defaults(was, flags) if flags else None
+                if a.start_rupees:   # (the same file: the rupees after the flags)
+                    more = flag_defaults(new if new is not None else was, {RUPEES: START_RUPEES}, kind="Int")
+                    new = more if more is not None else new
             except Exception as e:
                 sys.exit("%s: %s. Nothing written." % (n, e))
             if new is not None:
                 flag_files[FLAG_LIST + "/" + n] = new
+        if a.start_rupees:
+            print("a new game starts with %d rupees" % START_RUPEES)
+    if flags:
         print("open ways in a new game: %s (%d flag%s start put out)" % (
             " and ".join(n for n, on in (("the Deku Tree's", a.open_deku), ("the forest's way out", a.open_forest)) if on), len(flags), "" if len(flags) == 1 else "s"))
     print("map fixes for a shuffled game: %d file%s (the warp songs work in the Forest Temple's Stalfos room)%s" % (

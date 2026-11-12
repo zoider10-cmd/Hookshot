@@ -911,6 +911,8 @@ class LauncherForm : Form {
             "With Quest rewards: the frogs of Zora's River take part too." },
         new object[] { "rando_light_arrows", "Light Arrows", new[] { "Off", "On" }, new[] { 0, 1 },
             "With Quest rewards: the Light Arrows Zelda gives take part too, and can be anywhere." },
+        new object[] { "rando_start_rupees", "Starting rupees", new[] { "Off", "200" }, new[] { 0, 1 },
+            "A new game starts with 200 rupees in Link's wallet." },
     };
     // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and
@@ -1028,7 +1030,7 @@ class LauncherForm : Form {
         float cx = LeftW + 36, cw = W - LeftW - 72, colW = (cw - 14) / 2;
         AddSelectors(GraphicsRows, 1, cx, colW);
         AddSelectors(GameRows, 2, cx, colW);
-        AddSelectors(RandoRows, 3, cx, colW, null, 53, 50);   // (sixteen of them: closer lines, eight in all, over the seed's buttons)
+        AddSelectors(RandoRows, 3, cx, colW, null, 47, 45);   // (seventeen of them: closer lines, nine in all, over the seed's buttons)
         AddSelectors(CosmeticRows, 4, cx, colW, cosmetics);
         // (beside the fifth selector, in the third line's right half)
         widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx + colW + 14, 112 + 2 * 70 + 11, 160, 40), Page = 4, Click = OnRandomCosmetics });
