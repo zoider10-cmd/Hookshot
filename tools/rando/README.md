@@ -500,3 +500,15 @@ Forest), of another (Zora's River), of a dungeon (Inside the Deku Tree) and one 
 grotto; Link stood at each. Not in the file: gifts and Business Scrubs (they have no place by their key), and so not
 gone to. A check outside what its map lets Link stand on would take him back to his last safe place, a heart less,
 as a go-to there does; none of the four was.
+
+## In logic, on the Tracker tab
+
+Each line of `checks.txt` ends with what the check's rule asks for, the gating items by two letters (`CHECK_CODES`;
+`-` nothing). The menu holds the same letters with the Inventory page's rows that stand for each (`kLogicItems` in
+`gpu/vk/vk_menu.cpp`: a bigger bomb bag, the stronger gauntlets and the deeper scale count for the one asked for) and
+reads what Link carries from the counts the game reports for that page. An area's row says how many of its checks
+are in logic, the first row for the whole game; a row stepped to a check says "in logic" or "not in logic", and the
+help names what is still asked for. Nothing is said before a save's inventory has been read.
+
+The rules are the seed's own (`RULES`): by area, written to ask for too much, never too little. So a check in logic
+is one the seed promises; a check not in logic may well be within reach. Not seen in play yet.

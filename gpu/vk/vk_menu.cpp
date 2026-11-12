@@ -103,7 +103,8 @@ const char kTrackerHelp[] =
     "The treasure chests and Gold Skulltulas of this area that take part in the randomizer's seed. It is what the seed "
     "has there, not what is left: the game does not tell the menu what has been opened. Left and Right step through "
     "the area's checks one by one; with the debug tools on, confirm takes Link to the one shown. With the mouse: the "
-    "arrows step, a click on the row's name goes there.";
+    "arrows step, a click on the row's name goes there. In logic: Link carries all that the seed's rules ask for at "
+    "that check. The rules ask for more than a check may need, so one not in logic may still be within reach.";
 // The checks one by one: tools/rando/rando_seed.py writes <game folder>\mods\rando-seed\checks.txt beside the tracker's
 // file, a line "<area>|<kind>|<folder>|<ages>|<x> <y> <z>" for each chest and Gold Skulltula of the seed (tracker_load
 // reads it too). A row steps through the checks of its area, the ones whose <area> is the row's name (tracker_pick: 0 the
@@ -115,7 +116,11 @@ constexpr int kTrackerGoAction = 5;
 struct TrackerCheck {
     char area[48], kind[24], folder[40], ages[4];
     float pos[3];
+    char needs[64];   // (what the seed's rules ask for: kLogicItems' letters with commas, "-" nothing, "?" a file without it)
 };
+/// A check with what Link carries: 1 in logic (he has all its rule asks for), 0 not (missing, when given: what he has
+/// not, by name), -1 not known (the file does not say, or no save's inventory has been read). Below the inventory's counts
+int tracker_in_logic(const TrackerCheck& k, std::string* missing = nullptr);
 TrackerCheck tracker_checks[kTrackerChecks];
 int tracker_check_count = 0;
 int tracker_pick[kTrackerRows];
@@ -133,11 +138,28 @@ const TrackerCheck* tracker_row_check(int row, int n) {
 /// What a row says: its own words, or the check it is stepped to ("3 of 10: Chest, child's, at -27 68 65")
 std::string tracker_says(int row) {
     const TrackerCheck* k = tracker_pick[row] ? tracker_row_check(row, tracker_pick[row]) : nullptr;
-    if (!k) return tracker_value[row];
-    char text[112];
-    snprintf(text, sizeof text, "%d of %d: %s%s at %.0f %.0f %.0f", tracker_pick[row], tracker_row_checks(row), k->kind,
-             !strcmp(k->ages, "C") ? ", child's," : !strcmp(k->ages, "A") ? ", adult's," : "", k->pos[0], k->pos[1], k->pos[2]);
+    if (!k) {   // (its own words, and how many of its checks are in logic: the first row is the whole game's)
+        int in = 0, known = 0;
+        for (int i = 0; i < tracker_check_count; i++) {
+            if (row && strcmp(tracker_checks[i].area, tracker_name[row])) continue;
+            const int state = tracker_in_logic(tracker_checks[i]);
+            known += state >= 0, in += state > 0;
+        }
+        return known ? std::string(tracker_value[row]) + " (" + std::to_string(in) + " in logic)" : std::string(tracker_value[row]);
+    }
+    const int state = tracker_in_logic(*k);
+    char text[128];
+    snprintf(text, sizeof text, "%d of %d: %s%s at %.0f %.0f %.0f%s", tracker_pick[row], tracker_row_checks(row), k->kind,
+             !strcmp(k->ages, "C") ? ", child's," : !strcmp(k->ages, "A") ? ", adult's," : "", k->pos[0], k->pos[1], k->pos[2],
+             state > 0 ? ": in logic" : state == 0 ? ": not in logic" : "");
     return text;
+}
+/// The help's last line for a row stepped to a check: in logic, or what Link still needs for it
+std::string tracker_hint(int row) {
+    const TrackerCheck* k = tracker_pick[row] ? tracker_row_check(row, tracker_pick[row]) : nullptr;
+    std::string missing;
+    const int state = k ? tracker_in_logic(*k, &missing) : -1;
+    return state > 0 ? "In logic: Link carries all the seed's rules ask for here." : state == 0 ? "Not in logic. Still asked for: " + missing + "." : "";
 }
 /// A row's hints from a table, the value lo first (nullptr: none for that value)
 const char* hint_in(const char* const* t, int n, int lo, int v, int variant) {
@@ -1143,6 +1165,49 @@ constexpr ItemSections make_item_sections() {
 }
 constexpr ItemSections item_sections = make_item_sections();
 std::atomic<int> item_counts[kItems];   // (-1 until the game side reports: OOT_CHEAT_ITEM_BASE + i)
+// (the randomizer) The gating items of the seed's rules (tools/rando/rando_seed.py CHECK_CODES: the same letters, in its
+// order), each with the Inventory page's rows that stand for it: a bigger bag, the stronger gauntlets and the deeper
+// scale do what the one asked for does.
+struct LogicItem {
+    const char *code, *name, *rows[3];
+};
+constexpr LogicItem kLogicItems[] = {
+    {"KS", "Kokiri Sword", {"Kokiri Sword"}},
+    {"SL", "Fairy Slingshot", {"Fairy Slingshot"}},
+    {"BB", "Bomb Bag", {"Bomb Bag", "Big Bomb Bag", "Biggest Bomb Bag"}},
+    {"BM", "Boomerang", {"Boomerang"}},
+    {"LT", "Lens of Truth", {"Lens of Truth"}},
+    {"BW", "Fairy Bow", {"Fairy Bow"}},
+    {"HM", "Megaton Hammer", {"Megaton Hammer"}},
+    {"IB", "Iron Boots", {"Iron Boots"}},
+    {"HB", "Hover Boots", {"Hover Boots"}},
+    {"LS", "Longshot", {"Longshot"}},
+    {"SG", "Silver Gauntlets", {"Silver Gauntlets", "Golden Gauntlets"}},
+    {"MS", "Mirror Shield", {"Mirror Shield"}},
+    {"GG", "Golden Gauntlets", {"Golden Gauntlets"}},
+    {"GB", "Goron's Bracelet", {"Goron's Bracelet", "Silver Gauntlets", "Golden Gauntlets"}},
+    {"SS", "Silver Scale", {"Silver Scale", "Golden Scale"}},
+};
+int tracker_in_logic(const TrackerCheck& k, std::string* missing) {
+    if (k.needs[0] == '?' || item_counts[0].load(std::memory_order_relaxed) < 0) return -1;
+    int in = 1;
+    for (const char* p = k.needs; *p && *p != '-'; p += strcspn(p, ","), p += *p == ',') {
+        const size_t n = strcspn(p, ",");
+        bool known = false, has = false;
+        const char* name = "an item this menu does not know";
+        for (const LogicItem& item : kLogicItems) {
+            if (strlen(item.code) != n || strncmp(item.code, p, n)) continue;
+            known = true, name = item.name;
+            for (const char* row : item.rows)
+                for (int i = 0; row && i < kItems; i++)
+                    if (!strcmp(item_names[i], row) && item_counts[i].load(std::memory_order_relaxed) > 0) has = true;
+        }
+        if (known && has) continue;
+        in = 0;
+        if (missing) *missing += (missing->empty() ? "" : ", ") + std::string(name);
+    }
+    return in;
+}
 int item_choice = 0;
 int inventory_columns = 1, inventory_capacity = 1;   // (as last drawn: the cards in a row, on a page)
 int inventory_filter = 0;   // (All, then the item sections)
@@ -1318,8 +1383,9 @@ void tracker_load() {
         char line[256];
         while (checks < kTrackerChecks && fgets(line, sizeof line, f)) {
             TrackerCheck& k = tracker_checks[checks];
-            if (line[0] != '#' && sscanf(line, "%47[^|]|%23[^|]|%39[^|]|%3[^|]|%f %f %f", k.area, k.kind, k.folder, k.ages, &k.pos[0], &k.pos[1],
-                                         &k.pos[2]) == 7)
+            k.needs[0] = '?', k.needs[1] = 0;   // (a file written before the rules were in it)
+            if (line[0] != '#' && sscanf(line, "%47[^|]|%23[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]", k.area, k.kind, k.folder, k.ages, &k.pos[0],
+                                         &k.pos[1], &k.pos[2], k.needs) >= 7)
                 checks++;
         }
         fclose(f);
@@ -2080,6 +2146,8 @@ void draw_options(ui::Ctx& c) {
     const int count = tab_row_count(cur_tab), sel = tab_selected[cur_tab];
     const Row& selr = rows[tab_row_to_global(cur_tab, sel)];
     const char* hint = selr.value && selr.hint ? selr.hint(*selr.value, -1) : nullptr;
+    static std::string tracker_line;   // (a Tracker row stepped to a check: in logic, or what Link still needs)
+    if (selr.tracker >= 0 && !(tracker_line = tracker_hint(selr.tracker)).empty()) hint = tracker_line.c_str();
     const std::string pending_line = (cur_tab == TAB_GRAPHICS || cur_tab == TAB_DEBUG) && restart_pending() ? restart_line(c, 16 * s, hx1 - hx0 - 66 * s) : "";
     static float help_tall = 0, help_tall_w = 0;
     if (help_tall_w != hx1 - hx0) help_tall_w = hx1 - hx0, help_tall = measure_help(c, hx1 - hx0 - 48 * s);

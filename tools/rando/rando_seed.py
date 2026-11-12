@@ -1776,11 +1776,20 @@ def tracker_lines(chests, skulls, gifts=None):
 # ---- the checks, one by one: for the Tracker tab's "Go there" ----
 # <game folder>\mods\rando-seed\checks.txt, a line for each chest and Gold Skulltula that takes part:
 # "<the area's name, as its tracker row>|<Chest or Gold Skulltula>|<the Banc folder>|<C, A or CA: the ages whose map has
-# it>|<x> <y> <z>". The menu steps through an area's lines and has the game take Link to one (the debug tools: the
-# teleport to the folder's map, then the place). What a check holds is not in the file. Gifts and scrubs have no place
-# in a map file by their key, and are not in it. CHECK_ROWS: as many as the menu keeps (kTrackerChecks).
+# it>|<x> <y> <z>|<what the rules ask for>". The menu steps through an area's lines and has the game take Link to one
+# (the debug tools: the teleport to the folder's map, then the place). What a check holds is not in the file. Gifts and
+# scrubs have no place in a map file by their key, and are not in it. CHECK_ROWS: as many as the menu keeps
+# (kTrackerChecks).
+# What the rules ask for: the gating items of the check's rule, each by its two letters (CHECK_CODES, the menu's
+# kLogicItems), with commas; "-" when it asks for nothing. The menu says a check is in logic when Link carries them
+# all. The rules ask for too much, never too little (see RULES): a check not in logic may be within reach.
 CHECKS = "checks.txt"
 CHECK_ROWS = 320
+CHECK_CODES = collections.OrderedDict((
+    ("Item_Sword_Kokiri", "KS"), ("Item_Range_SlingShot", "SL"), ("Item_BombBag_Small", "BB"), ("Item_Boomerang", "BM"),
+    ("Item_GlassTruth", "LT"), ("Item_Range_Bow", "BW"), ("Item_Hammer", "HM"), ("Item_HeavyBoot", "IB"), ("Item_HoverBoot", "HB"),
+    ("Item_Longshot", "LS"), ("Item_Gauntlet_Silver", "SG"), ("Item_Shield_Mirror", "MS"), ("Item_Gauntlet_Gold", "GG"),
+    ("Item_Gauntlet_Goron", "GB"), ("Item_Scale_Silver", "SS")))
 
 
 def check_ages(names):
@@ -1791,13 +1800,14 @@ def check_ages(names):
 
 
 def check_lines(chests, skulls):
-    """The checks file's lines. chests and skulls: [(area (the Banc folder), position, ages)]. By the area's name, the
-    chests first, then by place; no more than the menu keeps."""
-    rows = [(AREA_NAMES.get(area, area).replace("|", "/")[:47], kind, area, ages, pos)
-            for kind, those in (("Chest", chests), ("Gold Skulltula", skulls)) for area, pos, ages in those if len(pos) == 3 and ages]
+    """The checks file's lines. chests and skulls: [(area (the Banc folder), position, ages, what its rule asks for)].
+    By the area's name, the chests first, then by place; no more than the menu keeps."""
+    rows = [(AREA_NAMES.get(area, area).replace("|", "/")[:47], kind, area, ages, pos,
+             ",".join(code for item, code in CHECK_CODES.items() if item in need) or "-")
+            for kind, those in (("Chest", chests), ("Gold Skulltula", skulls)) for area, pos, ages, need in those if len(pos) == 3 and ages]
     rows.sort(key=lambda r: (r[0].lower(), r[1], r[4]))
-    return ["# The checks of this seed, one by one, for the Tracker tab's Go there: <area>|<kind>|<folder>|<ages>|<x> <y> <z>"] + [
-        "%s|%s|%s|%s|%.1f %.1f %.1f" % (name, kind, area, ages, pos[0], pos[1], pos[2]) for name, kind, area, ages, pos in rows[:CHECK_ROWS]]
+    return ["# The checks of this seed, one by one, for the Tracker tab: <area>|<kind>|<folder>|<ages>|<x> <y> <z>|<the rules ask for>"] + [
+        "%s|%s|%s|%s|%.1f %.1f %.1f|%s" % (name, kind, area, ages, pos[0], pos[1], pos[2], need) for name, kind, area, ages, pos, need in rows[:CHECK_ROWS]]
 
 
 def remove_old(mod):
@@ -1987,7 +1997,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + " checks 1" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + " checks 2" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2367,8 +2377,9 @@ def main():
         f.write("\n".join(tracker_lines(collections.Counter(spots[h][0] for h in gives if h not in gifts), collections.Counter(skulls[h][0] for h in took),
                                         collections.Counter(g.area for g in gifts.values()))) + "\n")
     with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\n") as f:   # (for the Tracker tab's Go there)
-        f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h])) for h in gives if h not in gifts],
-                                      [(skulls[h][0], skulls[h][1], check_ages(maps[h])) for h in took])) + "\n")
+        skull_need = lambda h: quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0])
+        f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h]), needs[h]) for h in gives if h not in gifts],
+                                      [(skulls[h][0], skulls[h][1], check_ages(maps[h]), skull_need(h)) for h in took])) + "\n")
     with open(os.path.join(mod, "rando_manifest.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(written)) + "\n")
     with open(stamp_path, "w", encoding="utf-8") as f:   # (last: a run that stopped half way is made again)

@@ -62,28 +62,41 @@ def main():
           "the rows past the file's lines are shown, or the file is not read for the tab")
     check("else if (press[7] && !r.value && r.tracker < 0 && can_bind()) page = 1" in menu and
           "choice_cell(c, va, vb, tracker_says(r.tracker), selected, steps, steps);" in menu and
-          "if (!k) return tracker_value[row];" in menu,
+          ": std::string(tracker_value[row]);" in menu,
           "a Tracker row opens the Controls page on confirm, or does not show the file's value")
     # ---- the checks one by one, and Go there ----
-    lines = seed.check_lines([("ZoraRiver", (1.0, 2.0, 3.0), "CA"), ("KokiriForest", (-27.04, 67.6, 65.2), "C"), ("KokiriForest", (-30.0, 1.0, 2.0), "A"),
-                              ("Market", (), "C"), ("Market", (1.0, 1.0, 1.0), "")],
-                             [("KokiriForest", (5.0, 6.0, 7.0), "CA")])
+    lines = seed.check_lines([("ZoraRiver", (1.0, 2.0, 3.0), "CA", seed.ADULT), ("KokiriForest", (-27.04, 67.6, 65.2), "C", seed.NONE),
+                              ("KokiriForest", (-30.0, 1.0, 2.0), "A", seed.quest_need(seed.ADULT | {seed.HAM}, "KokiriForest")),
+                              ("Market", (), "C", seed.NONE), ("Market", (1.0, 1.0, 1.0), "", seed.NONE)],
+                             [("KokiriForest", (5.0, 6.0, 7.0), "CA", frozenset((seed.S, "Item_NotOfTheRules")))])
     check(lines[0].startswith("#") and lines[1:] == [
-        "Kokiri Forest|Chest|KokiriForest|A|-30.0 1.0 2.0", "Kokiri Forest|Chest|KokiriForest|C|-27.0 67.6 65.2",
-        "Kokiri Forest|Gold Skulltula|KokiriForest|CA|5.0 6.0 7.0", "Zora's River|Chest|ZoraRiver|CA|1.0 2.0 3.0"],
-        "the checks' lines are not the area's name, the kind, the folder, the ages and the place, by area: %r" % lines[1:])
+        "Kokiri Forest|Chest|KokiriForest|A|-30.0 1.0 2.0|KS,SL,BB,BM,HM,GB,SS", "Kokiri Forest|Chest|KokiriForest|C|-27.0 67.6 65.2|-",
+        "Kokiri Forest|Gold Skulltula|KokiriForest|CA|5.0 6.0 7.0|KS", "Zora's River|Chest|ZoraRiver|CA|1.0 2.0 3.0|KS,SL,BB,BM"],
+        "the checks' lines are not the area's name, the kind, the folder, the ages, the place and what the rules ask for, by area: %r" % lines[1:])
+    check(set(seed.CHECK_CODES) == set(seed.PROGRESSION | seed.QUEST_GATES) and len(set(seed.CHECK_CODES.values())) == len(seed.CHECK_CODES),
+          "a gating item of the rules has no letters for the tracker, or two have the same")
+    codes = re.findall(r'^    \{"([A-Z]{2})", "[^"]+", \{[^}]+\}\},$', menu, re.M)
+    check(codes == list(seed.CHECK_CODES.values()), "the menu's gating items are not the script's letters: %r" % codes)
+    names = set(re.findall(r'OOT_ITEM\("([^"]+)"', (ROOT / "gpu" / "vk" / "oot_cheat_items.h").read_text(encoding="utf-8")))
+    block = menu[menu.index("constexpr LogicItem kLogicItems[] = {"):menu.index("int tracker_in_logic(const TrackerCheck& k, std::string* missing) {")]
+    rows_named = set(re.findall(r'"([^"]+)"', "".join(re.findall(r", \{([^}]+)\}\},", block))))
+    check(rows_named and rows_named <= names, "a gating item's row is not a row of the Inventory page: %r" % sorted(rows_named - names))
+    check("if (k.needs[0] == '?' || item_counts[0].load(std::memory_order_relaxed) < 0) return -1;" in menu and
+          'state > 0 ? ": in logic" : state == 0 ? ": not in logic" : ""' in menu and '" in logic)"' in menu and
+          "if (selr.tracker >= 0 && !(tracker_line = tracker_hint(selr.tracker)).empty()) hint = tracker_line.c_str();" in menu,
+          "the tab does not say whether a check is in logic, or says so of a check it knows nothing of")
     check(all(line.split("|")[0] in {t.split("|")[0] for t in seed.tracker_lines({"KokiriForest": 2, "ZoraRiver": 1}, {"KokiriForest": 1})}
               for line in lines[1:]), "a check's area is not the name of its tracker row")
-    check(len(seed.check_lines([("Market", (float(k), 0.0, 0.0), "C") for k in range(400)], [])) == 1 + seed.CHECK_ROWS,
+    check(len(seed.check_lines([("Market", (float(k), 0.0, 0.0), "C", seed.NONE) for k in range(400)], [])) == 1 + seed.CHECK_ROWS,
           "more checks are written than the menu keeps")
     check(seed.check_ages({"KokiriForest_Child_Static.bcett.byml.zs"}) == "C" and seed.check_ages({"LostWood_Adult_Dynamic.bcett.byml.zs"}) == "A" and
           seed.check_ages({"A_Child_Static", "A_Adult_Static"}) == "CA" and seed.check_ages({"FireTemple_Static.bcett.byml.zs"}) == "CA" and
           seed.check_ages(set()) == "", "the ages whose map has a check are not read from its files' names")
     check('with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\\n") as f:' in script and seed.CHECKS == "checks.txt" and
-          '" checks 1" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
+          '" checks 2" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
     m = re.search(r"constexpr int kTrackerChecks = (\d+);", menu)
     check(m and int(m.group(1)) == seed.CHECK_ROWS, "the menu does not keep as many checks as the script may write")
-    check('"%47[^|]|%23[^|]|%39[^|]|%3[^|]|%f %f %f"' in menu and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
+    check('"%47[^|]|%23[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]"' in menu and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
     check("if (press[3] || press[4]) tracker_pick[row] = (tracker_pick[row] + n + 1 + (press[4] ? 1 : -1)) % (n + 1), changed = true;" in menu and
           "else if (r.tracker >= 0) tracker_press(r.tracker, press, changed);" in menu,
           "Left and Right do not step through a row's checks and back to its own words")
