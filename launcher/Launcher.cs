@@ -891,7 +891,10 @@ class LauncherForm : Form {
     // (env name, value when on, label, help, value when off; "" = no line, the game's default)
     const int FixPitch = 80;   // (six switches over the bottom row of buttons; 92 while there were five)
     static readonly string[][] Fixes = {
-        new[] { "RX_VK_WAIT_GPU", "", "No blue light flashes", "Each frame waits for the graphics card to finish the previous one. Stops the one-frame blue light flashes in Hyrule Field. Costs a few fps. Recommended.", "-1" },
+        // (the switch wrote no line when on and -1 when off, and the renderer takes both as 0, no wait (vk_replay.cpp: RX_VK_WAIT_GPU=<frames>):
+        // it did nothing either way. It writes 1 now. Seen without a player, the Market walked into from Hyrule Field: 15 to 20 frames
+        // washed with glare in 20 s without the wait, none with it, for about 5 fps)
+        new[] { "RX_VK_WAIT_GPU", "1", "No light flashes", "Each frame waits for the graphics card to finish the previous one. Stops the one-frame flashes of glare (the Market, Hyrule Field). Costs a few fps. Recommended.", "0" },
         new[] { "HOOKSHOT_OCCLUSION_OFF", "1", "Occlusion tests off", "The game no longer guesses what is hidden: everything is drawn. Steadier sun glare on AMD cards, a little slower.", "" },
         // (Mako) Ducky's controller workaround: HOS_NO_SDL=1 leaves SDL out (host/pad_sdl.c), pads only through XInput
         new[] { "HOS_NO_SDL", "1", "Basic controller mode (tip by Ducky)", "Controller not detected, double inputs or wrong buttons? Reads only Xbox-style (XInput) pads: a PlayStation pad then needs Steam or DS4Windows. No motion aiming.", "" },
