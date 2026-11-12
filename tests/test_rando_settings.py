@@ -78,6 +78,16 @@ def sources(rows):
                                                     "rando_open_forest", "rando_skip_intro", "rando_quests", "rando_frogs", "rando_light_arrows", "rando_start_rupees", "rando_scrubs", "rando_shops", "rando_progressive")),
           "rando_seed.py does not read the settings the menu keeps")
     check("hos_rando_init();" in main, "the game does not read the randomizer's settings at its start")
+    # ---- Skip cutscenes: the game's own skip, asked of a cutscene's player only ----
+    host = read("host", "hos_main.c")
+    check("int hos_rando_skip_cutscenes(void) { return rando_active && rando.v[OOT_RANDO_SKIP_CUTSCENES] != 0; }" in side and
+          '"rando_skip_cutscenes"' in launcher and 'X(SKIP_CUTSCENES, "Skip cutscenes", "rando_skip_cutscenes",' in read("gpu", "vk", "oot_rando.h"),
+          "Skip cutscenes is not a setting of the menu, the launcher and the game")
+    check("const int cutscene = recomp_load64(c, player) == OOT_TIMELINE_PLAYER;" in host and
+          "if (env == 2 || !cutscene || oot_cutscene_kept(name)) return;" in host and "    oot_skip_cutscene(c);" in host,
+          "the skip is asked of a player that is not a cutscene (a flowchart skipped ends its event before its steps have run), or is not asked at all")
+    check('static const char *const kept[] = {"Dm_Title", "Dm_StaffCredit", "Dm_Kokiri_0000", "Dm_SY_"};' in host,
+          "the title, the credits, the opening narration or the game's system scenes are skipped")
     check("oot_rando_read(f, r, &bad)" in side and '"hookshot_options.ini"' in side and "const OotRando *hos_rando(void)" in side,
           "host/oot_rando.c does not read the options file")
     check("rando_seed.py" in side and "not placed yet" in side, "the log no longer says what places the chests and that the other settings do nothing yet")

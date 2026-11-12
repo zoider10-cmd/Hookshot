@@ -1412,8 +1412,75 @@ static int oot_place_file(char *out, size_t size, const char *name) {
     return 1;
 }
 
+/* (the randomizer's fork) Skip cutscenes: the game's own skip, asked of a cutscene as soon as it plays. An event (the
+   event manager's current one, +104) has a list of players (+3768, count +3760) and plays one of them (+3864): its
+   flowchart, or a cutscene the flowchart started. A player's name is at +8, and a cutscene's player is of the class
+   OOT_TIMELINE_PLAYER (a flowchart's is another). The skip is the game's sequence action
+   SeqOneShotEventRequestForceSkip (f_832f1890): the player's +544, whose twelfth virtual function (+88) it calls.
+   Only a cutscene is skipped: asked of a flowchart the skip ends the whole event before its steps have run (the event
+   of Saria's goodbye started over and over, seen without a window). With a cutscene skipped its flowchart goes on: the
+   talk after Saria's goodbye played and the ocarina was given. Asked again each half second while the cutscene still
+   plays (the skip fades out first). Not asked of the events the game itself lets nobody skip (its three
+   EventSettingComponentLists with a SkipSetting), nor of the title's and the credits'.
+   HOS_OOT_SKIP_EVENTS=1 is the setting on, 2 only logs each event and the player it plays. */
+#define OOT_TIMELINE_PLAYER 0x84c82d58ULL
+int hos_rando_skip_cutscenes(void);   /* host/oot_rando.c */
+static int oot_cutscene_kept(const char *name) {
+    static const char *const kept[] = {"Dm_Title", "Dm_StaffCredit", "Dm_Kokiri_0000", "Dm_SY_"};
+    for (size_t i = 0; i < sizeof kept / sizeof kept[0]; i++)
+        if (!strncmp(name, kept[i], strlen(kept[i]))) return 1;
+    return 0;
+}
+
+static void oot_skip_cutscene(Ctx *c) {
+    static uint64_t was_event, was_player;
+    static int64_t asked_at;
+    static int env = -1;
+    if (env < 0) env = getenv("HOS_OOT_SKIP_EVENTS") ? atoi(getenv("HOS_OOT_SKIP_EVENTS")) : 0;
+    if (!env && !hos_rando_skip_cutscenes()) return;
+    const uint64_t events = oot_singleton(c, OOT_EVENTMGR_SLOT);
+    const uint64_t event = events ? recomp_load64(c, events + 104) : 0;
+    if (!event) {
+        was_event = was_player = 0;
+        return;
+    }
+    const uint64_t list = recomp_load64(c, event + 3768);
+    const uint32_t count = recomp_load32(c, event + 3760), at = recomp_load32(c, event + 3864);
+    const uint64_t player = list && at < count ? recomp_load64(c, list + 8ULL * at) : 0;
+    if (!player) return;
+    const int cutscene = recomp_load64(c, player) == OOT_TIMELINE_PLAYER;
+    const int is_new = event != was_event || player != was_player;
+    if (!cutscene && !(is_new && env == 2)) {
+        was_event = event, was_player = player;
+        return;
+    }
+    char name[64] = "";
+    const uint64_t text = recomp_load64(c, player + 8);
+    for (int n = 0; text && n < 63; n++) {
+        name[n] = (char)recomp_load8(c, text + n), name[n + 1] = 0;
+        if (!name[n]) break;
+    }
+    if (is_new && env == 2) hos_log("rando: event: player %u of %u, \"%s\"%s", at, count, name, cutscene ? ": a cutscene" : "");
+    was_event = event, was_player = player;
+    if (env == 2 || !cutscene || oot_cutscene_kept(name)) return;
+    const int64_t now = hos_now_ns();
+    if (!is_new && now - asked_at < 500000000LL) return;
+    asked_at = now;
+    const uint64_t line = recomp_load64(c, player + 544);
+    const uint64_t skip = line ? recomp_load64(c, recomp_load64(c, line) + 88) : 0;
+    A64Fn fn = skip ? a64_lookup(skip) : 0;
+    if (is_new) hos_log("rando: the cutscene %s is skipped%s", name, fn ? "" : " (no skip found: it plays)");
+    if (!fn) return;
+    const Ctx saved = *c;
+    c->x[31] = (c->x[31] - 0x200) & ~0xfULL;
+    c->x[0] = line;
+    fn(c);
+    *c = saved;
+}
+
 static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components) {
     int rx_option(int id, int otherwise);
+    oot_skip_cutscene(c);
     static uint64_t flying_actor, marked_actor, marked_controller;
     static int64_t last_tick, last_player_tick, hold_until, trace_until, trace_next;
     /* (the randomizer's fork) the Tracker tab's Go there: a check's place and its map's folder, read from

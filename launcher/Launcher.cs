@@ -931,6 +931,8 @@ class LauncherForm : Form {
             "A new game starts with 200 rupees in Link's wallet." },
         new object[] { "rando_progressive", "Progressive items", new[] { "Off", "On" }, new[] { 0, 1 },
             "An upgrade found gives the next one Link has not: bomb bags, the bow and quivers, the slingshot and bullet bags, Hookshot and Longshot, strength, scales, wallets, stick and nut bags, magic. A chest still shows the item it was shuffled as." },
+        new object[] { "rando_skip_cutscenes", "Skip cutscenes", new[] { "Off", "On" }, new[] { 0, 1 },
+            "Cutscenes are passed over as soon as they start, with the game's own skip: Saria's goodbye, the Deku Tree's story and the like. Talk, chests and item scenes still play. Not the title, the opening narration or the credits." },
     };
     // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and

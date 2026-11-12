@@ -93,6 +93,18 @@ chests that start an event when opened (most of the big items).
   numbers of that file so both entry points go on to what follows their cutscene. Seen in play: a new game starts in
   Link's house with both cutscenes passed over.
 
+**Skip cutscenes** (`rando_skip_cutscenes`; the game's side only, the seed is the same with it): each cutscene is
+passed over as soon as it starts, by the game's own skip. The game has one (`SeqOneShotEventRequestForceSkip`, and
+only three of its events turn it off, by a `SkipSetting`), and the host asks it (`host/hos_main.c`
+`oot_skip_cutscene`). An event plays a list of players: its flowchart and the cutscenes the flowchart starts (Saria's
+goodbye is the event `KokiriForest_ArriveLostWood`, which plays the cutscene `Dm_Kokiri_0150` and then the
+flowchart `Dm_Kokiri_0155`). Only a cutscene's player is skipped. Seen without a window: asked of a flowchart, the
+skip ended the event before its steps had run, and the event started over and over; asked of the cutscene only,
+`Dm_Kokiri_0150` was passed over in about two seconds, the talk after it played and the Fairy Ocarina was given. A
+chest's scene and talk are flowcharts and play as ever. Kept: the title's, the credits', the opening narration (Skip
+opening passes that one over) and the game's system scenes (`Dm_SY_`). Not tried yet: every other cutscene, the
+bosses' and the songs' among them. `HOS_OOT_SKIP_EVENTS=2` logs each event and the player it plays, without skipping.
+
 **Starting rupees** (`rando_start_rupees`, `--start-rupees`): a new game starts with 200 rupees, a full child's wallet in
 this game. Link's rupees are a whole number of the game's list of starting values (`GameData/GameDataList`,
 `PlayerStatus.CurrentRupee`, 0 in a new game), set there as the open ways' flags are (`flag_defaults`, kind `Int`).

@@ -31,6 +31,8 @@ int hos_rando_on(void) { return rando_active; }
 
 /* Progressive items: on with the randomizer (hos_main.c hos_oot_pouch_add) */
 int hos_rando_progressive(void) { return rando_active && rando.v[OOT_RANDO_PROGRESSIVE] != 0; }
+/* Skip cutscenes: on with the randomizer (hos_main.c oot_skip_cutscene) */
+int hos_rando_skip_cutscenes(void) { return rando_active && rando.v[OOT_RANDO_SKIP_CUTSCENES] != 0; }
 
 /* The seed's settings as the options file beside the game has them, HOS_RANDO_SEED_ID over them. say: what could not be
    loaded goes to the log */

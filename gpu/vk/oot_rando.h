@@ -26,7 +26,7 @@
 
    What is not here: the item placement. tools/rando/rando_seed.py reads rando_on, rando_seed, rando_chests,
    rando_skulltulas, rando_quests (with rando_frogs and rando_light_arrows), rando_keys, rando_major, rando_open_deku,
-   rando_open_forest, rando_skip_intro, rando_start_rupees, rando_scrubs, rando_shops and rando_progressive, shuffles the chests, the Gold Skulltulas' drops and some characters' gifts and
+   rando_open_forest, rando_skip_intro, rando_start_rupees, rando_scrubs, rando_shops and rando_progressive (rando_skip_cutscenes is the game's own: host/hos_main.c), shuffles the chests, the Gold Skulltulas' drops and some characters' gifts and
    makes the open ways' and the opening's changes as a mod (the launcher runs it at Play); the other settings are not placed yet
    (host/oot_rando.c). */
 #ifndef OOT_RANDO_H
@@ -91,6 +91,9 @@
       "Off", "200") \
     X(PROGRESSIVE, "Progressive items", "rando_progressive", \
       "An upgrade found gives the next one Link has not: bomb bags, the bow and quivers, the slingshot and bullet bags, Hookshot and Longshot, strength, scales, wallets, stick and nut bags, magic. A chest still shows the item it was shuffled as.", \
+      "Off", "On") \
+    X(SKIP_CUTSCENES, "Skip cutscenes", "rando_skip_cutscenes", \
+      "Cutscenes are passed over as soon as they start, with the game's own skip: Saria's goodbye, the Deku Tree's story and the like. Talk, chests and item scenes still play. Not the title, the opening narration or the credits.", \
       "Off", "On")
 
 enum {
