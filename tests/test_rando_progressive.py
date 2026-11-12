@@ -85,7 +85,9 @@ def main():
     check("if ((int32_t)c->x[3] <= 0 || !hos_rando_progressive()) return 0;" in block and "if (level >= tiers) return 0;" in block and
           "for (int t = tiers - 1; t >= 0 && !level; t--)" in block,
           "a content taken away, or one found with the setting off, is changed; or Link's place in a family is not the highest he carries")
-    check("c->x[1] = block + 16;" in block and "memcpy(A64_PTR(block + 96), give, strlen(give) + 1);" in block and "recomp_store8(c, text" not in block,
+    name = host[host.index("static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {"):host.index("int hos_oot_pouch_add(Ctx *c) {")]
+    check("c->x[1] = block + 16;" in name and "memcpy(A64_PTR(block + 96), give, strlen(give) + 1);" in name and "oot_pouch_name(c, view, give);" in block and
+          "recomp_store8(c, text" not in block and "recomp_store8(c, text" not in name,
           "the name is written over where it is, or the call is not given the host's own view of it")
     check('if (!strcmp(name, "Item_BombBag_Small") && c->x[30] == 0x828d50acULL && (uint32_t)c->x[4] == 2 && !(c->x[7] & 1)) {' in block and
           "if (!hos_rando_on()) return 0;" in block and block.index("if (!hos_rando_on()) return 0;") < block.index('"Item_BombBag_Small") && c->x[30]'),

@@ -2387,22 +2387,19 @@ def song_stone(data, now):
 # ---- Heart Pieces: the Pieces of Heart lying in the world ----
 # A Piece of Heart that lies in the world is an actor of its map file, Obj_Heart_Piece (one, in Gerudo Valley, is
 # Obj_GerudoValley_Heart_Piece: the same without being lifted). With the setting on some gating items are moved to
-# the pieces' places, where the rules still let the game be finished (gate_skulltulas, as for the Skulltulas): the
-# map's actor is given the item's name (regyaml), and the chest the item leaves gives a Piece of Heart, as some of the
-# game's do. A piece holds its own piece or a gating item, nothing else, and nothing moves without the logic.
-# What lies there is the item made a pick-up from the piece itself, not from the token as a Skulltula's drop is
-# (pickup_pack with HEART for its base). Seen without a window, at Lon Lon Ranch's: made from the token the item was
-# taken by touching it and was there again each time the map was entered (a token is done with through its
-# Skulltula; one lying in a map has none); made from the piece it lay there with the piece's glint, was taken once,
-# and was not there the next two times the map was entered. A gating item is one of a kind, so no item is ever made
-# from both: the ones a Skulltula drops are still made from the token. The other items a pick-up can be (the bundles)
-# are in many chests too, and a chest giving an item made from the piece has not been seen: they are left out.
+# the pieces, where the rules still let the game be finished (gate_skulltulas, as for the Skulltulas), and the chest
+# such an item leaves gives a Piece of Heart, as some of the game's do. A piece holds its own piece or a gating
+# item, nothing else, and nothing moves without the logic.
+# The map is left as it is: the piece lies there, is taken as a piece and stays taken as every piece does. What it
+# gives is said in its check's line, and the game's side puts that item in the pouch in the piece's place
+# (host/hos_main.c oot_piece_gives). The scene is the piece's: it shows a Piece of Heart and says so.
+# Tried first, and left: the item itself lying there, made a pick-up. From the token (as a Skulltula's drop is) it
+# was there again each time its map was entered; from the piece too, seen in play (the Megaton Hammer of Zora's
+# River); and with the saved truth value of the piece's hash set by the game's own setter, there again all the same.
 # The pieces a character gives or a chest holds are not these: they are gifts and chests.
-# RANDO_TEST_HEARTS="<a piece's hash>=<an item> ..." puts that item there, for a test.
 # What a piece asks for: its area's rule, which asks for an adult and more everywhere a piece lies. The one of Lon Lon
-# Ranch (HEART_RULES) asks for what a child out of the forest has. A child's map has most of the others too, but
-# not the way to them (the Colossus' needs the Requiem and a bean). Not walked to: a piece on a ledge is now an item
-# that falls, as a token does.
+# Ranch (HEART_RULES) asks for what a child out of the forest has. None has been walked to.
+# RANDO_TEST_HEARTS="<a piece's hash>=<an item> ..." makes that piece that item, for a test.
 HEART = "Obj_Heart_Piece"
 HEART_ACTORS = (HEART, "Obj_GerudoValley_Heart_Piece")
 HEART_RULES = {0x88358af5b5300aa9: CHILD}   # (Lon Lon Ranch, behind the crates)
@@ -2416,61 +2413,6 @@ def heart_rule(h, area):
 def hearts(data):
     """The Pieces of Heart lying in a map file: [(hash, place)]."""
     return [(h, pos) for h, gyaml, pos, _, _ in marks(data) if gyaml in HEART_ACTORS and h is not None]
-
-
-def regyaml(data, names):
-    """data (a BYML map file) with each actor of `names` ({hash: an actor's name}) made that actor: its Gyaml is the
-    name. The new bytes, or None when the file has none of them or each is that actor already. The names the file
-    has not are put after its own, in a string table at its end, so every index it uses stays right. Read back before
-    it is returned."""
-    if data[:2] != b"YB":
-        raise ValueError("not a little-endian BYML")
-    key_at, str_at, root = struct.unpack_from("<III", data, 4)
-    keys, strings = table(data, key_at), table(data, str_at)
-
-    def actors(d, strs):
-        for name, kind, value, _ in entries(d, root, keys):
-            if name != "Actors" or kind != 0xC0:
-                continue
-            n = int.from_bytes(d[value + 1:value + 4], "little")
-            vals = value + 4 + (n + 3 & ~3)
-            for i in range(n):
-                if d[value + 4 + i] != 0xC1:
-                    continue
-                ident, gyaml = None, None
-                for k, t, v, where in entries(d, struct.unpack_from("<I", d, vals + 4 * i)[0], keys):
-                    if k == "Hash" and t == 0xD5:
-                        ident = struct.unpack_from("<Q", d, v)[0]
-                    elif k == "Hash" and t == 0xD3:
-                        ident = v
-                    elif k == "Gyaml" and t == 0xA0:
-                        gyaml = (where, strs[v] if v < len(strs) else "")
-                if ident in names and gyaml:
-                    yield ident, gyaml[0], gyaml[1]
-
-    todo = [(h, where) for h, where, now in actors(data, strings) if now != names[h]]
-    if not todo:
-        return None
-    all_names = list(strings)
-    for h, _ in todo:
-        if names[h] not in all_names:
-            all_names.append(names[h])
-    out = bytearray(data)
-    out += b"\0" * (-len(out) % 4)
-    if len(all_names) > len(strings):
-        at = len(out)
-        out += string_table(all_names)
-        struct.pack_into("<I", out, 8, at)
-    for h, where in todo:
-        struct.pack_into("<I", out, where, all_names.index(names[h]))
-    out = bytes(out)
-    if any(now != names[h] for h, _, now in actors(out, table(out, struct.unpack_from("<I", out, 8)[0]))):
-        raise ValueError("an actor's new name did not read back as written")
-    before, _, _ = chests(data)
-    after, _, _ = chests(out)
-    if [(c.hash, c.item, c.params, c.event) for c in after] != [(c.hash, c.item, c.params, c.event) for c in before]:
-        raise ValueError("an actor's new name changed a chest")
-    return out
 
 
 def check_name(kind, item, about, pos, exits=(), parts=()):
@@ -2737,7 +2679,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + (" songs 2" if a.songs else "") + (" hearts 1" if a.heart_pieces else "") + " checks 9" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + (" songs 2" if a.songs else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2840,7 +2782,7 @@ def main():
             entry = skulls.setdefault(h, [parts[1] if len(parts) > 2 else "(Banc)", pos, True, False, False])
             entry[2], entry[3] = entry[2] and can, entry[3] or dungeon
             entry[4] = entry[4] or "_Child_" in parts[-1] or entry[0] in SKULLTULA_CHILD_DUNGEONS
-        if found or here or lying or any(struct.pack("<Q", h) in data for h in drops):
+        if found or here or any(struct.pack("<Q", h) in data for h in drops):
             files[rel] = (data, found)
 
     # ---- the chests: one per hash (the same chest is in several files: child and adult, static and dynamic) ----
@@ -2950,8 +2892,7 @@ def main():
                                           sum(1 for i in gives.values() if i == TOKEN)))
 
     # ---- Heart Pieces: the pieces lying in the world and the chests' items a pick-up can be change places ----
-    heart_drops = {}   # a piece's hash -> the item that lies there now
-    lying_items = set()
+    heart_drops = {}   # a piece's hash -> the item it gives now
     heart_asks = lambda h: step((lambda n: song_need(n, pieces[h][0]) if a.songs else n)(
         (lambda n: quest_need(n, pieces[h][0]) if a.quests else n)(heart_rule(h, pieces[h][0]))))
     if a.heart_pieces and pieces:
@@ -2966,11 +2907,9 @@ def main():
             print("Heart Pieces: nothing moves without the logic (Major items, or Songs)")
         for word in os.environ.get("RANDO_TEST_HEARTS", "").split():   # (a test: "<a piece's hash>=<an item>")
             heart_drops[int(word.split("=")[0], 16)] = word.split("=")[1]
-        pickups = sorted(set(pickups) | set(heart_drops.values()))
-        print("Heart Pieces: %d lying in the world take part, %d are now a gating item, and the chest each left holds a Piece of Heart" % (
+        print("Heart Pieces: %d lying in the world take part, %d now give a gating item, and the chest each left holds a Piece of Heart" % (
             len(pieces), len(heart_drops)))
 
-    lying_items = set(heart_drops.values())
     if test_chests:   # (a test: these chests give what the file says)
         strangers = sorted(h for h in test_chests if h not in gives)
         if strangers:
@@ -2984,9 +2923,6 @@ def main():
     for rel, (data, found) in files.items():
         try:
             new = rewrite(data, gives)
-            named_anew = regyaml(new if new is not None else data, heart_drops) if heart_drops else None
-            if named_anew is not None:
-                new = named_anew
             fixed = fix(new if new is not None else data)
             dropped = add_drop(fixed if fixed is not None else new if new is not None else data, drops,
                                anew=bool(os.environ.get("RANDO_DROPS_ANEW")))   # (a test: every file with a drop written anew)
@@ -3066,10 +3002,7 @@ def main():
             for item in pickups:
                 old = pack(item)
                 # (each time: what can be got more than once. A gating item is got once, and is as it was seen in play)
-                if item in lying_items:   # (what lies where a Piece of Heart lay is made from the piece: see HEART)
-                    new = pickup_pack(item, old, pack(HEART), base_name=HEART, effects_name=None, each_time=item not in PROGRESSION)
-                else:
-                    new = pickup_pack(item, old, base, each_time=item not in PROGRESSION)
+                new = pickup_pack(item, old, base, each_time=item not in PROGRESSION)
                 old_parts = sarc_read(old)
                 pack_parts.update(name for name, data in sarc_read(new).items()   # (the files changed in it)
                                   if data != old_parts.get(name, base_parts.get(name)))

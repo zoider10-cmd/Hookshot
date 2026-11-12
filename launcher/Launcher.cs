@@ -908,7 +908,7 @@ class LauncherForm : Form {
         new object[] { "rando_songs", "Songs", new[] { "Off", "Song spots", "Anywhere" }, new[] { 0, 1, 2 },
             "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere is not made yet: the same as Song spots." },
         new object[] { "rando_heart_pieces", "Heart Pieces", new[] { "Off", "On" }, new[] { 0, 1 },
-            "With Major items: the 14 Pieces of Heart lying in the world take part. A key item can lie where a piece lay, with the piece's glint, and the chest it left holds the Piece of Heart. Pieces given by a character or held by a chest are not these." },
+            "With Major items: the 14 Pieces of Heart lying in the world take part. A piece can be a key item: it still looks like a Piece of Heart and its scene says so, but the key item is what Link gets, and the chest it left holds the piece. Pieces given by a character or held by a chest are not these." },
         new object[] { "rando_shops", "Shops", new[] { "Off", "Low prices", "Any price" }, new[] { 0, 1, 2 },
             "Four shelves of each shop sell a shuffled item, once each, at a rolled price of 1 to 1000 rupees. The wallets are shuffled too: a price asks for one that holds it. Needs Chests." },
         new object[] { "rando_scrubs", "Deku Scrubs", new[] { "Off", "On" }, new[] { 0, 1 },

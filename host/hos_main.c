@@ -1157,6 +1157,7 @@ static struct {
     char item[64], folder[40];
     float place[3];
     signed char done;
+    uint64_t piece;   /* (a Piece of Heart lying in the world: its actor's hash; 0: another kind of check) */
 } oot_checks[OOT_TRACKER_MAX];
 static int oot_check_count = -1;
 static char oot_checks_seed[200];   /* (the stamp the checks and the record are of) */
@@ -1215,6 +1216,8 @@ static void oot_tracker_load(const char *stamp) {
                                &oot_checks[oot_check_count].place[1], &oot_checks[oot_check_count].place[2], needs, hash, item);
         if (got < 7) continue;
         snprintf(oot_checks[oot_check_count].item, sizeof oot_checks[0].item, "%s", got >= 10 ? item : "");
+        /* (tools/rando/rando_seed.py names such a check "Piece of Heart", and no other kind begins so) */
+        oot_checks[oot_check_count].piece = got >= 9 && !strncmp(kind, "Piece of Heart", 14) ? strtoull(hash, NULL, 16) : 0;
         oot_checks[oot_check_count++].done = 0;
     }
     if (f) fclose(f);
@@ -1257,6 +1260,35 @@ static void oot_tracker_item(const char *name) {
         else hos_log("rando: tracker: %s got: check %d is collected (the one left that gives it)", name, best);
     }
     ReleaseSRWLockExclusive(&oot_checks_lock);
+}
+
+/* (the randomizer's fork) Heart Pieces: what a Piece of Heart lying in the world gives. The seed leaves the piece in
+   its map as the game has it, so it is taken once and stays taken as every piece does, and says in its check's line
+   what it gives (tools/rando/rando_seed.py HEART). When a Piece of Heart enters the pouch within OOT_PIECE_NEAR metres
+   of such a check's place, in that place's map, and not by an event's action (a chest's and a character's piece come
+   from 0x828d50ac), the item of that check is put in the pouch in its place (hos_oot_pouch_add). The scene is the
+   piece's: it shows a Piece of Heart and says so.
+   Tried before this, and left: the item itself lying there, made a pick-up. Made from the token it was there again
+   each time its map was entered; made from the piece too (seen in play, the Megaton Hammer of Zora's River); and with
+   the saved truth value of the piece's own hash set by the game's setter (f_80f27130, as the piece's own
+   OneShotHeartPieceTakenDeadAfter calls it) it was there again all the same. out: the item, when 1 is returned. */
+#define OOT_PIECE_NEAR 12.0f
+#define OOT_PIECE "Obj_Heart_Piece"
+static int oot_piece_gives(char *out, size_t size) {
+    int best = -1;
+    float nearest = OOT_PIECE_NEAR;
+    AcquireSRWLockShared(&oot_checks_lock);
+    for (int i = 0; i < oot_check_count; i++) {
+        if (!oot_checks[i].piece || !oot_banc_in_folder(oot_link_map, oot_checks[i].folder)) continue;
+        const float dx = oot_checks[i].place[0] - oot_link_place[0], dy = oot_checks[i].place[1] - oot_link_place[1],
+                    dz = oot_checks[i].place[2] - oot_link_place[2];
+        const float away = sqrtf(dx * dx + dy * dy + dz * dz);
+        if (away < nearest) nearest = away, best = i;
+    }
+    const int other = best >= 0 && oot_checks[best].item[0] && strcmp(oot_checks[best].item, OOT_PIECE);
+    if (other) snprintf(out, size, "%s", oot_checks[best].item);
+    ReleaseSRWLockShared(&oot_checks_lock);
+    return other;
 }
 
 /* The record forgotten (the Tracker tab's first row: a new game of the same seed) */
@@ -1765,6 +1797,23 @@ void hos_oot_flight_pose(Ctx *c, uint64_t actor, uint64_t matrix) {
    x3 is how many (20, 5, 1); x2 is not. */
 int hos_rando_progressive(void);   /* host/oot_rando.c */
 int hos_rando_on(void);   /* (host/oot_rando.c: the randomizer is on) */
+#if defined(_WIN32) || defined(__linux__)
+/* The add's content made `give`: the call is given a view of its own, in memory that stays (the name is not written
+   over where it is: it may be the game's own text). Returns the view the call has now. */
+static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {
+    static uint64_t blocks;
+    static unsigned turn;
+    if (!blocks) blocks = hos_sys_alloc(8 * 256, 16);
+    if (!blocks) return view;
+    const uint64_t block = blocks + (uint64_t)(__atomic_fetch_add(&turn, 1, __ATOMIC_RELAXED) % 8) * 256;
+    memcpy(A64_PTR(block), A64_PTR(view - 16), 64);   /* (the view as it is, with what is before it: a string object's start) */
+    memcpy(A64_PTR(block + 96), give, strlen(give) + 1);
+    recomp_store64(c, block + 16, block + 96);
+    recomp_store32(c, block + 24, 128);
+    c->x[1] = block + 16;
+    return block + 16;
+}
+#endif
 int hos_oot_pouch_add(Ctx *c) {
 #if defined(_WIN32) || defined(__linux__)
     static const char *const families[][3][2] = {
@@ -1780,7 +1829,7 @@ int hos_oot_pouch_add(Ctx *c) {
         {{"Item_FairyBless_MP"}, {"Item_FairyBless_MPDouble"}},
     };
     if (!hos_rando_on()) return 0;
-    const uint64_t view = c->x[1];
+    uint64_t view = c->x[1];
     const uint64_t text = view ? recomp_load64(c, view) : 0;
     if (!text) return 0;
     char name[96];
@@ -1801,8 +1850,17 @@ int hos_oot_pouch_add(Ctx *c) {
     }
     /* (an item given: the tracker's record. Not the pouch as a save is loaded (from 0x8112d4b8), an add inside another (a bag
        filled, a bundle's own: from 0x8112f998 and 0x8112e19c), nor the debug inventory's (x4 9)) */
-    if ((int32_t)c->x[3] > 0 && c->x[30] != 0x8112d4b8ULL && c->x[30] != 0x8112f998ULL && c->x[30] != 0x8112e19cULL && (uint32_t)c->x[4] != 9)
+    if ((int32_t)c->x[3] > 0 && c->x[30] != 0x8112d4b8ULL && c->x[30] != 0x8112f998ULL && c->x[30] != 0x8112e19cULL && (uint32_t)c->x[4] != 9) {
+        /* (Heart Pieces: a piece lying in the world that the seed made another item gives that item) */
+        char gives[64];
+        if ((!strcmp(name, OOT_PIECE) || !strcmp(name, "Obj_GerudoValley_Heart_Piece")) && c->x[30] != 0x828d50acULL &&
+            oot_piece_gives(gives, sizeof gives)) {
+            hos_log("rando: the Piece of Heart lying here is the seed's %s: that is given", gives);
+            view = oot_pouch_name(c, view, gives);
+            snprintf(name, sizeof name, "%s", gives);
+        }
         oot_tracker_item(name);
+    }
     if ((int32_t)c->x[3] <= 0 || !hos_rando_progressive()) return 0;
     for (unsigned f = 0; f < sizeof families / sizeof families[0]; f++) {
         int spelling = -1, tiers = 0;
@@ -1821,16 +1879,7 @@ int hos_oot_pouch_add(Ctx *c) {
         const char *give = families[f][level][spelling] ? families[f][level][spelling] : families[f][level][0];
         hos_log("rando: progressive: %s found, Link has %d of its %d: %s given", name, level, tiers, give);
         if (!strcmp(give, name)) return 0;
-        static uint64_t blocks;
-        static unsigned turn;
-        if (!blocks) blocks = hos_sys_alloc(8 * 256, 16);
-        if (!blocks) return 0;
-        const uint64_t block = blocks + (uint64_t)(__atomic_fetch_add(&turn, 1, __ATOMIC_RELAXED) % 8) * 256;
-        memcpy(A64_PTR(block), A64_PTR(view - 16), 64);   /* (the view as it is, with what is before it: a string object's start) */
-        memcpy(A64_PTR(block + 96), give, strlen(give) + 1);
-        recomp_store64(c, block + 16, block + 96);
-        recomp_store32(c, block + 24, 128);
-        c->x[1] = block + 16;
+        oot_pouch_name(c, view, give);
         return 0;
     }
     return 0;

@@ -54,7 +54,7 @@
       "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere is not made yet: the same as Song spots.", \
       "Off", "Song spots", "Anywhere") \
     X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \
-      "With Major items: the 14 Pieces of Heart lying in the world take part. A key item can lie where a piece lay, with the piece's glint, and the chest it left holds the Piece of Heart. Pieces given by a character or held by a chest are not these.", \
+      "With Major items: the 14 Pieces of Heart lying in the world take part. A piece can be a key item: it still looks like a Piece of Heart and its scene says so, but the key item is what Link gets, and the chest it left holds the piece. Pieces given by a character or held by a chest are not these.", \
       "Off", "On") \
     X(SHOPS, "Shops", "rando_shops", \
       "Four shelves of each shop sell a shuffled item, once each, at a rolled price of 1 to 1000 rupees. The wallets are shuffled too: a price asks for one that holds it. Needs Chests.", \

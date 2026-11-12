@@ -1,16 +1,17 @@
 """The randomizer's Heart Pieces setting: no game data.
 
-The Pieces of Heart lying in the world take part (tools/rando/rando_seed.py HEART). A gating item can lie where a
-piece lay: the map's actor is given the item's name, the item is made a pick-up from the piece itself (so one taken
-stays taken: made from the token it was there again each time the map was entered, seen without a window), and the
-chest the item left gives the Piece of Heart.
+The Pieces of Heart lying in the world take part (tools/rando/rando_seed.py HEART). A piece can be a gating item: the
+map is left as it is, so the piece is taken once and stays taken; its check's line says what it gives, and the game's
+side puts that item in the pouch in the piece's place (host/hos_main.c oot_piece_gives). The chest the item left
+gives the Piece of Heart. (The item itself lying there was there again each time its map was entered: seen in play.)
 
-- a map file: the pieces lying in it are found, both kinds; an actor is given another name and reads back so, the
-  others and the chests as they were; nothing to change is None;
+- a map file: the pieces lying in it are found, both kinds;
 - the rules: a piece asks for its area's rule, the one of Lon Lon Ranch for what a child out of the forest has;
 - the placing: the chest a gating item leaves for a piece gives the piece, not a token;
-- the script reads the setting, names it in the seed's stamp, makes what lies there from the piece and what a
-  Skulltula drops from the token, and writes the pieces with the checks.
+- the script reads the setting, names it in the seed's stamp, leaves the map files and the pick-ups alone, and
+  writes the pieces with the checks;
+- the game's side: a Piece of Heart entering the pouch near such a check, not from an event's action, is made the
+  check's item before the tracker's record and Progressive items see it.
 
     python -I -B tests/test_rando_hearts.py
 """
@@ -50,16 +51,6 @@ def main():
         actor(0x13, "Obj_TBox_A_01", (7.0, 8.0, 9.0), "TBox_Rupee_Blue"), actor(0x14, "Obj_Heart", (0.0, 0.0, 0.0))])),))), 7)
     # ---- a map file ----
     check(S.hearts(data) == [(0x11, (1.0, 2.0, 3.0)), (0x12, (4.0, 5.0, 6.0))], "the pieces lying in a map file are not found, both kinds, or a heart is taken for one: %r" % S.hearts(data))
-    new = S.regyaml(data, {0x11: "Item_Hammer", 0x12: "Item_Hammer", 0x99: "Item_Longshot"})
-    check(new is not None and S.hearts(new) == [], "an actor given another name is still a piece")
-    names = {h: gyaml for h, gyaml, _, _, _ in S.marks(new)}
-    tree = S.byml_parse(new)[0][1]["Actors"][1]
-    got = [(int.from_bytes(a[1]["Hash"][1], "little"), a[1]["Gyaml"][1]) for a in tree]
-    check(got == [(0x11, "Item_Hammer"), (0x12, "Item_Hammer"), (0x13, "Obj_TBox_A_01"), (0x14, "Obj_Heart")],
-          "the actors do not read back with their new names, the others as they were: %r" % got)
-    check([(c.hash, c.item) for c in S.chests(new)[0]] == [(0x13, "TBox_Rupee_Blue")] and names.get(0x13) == "Obj_TBox_A_01", "a chest changed with it")
-    check(S.regyaml(data, {0x99: "Item_Hammer"}) is None and S.regyaml(data, {0x11: "Obj_Heart_Piece"}) is None and S.regyaml(new, {0x11: "Item_Hammer"}) is None,
-          "a file with nothing to change is written")
     # ---- the rules ----
     check(S.heart_rule(0x88358af5b5300aa9, "HyruleField") == S.CHILD and S.heart_rule(0x1, "HyruleField") == S.rule("HyruleField", "") and
           S.heart_rule(0x1, "DesertColossus") >= S.DESERT and S.heart_rule(0x1, "NoSuchArea") == S.PROGRESSION,
@@ -74,21 +65,29 @@ def main():
     check(out[1] == S.TOKEN, "a Skulltula's chest no longer gives a token")
     # ---- the script ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_heart_pieces": 0' in script and '(" hearts 1" if a.heart_pieces else "")' in script and
+    check('"rando_heart_pieces": 0' in script and '(" hearts 2" if a.heart_pieces else "")' in script and
           'a.heart_pieces = a.heart_pieces or ini["rando_heart_pieces"] != 0' in script,
           "the script does not read the setting, or does not name it in the seed's stamp")
-    check("new = pickup_pack(item, old, pack(HEART), base_name=HEART, effects_name=None, each_time=item not in PROGRESSION)" in script and
-          "new = pickup_pack(item, old, base, each_time=item not in PROGRESSION)" in script and "lying_items = set(heart_drops.values())" in script,
-          "what lies where a piece lay is not made from the piece (made from the token it is there again each time), or a Skulltula's drop is")
+    check("regyaml" not in script and "pack(HEART)" not in script and "set(heart_drops.values())" not in script,
+          "the item is put in the map or made a pick-up again: lying there it was there again each time its map was entered")
     check("{h: heart_asks(h) for h in pieces}, fixed, token=HEART," in script and
-          "(skull_asks(h), item) for h, item in skull_drops.items() if item in PROGRESSION]" in script and
-          "named_anew = regyaml(new if new is not None else data, heart_drops) if heart_drops else None" in script,
-          "the pieces are not placed by the rules with the Skulltulas' gating items counted, or the map files are not changed")
+          "(skull_asks(h), item) for h, item in skull_drops.items() if item in PROGRESSION]" in script,
+          "the pieces are not placed by the rules with the Skulltulas' gating items counted")
     check('named("Piece of Heart", h, pieces[h][0], pieces[h][1]), h,' in script and "heart_drops.get(h, HEART)) for h in pieces]," in script,
           "the pieces are not written with the checks")
     header = (ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
-    check('X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \\' in header and "With Major items: the 14 Pieces of Heart lying in the world take part." in header,
+    check('X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \\' in header and "With Major items: the 14 Pieces of Heart lying in the world take part. A piece can be a key item: it still looks like a Piece of Heart" in header,
           "the setting's row does not say what it does")
+    host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
+    check('oot_checks[oot_check_count].piece = got >= 9 && !strncmp(kind, "Piece of Heart", 14) ? strtoull(hash, NULL, 16) : 0;' in host and
+          'named("Piece of Heart", h,' in script, "the game's side does not know which checks are pieces lying in the world")
+    block = host[host.index("int hos_oot_pouch_add(Ctx *c) {"):]
+    check('(!strcmp(name, OOT_PIECE) || !strcmp(name, "Obj_GerudoValley_Heart_Piece")) && c->x[30] != 0x828d50acULL &&' in block and
+          "view = oot_pouch_name(c, view, gives);" in block and 'snprintf(name, sizeof name, "%s", gives);' in block and
+          block.index("view = oot_pouch_name(c, view, gives);") < block.index("oot_tracker_item(name);") < block.index("hos_rando_progressive()"),
+          "a piece lying in the world does not give its check's item, a chest's piece does, or the record and Progressive items see the piece")
+    check("const int other = best >= 0 && oot_checks[best].item[0] && strcmp(oot_checks[best].item, OOT_PIECE);" in host and "#define OOT_PIECE_NEAR 12.0f" in host,
+          "a piece that is its own piece is made another item, or one far from Link is")
     print("PASS: Heart Pieces")
 
 

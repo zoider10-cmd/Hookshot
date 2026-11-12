@@ -95,19 +95,24 @@ chests that start an event when opened (most of the big items).
 
 **Heart Pieces** (`rando_heart_pieces`, `--heart-pieces`, `HEART`): the 14 Pieces of Heart lying in the world take
 part (the map files' `Obj_Heart_Piece` actors, and Gerudo Valley's `Obj_GerudoValley_Heart_Piece`). With the logic on,
-some gating items are moved to the pieces' places where the rules still let the game be finished; the chest such an
-item leaves gives the Piece of Heart. A piece holds its own piece or a gating item, nothing else.
-- The map's actor is given the item's name (`regyaml`), and the item is made a pick-up from the piece itself, not
-  from the token as a Gold Skulltula's drop is. Seen without a window at Lon Lon Ranch's piece: made from the token,
-  an arrow bundle was taken by touching it and was there again each time the map was entered; made from the piece,
-  the Megaton Hammer lay there with the piece's glint, was taken once and was not there the next two times the map
-  was entered. Not seen: a save and a load between, and the item's look from close by.
-- A gating item is one of a kind, so none is made from both the piece and the token. The bundles a pick-up can be are
-  left out: they are in many chests too, and a chest giving an item made from the piece has not been seen.
+some gating items are moved to the pieces where the rules still let the game be finished; the chest such an item
+leaves gives the Piece of Heart. A piece holds its own piece or a gating item, nothing else.
+- The map is left as it is: the piece lies there, is taken as a piece and stays taken as every piece does. Its
+  check's line says what it gives, and the game's side puts that item in the pouch in the piece's place
+  (`host/hos_main.c` `oot_piece_gives`: a Piece of Heart entering the pouch within 12 m of such a check, not from an
+  event's action, which is how a chest's and a character's piece come). The scene is the piece's: it shows a Piece
+  of Heart and says so; the tracker's row and the inventory say what was got.
+- Tried first, and left: the item itself lying there, made a pick-up. Made from the token (as a Skulltula's drop is)
+  it was there again each time its map was entered. Made from the piece too: seen in play, the Megaton Hammer of
+  Zora's River was got with its scene, and was there again (taken a second time it went over Link's head with no
+  scene). And with the saved truth value of the piece's own hash set by the game's setter (`f_80f27130`, which the
+  piece's `OneShotHeartPieceTakenDeadAfter` calls with its `RespawnGmdHash`), there again all the same: what keeps a
+  lying piece taken was not found. The game's list has a value for every placed pick-up (`Bool64bitKey`, by the
+  actor's hash); an actor that drops something (a chest, a pot, a Skulltula) has a second one, hash ^ 2.
 - The rules: a piece asks for its area's rule, which asks for an adult everywhere a piece lies; Lon Lon Ranch's asks
   for what a child out of the forest has (`HEART_RULES`). None has been walked to.
-- The pieces are checks of the tracker ("Piece of Heart, Lon Lon Ranch"). `RANDO_TEST_HEARTS="<hash>=<item>"` puts an
-  item at a piece's place, for a test.
+- The pieces are checks of the tracker ("Piece of Heart, Lon Lon Ranch"). `RANDO_TEST_HEARTS="<hash>=<item>"` makes
+  a piece an item, for a test. Not seen yet: a piece giving its item.
 
 **Songs** (`rando_songs`, `--songs`, `SONGS`): the twelve songs are shuffled among the twelve lessons (Song spots;
 Anywhere, a song in any item's place, is not made yet and is the same). A lesson gives its song as a character gives
