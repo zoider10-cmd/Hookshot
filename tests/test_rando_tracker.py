@@ -117,7 +117,7 @@ def main():
                              [("Market", (7.0, 8.0, 9.0), "C", seed.NONE, "the dog lady", None, "TBox_Rupee_Blue"), ("Market", (7.0, 8.0, 9.5), "C", seed.NONE, "the gallery")])
     check(given[1:] == ["Market|Chest (red rupee)|Market|C|1.0 2.0 3.0|-|86f700bfe72c18fc|Item_Hammer", "Market|The dog lady|Market|C|7.0 8.0 9.0|-|-|TBox_Rupee_Blue",
                         "Market|The gallery|Market|C|7.0 8.0 9.5|-"], "a line does not end with the item it gives, after its hash or a dash: %r" % given[1:])
-    check('named("Chest", h, spots[h][0], spots[h][5], spots[h][1]), h, gives[h])' in script and
+    check('named("Chest", h, spots[h][0], spots[h][5], spots[h][1]), h, gives[h],' in script and
           'named("Gold Skulltula", h, skulls[h][0], skulls[h][1]), h, skull_drops.get(h) or drops.get(h) or TOKEN)' in script and
           "needs[h], g.name, None, gives[h])" in script and "needs[h], gifts[h].name, None, gives[h])" in script,
           "what the chests, the Gold Skulltulas, the gifts and the shelves give is not written with the checks")
@@ -147,6 +147,20 @@ def main():
           "if (done == 1) continue;   // (a check collected is not one to go for)" in menu and '(n == 1 ? " check" : " checks")' in menu and
           "for (auto& done : tracker_done) done.store(-1, std::memory_order_relaxed);" in menu,
           "the tab does not say a check is done, counts one collected among those in logic, or takes a check for collected before the game says so")
+    # ---- where Link is put to go to a chest: before it ----
+    front = seed.chest_front
+    check(front((-54.2, 112.3, -40.9), (0.0, 0.83, 0.0)) == (-53.2, 112.3, -40.0) and front((-49.3, 112.3, -40.9), (0.0, -0.78, 0.0)) == (-50.2, 112.3, -40.0),
+          "the two end chests of Mido's house are not gone to before them, towards the room's middle: %r %r" % (
+              front((-54.2, 112.3, -40.9), (0.0, 0.83, 0.0)), front((-49.3, 112.3, -40.9), (0.0, -0.78, 0.0))))
+    check(front((0.0, 5.0, 0.0), (0.0, 0.0, 0.0)) == (0.0, 5.0, 1.3) and front((0.0, 5.0, 0.0), (3.14159265, 0.0, 3.14159265)) == (0.0, 5.0, -1.3) and
+          front((0.0, 5.0, 0.0), (0.0, 1.57079633, 0.0), 2.0) == (2.0, 5.0, 0.0),
+          "a chest's front is not its +Z turned as the chest is")
+    stood = seed.check_lines([("Market", (1.0, 2.0, 3.0), "C", seed.NONE, "Chest (red rupee)", 0x1f, "Item_Hammer", (1.0, 2.0, 4.3)),
+                              ("Market", (5.0, 2.0, 3.0), "C", seed.NONE, "Chest (blue rupee)", None, "", (5.0, 2.0, 4.3))], [])
+    check(stood[1:] == ["Market|Chest (blue rupee)|Market|C|5.0 2.0 3.0|-|-|-|5.0 2.0 4.3", "Market|Chest (red rupee)|Market|C|1.0 2.0 3.0|-|000000000000001f|Item_Hammer|1.0 2.0 4.3"],
+          "a line does not end with where Link is put, after its hash and its item or a dash for each: %r" % stood[1:])
+    check('chest_front(spots[h][5], about[h]["turned"]) if len(spots[h][5]) == 3 and "turned" in about.get(h, {}) else None)' in script and
+          'was.setdefault("turned", words.get("Rotate", (0.0, 0.0, 0.0)))' in script, "a chest's front is not written with its line")
     # ---- what the tab shows: all, the ones left, the ones left and in logic ----
     check("if (tracker_done[i].load(std::memory_order_relaxed) == 1) return false;" in menu and
           "return tracker_show != kTrackerShowReachable || tracker_in_logic(tracker_checks[i]) != 0;" in menu and
@@ -187,10 +201,10 @@ def main():
           seed.check_ages({"A_Child_Static", "A_Adult_Static"}) == "CA" and seed.check_ages({"FireTemple_Static.bcett.byml.zs"}) == "CA" and
           seed.check_ages(set()) == "", "the ages whose map has a check are not read from its files' names")
     check('with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\\n") as f:' in script and seed.CHECKS == "checks.txt" and
-          '" checks 7" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
+          '" checks 8" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
     m = re.search(r"constexpr int kTrackerChecks = (\d+);", menu)
     check(m and int(m.group(1)) == seed.CHECK_ROWS, "the menu does not keep as many checks as the script may write")
-    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]"' in menu and "char area[48], kind[80], folder[40], ages[4];" in menu and seed.CHECK_NAME == 79 and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
+    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]|%31[^|]|%63[^|]|%f %f %f"' in menu and "char area[48], kind[80], folder[40], ages[4];" in menu and seed.CHECK_NAME == 79 and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
     check("if (press[3] || press[4]) tracker_pick[row] = (tracker_pick[row] + n + 1 + (press[4] ? 1 : -1)) % (n + 1), changed = true;" in menu and
           "else if (r.tracker >= 0) tracker_press(r.tracker, press, changed);" in menu,
           "Left and Right do not step through a row's checks and back to its own words")
@@ -198,7 +212,8 @@ def main():
           "a click on a Tracker row's arrows goes to the check instead of stepping (seen in play), or its name does not go there")
     check("const TrackerCheck* k = press[7] && cheats_on() ? tracker_row_check(row, tracker_pick[row]) : nullptr;" in menu and
           '"rando\\\\goto_check.txt"' in menu and "cheat_action.store(kTrackerGoAction);" in menu and
-          'fprintf(f, "%.2f %.2f %.2f %s %s\\n", k->pos[0], k->pos[1] + 1.0f, k->pos[2], k->folder, k->ages);' in menu,
+          'fprintf(f, "%.2f %.2f %.2f %s %s\\n", k->stand[0], k->stand[1] + 1.0f, k->stand[2], k->folder, k->ages);' in menu and
+          "if (got < 13) memcpy(k.stand, k.pos, sizeof k.stand);" in menu,
           "confirm does not send the check shown to the game, or does so with the debug tools off")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     m = re.search(r"constexpr int kTrackerGoAction = (\d+);", menu)

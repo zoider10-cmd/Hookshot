@@ -493,7 +493,9 @@ takes Link there: the menu writes the check to `<game folder>/rando/goto_check.t
 game (`host/hos_main.c`) takes the debug teleport to the folder's map when Link is in another, waits until he has
 arrived (no event playing, no map loading, for a second and a half), then puts him a metre above the check and holds
 him three seconds, as at a go-to. Link's own mark becomes that place. A check whose map the age Link has now does not
-have is not gone to (the log says so): change his age first.
+have is not gone to (the log says so): change his age first. A chest is gone to before it, not above it: its line
+ends with a place 1.3 m in front of the chest, from how the chest is turned (`chest_front`). Above a chest Link came
+down behind it, and in Mido's house a wall he could not see kept him there.
 
 Seen in unattended runs (the action sent by the live input file, not from the menu): a chest of the same map (Kokiri
 Forest), of another (Zora's River), of a dungeon (Inside the Deku Tree) and one 500 metres across Hyrule Field, in a

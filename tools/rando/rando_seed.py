@@ -2226,7 +2226,7 @@ def marks(data):
         for i in range(n):
             if data[value + 4 + i] != 0xC1:
                 continue
-            ident, gyaml, pos, scale, dyn = None, "", (), (), None
+            ident, gyaml, pos, scale, dyn, turned = None, "", (), (), None, (0.0, 0.0, 0.0)
             for k, t, v, _ in entries(data, struct.unpack_from("<I", data, vals + 4 * i)[0], keys):
                 if k == "Hash" and t == 0xD5:
                     ident = struct.unpack_from("<Q", data, v)[0]
@@ -2237,14 +2237,35 @@ def marks(data):
                 elif k in ("Translate", "Scale") and t == 0xC0 and int.from_bytes(data[v + 1:v + 4], "little") == 3:
                     three = tuple(round(x, 1) for x in struct.unpack_from("<3f", data, v + 8))
                     pos, scale = (three, scale) if k == "Translate" else (pos, three)
+                elif k == "Rotate" and t == 0xC0 and int.from_bytes(data[v + 1:v + 4], "little") == 3:
+                    turned = struct.unpack_from("<3f", data, v + 8)
                 elif k == "Dynamic" and t == 0xC1:
                     dyn = v
             if gyaml in MARKS or gyaml == SKULLTULA or gyaml.startswith("Obj_TBox"):
                 words = {}
                 for dk, dt, dv, _ in entries(data, dyn, keys) if dyn is not None else ():
                     words[dk] = (strings[dv] if dv < len(strings) else "") if dt == 0xA0 else dv
+                words["Rotate"] = turned   # (not a Dynamic's name: how the actor is turned, in radians about X, Y and Z)
                 out.append((ident, gyaml, pos, scale, words))
     return out
+
+
+# Where Link is put to go to a chest: not on it. Above a chest he came down on it or behind it, and behind one of Mido's
+# house's he was between the chest and the wall, where a wall he could not see kept him (seen in play). A chest's
+# front is its own +Z turned as the chest is (about X, then Y, then Z: the four of Mido's house, turned 0.83 to -0.78
+# about Y, face the room's middle so); he is put CHEST_FRONT metres before it, at its height.
+CHEST_FRONT = 1.3
+
+
+def chest_front(pos, turned, far=CHEST_FRONT):
+    """the place `far` metres before a chest: its place and how it is turned (radians about X, Y, Z)"""
+    x, y, z = 0.0, 0.0, 1.0
+    rx, ry, rz = turned
+    y, z = y * math.cos(rx) - z * math.sin(rx), y * math.sin(rx) + z * math.cos(rx)
+    x, z = x * math.cos(ry) + z * math.sin(ry), -x * math.sin(ry) + z * math.cos(ry)
+    x, y = x * math.cos(rz) - y * math.sin(rz), x * math.sin(rz) + y * math.cos(rz)
+    flat = math.hypot(x, z) or 1.0
+    return (round(pos[0] + far * x / flat, 1), pos[1], round(pos[2] + far * z / flat, 1))
 
 
 def check_name(kind, item, about, pos, exits=(), parts=()):
@@ -2273,7 +2294,8 @@ def check_lines(chests, skulls, gifts=()):
     chests first, then the Gold Skulltulas, then the gifts, each by name; no more than the menu keeps. After what the
     rules ask for a line may have two more fields: its actor's hash, 16 hexadecimal digits ("-" without one), and
     the item it gives (a seventh of a tuple): the game's side marks a check collected when its item is given near it.
-    A line with neither ends after what the rules ask for."""
+    A line with neither ends after what the rules ask for. An eighth of a tuple is where Link is put to go to the
+    check, when that is not the check's own place (a chest's front): a field more, "x y z"."""
     rows = []
     for order, plain, those in ((0, "Chest", chests), (1, "Gold Skulltula", skulls), (2, "", gifts)):
         for area, pos, ages, need, *more in those:
@@ -2282,7 +2304,7 @@ def check_lines(chests, skulls, gifts=()):
             name = more[0] if more else plain
             rows.append([AREA_NAMES.get(area, area).replace("|", "/")[:47], (name[:1].upper() + name[1:]).replace("|", "/"), area, ages, pos,
                          ",".join(code for item, code in CHECK_CODES.items() if item in need) or "-", order, more[1] if len(more) > 1 else None,
-                         more[2] if len(more) > 2 else ""])
+                         more[2] if len(more) > 2 else "", more[3] if len(more) > 3 else None])
     rows.sort(key=lambda r: (r[0].lower(), r[6], r[1], r[4]))
     same = collections.Counter((r[0], r[1]) for r in rows if r[1] not in ("Chest", "Gold Skulltula"))
     count = collections.Counter()
@@ -2291,10 +2313,11 @@ def check_lines(chests, skulls, gifts=()):
             count[(r[0], r[1])] += 1
             r[1] = r[1][:CHECK_NAME - 4] + " #%d" % count[(r[0], r[1])]
         r[1] = r[1][:CHECK_NAME]
-    return ["# The checks of this seed, one by one, for the Tracker tab: <area>|<kind>|<folder>|<ages>|<x> <y> <z>|<the rules ask for>[|<the actor's hash>[|<the item it gives>]]"] + [
-        "%s|%s|%s|%s|%.1f %.1f %.1f|%s%s%s" % (name, kind, area, ages, pos[0], pos[1], pos[2], need,
-                                               "" if key is None and not given else "|-" if key is None else "|%016x" % key, "|" + given if given else "")
-        for name, kind, area, ages, pos, need, _, key, given in rows[:CHECK_ROWS]]
+    return ["# The checks of this seed, one by one, for the Tracker tab: <area>|<kind>|<folder>|<ages>|<x> <y> <z>|<the rules ask for>[|<the actor's hash>[|<the item it gives>[|<where Link is put>]]]"] + [
+        "%s|%s|%s|%s|%.1f %.1f %.1f|%s%s%s%s" % (name, kind, area, ages, pos[0], pos[1], pos[2], need,
+                                                 "" if key is None and not given and not stand else "|-" if key is None else "|%016x" % key,
+                                                 "|" + given if given else "|-" if stand else "", "|%.1f %.1f %.1f" % tuple(stand) if stand else "")
+        for name, kind, area, ages, pos, need, _, key, given, stand in rows[:CHECK_ROWS]]
 
 
 def remove_old(mod):
@@ -2490,7 +2513,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + " checks 7" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + " checks 8" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2563,6 +2586,7 @@ def main():
                 elif h is not None:
                     was = about.setdefault(h, {})
                     was["big"] = was.get("big") or gyaml.startswith("Obj_TBox_A_02")
+                    was.setdefault("turned", words.get("Rotate", (0.0, 0.0, 0.0)))
                     was["night"] = was.get("night") or bool(words.get("Enemy_Skulltula_Gold_Nocturnal"))
                     was["soil"] = was.get("soil") or bool(words.get("Enemy_Skulltula_Gold_IsMagicBeanSoil"))
                     if "DefaultDungeonRoomIndex" in words:
@@ -3006,7 +3030,8 @@ def main():
     with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\n") as f:   # (for the Tracker tab's Go there)
         skull_need = lambda h: step(quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0]))
         named = lambda kind, h, area, pos, item="": check_name(kind, item, about.get(h, {}), pos, exits[area], sub_areas[area])
-        f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h]), needs[h], named("Chest", h, spots[h][0], spots[h][5], spots[h][1]), h, gives[h])
+        f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h]), needs[h], named("Chest", h, spots[h][0], spots[h][5], spots[h][1]), h, gives[h],
+                                        chest_front(spots[h][5], about[h]["turned"]) if len(spots[h][5]) == 3 and "turned" in about.get(h, {}) else None)
                                        for h in gives if h not in gifts],
                                       [(skulls[h][0], skulls[h][1], check_ages(maps[h]), skull_need(h), named("Gold Skulltula", h, skulls[h][0], skulls[h][1]), h, skull_drops.get(h) or drops.get(h) or TOKEN)
                                        for h in took],

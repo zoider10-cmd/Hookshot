@@ -119,6 +119,7 @@ constexpr ULONGLONG kTrackerForgetMs = 4000;
 struct TrackerCheck {
     char area[48], kind[80], folder[40], ages[4];   // (kind: the check's name; Chest or Gold Skulltula in a file without names)
     float pos[3];
+    float stand[3];   // (where Link is put to go to it: a chest's front; its own place where the file has no other)
     char needs[64];   // (what the seed's rules ask for: kLogicItems' letters with commas, "-" nothing, "?" a file without it)
 };
 /// A check with what Link carries: 1 in logic (he has all its rule asks for), 0 not (missing, when given: what he has
@@ -1426,9 +1427,14 @@ void tracker_load() {
         while (checks < kTrackerChecks && fgets(line, sizeof line, f)) {
             TrackerCheck& k = tracker_checks[checks];
             k.needs[0] = '?', k.needs[1] = 0;   // (a file written before the rules were in it)
-            if (line[0] != '#' && sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]", k.area, k.kind, k.folder, k.ages, &k.pos[0],
-                                         &k.pos[1], &k.pos[2], k.needs) >= 7)
+            char hash[32], gives[64];   // (the game side's: host/hos_main.c oot_tracker_load)
+            const int got = line[0] == '#' ? 0 : sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]|%31[^|]|%63[^|]|%f %f %f", k.area, k.kind,
+                                                        k.folder, k.ages, &k.pos[0], &k.pos[1], &k.pos[2], k.needs, hash, gives, &k.stand[0], &k.stand[1],
+                                                        &k.stand[2]);
+            if (got >= 7) {
+                if (got < 13) memcpy(k.stand, k.pos, sizeof k.stand);
                 checks++;
+            }
         }
         fclose(f);
     }
@@ -3492,7 +3498,7 @@ void tracker_press(int row, const bool* press, bool& changed) {
     std::string path = ini_path();
     path = path.substr(0, path.find_last_of("\\/") + 1) + "rando\\goto_check.txt";
     if (FILE* f = fopen(path.c_str(), "w")) {
-        fprintf(f, "%.2f %.2f %.2f %s %s\n", k->pos[0], k->pos[1] + 1.0f, k->pos[2], k->folder, k->ages);
+        fprintf(f, "%.2f %.2f %.2f %s %s\n", k->stand[0], k->stand[1] + 1.0f, k->stand[2], k->folder, k->ages);
         fclose(f);
         cheat_action.store(kTrackerGoAction);
         logf("menu: tracker: go to the %s of %s at %.1f %.1f %.1f", k->kind, k->folder, k->pos[0], k->pos[1], k->pos[2]);
