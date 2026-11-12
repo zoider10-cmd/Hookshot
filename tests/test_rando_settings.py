@@ -63,8 +63,12 @@ def sources(rows):
     got = [(key, label, re.findall(r'"([^"]*)"', choices), [int(v) for v in values.split(",")], help_)
            for key, label, choices, values, help_ in found[1:]]
     check(got == want, "the launcher's Randomizer page and gpu/vk/oot_rando.h differ:\n  %r\n  %r" % (got, want))
-    check("AddSelectors(RandoRows, 3, cx, colW, null, 47, 45);" in launcher and '"Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About"' in launcher,
+    check("AddSelectors(RandoRows, 3, cx, colW, null, 47, 45, true);" in launcher and '"Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About"' in launcher,
           "the launcher does not show its Randomizer page")
+    # (more settings than the page has room for: the list scrolls, and a row is shown, lit and pressed only inside its view)
+    check("if (PageNow == 3) ScrollRando(-e.Delta * 47f / 120);" in launcher and "g.SetClip(RandoView, CombineMode.Intersect);" in launcher and
+          "w.Hit(p) && InView(w, p)) return w;" in launcher and "foreach (var w in widgets) if (w.Scrolls) w.R.Y = w.HomeY - randoScroll;" in launcher,
+          "the Randomizer page's list does not scroll by the wheel, is drawn over the seed's buttons, or a row scrolled out of view can be pressed")
     check('lines[i] = k + "=" + randoSeed;' in launcher and 'lines.RemoveAll(l => l.StartsWith("rando_import="))' in launcher,
           "the launcher does not keep the seed, or leaves an import that would undo its settings")
     # ---- the game side ----

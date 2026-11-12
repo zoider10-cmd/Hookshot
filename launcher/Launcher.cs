@@ -569,6 +569,8 @@ abstract class Widget {
     public int HideOn = -1;      // (an always-shown widget left out on this page)
     public float Hover;          // (0..1, eased toward the mouse)
     public bool Enabled = true;
+    public bool Scrolls;         // (a row of a list that scrolls: shown and pressed only inside the list's view. The Randomizer page's settings)
+    public float HomeY;          // (its R.Y with the list at its top)
     public virtual string Help { get { return null; } }
     public virtual bool Hit(PointF p) { return Enabled && R.Contains(p); }
     public abstract void Paint(Graphics g, LauncherForm ui);
@@ -1050,7 +1052,9 @@ class LauncherForm : Form {
         float cx = LeftW + 36, cw = W - LeftW - 72, colW = (cw - 14) / 2;
         AddSelectors(GraphicsRows, 1, cx, colW);
         AddSelectors(GameRows, 2, cx, colW);
-        AddSelectors(RandoRows, 3, cx, colW, null, 47, 45);   // (seventeen of them: closer lines, nine in all, over the seed's buttons)
+        // (more of them than fit over the seed's buttons: closer lines, and the list scrolls by the wheel inside RandoView)
+        AddSelectors(RandoRows, 3, cx, colW, null, 47, 45, true);
+        randoHeight = 112 + (RandoRows.Length + 1) / 2 * 47 - 2 - RandoView.Y;
         AddSelectors(CosmeticRows, 4, cx, colW, cosmetics);
         // (beside the fifth selector, in the third line's right half)
         widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx + colW + 14, 112 + 2 * 70 + 11, 160, 40), Page = 4, Click = OnRandomCosmetics });
@@ -1110,7 +1114,7 @@ class LauncherForm : Form {
         ShowPage(cmd.Length > 2 && int.TryParse(cmd[2], out first) && first >= 0 && first < tabs.Count ? first : 0);
         tabX = tabs[PageNow].R.X; tabW = tabs[PageNow].R.Width;
         float scroll0;   // (a third argument: the Recommended tab scrolled, for screenshots)
-        if (cmd.Length > 3 && float.TryParse(cmd[3], out scroll0)) recScroll = scroll0;
+        if (cmd.Length > 3 && float.TryParse(cmd[3], out scroll0)) { recScroll = scroll0; if (PageNow == 3) ScrollRando(scroll0); }
 
         timer = new System.Windows.Forms.Timer { Interval = 16 };
         timer.Tick += (s, e) => Step();
@@ -1123,12 +1127,23 @@ class LauncherForm : Form {
         try { int round = 2; DwmSetWindowAttribute(Handle, 33, ref round, 4); } catch { }   // (Windows 11: rounded corners)
     }
 
-    void AddSelectors(object[][] rows, int page, float x0, float colW, Dictionary<string, Selector> into = null, int pitch = 70, int height = 62) {
+    // The Randomizer page's list of settings: what of it shows (down to the seed's buttons), how far it is scrolled, its
+    // whole height. A row is shown, lit and pressed only inside the view.
+    static readonly RectangleF RandoView = new RectangleF(LeftW + 1, 104, W - LeftW - 2, 430);
+    float randoScroll, randoHeight;
+    bool InView(Widget w, PointF p) { return !w.Scrolls || RandoView.Contains(p); }
+    void ScrollRando(float by) {
+        randoScroll = Math.Max(0, Math.Min(randoScroll + by, Math.Max(0, randoHeight - RandoView.Height)));
+        foreach (var w in widgets) if (w.Scrolls) w.R.Y = w.HomeY - randoScroll;
+    }
+
+    void AddSelectors(object[][] rows, int page, float x0, float colW, Dictionary<string, Selector> into = null, int pitch = 70, int height = 62, bool scrolls = false) {
         for (int i = 0; i < rows.Length; i++) {
             var row = rows[i];
             int col = i % 2, line = i / 2;
             var s = new Selector { Key = (string)row[0], Label = (string)row[1], Items = (string[])row[2], Values = (int[])row[3], HelpText = (string)row[4],
-                                   Page = page, R = new RectangleF(x0 + col * (colW + 14), 112 + line * pitch, colW, height) };
+                                   Page = page, R = new RectangleF(x0 + col * (colW + 14), 112 + line * pitch, colW, height),
+                                   Scrolls = scrolls, HomeY = 112 + line * pitch };
             if (into == null) { s.Changed = OnSetting; settings[s.Key] = s; }
             else { s.Changed = OnCosmetic; into[s.Key] = s; }
             widgets.Add(s);
@@ -1153,7 +1168,7 @@ class LauncherForm : Form {
         Time = (float)clock.Elapsed.TotalSeconds;
         foreach (var w in widgets) {
             bool visible = (w.Page < 0 && w.HideOn != PageNow) || w.Page == PageNow;
-            float target = visible && w.Enabled && w.R.Contains(mouse) ? 1 : 0;
+            float target = visible && w.Enabled && w.R.Contains(mouse) && InView(w, mouse) ? 1 : 0;
             w.Hover += (target - w.Hover) * 0.22f;
             w.Tick();
         }
@@ -1166,7 +1181,7 @@ class LauncherForm : Form {
         }
         // (the help line: the hovered setting's explanation)
         string want = null;
-        foreach (var w in widgets) if ((w.Page == PageNow) && w.Help != null && w.R.Contains(mouse)) want = w.Help;
+        foreach (var w in widgets) if ((w.Page == PageNow) && w.Help != null && w.R.Contains(mouse) && InView(w, mouse)) want = w.Help;
         if (want != null && want != helpShown) { helpShown = want; helpFade = 0; }
         helpFade = want != null ? Math.Min(1, helpFade + dt * 6) : Math.Max(0, helpFade - dt * 3);
         if (WindowState != FormWindowState.Minimized) Invalidate();
@@ -1219,8 +1234,28 @@ class LauncherForm : Form {
         var state = g.Save();
         float slide = (1 - Ease(pageFade)) * 14;
         g.TranslateTransform(0, slide);
-        foreach (var w in widgets) if (w.Page >= 0 && w.Page == PageNow) w.Paint(g, this);
+        foreach (var w in widgets) {
+            if (w.Page < 0 || w.Page != PageNow) continue;
+            if (!w.Scrolls) { w.Paint(g, this); continue; }
+            if (!w.R.IntersectsWith(RandoView)) continue;
+            var whole = g.Save();   // (a row of the list: cut off at the view's edges)
+            g.SetClip(RandoView, CombineMode.Intersect);
+            w.Paint(g, this);
+            g.Restore(whole);
+        }
         g.Restore(state);
+        if (PageNow == 3 && randoHeight > RandoView.Height) {   // (the list goes on under the view, or over it: a fade at that edge, and a bar at the right)
+            float x = LeftW + 36, w = W - LeftW - 72, more = randoHeight - RandoView.Height;
+            if (randoScroll < more - 1)
+                using (var b = new LinearGradientBrush(new RectangleF(x, RandoView.Bottom - 24, w, 25), Theme.A(Theme.Bg1, 0), Theme.A(Theme.Bg1, 235), LinearGradientMode.Vertical))
+                    g.FillRectangle(b, x, RandoView.Bottom - 24, w, 24);
+            if (randoScroll > 1)
+                using (var b = new LinearGradientBrush(new RectangleF(x, RandoView.Y - 1, w, 19), Theme.A(Theme.Bg1, 235), Theme.A(Theme.Bg1, 0), LinearGradientMode.Vertical))
+                    g.FillRectangle(b, x, RandoView.Y, w, 18);
+            float track = RandoView.Height - 16, bar = Math.Max(30, track * RandoView.Height / randoHeight);
+            using (var b = new SolidBrush(Theme.A(Theme.Cyan, 110)))
+            using (var p = Theme.Round(new RectangleF(W - 30, RandoView.Y + 8 + (track - bar) * randoScroll / more, 4, bar), 2)) g.FillPath(b, p);
+        }
         if (pageFade < 1)   // (the page fading in: a veil of the background over it)
             using (var b = new SolidBrush(Theme.A(Theme.Bg1, (int)(255 * (1 - Ease(pageFade)))))) g.FillRectangle(b, LeftW + 1, 100, W - LeftW - 2, 496);
         PaintPageExtras(g);
@@ -1407,7 +1442,7 @@ class LauncherForm : Form {
     Widget At(PointF p) {
         for (int i = widgets.Count - 1; i >= 0; i--) {
             var w = widgets[i];
-            if (((w.Page < 0 && w.HideOn != PageNow) || w.Page == PageNow) && w.Hit(p)) return w;
+            if (((w.Page < 0 && w.HideOn != PageNow) || w.Page == PageNow) && w.Hit(p) && InView(w, p)) return w;
         }
         return null;
     }
@@ -2136,6 +2171,7 @@ class LauncherForm : Form {
     protected override void OnMouseWheel(MouseEventArgs e) {
         base.OnMouseWheel(e);
         if (PageNow == 0) recScroll = Math.Max(0, Math.Min(recScroll - e.Delta * 0.6f, Math.Max(0, recHeight - 488)));
+        if (PageNow == 3) ScrollRando(-e.Delta * 47f / 120);   // (a notch of the wheel: a line of the list)
     }
 
     void OnApplyRecommended() {
