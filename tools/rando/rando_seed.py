@@ -1773,6 +1773,33 @@ def tracker_lines(chests, skulls, gifts=None):
         "%s|%s" % (name.replace("|", "/")[:47], value[:71]) for name, value in rows]
 
 
+# ---- the checks, one by one: for the Tracker tab's "Go there" ----
+# <game folder>\mods\rando-seed\checks.txt, a line for each chest and Gold Skulltula that takes part:
+# "<the area's name, as its tracker row>|<Chest or Gold Skulltula>|<the Banc folder>|<C, A or CA: the ages whose map has
+# it>|<x> <y> <z>". The menu steps through an area's lines and has the game take Link to one (the debug tools: the
+# teleport to the folder's map, then the place). What a check holds is not in the file. Gifts and scrubs have no place
+# in a map file by their key, and are not in it. CHECK_ROWS: as many as the menu keeps (kTrackerChecks).
+CHECKS = "checks.txt"
+CHECK_ROWS = 320
+
+
+def check_ages(names):
+    """C, A or CA: the ages whose map files (names) have a check. A map without an age in its name is both's."""
+    child = any("_Child" in n or "_Adult" not in n for n in names)
+    adult = any("_Adult" in n or "_Child" not in n for n in names)
+    return ("C" if child else "") + ("A" if adult else "")
+
+
+def check_lines(chests, skulls):
+    """The checks file's lines. chests and skulls: [(area (the Banc folder), position, ages)]. By the area's name, the
+    chests first, then by place; no more than the menu keeps."""
+    rows = [(AREA_NAMES.get(area, area).replace("|", "/")[:47], kind, area, ages, pos)
+            for kind, those in (("Chest", chests), ("Gold Skulltula", skulls)) for area, pos, ages in those if len(pos) == 3 and ages]
+    rows.sort(key=lambda r: (r[0].lower(), r[1], r[4]))
+    return ["# The checks of this seed, one by one, for the Tracker tab's Go there: <area>|<kind>|<folder>|<ages>|<x> <y> <z>"] + [
+        "%s|%s|%s|%s|%.1f %.1f %.1f" % (name, kind, area, ages, pos[0], pos[1], pos[2]) for name, kind, area, ages, pos in rows[:CHECK_ROWS]]
+
+
 def remove_old(mod):
     """the files a run before this one wrote (its list: rando_manifest.txt), and the folders they leave empty"""
     listing = os.path.join(mod, "rando_manifest.txt")
@@ -1781,7 +1808,7 @@ def remove_old(mod):
     n = 0
     with open(listing, encoding="utf-8") as f:
         rels = [line.strip() for line in f if line.strip()]
-    for rel in rels + ["spoiler.txt", TRACKER, "rando_stamp.txt", "rando_manifest.txt"]:
+    for rel in rels + ["spoiler.txt", TRACKER, CHECKS, "rando_stamp.txt", "rando_manifest.txt"]:
         path = os.path.normpath(os.path.join(mod, rel))
         if not path.startswith(os.path.normpath(mod) + os.sep) or not os.path.isfile(path):   # (only inside the mod's folder)
             continue
@@ -1960,7 +1987,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + " checks 1" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2003,6 +2030,7 @@ def main():
 
     # ---- every map file with chests ----
     files = collections.OrderedDict()   # rel -> (bytes, [Chest])
+    maps = collections.defaultdict(set)  # a chest's or Gold Skulltula's hash -> the names of the map files that have it
     skulls = collections.OrderedDict()  # hash -> [area, position, can be given a drop (in every file it is in), a dungeon's, a child's map has it]
     paths = []
     for top, dirs, names in os.walk(os.path.join(romfs, "Banc")):
@@ -2025,6 +2053,7 @@ def main():
                 pass
         for h, pos, can, dungeon in here:
             parts = rel.split("/")
+            maps[h].add(parts[-1])
             entry = skulls.setdefault(h, [parts[1] if len(parts) > 2 else "(Banc)", pos, True, False, False])
             entry[2], entry[3] = entry[2] and can, entry[3] or dungeon
             entry[4] = entry[4] or "_Child_" in parts[-1] or entry[0] in SKULLTULA_CHILD_DUNGEONS
@@ -2039,6 +2068,7 @@ def main():
         for c in found:
             if c.hash is None or not c.gyaml.startswith("Obj_TBox"):
                 continue
+            maps[c.hash].add(parts[-1])
             why = stays_why(c, a.event_chests, placement)
             dungeon = "DefaultDungeonRoomIndex" in c.params
             if c.hash not in spots:
@@ -2336,6 +2366,9 @@ def main():
         took = [h for h in able] if a.skulltulas else []
         f.write("\n".join(tracker_lines(collections.Counter(spots[h][0] for h in gives if h not in gifts), collections.Counter(skulls[h][0] for h in took),
                                         collections.Counter(g.area for g in gifts.values()))) + "\n")
+    with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\n") as f:   # (for the Tracker tab's Go there)
+        f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h])) for h in gives if h not in gifts],
+                                      [(skulls[h][0], skulls[h][1], check_ages(maps[h])) for h in took])) + "\n")
     with open(os.path.join(mod, "rando_manifest.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(written)) + "\n")
     with open(stamp_path, "w", encoding="utf-8") as f:   # (last: a run that stopped half way is made again)

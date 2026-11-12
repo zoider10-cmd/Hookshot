@@ -482,3 +482,21 @@ of 90 metres in Kokiri Forest, and one into the Lost Woods grotto of the two Bus
 the teleport to the Lost Woods), land and stay. A place outside what the map lets Link stand on does not: the Business
 Scrub of Kokiri Forest's map file (`-128.0 114.6 -15.3`, a copy of the Lost Woods' start past the village's west exit)
 has ground under it, and the game takes Link back to his last safe place a second after he lands, a heart less.
+
+## Going to a check from the Tracker tab
+
+The seed also writes `mods/rando-seed/checks.txt`: a line for each chest and Gold Skulltula that takes part, with its
+area's name, its Banc folder, the ages whose map has it (`C`, `A` or `CA`, from its map files' names) and its place
+(`check_lines`). What a check holds is not in the file. On the Tracker tab **Left and Right** step an area's row
+through its checks ("3 of 10: Chest at -27 68 65") and back to its own words; with the debug tools on, **confirm**
+takes Link there: the menu writes the check to `<game folder>/rando/goto_check.txt` and sends the action 5, and the
+game (`host/hos_main.c`) takes the debug teleport to the folder's map when Link is in another, waits until he has
+arrived (no event playing, no map loading, for a second and a half), then puts him a metre above the check and holds
+him three seconds, as at a go-to. Link's own mark becomes that place. A check whose map the age Link has now does not
+have is not gone to (the log says so): change his age first.
+
+Seen in unattended runs (the action sent by the live input file, not from the menu): a chest of the same map (Kokiri
+Forest), of another (Zora's River), of a dungeon (Inside the Deku Tree) and one 500 metres across Hyrule Field, in a
+grotto; Link stood at each. Not in the file: gifts and Business Scrubs (they have no place by their key), and so not
+gone to. A check outside what its map lets Link stand on would take him back to his last safe place, a heart less,
+as a go-to there does; none of the four was.

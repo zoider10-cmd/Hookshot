@@ -1206,6 +1206,12 @@ static int oot_flight_moved_away(Ctx *c, uint64_t actor, const float held[3]) {
     return apart > 2.0f * 2.0f;
 }
 
+/* (the randomizer's fork) a map (banc: "KokiriForest_Child", "HyruleCastle") is of a Banc folder ("KokiriForest") */
+static int oot_banc_in_folder(const char *banc, const char *folder) {
+    const size_t n = strlen(folder);
+    return n && !strncmp(banc, folder, n) && (!banc[n] || banc[n] == '_');
+}
+
 /* (the randomizer's fork) <game folder>/rando/<name>, into out: 1, or 0 when the game's folder is not known */
 static int oot_place_file(char *out, size_t size, const char *name) {
     char exe[MAX_PATH];
@@ -1224,6 +1230,16 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     int rx_option(int id, int otherwise);
     static uint64_t flying_actor, marked_actor, marked_controller;
     static int64_t last_tick, last_player_tick, hold_until, trace_until, trace_next;
+    /* (the randomizer's fork) the Tracker tab's Go there: a check's place and its map's folder, read from
+       <game folder>/rando/goto_check.txt at the action 5. waiting: the teleport to that map was sent, and the place is
+       taken once Link is in it with no event playing and no map loading for a second and a half. */
+    static struct {
+        float place[3];
+        char folder[40], ages[8];
+        int waiting;
+        int64_t until, settled;
+    } check;
+    int go = 0;
     static float target[3], velocity[3], mark[3], yaw;
     int flying = rx_option(HOS_OPT_CHEAT_FLIGHT, 0) > 0;
     /* An event that takes Link (a map change he flew into, the age toggle's, a cutscene) waits for him to stand, and the
@@ -1252,12 +1268,53 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     } else if (action >= 100 && action < 124) {
         oot_set_time(c, action - 100);
     }
+    if (action == 5) {
+        char path[MAX_PATH + 32], current[80];
+        FILE *f = oot_place_file(path, sizeof path, "goto_check.txt") ? fopen(path, "r") : NULL;
+        const int read = f ? fscanf(f, "%f %f %f %39s %7s", &check.place[0], &check.place[1], &check.place[2], check.folder, check.ages) : 0;
+        if (f) fclose(f);
+        check.waiting = 0;
+        int child = 1;
+        oot_gamedata_bool(c, 0xcea220d3u, &child);   /* Sequence_IsChildhood */
+        oot_gamedata_string(c, 0x1d6189dau, current, sizeof current);   /* Sequence_CurrentBanc */
+        if (read != 5) {
+            hos_log("cheats: go to a check: rando/goto_check.txt does not say one");
+        } else if (!strchr(check.ages, child ? 'C' : 'A')) {
+            hos_log("cheats: go to a check: %s's map of %s does not have it (change Link's age first)", child ? "the child" : "the adult", check.folder);
+        } else if (oot_banc_in_folder(current, check.folder)) {
+            go = 1;
+        } else {
+            unsigned index = 0;
+            const unsigned count = sizeof oot_destinations / sizeof oot_destinations[0];
+            for (; index < count; index++) {
+                const char *banc = child ? oot_destinations[index].child_banc : oot_destinations[index].adult_banc;
+                if (banc && oot_banc_in_folder(banc, check.folder)) break;
+            }
+            if (index == count) hos_log("cheats: go to a check: the teleport has no map of %s", check.folder);
+            else if (oot_teleport(c, actor, index)) check.waiting = 1, check.until = now + 60000000000LL, check.settled = 0;
+        }
+    } else if (check.waiting) {
+        char current[80];
+        int loading = 0;
+        oot_gamedata_string(c, 0x1d6189dau, current, sizeof current);
+        oot_gamedata_bool(c, 0xef2b60c2u, &loading);   /* Sequence_IsLoadingBanc */
+        if (now > check.until) {
+            check.waiting = 0;
+            hos_log("cheats: go to a check: Link did not arrive in %s (in \"%s\")", check.folder, current);
+        } else if (!oot_banc_in_folder(current, check.folder) || loading || oot_event_playing(c)) {
+            check.settled = 0;
+        } else if (!check.settled) {
+            check.settled = now;
+        } else if (now - check.settled > 1500000000LL) {
+            check.waiting = 0, go = 1;
+        }
+    }
     if (now < trace_until && now >= trace_next) {   /* (where Link is, twice a second, for a while after a go-to) */
         trace_next = now + 500000000LL;
         hos_log("cheats: go-to trace: Link at %.2f %.2f %.2f%s", oot_load_float(c, actor + 796), oot_load_float(c, actor + 800),
                 oot_load_float(c, actor + 804), now < hold_until ? " (held)" : "");
     }
-    if (!flying && action != 2 && action != 3 && now >= hold_until) return;
+    if (!flying && action != 2 && action != 3 && !go && now >= hold_until) return;
 
     // Follow OneShotPhysicsCctChangePosition to Link's controller.
     const uint64_t controller = oot_player_controller(c, components);
@@ -1303,8 +1360,16 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
             fclose(f);
         }
     }
+    if (go) {   /* (the check's place is the mark, and Link is held there as at a go-to) */
+        memcpy(mark, check.place, sizeof mark);
+        marked_actor = actor;
+        marked_controller = controller;
+        hold_until = now + 3000000000LL;
+        trace_until = hold_until + 8000000000LL, trace_next = 0;
+        hos_log("cheats: go to a check: %s, %.2f %.2f %.2f", check.folder, mark[0], mark[1], mark[2]);
+    }
     if (action == 2 || marked_controller != controller) hold_until = 0;
-    const int returning = (action == 3 || now < hold_until) && marked_controller == controller;
+    const int returning = (action == 3 || go || now < hold_until) && marked_controller == controller;
     if (action == 3 && !returning) hos_log("cheats: no mark for this player controller");
     if (!flying && !returning) return;
     const int64_t elapsed = now - last_tick;
@@ -1376,7 +1441,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     change_position(c);
     flight_transform_controller = 0;
     *c = saved;
-    if (action == 3 && returning) hos_log("cheats: returned to %.2f %.2f %.2f", mark[0], mark[1], mark[2]);
+    if ((action == 3 || go) && returning) hos_log("cheats: returned to %.2f %.2f %.2f", mark[0], mark[1], mark[2]);
 }
 #endif
 

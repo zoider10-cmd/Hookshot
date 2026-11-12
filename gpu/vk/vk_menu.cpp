@@ -101,7 +101,43 @@ int tracker_count = 0;
 void tracker_load();
 const char kTrackerHelp[] =
     "The treasure chests and Gold Skulltulas of this area that take part in the randomizer's seed. It is what the seed "
-    "has there, not what is left: the game does not tell the menu what has been opened.";
+    "has there, not what is left: the game does not tell the menu what has been opened. Left and Right step through "
+    "the area's checks one by one; with the debug tools on, confirm takes Link to the one shown.";
+// The checks one by one: tools/rando/rando_seed.py writes <game folder>\mods\rando-seed\checks.txt beside the tracker's
+// file, a line "<area>|<kind>|<folder>|<ages>|<x> <y> <z>" for each chest and Gold Skulltula of the seed (tracker_load
+// reads it too). A row steps through the checks of its area, the ones whose <area> is the row's name (tracker_pick: 0 the
+// row's own words, n its n-th check), and confirm has the game take Link there: the check is written to
+// <game folder>\rando\goto_check.txt and the action kTrackerGoAction sent (host/hos_main.c: the debug teleport to the
+// folder's map when Link is in another, then the place).
+constexpr int kTrackerChecks = 320;
+constexpr int kTrackerGoAction = 5;
+struct TrackerCheck {
+    char area[48], kind[24], folder[40], ages[4];
+    float pos[3];
+};
+TrackerCheck tracker_checks[kTrackerChecks];
+int tracker_check_count = 0;
+int tracker_pick[kTrackerRows];
+/// How many checks a row's area has, and (n from 1) its n-th: nullptr past them
+int tracker_row_checks(int row) {
+    int n = 0;
+    for (int i = 0; i < tracker_check_count; i++) n += !strcmp(tracker_checks[i].area, tracker_name[row]);
+    return n;
+}
+const TrackerCheck* tracker_row_check(int row, int n) {
+    for (int i = 0; i < tracker_check_count; i++)
+        if (!strcmp(tracker_checks[i].area, tracker_name[row]) && !--n) return &tracker_checks[i];
+    return nullptr;
+}
+/// What a row says: its own words, or the check it is stepped to ("3 of 10: Chest, child's, at -27 68 65")
+std::string tracker_says(int row) {
+    const TrackerCheck* k = tracker_pick[row] ? tracker_row_check(row, tracker_pick[row]) : nullptr;
+    if (!k) return tracker_value[row];
+    char text[112];
+    snprintf(text, sizeof text, "%d of %d: %s%s at %.0f %.0f %.0f", tracker_pick[row], tracker_row_checks(row), k->kind,
+             !strcmp(k->ages, "C") ? ", child's," : !strcmp(k->ages, "A") ? ", adult's," : "", k->pos[0], k->pos[1], k->pos[2]);
+    return text;
+}
 /// A row's hints from a table, the value lo first (nullptr: none for that value)
 const char* hint_in(const char* const* t, int n, int lo, int v, int variant) {
     return variant <= 0 && v - lo >= 0 && v - lo < n ? t[v - lo] : nullptr;
@@ -1275,6 +1311,21 @@ void tracker_load() {
         n = 1;
     }
     tracker_count = n;
+    int checks = 0;
+    path = path.substr(0, path.find_last_of("\\/") + 1) + "checks.txt";
+    if (FILE* f = fopen(path.c_str(), "r")) {
+        char line[256];
+        while (checks < kTrackerChecks && fgets(line, sizeof line, f)) {
+            TrackerCheck& k = tracker_checks[checks];
+            if (line[0] != '#' && sscanf(line, "%47[^|]|%23[^|]|%39[^|]|%3[^|]|%f %f %f", k.area, k.kind, k.folder, k.ages, &k.pos[0], &k.pos[1],
+                                         &k.pos[2]) == 7)
+                checks++;
+        }
+        fclose(f);
+    }
+    tracker_check_count = checks;
+    for (int row = 0; row < kTrackerRows; row++)   // (a seed made anew: a row stepped past its area's checks is its own words again)
+        if (row >= n || tracker_pick[row] > tracker_row_checks(row)) tracker_pick[row] = 0;
 }
 const char* ini_key(const Row& r) {
     if (r.value == &opts.output_res) return "output_res";   // (host/nn_applet.c reads it at the start)
@@ -2037,7 +2088,12 @@ void draw_options(ui::Ctx& c) {
     int prompts_n = cur_tab == TAB_MOTION ? 3 : 4;
     if (!selr.value) prompt_list[1] = {ui::kConfirm, confirms ? (pending == &selr ? "Confirm" : selr.name) : "Open"};
     if (cur_tab == TAB_MOTION) prompt_list[2] = {ui::kBack, "Back"};   // (Esc: to Controls)
-    if (selr.tracker >= 0) prompt_list[1] = {ui::kTabs, "Tabs"}, prompt_list[2] = {ui::kBack, "Close"}, prompts_n = 3;   // (nothing to change or open)
+    if (selr.tracker >= 0) {   // (a line of the Tracker tab: its area's checks to step through, and the one shown to go to)
+        prompts_n = 1;
+        if (tracker_row_checks(selr.tracker)) prompt_list[prompts_n++] = {ui::kLeftRight, "Checks"};
+        if (tracker_pick[selr.tracker] && cheats_on()) prompt_list[prompts_n++] = {ui::kConfirm, "Go there"};
+        prompt_list[prompts_n++] = {ui::kTabs, "Tabs"}, prompt_list[prompts_n++] = {ui::kBack, "Close"};
+    }
     if (selr.cheat >= 0) {   // (a debug tool: Change when Left and Right do something, then what confirm does)
         prompts_n = 1;
         if (selr.cheat <= 1 || selr.cheat == 7 || cheat_chooses(selr.cheat) || age_shown(selr.cheat))
@@ -2090,8 +2146,9 @@ void draw_options(ui::Ctx& c) {
             halves_cell(c, va, vb, "Off", "On", tool == "On", selected, false);
         } else if (r.cheat >= 0 && !tool.empty()) {   // (a debug tool with a value: arrows when Left and Right choose it)
             choice_cell(c, va, vb, tool, selected, cheat_chooses(r.cheat), cheat_chooses(r.cheat));
-        } else if (r.tracker >= 0) {   // (a line of the Tracker tab: what the seed's file says, nothing to change)
-            choice_cell(c, va, vb, tracker_value[r.tracker], selected, false, false);
+        } else if (r.tracker >= 0) {   // (a line of the Tracker tab: what the seed's file says, or the check it is stepped to)
+            const bool steps = tracker_row_checks(r.tracker) > 0;
+            choice_cell(c, va, vb, tracker_says(r.tracker), selected, steps, steps);
         } else if (!r.value) {   // (a page, or Restart and Quit: Confirm until the second press)
             if (pending == &r) choice_cell(c, va, vb, "Press again to confirm", selected, false, false);
             else {
@@ -3286,6 +3343,26 @@ void teleport_mouse(const MkwVkPointer& ptr, int mx, int my, bool* press, bool& 
     if (ptr.pressed & HOS_MOUSE_RIGHT) press[5] = true;
     if (ptr.wheel) teleport_wheel += ptr.wheel, teleport_follow = false, changed = true;
 }
+/// A row of the Tracker tab: Left and Right step through its area's checks (past the last: its own words again), and
+/// confirm, with the debug tools on, has the game take Link to the check shown: its place, a metre above it, with its
+/// folder and ages, goes into <game folder>\rando\goto_check.txt and the action to the game, and the menu closes
+void tracker_press(int row, const bool* press, bool& changed) {
+    const int n = tracker_row_checks(row);
+    if (!n) return;
+    if (press[3] || press[4]) tracker_pick[row] = (tracker_pick[row] + n + 1 + (press[4] ? 1 : -1)) % (n + 1), changed = true;
+    const TrackerCheck* k = press[7] && cheats_on() ? tracker_row_check(row, tracker_pick[row]) : nullptr;
+    if (!k) return;
+    std::string path = ini_path();
+    path = path.substr(0, path.find_last_of("\\/") + 1) + "rando\\goto_check.txt";
+    if (FILE* f = fopen(path.c_str(), "w")) {
+        fprintf(f, "%.2f %.2f %.2f %s %s\n", k->pos[0], k->pos[1] + 1.0f, k->pos[2], k->folder, k->ages);
+        fclose(f);
+        cheat_action.store(kTrackerGoAction);
+        logf("menu: tracker: go to the %s of %s at %.1f %.1f %.1f", k->kind, k->folder, k->pos[0], k->pos[1], k->pos[2]);
+        open_now = false, changed = true;   // (back to the game: a map change starts with an event)
+    }
+}
+
 /// A debug tool's row on the Debug tab (Row::cheat i): Left and Right, and confirm (press[7]: A, Enter, a click). Teleport and
 /// Inventory open their pages; back from them comes to the Debug tab, the row still selected
 void cheat_press(int i, const bool* press, bool& changed) {
@@ -3723,6 +3800,7 @@ void menu_tick() {
                 }
             }
         } else if (r.cheat >= 0) cheat_press(r.cheat, press, changed);   // (a debug tool: on the Debug tab itself)
+        else if (r.tracker >= 0) tracker_press(r.tracker, press, changed);
         else if (press[7] && is_motion_row(r)) cur_tab = TAB_MOTION, tab_selected[TAB_MOTION] = 0, press[7] = false, changed = true;
         else if (press[7] && !r.value && r.tracker < 0 && can_bind()) page = 1, csel = 0, ccol = 0, changed = true;
         if ((press[3] || press[4] || press[7]) && r.value) {   // (Enter, or A, as Right)
