@@ -258,6 +258,76 @@ SCRUBS = (
 )
 
 
+# ---- a scrub's words ----
+# A sale's text is the scrub's own, named in the sale's call (SellerMessageId): "This bag will allow you to carry more
+# Deku sticks. It's 40 rupees. Wanna buy it?" for a sale that is now a Bomb Bag (seen in play). The texts are in the
+# language archives (Mals/<language>.Product.<n>.sarc.zs), a file a subject (EventFlowMsg/Enemy_Event.msbt: UTF-8, a
+# line's tags the byte 0x0E, then its group, type and size as 16-bit numbers, then its bytes). No line of the scrubs'
+# is without its item, so the words before "It's <price> rupees. Wanna buy it?" of a sale that sells another item are
+# made SCRUB_WORDS, with spaces to the same length: the file, its archive and the size table's entry keep their sizes.
+# The price and the question, with their tags, are as they were. English only (the two English archives): the other
+# languages keep the scrub's own words. The two Pieces of Heart are one line.
+SCRUB_TEXT = "EventFlowMsg/Enemy_Event.msbt"
+SCRUB_LANGS = ("USen", "EUen")
+SCRUB_WORDS = "I've got something special for you."
+SCRUB_LINES = {"scrub_heart_field": "Enemy_Scrub_Business_Heart_01", "scrub_heart_secret": "Enemy_Scrub_Business_Heart_01",
+               "scrub_sticks": "Enemy_Scrub_Business_DekuStickPouch_01", "scrub_nuts": "Enemy_Scrub_Business_DekuNutsPouch_01"}
+
+
+def msbt_text(data, label):
+    """where a line of a text file (MSBT) is: (its first byte, the byte after its last), by its label. ValueError: not
+    such a file, or no such label."""
+    if data[:8] != b"MsgStdBn" or data[8:10] != b"\xff\xfe" or data[0x0c] != 0:
+        raise ValueError("not a little-endian UTF-8 text file")
+    at, index, texts = 0x20, None, None
+    for _ in range(struct.unpack_from("<H", data, 0x0e)[0]):
+        kind, size = data[at:at + 4], struct.unpack_from("<I", data, at + 4)[0]
+        body = at + 0x10
+        if kind == b"LBL1":
+            for g in range(struct.unpack_from("<I", data, body)[0]):
+                n, off = struct.unpack_from("<II", data, body + 4 + 8 * g)
+                p = body + off
+                for _k in range(n):
+                    ln = data[p]
+                    if data[p + 1:p + 1 + ln] == label.encode():
+                        index = struct.unpack_from("<I", data, p + 1 + ln)[0]
+                    p += 1 + ln + 4
+        elif kind == b"TXT2":
+            texts = (body, size)
+        at = body + (size + 15 & ~15)
+    if index is None or texts is None:
+        raise ValueError("the text file has no line %s" % label)
+    body, size = texts
+    n = struct.unpack_from("<I", data, body)[0]
+    if index >= n:
+        raise ValueError("the line %s is past the file's texts" % label)
+    start = struct.unpack_from("<I", data, body + 4 + 4 * index)[0]
+    end = struct.unpack_from("<I", data, body + 4 + 4 * (index + 1))[0] if index + 1 < n else size
+    return body + start, body + end
+
+
+def scrub_words(data, label, words=SCRUB_WORDS):
+    """The text file with the sale line `label` saying `words` before its price ("It's ..."): the new bytes, of the
+    same length (spaces fill what the scrub's own words took), or None when it says so already. The tags at the
+    line's start and everything from "It's" on are as they were."""
+    start, end = msbt_text(data, label)
+    a = start
+    while a + 8 <= end and data[a] == 0x0E:   # (the tags the line starts with)
+        a += 7 + struct.unpack_from("<H", data, a + 5)[0]
+    b = data.find(b"It's", a, end)
+    if b < 0:
+        raise ValueError("the line %s names no price" % label)
+    sep = data[b - 1:b] if b > a and data[b - 1:b] in (b" ", b"\n") else b""
+    room = b - a - len(sep)
+    new = words.encode("utf-8")
+    if len(new) > room:
+        raise ValueError("the line %s has no room for the words (%d bytes, %d to fill)" % (label, len(new), room))
+    new = new + b" " * (room - len(new)) + sep
+    if data[a:b] == new:
+        return None
+    return bytes(data[:a]) + new + bytes(data[b:])
+
+
 def gift_hash(key):
     """a gift's place among the chests' hashes: its own, the same in every seed (no chest's is this high)"""
     return 0xF1F7000000000000 | zlib.crc32(key.encode())
@@ -1857,7 +1927,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1" if a.scrubs else "") +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words" if a.scrubs else "") +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2144,6 +2214,27 @@ def main():
             sys.exit("%s gives no %s (rando\\test_gifts.txt, or the game's flow is not the one the gifts were listed from). Nothing written." % (
                 flow, ", ".join(sorted(str(k) for k in set(change) - found))))
         gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
+    # ---- a scrub that sells another item no longer names its own (English) ----
+    lines = sorted({SCRUB_LINES[g.key] for h, g in gifts.items() if g.key in SCRUB_LINES and gives[h] != g.item})
+    for lang in SCRUB_LANGS if lines else ():
+        folder = os.path.join(romfs, "Mals")
+        for n in sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if n.startswith(lang + ".") and n.endswith(".sarc.zs")):
+            try:
+                was = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
+                parts = sarc_read(was)
+                text = parts[SCRUB_TEXT]
+                for label in lines:
+                    text = scrub_words(text, label) or text
+                parts[SCRUB_TEXT] = text
+                now = sarc_write(parts)
+            except (OSError, KeyError, ValueError, struct.error) as e:
+                sys.exit("the scrubs' words, Mals/%s: %s. Nothing written." % (n, e))
+            if len(now) != len(was):
+                sys.exit("the scrubs' words, Mals/%s: the archive would change its size. Nothing written." % n)
+            if now != was:
+                gift_files["Mals/" + n] = now
+    if lines:
+        print("Deku Scrubs: %d sale line%s no longer name the scrub's own item (English)" % (len(lines), "" if len(lines) == 1 else "s"))
 
     # ---- the size table ----
     folder = os.path.join(romfs, "System", "Resource")

@@ -10,6 +10,10 @@ Checked here, without the game, on a made-up flow of two entry points:
 - the table: four sales, each of the scrubs' flow and of an entry point, waiting for the Deku Scrubs setting and not
   for Quest rewards; no two of one entry point name the same item; the upgrades put the bigger size in the pool
   (Quest rewards' Forest Stage puts in the middle ones);
+- a scrub's words (scrub_words), on a made-up text file: the words before a sale line's price are made the plain
+  ones, with spaces to the same length, so the file keeps its size; the tags the line starts with, the price, its
+  tags and the question are as they were, and so is every other line; done again it changes nothing; a line with no
+  room, a line without a price and a label the file has not are errors;
 - the script reads the setting, names it in the seed's stamp, and gives the scrubs their place among the chests with
   or without Quest rewards.
 
@@ -100,6 +104,29 @@ def flow(events, entries):
     return bytes(out), pointers
 
 
+def text_file(lines):
+    """A text file (MSBT, UTF-8) of the lines [(label, its bytes)], each label in a group of its own."""
+    lbl = struct.pack("<I", len(lines))
+    at = 4 + 8 * len(lines)
+    names = b""
+    for i, (label, _) in enumerate(lines):
+        lbl += struct.pack("<II", 1, at + len(names))
+        names += bytes([len(label)]) + label.encode() + struct.pack("<I", i)
+    lbl += names
+    txt = struct.pack("<I", len(lines))
+    at = 4 + 4 * len(lines)
+    body = b""
+    for _, raw in lines:
+        txt += struct.pack("<I", at + len(body))
+        body += raw + b"\0"
+    txt += body
+    out = bytearray(b"MsgStdBn" + b"\xff\xfe" + bytes(2) + bytes([0, 3]) + struct.pack("<H", 2) + bytes(0x10))
+    for kind, sec in ((b"LBL1", lbl), (b"TXT2", txt)):
+        out += kind + struct.pack("<I", len(sec)) + bytes(8) + sec + bytes(-len(sec) % 16)
+    struct.pack_into("<I", out, 0x12, len(out))
+    return bytes(out)
+
+
 def given(data, pointer):
     at = struct.unpack_from("<Q", data, pointer)[0]
     return data[at + 2:at + 2 + struct.unpack_from("<H", data, at)[0]].decode()
@@ -156,9 +183,46 @@ def main():
           "the stick and nut upgrades are not one of each size between the scrubs and the Forest Stage")
     check(all(g.when != "scrubs" for g in seed.GIFTS), "a gift of Quest rewards waits for the scrubs' setting")
 
+    # ---- a scrub's words ----
+    tag = lambda group, kind, payload=b"": b"\x0e" + struct.pack("<HHH", group, kind, len(payload)) + payload
+    head = tag(3, 0, b"\x0f\0\0")
+    price = b"It's " + tag(0, 3, b"\x02\0") + tag(2, 12, b"SimpleShop_Price") + b" rupees" + tag(0, 3, b"\xff\xff") + b"." + tag(5, 0) + b" Wanna buy it?"
+    own = head + b"This bag will allow you to carry more " + tag(201, 15) + b"Deku sticks.\n" + price
+    heart = head + b"Ohhh, a " + tag(0, 3, b"\x02\0") + b"Piece of Heart" + tag(0, 3, b"\xff\xff") + b". Shimmery glimmery! " + price
+    other = head + b"Squee! Get out of here, then!"
+    short = head + b"Hm.\n" + price
+    lines = [("Other", other), ("Enemy_Scrub_Business_DekuStickPouch_01", own), ("Short", short), ("Enemy_Scrub_Business_Heart_01", heart)]
+    data = text_file(lines)
+    for label, raw in lines:
+        a, b = seed.msbt_text(data, label)
+        check(data[a:b].rstrip(b"\0") == raw, "the line %s is not found where it is" % label)
+    new = seed.scrub_words(data, "Enemy_Scrub_Business_DekuStickPouch_01")
+    a, b = seed.msbt_text(new, "Enemy_Scrub_Business_DekuStickPouch_01")
+    line = new[a:b].rstrip(b"\0")
+    words = seed.SCRUB_WORDS.encode()
+    check(len(new) == len(data) and line.startswith(head + words) and line.endswith(b"\n" + price) and
+          line[len(head) + len(words):-len(price) - 1].strip(b" ") == b"" and b"Deku sticks" not in line,
+          "the sale's words are not the plain ones before its price, as long as they were: %r" % line)
+    check(all(new[x:y] == data[x:y] for x, y in (seed.msbt_text(data, l) for l in ("Other", "Short", "Enemy_Scrub_Business_Heart_01"))),
+          "another line was changed")
+    check(seed.scrub_words(new, "Enemy_Scrub_Business_DekuStickPouch_01") is None, "done again, the line changes")
+    both = seed.scrub_words(new, "Enemy_Scrub_Business_Heart_01")
+    a, b = seed.msbt_text(both, "Enemy_Scrub_Business_Heart_01")
+    check(len(both) == len(data) and both[a:b].startswith(head + words) and both[a:b].rstrip(b"\0").endswith(b" " + price) and b"Piece of Heart" not in both[a:b],
+          "a line whose own words have tags in them is not made plain")
+    for label, why in (("Short", "a line with no room for the words"), ("Other", "a line without a price"), ("NoSuch", "a label the file has not")):
+        try:
+            seed.scrub_words(data, label)
+            check(False, "%s is taken" % why)
+        except ValueError:
+            pass
+    check(set(seed.SCRUB_LINES) == {g.key for g in seed.SCRUBS}, "a scrub's sale has no line of text named for it")
+
     # ---- the script ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_scrubs": 0' in script and '(" scrubs 1" if a.scrubs else "")' in script, "the script does not read the setting, or does not name it in the seed's stamp")
+    check('"rando_scrubs": 0' in script and '(" scrubs 1 words" if a.scrubs else "")' in script, "the script does not read the setting, or does not name it in the seed's stamp")
+    check("if len(now) != len(was):" in script and 'gift_files["Mals/" + n] = now' in script and "if g.key in SCRUB_LINES and gives[h] != g.item" in script,
+          "a changed sale's words are not written with the seed, or an archive of another size would be")
     check("if a.scrubs:   # (Deku Scrubs: with or without Quest rewards)" in script and "((g.entry, old) if g.entry else old, gives[h]) for old in g.olds" in script,
           "the scrubs wait for Quest rewards, or their sales are not swapped by their entry points")
     check("quest_need(gifts[h].need, gifts[h].area) if h in gifts" in script, "with Quest rewards a scrub does not ask for its two gating items")

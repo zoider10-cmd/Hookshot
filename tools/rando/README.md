@@ -110,7 +110,8 @@ call's item is changed, by the entry point it is under (`flow_reach`), since the
 in one flow. The price stays the scrub's. The scrubs that sell what can be bought again (seeds, nuts, bombs, arrows,
 potions) and the Dream World's are left. **Seen in play**: the Lost Woods' stick scrub, whose sale was the Bomb Bag in
 that seed, sold it for his 40 rupees with his own words about Deku Sticks (the text is the scrub's, not the
-item's), left at once and was not there again after the forest was left and come back to. **Not seen yet**: the
+item's: since then such a sale opens with "I've got something special for you." in English, `scrub_words`, the
+line's other languages left), left at once and was not there again after the forest was left and come back to. **Not seen yet**: the
 other three, and whether Kokiri Forest's stick scrub still sells after the Lost Woods' has. `tests/test_rando_scrubs.py`.
 
 ### The logic
