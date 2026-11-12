@@ -100,7 +100,7 @@ char tracker_value[kTrackerRows][72];
 int tracker_count = 0;
 void tracker_load();
 const char kTrackerHelp[] =
-    "The treasure chests and Gold Skulltulas of this area that take part in the randomizer's seed. It is what the seed "
+    "The treasure chests, Gold Skulltulas and gifts of this area that take part in the randomizer's seed. It is what the seed "
     "has there, not what is left: the game does not tell the menu what has been opened. Left and Right step through "
     "the area's checks one by one; with the debug tools on, confirm takes Link to the one shown. With the mouse: the "
     "arrows step, a click on the row's name goes there. In logic: Link carries all that the seed's rules ask for at "
@@ -114,7 +114,7 @@ const char kTrackerHelp[] =
 constexpr int kTrackerChecks = 320;
 constexpr int kTrackerGoAction = 5;
 struct TrackerCheck {
-    char area[48], kind[24], folder[40], ages[4];
+    char area[48], kind[56], folder[40], ages[4];   // (kind: Chest, Gold Skulltula, or a gift's name)
     float pos[3];
     char needs[64];   // (what the seed's rules ask for: kLogicItems' letters with commas, "-" nothing, "?" a file without it)
 };
@@ -148,9 +148,10 @@ std::string tracker_says(int row) {
         return known ? std::string(tracker_value[row]) + " (" + std::to_string(in) + " in logic)" : std::string(tracker_value[row]);
     }
     const int state = tracker_in_logic(*k);
-    char text[128];
-    snprintf(text, sizeof text, "%d of %d: %s%s at %.0f %.0f %.0f%s", tracker_pick[row], tracker_row_checks(row), k->kind,
-             !strcmp(k->ages, "C") ? ", child's," : !strcmp(k->ages, "A") ? ", adult's," : "", k->pos[0], k->pos[1], k->pos[2],
+    char text[192], place[48] = "";   // (a chest's or a Gold Skulltula's place tells it from the next; a gift has its name)
+    if (!strcmp(k->kind, "Chest") || !strcmp(k->kind, "Gold Skulltula")) snprintf(place, sizeof place, " at %.0f %.0f %.0f", k->pos[0], k->pos[1], k->pos[2]);
+    snprintf(text, sizeof text, "%d of %d: %s%s%s%s", tracker_pick[row], tracker_row_checks(row), k->kind,
+             !strcmp(k->ages, "C") ? ", child's," : !strcmp(k->ages, "A") ? ", adult's," : "", place,
              state > 0 ? ": in logic" : state == 0 ? ": not in logic" : "");
     return text;
 }
@@ -1384,7 +1385,7 @@ void tracker_load() {
         while (checks < kTrackerChecks && fgets(line, sizeof line, f)) {
             TrackerCheck& k = tracker_checks[checks];
             k.needs[0] = '?', k.needs[1] = 0;   // (a file written before the rules were in it)
-            if (line[0] != '#' && sscanf(line, "%47[^|]|%23[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]", k.area, k.kind, k.folder, k.ages, &k.pos[0],
+            if (line[0] != '#' && sscanf(line, "%47[^|]|%55[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]", k.area, k.kind, k.folder, k.ages, &k.pos[0],
                                          &k.pos[1], &k.pos[2], k.needs) >= 7)
                 checks++;
         }

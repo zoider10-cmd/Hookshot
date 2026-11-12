@@ -73,6 +73,20 @@ def main():
         "Kokiri Forest|Chest|KokiriForest|A|-30.0 1.0 2.0|KS,SL,BB,BM,HM,GB,SS", "Kokiri Forest|Chest|KokiriForest|C|-27.0 67.6 65.2|-",
         "Kokiri Forest|Gold Skulltula|KokiriForest|CA|5.0 6.0 7.0|KS", "Zora's River|Chest|ZoraRiver|CA|1.0 2.0 3.0|KS,SL,BB,BM"],
         "the checks' lines are not the area's name, the kind, the folder, the ages, the place and what the rules ask for, by area: %r" % lines[1:])
+    # ---- the gifts and the scrubs' sales among them ----
+    check(set(seed.GIFT_PLACES) == {g.key for g in seed.GIFTS + seed.SCRUBS}, "a gift or a scrub's sale has no place for the tracker, or a place is of no gift: %r" % sorted(
+        set(seed.GIFT_PLACES) ^ {g.key for g in seed.GIFTS + seed.SCRUBS}))
+    check(all(ages in ("C", "A", "CA") and len(pos) == 3 and g.area in seed.AREA_NAMES and len(g.name) <= 55
+              for g in seed.GIFTS + seed.SCRUBS for ages, pos in [seed.GIFT_PLACES[g.key]]), "a gift's place is not ages and three numbers, or its name is too long for a row")
+    with_gifts = seed.check_lines([("KakarikoVillage", (1.0, 2.0, 3.0), "CA", seed.NONE)], [("KakarikoVillage", (4.0, 5.0, 6.0), "C", seed.CHILD)],
+                                  [("KakarikoVillage", (-73.9, 99.5, 82.9), "C", seed.CHILD, "the cucco lady"), ("LostWood", (7.3, 82.9, -85.6), "CA", seed.CHILD, "a Business Scrub: the Deku Nut upgrade")])
+    check(with_gifts[1:] == ["Kakariko Village|Chest|KakarikoVillage|CA|1.0 2.0 3.0|-", "Kakariko Village|Gold Skulltula|KakarikoVillage|C|4.0 5.0 6.0|KS,SL",
+                             "Kakariko Village|The cucco lady|KakarikoVillage|C|-73.9 99.5 82.9|KS,SL",
+                             "Lost Woods|A Business Scrub: the Deku Nut upgrade|LostWood|CA|7.3 82.9 -85.6|KS,SL"],
+          "a gift's line is not its area, its name, its folder, its ages, its place and what it asks for, after the area's chests and Gold Skulltulas: %r" % with_gifts[1:])
+    check("for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES])) + " in script and
+          'if (!strcmp(k->kind, "Chest") || !strcmp(k->kind, "Gold Skulltula")) snprintf(place' in menu,
+          "the gifts that take part are not written with the checks, or a gift's row is its place and not its name")
     check(set(seed.CHECK_CODES) == set(seed.PROGRESSION | seed.QUEST_GATES) and len(set(seed.CHECK_CODES.values())) == len(seed.CHECK_CODES),
           "a gating item of the rules has no letters for the tracker, or two have the same")
     codes = re.findall(r'^    \{"([A-Z]{2})", "[^"]+", \{[^}]+\}\},$', menu, re.M)
@@ -93,10 +107,10 @@ def main():
           seed.check_ages({"A_Child_Static", "A_Adult_Static"}) == "CA" and seed.check_ages({"FireTemple_Static.bcett.byml.zs"}) == "CA" and
           seed.check_ages(set()) == "", "the ages whose map has a check are not read from its files' names")
     check('with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\\n") as f:' in script and seed.CHECKS == "checks.txt" and
-          '" checks 2" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
+          '" checks 3" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
     m = re.search(r"constexpr int kTrackerChecks = (\d+);", menu)
     check(m and int(m.group(1)) == seed.CHECK_ROWS, "the menu does not keep as many checks as the script may write")
-    check('"%47[^|]|%23[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]"' in menu and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
+    check('"%47[^|]|%55[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]"' in menu and "char area[48], kind[56], folder[40], ages[4];" in menu and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
     check("if (press[3] || press[4]) tracker_pick[row] = (tracker_pick[row] + n + 1 + (press[4] ? 1 : -1)) % (n + 1), changed = true;" in menu and
           "else if (r.tracker >= 0) tracker_press(r.tracker, press, changed);" in menu,
           "Left and Right do not step through a row's checks and back to its own words")

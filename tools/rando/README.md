@@ -497,8 +497,7 @@ have is not gone to (the log says so): change his age first.
 
 Seen in unattended runs (the action sent by the live input file, not from the menu): a chest of the same map (Kokiri
 Forest), of another (Zora's River), of a dungeon (Inside the Deku Tree) and one 500 metres across Hyrule Field, in a
-grotto; Link stood at each. Not in the file: gifts and Business Scrubs (they have no place by their key), and so not
-gone to. A check outside what its map lets Link stand on would take him back to his last safe place, a heart less,
+grotto; Link stood at each. A check outside what its map lets Link stand on would take him back to his last safe place, a heart less,
 as a go-to there does; none of the four was.
 
 ## In logic, on the Tracker tab
@@ -512,3 +511,17 @@ help names what is still asked for. Nothing is said before a save's inventory ha
 
 The rules are the seed's own (`RULES`): by area, written to ask for too much, never too little. So a check in logic
 is one the seed promises; a check not in logic may well be within reach. Not seen in play yet.
+
+## Gifts and scrubs on the Tracker tab
+
+A gift or a Business Scrub's sale that takes part has a line in `checks.txt` too: its kind is the gift's name, its
+place the one written for its key in `GIFT_PLACES` (the giver, or the game's own place for Link there: a mini-game's
+start, a scene's anchor), read from the map files of its area. So it is stepped to, gone to and in logic or not as a
+chest is. A new gift needs its place there (the check asks for one for every key).
+
+Gone to in an unattended run, as a child, Link standing there after: Darunia, the rolling Goron, the Skull Kid (both),
+the two Lost Woods scrubs, the Skulltula house (on its floor, the family hangs above), the cucco lady's pen, the man
+on the roof, Bombchu Bowling, the Market's gallery, the dog lady, the diving game, the frogs, the fishing pond, and
+the two Piece of Heart scrubs. Not gone to yet: the Lost Woods target and the Forest Stage (an event was playing when
+they were asked for, and a go-to waits for none), and the adult's four (the fishing pond, Kakariko's gallery,
+horseback archery, the Temple of Time).

@@ -1777,9 +1777,9 @@ def tracker_lines(chests, skulls, gifts=None):
 # <game folder>\mods\rando-seed\checks.txt, a line for each chest and Gold Skulltula that takes part:
 # "<the area's name, as its tracker row>|<Chest or Gold Skulltula>|<the Banc folder>|<C, A or CA: the ages whose map has
 # it>|<x> <y> <z>|<what the rules ask for>". The menu steps through an area's lines and has the game take Link to one
-# (the debug tools: the teleport to the folder's map, then the place). What a check holds is not in the file. Gifts and
-# scrubs have no place in a map file by their key, and are not in it. CHECK_ROWS: as many as the menu keeps
-# (kTrackerChecks).
+# (the debug tools: the teleport to the folder's map, then the place). What a check holds is not in the file. A gift
+# or a Business Scrub's sale has a line too, its kind the gift's name and its place from GIFT_PLACES. CHECK_ROWS: as
+# many as the menu keeps (kTrackerChecks).
 # What the rules ask for: the gating items of the check's rule, each by its two letters (CHECK_CODES, the menu's
 # kLogicItems), with commas; "-" when it asks for nothing. The menu says a check is in logic when Link carries them
 # all. The rules ask for too much, never too little (see RULES): a check not in logic may be within reach.
@@ -1799,13 +1799,53 @@ def check_ages(names):
     return ("C" if child else "") + ("A" if adult else "")
 
 
-def check_lines(chests, skulls):
+# A gift or a Business Scrub's sale is a scene, not an actor with a hash: where Link stands for it is written here, by
+# the gift's key, from the map files of its area (GIFTS' and SCRUBS' area): the giver, or the game's own place for
+# Link there (a mini-game's StartPos, a scene's anchor). (the ages whose map has it, the place). Its line's kind is the
+# gift's name. Read from the map files, not walked to: the four tried unattended are named in the README.
+GIFT_PLACES = {
+    "darunia": ("C", (-0.2, 98.6, -38.5)),                 # (Npc_Goron_Darunia_Child at z -41.8, the door at -29.2)
+    "lostwood_target": ("C", (41.1, 102.6, -4.9)),         # (HitTargetOfDekuScrub)
+    "skulltula_house_10": ("CA", (-26.5, 109.9, 74.5)),    # (Npc_SkullDad at z 72.5)
+    "skulltula_house_20": ("CA", (-26.5, 109.9, 74.5)),
+    "skulltula_house_30": ("CA", (-26.5, 109.9, 74.5)),
+    "skulltula_house_50": ("CA", (-26.5, 109.9, 74.5)),
+    "forest_stage_skull": ("C", (-10.0, 83.2, -52.0)),     # (ScrubForestStageElder at z -54.5)
+    "forest_stage_truth": ("C", (-10.0, 83.2, -52.0)),
+    "bowling_bag": ("C", (-25.1, 100.0, 9.5)),             # (BombchuBowlingStartPos)
+    "bowling_heart": ("C", (-25.1, 100.0, 9.5)),
+    "diving": ("C", (25.4, 113.2, -5.3)),                  # (MiniGame_Diving_PlayerStart)
+    "fishing_child": ("C", (-97.6, 134.1, 489.7)),         # (MiniGame_Fishing_PlayerStart)
+    "fishing_adult": ("A", (-97.6, 134.1, 489.7)),
+    "frogs": ("C", (9.2, 101.9, -54.8)),                   # (OcarinaPoint_MiniGame_FrogTenors)
+    "gallery_market": ("C", (-14.2, 100.1, -12.4)),        # (HitTargetStartPos)
+    "gallery_kakariko": ("A", (-58.5, 91.4, 62.6)),        # (HitTargetStartPos)
+    "cucco_lady": ("C", (-73.9, 99.5, 82.9)),              # (CatchCucco_GoalPoint)
+    "archery_heart": ("A", (69.5, 115.0, 36.3)),           # (HorsebackArcheryPlayerPos)
+    "archery_quiver": ("A", (69.5, 115.0, 36.3)),
+    "rolling_goron": ("C", (-10.3, 109.6, -16.5)),         # (Npc_Goron_006_Child)
+    "roof_man": ("CA", (-36.1, 107.5, 29.0)),              # (his HeartPieceAnchor)
+    "skull_kid_song": ("C", (-28.6, 101.0, 1.6)),          # (On_Center_Npc_SkullKid_Child)
+    "skull_kid_game": ("C", (48.4, 97.8, 15.8)),           # (OcarinaPoint_SkullKidSession)
+    "dog_lady": ("C", (-0.3, 100.1, 26.9)),                # (SubEvent_FindRichard_Link_Stay)
+    "light_arrows": ("A", (108.0, 103.9, -34.0)),          # (the Temple of Time, before the Spirit Stones' base at x 110.4)
+    "scrub_heart_field": ("CA", (25.0, 129.9, 22.1)),      # (the scrubs: where the map has them)
+    "scrub_heart_secret": ("C", (-23.0, 119.1, 33.0)),
+    "scrub_sticks": ("CA", (-45.2, 95.2, 72.6)),
+    "scrub_nuts": ("CA", (7.3, 82.9, -85.6)),
+}
+
+
+def check_lines(chests, skulls, gifts=()):
     """The checks file's lines. chests and skulls: [(area (the Banc folder), position, ages, what its rule asks for)].
-    By the area's name, the chests first, then by place; no more than the menu keeps."""
+    gifts: the same with the gift's name after, which is its line's kind. By the area's name, the chests first, then
+    the Gold Skulltulas by place, then the gifts by name; no more than the menu keeps."""
     rows = [(AREA_NAMES.get(area, area).replace("|", "/")[:47], kind, area, ages, pos,
              ",".join(code for item, code in CHECK_CODES.items() if item in need) or "-")
             for kind, those in (("Chest", chests), ("Gold Skulltula", skulls)) for area, pos, ages, need in those if len(pos) == 3 and ages]
-    rows.sort(key=lambda r: (r[0].lower(), r[1], r[4]))
+    rows += [(AREA_NAMES.get(area, area).replace("|", "/")[:47], (name[:1].upper() + name[1:]).replace("|", "/")[:55], area, ages, pos,
+              ",".join(code for item, code in CHECK_CODES.items() if item in need) or "-") for area, pos, ages, need, name in gifts]
+    rows.sort(key=lambda r: (r[0].lower(), r[1] not in ("Chest", "Gold Skulltula"), r[1], r[4]))
     return ["# The checks of this seed, one by one, for the Tracker tab: <area>|<kind>|<folder>|<ages>|<x> <y> <z>|<the rules ask for>"] + [
         "%s|%s|%s|%s|%.1f %.1f %.1f|%s" % (name, kind, area, ages, pos[0], pos[1], pos[2], need) for name, kind, area, ages, pos, need in rows[:CHECK_ROWS]]
 
@@ -1997,7 +2037,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + " checks 2" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + " checks 3" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2379,7 +2419,9 @@ def main():
     with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\n") as f:   # (for the Tracker tab's Go there)
         skull_need = lambda h: quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0])
         f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h]), needs[h]) for h in gives if h not in gifts],
-                                      [(skulls[h][0], skulls[h][1], check_ages(maps[h]), skull_need(h)) for h in took])) + "\n")
+                                      [(skulls[h][0], skulls[h][1], check_ages(maps[h]), skull_need(h)) for h in took],
+                                      [(g.area, GIFT_PLACES[g.key][1], GIFT_PLACES[g.key][0], needs[h], g.name)
+                                       for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES])) + "\n")
     with open(os.path.join(mod, "rando_manifest.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(written)) + "\n")
     with open(stamp_path, "w", encoding="utf-8") as f:   # (last: a run that stopped half way is made again)
