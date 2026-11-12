@@ -26,6 +26,9 @@ static int rando_active;
 /* The seed's settings while the randomizer is on, or NULL: the game as shipped */
 const OotRando *hos_rando(void) { return rando_active ? &rando : NULL; }
 
+/* Progressive items: on with the randomizer (hos_main.c hos_oot_pouch_add) */
+int hos_rando_progressive(void) { return rando_active && rando.v[OOT_RANDO_PROGRESSIVE] != 0; }
+
 /* The seed's settings as the options file beside the game has them, HOS_RANDO_SEED_ID over them. say: what could not be
    loaded goes to the log */
 static void rando_read(OotRando *r, int say) {

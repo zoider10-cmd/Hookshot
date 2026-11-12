@@ -332,6 +332,27 @@ WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,
 SHELF_LIFT = {"Item_Gauntlet_Gold": 0.22, "Item_Gauntlet_Silver": 0.22, "Item_Gauntlet_Goron": 0.22, "Item_Token_Gold": 0.15}
 
 
+# ---- Progressive items: what the rules ask for when an upgrade found gives the next one Link has not ----
+# The game's side (host/hos_main.c hos_oot_pouch_add) puts the next of an upgrade's family in the pouch whatever was
+# found. So Link has the family's second when he has found two of it: a rule that asks for the Silver Gauntlets
+# asks for them and for the Goron's Bracelet, the Giant's Wallet for the Adult's too (progressive_need). Only the
+# ones the seed shuffles are added: the others are where the game has them, and the rules count on that already.
+# Too much, never too little: with both found he has the second, whichever came first.
+PROGRESSIVE_TIERS = (("Item_Gauntlet_Goron", "Item_Gauntlet_Silver", "Item_Gauntlet_Gold"), ("Item_Wallet_Medium", "Item_Wallet_Large"),
+                     ("Item_Scale_Silver", "Item_Scale_Gold"))
+
+
+def progressive_need(need, shuffled):
+    """what a rule asks for with Progressive items: each upgrade it names, and the ones under it of its family that
+    the seed shuffles"""
+    more = set(need)
+    for tiers in PROGRESSIVE_TIERS:
+        for k, item in enumerate(tiers):
+            if item in need:
+                more.update(i for i in tiers[:k] if i in shuffled)
+    return frozenset(more)
+
+
 def shelf_item(actor):
     """what goes into the pool for a shelf's own actor: the chests' kind of it, or a red rupee"""
     return next((item for start, item in SHELF_ITEMS if actor.startswith(start)), SHELF_OTHER)
@@ -2002,7 +2023,7 @@ def settings(game):
     """the randomizer's lines of the options file (0 where it does not say)"""
     got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
            "rando_skip_intro": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0,
-           "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0}
+           "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -2353,6 +2374,7 @@ def main():
     p.add_argument("--scrubs", action="store_true", help="as rando_scrubs=1: the Business Scrubs' four one-time sales take part with the chests (SCRUBS)")
     p.add_argument("--shops", type=int, choices=(0, 1, 2), help="in place of rando_shops: four shelves of each shop sell a shuffled item, once (SHOPS). "
                                                                "2: with rolled prices")
+    p.add_argument("--progressive", action="store_true", help="as rando_progressive=1: the rules count an upgrade found as the next of its family")
     p.add_argument("--start-rupees", action="store_true", help="as rando_start_rupees=1: a new game starts with %d rupees" % START_RUPEES)
     p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already this seed's (the launcher, at Play)")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
@@ -2386,6 +2408,7 @@ def main():
     a.skip_intro = a.skip_intro or ini["rando_skip_intro"] != 0
     a.start_rupees = a.start_rupees or ini["rando_start_rupees"] != 0
     a.scrubs = a.scrubs or ini["rando_scrubs"] != 0
+    a.progressive = a.progressive or ini["rando_progressive"] != 0
     a.shops = a.shops if a.shops is not None else ini["rando_shops"]
     a.shops = a.shops if 0 <= a.shops <= 2 else 0
     a.skulltulas = a.skulltulas if a.skulltulas is not None else ini["rando_skulltulas"]
@@ -2439,7 +2462,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 4" % a.shops if a.shops else "") + " checks 5" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 4" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + " checks 5" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2592,6 +2615,8 @@ def main():
         needs = {h: quest_need(gifts[h].need, gifts[h].area) if h in gifts else quest_need(n, spots[h][0]) for h, n in needs.items()}
     elif gifts:    # (the scrubs alone)
         needs = {h: gifts[h].need if h in gifts else n for h, n in needs.items()}
+    step = (lambda need: progressive_need(need, PROGRESSION)) if a.progressive else (lambda need: need)
+    needs = {h: step(n) for h, n in needs.items()}
     try:
         gives, stays, spheres = place(rng, collections.OrderedDict((h, tuple(s[:4])) for h, s in spots.items()), which, keys_mode,
                                       needs if logic else None)
@@ -2614,7 +2639,7 @@ def main():
             fixed = [(needs[h], spots[h][1]) for h in spots if h not in gives and spots[h][1] in PROGRESSION]
             gives, skull_drops, spheres, gated = gate_skulltulas(
                 random.Random("skulltulas gated:%d:%d:%d" % (seed, a.skulltulas, len(able))), gives, skull_drops,
-                able, needs, {h: quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0])
+                able, needs, {h: step(quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0]))
                               for h in able}, fixed, never=((SSC,) if a.quests else ()) + (tuple(SHOP_GATES) if a.shops else ()))
             print("Gold Skulltulas: %d gating item%s now dropped by one" % (gated, "" if gated == 1 else "s"))
         for h, item in skull_drops.items():
@@ -2947,7 +2972,7 @@ def main():
         f.write("\n".join(tracker_lines(collections.Counter(spots[h][0] for h in gives if h not in gifts), collections.Counter(skulls[h][0] for h in took),
                                         collections.Counter(g.area for g in gifts.values()))) + "\n")
     with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\n") as f:   # (for the Tracker tab's Go there)
-        skull_need = lambda h: quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0])
+        skull_need = lambda h: step(quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0]))
         named = lambda kind, h, area, pos, item="": check_name(kind, item, about.get(h, {}), pos, exits[area], sub_areas[area])
         f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h]), needs[h], named("Chest", h, spots[h][0], spots[h][5], spots[h][1]))
                                        for h in gives if h not in gifts],

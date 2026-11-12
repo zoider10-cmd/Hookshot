@@ -571,3 +571,23 @@ Seen in play, with a seed made with the setting: the shuffled items on the shelv
 each with its name, its price and its words; a green rupee bought for 150 gave one rupee, was sold out after, and
 stayed so when the shop was come back to. NOT seen yet: a wallet got and a price past 200 paid; a key or a Piece
 of Heart bought; the adult's shops.
+
+## Progressive items
+
+The Progressive items setting (`rando_progressive`, `--progressive`): an upgrade found gives the next of its family
+that Link has not. Ten families: bomb bags; the bow and the two bigger quivers; the slingshot and the two bigger
+bullet bags; Hookshot and Longshot; the Goron's Bracelet and the Silver and Golden Gauntlets; the scales; the wallets;
+stick bags; nut bags; magic and double magic.
+
+It is done where a content enters the pouch: the pouch manager's add (`f_8112d570`: every way of getting an item
+looked at calls it) asks the host at its start (`nx2/oot_patches.py` `patch_pouch_add`, `host/hos_main.c`
+`hos_oot_pouch_add`), which gives it the family's next in place of the one named. Link's place in a family is the
+highest of it he carries. The seed's side makes the rules ask for the ones under an upgrade that it shuffles
+(`progressive_need`): the Silver Gauntlets ask for the Goron's Bracelet too, the Giant's Wallet for the Adult's.
+
+Seen in an unattended run, the items added by the debug inventory: a Longshot gave the Hookshot and the next the
+Longshot; three Golden Gauntlets gave the bracelet, the Silver and the Golden; a Big Bomb Bag gave the Bomb Bag. NOT
+seen yet: a chest, a gift or a shelf (the same add, by what was read of the code); the other families.
+
+What a chest's scene shows and says is still the item it was shuffled as: the Longshot is held up and named, and the
+Hookshot is in the pouch.

@@ -95,6 +95,21 @@ def patch_movement(source):
                           'extern void hos_oot_flight_pose(Ctx *c, uint64_t actor, uint64_t matrix);\n', 1)
 
 
+# Progressive items (the randomizer's fork: host/hos_main.c hos_oot_pouch_add): the pouch manager's add, f_8112d570, asks the
+# host at its start, which may give it another content's name (x1) in place of the one it was called with.
+POUCH_HEAD = "void f_8112d570(Ctx *__restrict A64_NOESC c) {\n"
+POUCH_HOOK = "    hos_oot_pouch_add(c);   /* (nx2/oot_patches.py: progressive items; x1 the content's name, x2 how many) */\n"
+
+
+def patch_pouch_add(source):
+    if source.count(POUCH_HEAD) != 1:
+        return None
+    if POUCH_HEAD + POUCH_HOOK in source:   # (made by an earlier run over this file)
+        return source
+    return source.replace(POUCH_HEAD, POUCH_HEAD + POUCH_HOOK, 1).replace(
+        '#include "a64.h"\n', '#include "a64.h"\nextern void hos_oot_pouch_add(Ctx *c);\n', 1)
+
+
 def patch_flight_rotation(source):
     start = source.find(WARP_HEAD)
     if start < 0:
@@ -433,6 +448,7 @@ def apply(gen, *, protect_hearts=False, required=False):
         done["free camera"] = 0
         done["mouse camera"] = 0
         done["disable camera centering"] = 0
+        done["progressive items"] = 0
     speed_hooks = 0   # (SPEED_PLACES', in one file or several)
     step_sites, step_files = 0, []   # (the divides with the hook, and the files that have it)
     whole_sites = 0   # (the counters of WHOLE_SITES with the whole frames: patch_whole_frames)
@@ -496,6 +512,12 @@ def apply(gen, *, protect_hearts=False, required=False):
             out = center
             done["disable camera centering"] += 1
             print("oot_patches: disable camera centering switch in", os.path.basename(path))
+        pouch = patch_pouch_add(out) if protect_hearts else None
+        if pouch is not None:
+            if pouch != out:
+                print("oot_patches: progressive items in", os.path.basename(path))
+            out = pouch
+            done["progressive items"] += 1
         speed = patch_cct_speed(out) if protect_hearts else None
         if speed is not None:
             if speed[0] != out:

@@ -26,7 +26,7 @@
 
    What is not here: the item placement. tools/rando/rando_seed.py reads rando_on, rando_seed, rando_chests,
    rando_skulltulas, rando_quests (with rando_frogs and rando_light_arrows), rando_keys, rando_major, rando_open_deku,
-   rando_open_forest, rando_skip_intro, rando_start_rupees, rando_scrubs and rando_shops, shuffles the chests, the Gold Skulltulas' drops and some characters' gifts and
+   rando_open_forest, rando_skip_intro, rando_start_rupees, rando_scrubs, rando_shops and rando_progressive, shuffles the chests, the Gold Skulltulas' drops and some characters' gifts and
    makes the open ways' and the opening's changes as a mod (the launcher runs it at Play); the other settings are not placed yet
    (host/oot_rando.c). */
 #ifndef OOT_RANDO_H
@@ -88,7 +88,10 @@
       "Off", "On") \
     X(START_RUPEES, "Starting rupees", "rando_start_rupees", \
       "A new game starts with 200 rupees in Link's wallet.", \
-      "Off", "200")
+      "Off", "200") \
+    X(PROGRESSIVE, "Progressive items", "rando_progressive", \
+      "An upgrade found gives the next one Link has not: bomb bags, the bow and quivers, the slingshot and bullet bags, Hookshot and Longshot, strength, scales, wallets, stick and nut bags, magic. A chest still shows the item it was shuffled as.", \
+      "Off", "On")
 
 enum {
 #define OOT_RANDO_ENUM(NAME, label, key, help, ...) OOT_RANDO_##NAME,

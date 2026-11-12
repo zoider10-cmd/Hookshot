@@ -1523,6 +1523,75 @@ void hos_oot_flight_pose(Ctx *c, uint64_t actor, uint64_t matrix) {
 #endif
 }
 
+/* (the randomizer's fork) Progressive items. f_8112d570 is the pouch manager's add: x0 the manager, x1 a string view of
+   the content's actor name ({the text, its room as a 32-bit number}), x2 how many (the event action
+   OneShotAddOrRemovePouchContent, f_828d4a70, calls it so, and a dozen other places do). nx2/oot_patches.py calls this at
+   its start. With the setting on, an upgrade of a family on its way into the pouch is made the next of the family that
+   Link has not: he has the Silver Gauntlets' place in the family when he carries them or the Golden ones (a bigger one
+   may take the smaller one's place in the pouch). The name is not written over where it is (it may be the game's own
+   text): the call is given a view of its own, in memory that stays. What the chest's scene shows and says is the item
+   it was shuffled as; what is put in the pouch is this. A name given in two spellings (the item's and the pouch's)
+   is answered in the one it came in. */
+int hos_rando_progressive(void);   /* host/oot_rando.c */
+void hos_oot_pouch_add(Ctx *c) {
+#if defined(_WIN32) || defined(__linux__)
+    static const char *const families[][3][2] = {
+        {{"Item_BombBag_Small"}, {"Item_BombBag_Medium"}, {"Item_BombBag_Large"}},
+        {{"Item_Range_Bow", "Weapon_Range_Bow"}, {"Item_Quiver_Medium"}, {"Item_Quiver_Large"}},
+        {{"Item_Range_SlingShot", "Weapon_Range_SlingShot"}, {"Item_BulletBag_Medium"}, {"Item_BulletBag_Large"}},
+        {{"Item_Hookshot"}, {"Item_Longshot"}},
+        {{"Item_Gauntlet_Goron"}, {"Item_Gauntlet_Silver", "Armor_Adult_Gauntlet_Silver"}, {"Item_Gauntlet_Gold", "Armor_Adult_Gauntlet_Gold"}},
+        {{"Item_Scale_Silver"}, {"Item_Scale_Gold"}},
+        {{"Item_Wallet_Medium"}, {"Item_Wallet_Large"}},
+        {{"Item_StickBag_Small"}, {"Item_StickBag_Medium"}, {"Item_StickBag_Large"}},
+        {{"Item_NutBag_Small"}, {"Item_NutBag_Medium"}, {"Item_NutBag_Large"}},
+        {{"Item_FairyBless_MP"}, {"Item_FairyBless_MPDouble"}},
+    };
+    if ((int32_t)c->x[2] <= 0 || !hos_rando_progressive()) return;
+    const uint64_t view = c->x[1];
+    const uint64_t text = view ? recomp_load64(c, view) : 0;
+    if (!text) return;
+    char name[96];
+    size_t length = 0;
+    for (; length + 1 < sizeof name; length++) {
+        name[length] = (char)recomp_load8(c, text + length);
+        if (!name[length]) break;
+    }
+    name[length] = 0;
+    for (unsigned f = 0; f < sizeof families / sizeof families[0]; f++) {
+        int spelling = -1, tiers = 0;
+        for (int t = 0; t < 3; t++) {
+            if (!families[f][t][0]) break;
+            tiers = t + 1;
+            for (int a = 0; a < 2; a++)
+                if (families[f][t][a] && !strcmp(name, families[f][t][a])) spelling = a;
+        }
+        if (spelling < 0) continue;
+        int level = 0;   /* (how many of the family Link has: the highest he carries, and all under it) */
+        for (int t = tiers - 1; t >= 0 && !level; t--)
+            for (int a = 0; a < 2; a++)
+                if (families[f][t][a] && oot_pouch_count(c, families[f][t][a]) > 0) level = t + 1;
+        if (level >= tiers) return;   /* (he has them all: the one found is given as it is) */
+        const char *give = families[f][level][spelling] ? families[f][level][spelling] : families[f][level][0];
+        hos_log("rando: progressive: %s found, Link has %d of its %d: %s given", name, level, tiers, give);
+        if (!strcmp(give, name)) return;
+        static uint64_t blocks;
+        static unsigned turn;
+        if (!blocks) blocks = hos_sys_alloc(8 * 256, 16);
+        if (!blocks) return;
+        const uint64_t block = blocks + (uint64_t)(__atomic_fetch_add(&turn, 1, __ATOMIC_RELAXED) % 8) * 256;
+        memcpy(A64_PTR(block), A64_PTR(view - 16), 64);   /* (the view as it is, with what is before it: a string object's start) */
+        memcpy(A64_PTR(block + 96), give, strlen(give) + 1);
+        recomp_store64(c, block + 16, block + 96);
+        recomp_store32(c, block + 24, 128);
+        c->x[1] = block + 16;
+        return;
+    }
+#else
+    (void)c;
+#endif
+}
+
 void hos_oot_lift_player(Ctx *c, uint64_t actor) {
 #if defined(_WIN32) || defined(__linux__)   /* (the debug tools: host/posix has what they call) */
     flight_pose_actor = 0;
