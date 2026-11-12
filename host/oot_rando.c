@@ -26,6 +26,9 @@ static int rando_active;
 /* The seed's settings while the randomizer is on, or NULL: the game as shipped */
 const OotRando *hos_rando(void) { return rando_active ? &rando : NULL; }
 
+/* The randomizer is on (hos_main.c hos_oot_pouch_add: the Bomb Bag the game gives with bombs is kept back) */
+int hos_rando_on(void) { return rando_active; }
+
 /* Progressive items: on with the randomizer (hos_main.c hos_oot_pouch_add) */
 int hos_rando_progressive(void) { return rando_active && rando.v[OOT_RANDO_PROGRESSIVE] != 0; }
 

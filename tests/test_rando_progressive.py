@@ -59,8 +59,8 @@ def main():
     head = oot_patches.POUCH_HEAD
     source = '#include "a64.h"\nvoid f_8112d570(Ctx *A64_NOESC);\n' + head + "    /* nop/hint */\n}\nvoid f_1(Ctx *__restrict A64_NOESC c) {\n}\n"
     made = oot_patches.patch_pouch_add(source)
-    check(made is not None and made.count("hos_oot_pouch_add(c);") == 1 and head + oot_patches.POUCH_HOOK + "    /* nop/hint */" in made and
-          made.count("extern void hos_oot_pouch_add(Ctx *c);") == 1, "the hook is not the first line of the pouch manager's add, once, with its declaration")
+    check(made is not None and made.count("if (hos_oot_pouch_add(c)) { c->x[0] = 0; return; }") == 1 and head + oot_patches.POUCH_HOOK + "    /* nop/hint */" in made and
+          made.count("extern int hos_oot_pouch_add(Ctx *c);") == 1, "the hook is not the first line of the pouch manager's add, once, with its declaration")
     check(oot_patches.patch_pouch_add(made) == made, "made again, the hook is there twice")
     check(oot_patches.patch_pouch_add(source.replace("f_8112d570", "f_8112d571")) is None, "a source without the function is changed")
     patches = (ROOT / "nx2" / "oot_patches.py").read_text(encoding="utf-8")
@@ -69,7 +69,7 @@ def main():
 
     # ---- the game's side ----
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    block = host[host.index("void hos_oot_pouch_add(Ctx *c) {"):host.index("void hos_oot_lift_player(Ctx *c, uint64_t actor) {")]
+    block = host[host.index("int hos_oot_pouch_add(Ctx *c) {"):host.index("void hos_oot_lift_player(Ctx *c, uint64_t actor) {")]
     rows = re.findall(r"^        \{(\{.*\})\},$", block, re.M)
     families = [[re.findall(r'"([^"]+)"', tier) for tier in re.findall(r"\{([^{}]*)\}", row)] for row in rows]
     check(len(families) == 10 and all(2 <= len(f) <= 3 and all(1 <= len(t) <= 2 for t in f) for f in families),
@@ -82,11 +82,14 @@ def main():
     for word in ("Item_BombBag_Small", "Item_Quiver_Large", "Item_BulletBag_Large", "Item_Longshot", "Item_Wallet_Large", "Item_StickBag_Large",
                  "Item_NutBag_Large", "Item_FairyBless_MPDouble"):
         check(word in flat, "the game's families have no %s" % word)
-    check("if ((int32_t)c->x[2] <= 0 || !hos_rando_progressive()) return;" in block and "if (level >= tiers) return;" in block and
+    check("if ((int32_t)c->x[3] <= 0 || !hos_rando_progressive()) return 0;" in block and "if (level >= tiers) return 0;" in block and
           "for (int t = tiers - 1; t >= 0 && !level; t--)" in block,
           "a content taken away, or one found with the setting off, is changed; or Link's place in a family is not the highest he carries")
     check("c->x[1] = block + 16;" in block and "memcpy(A64_PTR(block + 96), give, strlen(give) + 1);" in block and "recomp_store8(c, text" not in block,
           "the name is written over where it is, or the call is not given the host's own view of it")
+    check('if (!strcmp(name, "Item_BombBag_Small") && c->x[30] == 0x828d50acULL && (uint32_t)c->x[4] == 2 && !(c->x[7] & 1)) {' in block and
+          "if (!hos_rando_on()) return 0;" in block and block.index("if (!hos_rando_on()) return 0;") < block.index('"Item_BombBag_Small") && c->x[30]'),
+          "the Bomb Bag the game gives with bombs is given in a seed, or is kept back with the randomizer off, or a chest's own bag is")
     side = (ROOT / "host" / "oot_rando.c").read_text(encoding="utf-8")
     header = (ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
     check("int hos_rando_progressive(void) { return rando_active && rando.v[OOT_RANDO_PROGRESSIVE] != 0; }" in side and

@@ -591,3 +591,11 @@ seen yet: a chest, a gift or a shelf (the same add, by what was read of the code
 
 What a chest's scene shows and says is still the item it was shuffled as: the Longshot is held up and named, and the
 Hookshot is in the pouch.
+
+### The Bomb Bag the game gives with bombs
+
+A chest's bombs, opened with no Bomb Bag, came with one, filled: five bombs gave the seed's gating item (seen in play).
+The game does it in three adds (its log, twice): the chest's scene adds `Item_BombBag_Small` by the event action, marked
+otherwise than a chest's own item is (x4 2, x7 0 against 7 and 1); the bag is filled; the bundle is added. With the
+randomizer on the first is not made (`hos_oot_pouch_add` returns 1 and the add is left at once), so the bombs find no
+bag and are not kept. A Bomb Bag that is a chest's or a shelf's own item is added as the bundle is. NOT seen in play yet.

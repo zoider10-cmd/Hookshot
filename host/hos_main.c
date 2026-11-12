@@ -1532,8 +1532,16 @@ void hos_oot_flight_pose(Ctx *c, uint64_t actor, uint64_t matrix) {
    text): the call is given a view of its own, in memory that stays. What the chest's scene shows and says is the item
    it was shuffled as; what is put in the pouch is this. A name given in two spellings (the item's and the pouch's)
    is answered in the one it came in. */
+/* And the Bomb Bag the game gives with bombs. A chest's bombs, when Link has no bag, are got in three adds (seen in the
+   log of a game, twice): the event action adds Item_BombBag_Small (from 0x828d50ac, x4 2, x7 0), the bag is filled
+   (Item_Bomb, 20), then the action adds the bundle as every chest's item is added (x4 7, x7 1). The first is the
+   game's own kindness and gave the randomizer's gating item for five bombs: with the randomizer on it is not made
+   (1 is returned, and the add is left at once with nothing added), so the bombs find no bag and are not kept, as
+   bombs dropped by a Gold Skulltula are not. A Bomb Bag of a chest's own comes as the bundle does and is added.
+   x3 is how many (20, 5, 1); x2 is not. */
 int hos_rando_progressive(void);   /* host/oot_rando.c */
-void hos_oot_pouch_add(Ctx *c) {
+int hos_rando_on(void);   /* (host/oot_rando.c: the randomizer is on) */
+int hos_oot_pouch_add(Ctx *c) {
 #if defined(_WIN32) || defined(__linux__)
     static const char *const families[][3][2] = {
         {{"Item_BombBag_Small"}, {"Item_BombBag_Medium"}, {"Item_BombBag_Large"}},
@@ -1547,10 +1555,10 @@ void hos_oot_pouch_add(Ctx *c) {
         {{"Item_NutBag_Small"}, {"Item_NutBag_Medium"}, {"Item_NutBag_Large"}},
         {{"Item_FairyBless_MP"}, {"Item_FairyBless_MPDouble"}},
     };
-    if ((int32_t)c->x[2] <= 0 || !hos_rando_progressive()) return;
+    if (!hos_rando_on()) return 0;
     const uint64_t view = c->x[1];
     const uint64_t text = view ? recomp_load64(c, view) : 0;
-    if (!text) return;
+    if (!text) return 0;
     char name[96];
     size_t length = 0;
     for (; length + 1 < sizeof name; length++) {
@@ -1560,9 +1568,14 @@ void hos_oot_pouch_add(Ctx *c) {
     name[length] = 0;
     /* (every content added, with where the call came from and its other arguments: the game gives a Bomb Bag with a
        chest's bombs when Link has none, seen in play, and that add is to be told from a chest's own Bomb Bag) */
-    hos_log("rando: pouch add %s x%d (lr %#llx, x3 %#llx x4 %#llx x5 %#llx x6 %#llx x7 %#llx)", name, (int)(int32_t)c->x[2],
-            (unsigned long long)c->x[30], (unsigned long long)c->x[3], (unsigned long long)c->x[4], (unsigned long long)c->x[5],
+    hos_log("rando: pouch add %s x%d (lr %#llx, x2 %#llx x4 %#llx x5 %#llx x6 %#llx x7 %#llx)", name, (int)(int32_t)c->x[3],
+            (unsigned long long)c->x[30], (unsigned long long)c->x[2], (unsigned long long)c->x[4], (unsigned long long)c->x[5],
             (unsigned long long)c->x[6], (unsigned long long)c->x[7]);
+    if (!strcmp(name, "Item_BombBag_Small") && c->x[30] == 0x828d50acULL && (uint32_t)c->x[4] == 2 && !(c->x[7] & 1)) {
+        hos_log("rando: the Bomb Bag the game gives with bombs is not given");
+        return 1;
+    }
+    if ((int32_t)c->x[3] <= 0 || !hos_rando_progressive()) return 0;
     for (unsigned f = 0; f < sizeof families / sizeof families[0]; f++) {
         int spelling = -1, tiers = 0;
         for (int t = 0; t < 3; t++) {
@@ -1576,24 +1589,26 @@ void hos_oot_pouch_add(Ctx *c) {
         for (int t = tiers - 1; t >= 0 && !level; t--)
             for (int a = 0; a < 2; a++)
                 if (families[f][t][a] && oot_pouch_count(c, families[f][t][a]) > 0) level = t + 1;
-        if (level >= tiers) return;   /* (he has them all: the one found is given as it is) */
+        if (level >= tiers) return 0;   /* (he has them all: the one found is given as it is) */
         const char *give = families[f][level][spelling] ? families[f][level][spelling] : families[f][level][0];
         hos_log("rando: progressive: %s found, Link has %d of its %d: %s given", name, level, tiers, give);
-        if (!strcmp(give, name)) return;
+        if (!strcmp(give, name)) return 0;
         static uint64_t blocks;
         static unsigned turn;
         if (!blocks) blocks = hos_sys_alloc(8 * 256, 16);
-        if (!blocks) return;
+        if (!blocks) return 0;
         const uint64_t block = blocks + (uint64_t)(__atomic_fetch_add(&turn, 1, __ATOMIC_RELAXED) % 8) * 256;
         memcpy(A64_PTR(block), A64_PTR(view - 16), 64);   /* (the view as it is, with what is before it: a string object's start) */
         memcpy(A64_PTR(block + 96), give, strlen(give) + 1);
         recomp_store64(c, block + 16, block + 96);
         recomp_store32(c, block + 24, 128);
         c->x[1] = block + 16;
-        return;
+        return 0;
     }
+    return 0;
 #else
     (void)c;
+    return 0;
 #endif
 }
 
