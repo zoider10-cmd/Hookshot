@@ -889,7 +889,7 @@ class LauncherForm : Form {
         new[] { "ja", "日本語" }, new[] { "ko", "한국어" }, new[] { "zh-Hans", "简体中文" }, new[] { "zh-Hant", "繁體中文" },
     };
     // (env name, value when on, label, help, value when off; "" = no line, the game's default)
-    const int FixPitch = 80;   // (six switches over the bottom row of buttons; 92 while there were five)
+    const int FixPitch = 92;   // (five switches; 80 holds six over the bottom row of buttons)
     static readonly string[][] Fixes = {
         // (the switch wrote no line when on and -1 when off, and the renderer takes both as 0, no wait (vk_replay.cpp: RX_VK_WAIT_GPU=<frames>):
         // it did nothing either way. It writes 1 now. Seen without a player, the Market walked into from Hyrule Field: 15 to 20 frames
@@ -902,10 +902,6 @@ class LauncherForm : Form {
         new[] { "RX_VK_PREDICT_BG", "1", "Quick first start", "Off (recommended): after an update every effect is prepared before the title (up to ~40 min, once). On: the title comes much sooner, but expect stutters for hours.", "" },
         // (Mako) AMD FSR Redstone frame generation (gpu/vk/vk_redstone.h), off unless switched on: it takes video memory
         new[] { "RX_VK_REDSTONE", "1", "AMD FSR Redstone frame generation (RX 9000)", "AMD's AI frame generation instead of Mako's: cleaner motion, steady HUD. Needs an RX 9000, AMD's files (FSR tab), FSR 4 and Frame generation 2x. Best with 12 GB+.", "" },
-        // (a trial: gpu/vk/vk_memory.cpp capture_make's wait for a page the graphics card still writes back. With it the replay
-        // waited ~5.5 ms a frame in the Market reached from Hyrule Field, 45 fps for 60; without it the exposure can step for a
-        // frame, which is what the wait was made for)
-        new[] { "RX_VK_CAPTURE_WAIT", "0", "Faster in busy places (trial)", "The renderer stops waiting for the graphics card before it copies memory they share. More fps in the busiest places (the Market after Hyrule Field). May flash for a frame: off if it does.", "" },
     };
 
     [DllImport("user32.dll")] static extern bool ReleaseCapture();
