@@ -382,7 +382,9 @@ not known without reading that format.
   Sword and the lake scientist's Piece of Heart (what is in the pouch); and the two ocarinas (the scene puts them in
   the pouch itself), the Gerudo's card (many scenes ask for it), Dampe's Piece of Heart (dropped as an actor).
   **Seen without a player:** a seed with all 25 is written (19 flows) and the game starts and loads a save with it.
-  **Not seen in play yet:** any of these scenes but Darunia's giving another item; whether each gives only once (they
+  **Seen in play:** the cucco lady (`Minigame_CatchCucco`) made to give a purple rupee: Link got it with its text and
+  50 rupees, no bottle, and she gave nothing more when spoken to again.
+  **Not seen in play yet:** the other scenes (but Darunia's) giving another item; whether each gives only once (they
   were chosen for having a flag of their own for that); a gift's item (a scale, a bag, a wallet, the Stone of
   Agony, a bottle, the Light Arrows) coming out of a chest, though each has the chest items' base as the others do.
   `tests/test_rando_quests.py`.
