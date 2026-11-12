@@ -103,7 +103,7 @@ const char kTrackerHelp[] =
     "The treasure chests, Gold Skulltulas and gifts of this area that take part in the randomizer's seed. It is what the seed "
     "has there, not what is left: the game does not tell the menu what has been opened. Left and Right step through "
     "the area's checks one by one; with the debug tools on, confirm takes Link to the one shown. With the mouse: the "
-    "arrows step, a click on the row's name goes there. Left: not collected yet, by the game's own word on a chest opened and a Gold Skulltula killed. In logic: Link carries all that the seed's rules ask for at "
+    "arrows step, a click on the row's name goes there. Left: not collected yet, by the randomizer's own record of the items given since it began; on the first row, confirm twice to forget it (a new game). In logic: Link carries all that the seed's rules ask for at "
     "that check. The rules ask for more than a check may need, so one not in logic may still be within reach.";
 // The checks one by one: tools/rando/rando_seed.py writes <game folder>\mods\rando-seed\checks.txt beside the tracker's
 // file, a line "<area>|<kind>|<folder>|<ages>|<x> <y> <z>" for each chest and Gold Skulltula of the seed (tracker_load
@@ -113,6 +113,9 @@ const char kTrackerHelp[] =
 // folder's map when Link is in another, then the place).
 constexpr int kTrackerChecks = 320;
 constexpr int kTrackerGoAction = 5;
+constexpr int kTrackerForgetAction = 6;   // (the first row, confirmed twice: the record of what is collected is forgotten)
+ULONGLONG tracker_forget_asked = 0;       // (when the first row was confirmed once; within kTrackerForgetMs the next one forgets)
+constexpr ULONGLONG kTrackerForgetMs = 4000;
 struct TrackerCheck {
     char area[48], kind[80], folder[40], ages[4];   // (kind: the check's name; Chest or Gold Skulltula in a file without names)
     float pos[3];
@@ -123,9 +126,9 @@ struct TrackerCheck {
 int tracker_in_logic(const TrackerCheck& k, std::string* missing = nullptr);
 TrackerCheck tracker_checks[kTrackerChecks];
 int tracker_check_count = 0;
-// What the game says of each check, in the file's order (host/hos_main.c oot_tracker_refresh, each second): 1 collected (a
-// chest opened, a Gold Skulltula killed: the game's own flag of that actor), 0 not, -1 not known (a gift, a shelf; or no
-// game loaded yet).
+// What the game's side says of each check, in the file's order (host/hos_main.c oot_tracker_refresh, each second): 1
+// collected (its item was given near it: the randomizer's own record, rando\collected.txt), 0 not, -1 not known (no game
+// loaded yet).
 static_assert(kTrackerChecks == OOT_TRACKER_MAX, "the game side reports as many checks as the menu keeps");
 std::atomic<signed char> tracker_done[kTrackerChecks];
 int tracker_pick[kTrackerRows];
@@ -144,6 +147,8 @@ const TrackerCheck* tracker_row_check(int row, int n) {
 std::string tracker_says(int row) {
     const TrackerCheck* k = tracker_pick[row] ? tracker_row_check(row, tracker_pick[row]) : nullptr;
     if (!k) {   // (its own words, how many of its checks are left and how many of those are in logic: the first row is the whole game's)
+        if (!row && tracker_forget_asked && GetTickCount64() - tracker_forget_asked < kTrackerForgetMs)
+            return "Press again to forget what is collected";
         int in = 0, known = 0, left = 0, told = 0;
         for (int i = 0; i < tracker_check_count; i++) {
             if (row && strcmp(tracker_checks[i].area, tracker_name[row])) continue;
@@ -172,7 +177,7 @@ std::string tracker_says(int row) {
 std::string tracker_hint(int row) {
     const TrackerCheck* k = tracker_pick[row] ? tracker_row_check(row, tracker_pick[row]) : nullptr;
     std::string missing;
-    if (k && tracker_done[k - tracker_checks].load(std::memory_order_relaxed) == 1) return "Done: the game has this one as collected.";
+    if (k && tracker_done[k - tracker_checks].load(std::memory_order_relaxed) == 1) return "Done: its item was given to Link here.";
     const int state = k ? tracker_in_logic(*k, &missing) : -1;
     return state > 0 ? "In logic: Link carries all the seed's rules ask for here." : state == 0 ? "Not in logic. Still asked for: " + missing + "." : "";
 }
@@ -2177,6 +2182,7 @@ void draw_options(ui::Ctx& c) {
     if (selr.tracker >= 0) {   // (a line of the Tracker tab: its area's checks to step through, and the one shown to go to)
         prompts_n = 1;
         if (tracker_row_checks(selr.tracker)) prompt_list[prompts_n++] = {ui::kLeftRight, "Checks"};
+        if (!selr.tracker && tracker_check_count) prompt_list[prompts_n++] = {ui::kConfirm, "Forget"};   // (the whole game's row)
         if (tracker_pick[selr.tracker] && cheats_on()) prompt_list[prompts_n++] = {ui::kConfirm, "Go there"};
         prompt_list[prompts_n++] = {ui::kTabs, "Tabs"}, prompt_list[prompts_n++] = {ui::kBack, "Close"};
     }
@@ -3440,6 +3446,18 @@ void teleport_mouse(const MkwVkPointer& ptr, int mx, int my, bool* press, bool& 
 /// confirm, with the debug tools on, has the game take Link to the check shown: its place, a metre above it, with its
 /// folder and ages, goes into <game folder>\rando\goto_check.txt and the action to the game, and the menu closes
 void tracker_press(int row, const bool* press, bool& changed) {
+    if (!row && tracker_check_count) {   // (the whole game's row: confirm, and again within a moment, forgets what is collected)
+        if (press[7]) {
+            const ULONGLONG now = GetTickCount64();
+            if (tracker_forget_asked && now - tracker_forget_asked < kTrackerForgetMs) {
+                cheat_action.store(kTrackerForgetAction);
+                tracker_forget_asked = 0;
+                logf("menu: tracker: forget what is collected");
+            } else tracker_forget_asked = now;
+            changed = true;
+        }
+        return;
+    }
     const int n = tracker_row_checks(row);
     if (!n) return;
     if (press[3] || press[4]) tracker_pick[row] = (tracker_pick[row] + n + 1 + (press[4] ? 1 : -1)) % (n + 1), changed = true;

@@ -2270,9 +2270,10 @@ def check_lines(chests, skulls, gifts=()):
     """The checks file's lines. chests, skulls and gifts: [(area (the Banc folder), position, ages, what its rule asks
     for, its name, its actor's hash)]; a chest or a Gold Skulltula without a name is "Chest" or "Gold Skulltula". The
     name is the line's kind; those of an area that are the same are numbered, by place. By the area's name, the
-    chests first, then the Gold Skulltulas, then the gifts, each by name; no more than the menu keeps. A line with a
-    hash ends with it, 16 hexadecimal digits: the game's flag of that actor is the hash (a chest opened, a Gold
-    Skulltula killed), and the game's side tells the menu which are collected by it."""
+    chests first, then the Gold Skulltulas, then the gifts, each by name; no more than the menu keeps. After what the
+    rules ask for a line may have two more fields: its actor's hash, 16 hexadecimal digits ("-" without one), and
+    the item it gives (a seventh of a tuple): the game's side marks a check collected when its item is given near it.
+    A line with neither ends after what the rules ask for."""
     rows = []
     for order, plain, those in ((0, "Chest", chests), (1, "Gold Skulltula", skulls), (2, "", gifts)):
         for area, pos, ages, need, *more in those:
@@ -2280,7 +2281,8 @@ def check_lines(chests, skulls, gifts=()):
                 continue
             name = more[0] if more else plain
             rows.append([AREA_NAMES.get(area, area).replace("|", "/")[:47], (name[:1].upper() + name[1:]).replace("|", "/"), area, ages, pos,
-                         ",".join(code for item, code in CHECK_CODES.items() if item in need) or "-", order, more[1] if len(more) > 1 else None])
+                         ",".join(code for item, code in CHECK_CODES.items() if item in need) or "-", order, more[1] if len(more) > 1 else None,
+                         more[2] if len(more) > 2 else ""])
     rows.sort(key=lambda r: (r[0].lower(), r[6], r[1], r[4]))
     same = collections.Counter((r[0], r[1]) for r in rows if r[1] not in ("Chest", "Gold Skulltula"))
     count = collections.Counter()
@@ -2289,9 +2291,10 @@ def check_lines(chests, skulls, gifts=()):
             count[(r[0], r[1])] += 1
             r[1] = r[1][:CHECK_NAME - 4] + " #%d" % count[(r[0], r[1])]
         r[1] = r[1][:CHECK_NAME]
-    return ["# The checks of this seed, one by one, for the Tracker tab: <area>|<kind>|<folder>|<ages>|<x> <y> <z>|<the rules ask for>[|<the actor's hash>]"] + [
-        "%s|%s|%s|%s|%.1f %.1f %.1f|%s%s" % (name, kind, area, ages, pos[0], pos[1], pos[2], need, "" if key is None else "|%016x" % key)
-        for name, kind, area, ages, pos, need, _, key in rows[:CHECK_ROWS]]
+    return ["# The checks of this seed, one by one, for the Tracker tab: <area>|<kind>|<folder>|<ages>|<x> <y> <z>|<the rules ask for>[|<the actor's hash>[|<the item it gives>]]"] + [
+        "%s|%s|%s|%s|%.1f %.1f %.1f|%s%s%s" % (name, kind, area, ages, pos[0], pos[1], pos[2], need,
+                                               "" if key is None and not given else "|-" if key is None else "|%016x" % key, "|" + given if given else "")
+        for name, kind, area, ages, pos, need, _, key, given in rows[:CHECK_ROWS]]
 
 
 def remove_old(mod):
@@ -2487,7 +2490,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + " checks 6" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + " checks 7" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -3003,13 +3006,14 @@ def main():
     with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\n") as f:   # (for the Tracker tab's Go there)
         skull_need = lambda h: step(quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0]))
         named = lambda kind, h, area, pos, item="": check_name(kind, item, about.get(h, {}), pos, exits[area], sub_areas[area])
-        f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h]), needs[h], named("Chest", h, spots[h][0], spots[h][5], spots[h][1]), h)
+        f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h]), needs[h], named("Chest", h, spots[h][0], spots[h][5], spots[h][1]), h, gives[h])
                                        for h in gives if h not in gifts],
-                                      [(skulls[h][0], skulls[h][1], check_ages(maps[h]), skull_need(h), named("Gold Skulltula", h, skulls[h][0], skulls[h][1]), h)
+                                      [(skulls[h][0], skulls[h][1], check_ages(maps[h]), skull_need(h), named("Gold Skulltula", h, skulls[h][0], skulls[h][1]), h, skull_drops.get(h) or drops.get(h) or TOKEN)
                                        for h in took],
-                                      [(g.area, GIFT_PLACES[g.key][1], GIFT_PLACES[g.key][0], needs[h], g.name)
+                                      [(g.area, GIFT_PLACES[g.key][1], GIFT_PLACES[g.key][0], needs[h], g.name, None, gives[h])
                                        for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES] +
-                                      [(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name) for h, (shop, _, _) in shelves.items() if h in gives])) + "\n")
+                                      [(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name, None, gives[h])
+                                       for h, (shop, _, _) in shelves.items() if h in gives])) + "\n")
     with open(os.path.join(mod, "rando_manifest.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(written)) + "\n")
     with open(stamp_path, "w", encoding="utf-8") as f:   # (last: a run that stopped half way is made again)

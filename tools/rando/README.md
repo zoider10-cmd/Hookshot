@@ -600,20 +600,27 @@ otherwise than a chest's own item is (x4 2, x7 0 against 7 and 1); the bag is fi
 randomizer on the first is not made (`hos_oot_pouch_add` returns 1 and the add is left at once), so the bombs find no
 bag and are not kept. A Bomb Bag that is a chest's or a shelf's own item is added as the bundle is. NOT seen in play yet.
 
-## What is collected, on the Tracker tab: not working yet
+## What is collected, on the Tracker tab
 
-The parts are in: a chest's and a Gold Skulltula's line of `checks.txt` ends with the actor's hash; the game's side
-reports each check to the menu each second (`oot_tracker_refresh`: 1 collected, 0 not, -1 not known); the menu says
-"left" on an area's row and "done" on a check (`tracker_done`). What is missing is the game's word: every check is
-reported not known, and the menu says nothing of it.
+The randomizer keeps its own record. The pouch manager's add sees every item given (`hos_oot_pouch_add`), and the
+check of the seed that gives that item nearest to Link, in the map he is in and within 60 metres, is marked
+(`oot_tracker_item`; an item only one check of the seed still gives is that check's wherever he is). What each check
+gives is the last field of its line of `checks.txt` (so the file says where everything is, as `spoiler.txt` does).
+The record is `<game folder>/rando/collected.txt`: the seed's stamp, then the collected checks' places in the checks
+file; another seed's record is not taken. The game's side reports each check to the menu each second, and the
+Tracker tab says how many of an area's checks are left, counts only those among the ones in logic, and says "done"
+on a check.
 
-What was found, looking for it: each chest and Gold Skulltula has a flag of the game's keyed by its hash
-(`Data.Bool64bitKey`), and the game reads such a flag from a sorted table of 16-byte entries (the object at
-`0x84ea42a8`: count at +3160, entries at +3168, the value the first bit of the byte at +12). Read the same way, a
-chest opened in an unattended run changed nothing in its entry. So either a chest's being open is not that flag, or
-the value is kept elsewhere. Not found by: the manager's groups of flags, a search of the memory around its tables
-for the key kept twice, or the bits of the save's data (they are only what the last save wrote).
+It is one record for the game folder, not for a save: a new game of the same seed keeps it until it is forgotten
+(the Tracker tab's first row, confirm twice), a save from before a check was collected still says it is, and what
+was collected before the record began is not in it.
 
-Another way that needs none of it: the pouch manager's add (`hos_oot_pouch_add`) sees every item given, with how it
-was given (a chest's: from 0x828d50ac, x4 7, x7 1) and where Link stands. The seed knows what each check gives. So
-the check that gives that item nearest to Link can be marked, and kept in a file beside the save. Not built.
+Seen in an unattended run: a chest opened (the Kokiri Forest chest by the Lost Woods exit, its purple rupee given)
+was marked, 0.6 m from Link, and written to the record. NOT seen yet: a Gold Skulltula's drop taken from afar, a
+gift, a shop's shelf, the menu's rows, forgetting the record.
+
+The game's own flag for a chest opened was looked for first and not found. Each chest and Gold Skulltula has a flag
+keyed by its hash (`Data.Bool64bitKey`), and the game reads such a flag from a sorted table of 16-byte entries (the
+object at `0x84ea42a8`: count at +3160, entries at +3168, the value the first bit of the byte at +12). Read the same
+way, a chest opened changed nothing in its entry. Not found either by the manager's groups of flags, a search of
+the memory around its tables for the key kept twice, or the bits of the save's data (only what the last save wrote).

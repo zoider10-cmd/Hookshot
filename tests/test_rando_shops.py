@@ -293,7 +293,7 @@ def main():
           "the prices are not rolled by the seed, a shelf does not ask for its price's wallet, or the wallets are not shuffled as gating items kept from the Skulltulas")
     check('on_sale = collections.OrderedDict((shop_actor("%s_%d" % (shop.key, index)), (gives[h], shelf_prices[h]))' in script and
           "table = shop_rows(table, kind, item, price, actor)" in script, "a shelf has not an actor of its own, with its own price")
-    check("[(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name) for h, (shop, _, _) in shelves.items() if h in gives]" in script,
+    check("[(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name, None, gives[h])" in script and "for h, (shop, _, _) in shelves.items() if h in gives]" in script,
           "the shelves are not among the tracker's checks")
     print("PASS: Shops")
 

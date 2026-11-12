@@ -1137,73 +1137,158 @@ static int oot_gamedata_set_bool(Ctx *c, uint32_t hash, int value) {
     return 0;
 }
 
-/* (the randomizer's fork) What the Tracker tab says is collected: NOT READ YET. A chest and a Gold Skulltula each have a
-   flag of the game's whose key is the actor's own 64-bit hash (GameDataList: Data.Bool64bitKey, 11657 of them; all 191
-   chests and 100 Skulltulas of the map files have one, some a second, the hash - 2 or + 2). The game's own reads
-   (f_80222cf0, f_80229040, build e0f3ccfa) take the object at 0x84ea42a8: how many at +3160, the entries at +3168, 16
-   bytes each, sorted by key, and the first bit of the byte at +12 as the value. Read so here, a chest opened without
-   a player (the Kokiri Forest chest 3f38f9b9a399e19a, its item given) changed nothing in its entry, nor in the one of
-   its hash - 2, in the half minute after; and the memory around the tables showed no key kept a second time. So the
-   flag that says a chest is open is not yet known, and every check is said not known (-1): the menu then says
-   nothing of what is left. (One bit of the save's data, 0x8388 into what the manager's +0xd40 points at, came on with
-   that chest; read as the flags in their order it gave 16, 12 and 35 collected in one new game: it is not them.) */
-static int oot_flag64(Ctx *c, uint64_t key) {
-    (void)c, (void)key;
-    return -1;
+/* (the randomizer's fork) What the Tracker tab says is collected: the randomizer's own record. The game's flag for a chest
+   opened was looked for and not found (tools/rando/README.md says where), so the record is kept here: the pouch
+   manager's add (hos_oot_pouch_add, below) sees every item given and tells oot_tracker_item, which marks the check of
+   the seed that gives that item nearest to where Link stands, in the map he is in (a check further than
+   OOT_CHECK_NEAR is not his; an item only one check of the whole seed still gives is that check's wherever he is: a
+   gift given indoors). What each check gives is the last field of its line of <game folder>/mods/rando-seed/checks.txt.
+   The record is <game folder>/rando/collected.txt: the seed's stamp it is of (the first line of the seed's
+   rando_stamp.txt), then the collected checks' places in the checks file. Another seed's record is not taken. It is
+   one record for the folder, not for a save: a new game of the same seed keeps it until it is forgotten (the Tracker
+   tab's first row, the action 6), and a save from before a check was collected still says it is. Checks collected
+   before there was a record are not in it. */
+#define OOT_CHECK_NEAR 60.0f
+static float oot_load_float(Ctx *c, uint64_t addr);
+static int oot_gamedata_string(Ctx *c, uint32_t hash, char *buf, size_t size);
+int hos_rando_on(void);   /* host/oot_rando.c */
+static int oot_banc_in_folder(const char *banc, const char *folder);
+static struct {
+    char item[64], folder[40];
+    float place[3];
+    signed char done;
+} oot_checks[OOT_TRACKER_MAX];
+static int oot_check_count = -1;
+static char oot_checks_seed[200];   /* (the stamp the checks and the record are of) */
+static float oot_link_place[3];
+static char oot_link_map[80];
+static SRWLOCK oot_checks_lock = SRWLOCK_INIT;
+
+/* <game folder>/<tail>, into out: 1, or 0 when the game's folder is not known */
+static int oot_game_file(char *out, size_t size, const char *tail) {
+    char exe[MAX_PATH];
+    const DWORD n = hos_game_path_a(exe, MAX_PATH);
+    if (!n || n >= MAX_PATH) return 0;
+    char *slash = strrchr(exe, '\\');
+    char *other = strrchr(exe, '/');
+    if (other > slash) slash = other;
+    if (!slash) return 0;
+    *slash = 0;
+    snprintf(out, size, "%s/%s", exe, tail);
+    return 1;
 }
 
-/* The seed's checks (<game folder>/mods/rando-seed/checks.txt, a line's last field the actor's hash where it has one), each
-   second: collected or not, to the menu, in the file's order (the lines the menu takes: gpu/vk/vk_menu.cpp tracker_load). */
-int hos_rando_on(void);   /* host/oot_rando.c */
-static void oot_tracker_refresh(Ctx *c, int64_t now) {
+/* (the lock held) the record, written whole */
+static void oot_tracker_save(void) {
+    char path[MAX_PATH + 48];
+    FILE *f = oot_game_file(path, sizeof path, "rando/collected.txt") ? fopen(path, "w") : NULL;
+    if (!f) return;
+    fprintf(f, "seed %s\n", oot_checks_seed);
+    for (int i = 0; i < oot_check_count; i++)
+        if (oot_checks[i].done == 1) fprintf(f, "%d\n", i);
+    fclose(f);
+}
+
+/* (the lock held) the seed's stamp as it is now, the first line of its file without the line's end: 1, or 0 with no seed */
+static int oot_tracker_stamp(char *out, size_t size) {
+    char path[MAX_PATH + 48];
+    FILE *f = oot_game_file(path, sizeof path, "mods/rando-seed/rando_stamp.txt") ? fopen(path, "r") : NULL;
+    out[0] = 0;
+    if (!f) return 0;
+    if (!fgets(out, (int)size, f)) out[0] = 0;
+    fclose(f);
+    out[strcspn(out, "\r\n")] = 0;
+    return out[0] != 0;
+}
+
+/* (the lock held) the seed's checks with what each gives, and the record of that seed */
+static void oot_tracker_load(const char *stamp) {
+    char path[MAX_PATH + 48], line[400];
+    oot_check_count = 0;
+    snprintf(oot_checks_seed, sizeof oot_checks_seed, "%s", stamp);
+    FILE *f = oot_game_file(path, sizeof path, "mods/rando-seed/checks.txt") ? fopen(path, "r") : NULL;
+    while (f && oot_check_count < OOT_TRACKER_MAX && fgets(line, sizeof line, f)) {
+        char area[48], kind[80], ages[4], needs[64] = "", hash[32] = "", item[64] = "";
+        if (line[0] == '#') continue;   /* (the lines the menu takes, in its order: gpu/vk/vk_menu.cpp tracker_load) */
+        const int got = sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]|%31[0-9a-fA-F-]|%63[A-Za-z0-9_]", area, kind,
+                               oot_checks[oot_check_count].folder, ages, &oot_checks[oot_check_count].place[0],
+                               &oot_checks[oot_check_count].place[1], &oot_checks[oot_check_count].place[2], needs, hash, item);
+        if (got < 7) continue;
+        snprintf(oot_checks[oot_check_count].item, sizeof oot_checks[0].item, "%s", got >= 10 ? item : "");
+        oot_checks[oot_check_count++].done = 0;
+    }
+    if (f) fclose(f);
+    int collected = 0;
+    f = oot_game_file(path, sizeof path, "rando/collected.txt") ? fopen(path, "r") : NULL;
+    if (f && fgets(line, sizeof line, f)) {
+        line[strcspn(line, "\r\n")] = 0;
+        if (!strncmp(line, "seed ", 5) && !strcmp(line + 5, oot_checks_seed))   /* (this seed's record) */
+            while (fgets(line, sizeof line, f)) {
+                const int i = atoi(line);
+                if (line[0] >= '0' && line[0] <= '9' && i < oot_check_count && oot_checks[i].done != 1) oot_checks[i].done = 1, collected++;
+            }
+    }
+    if (f) fclose(f);
+    hos_log("rando: tracker: %d checks of the seed, %d of them collected by the record", oot_check_count, collected);
+}
+
+/* An item given (hos_oot_pouch_add): the check that gives it is collected */
+static void oot_tracker_item(const char *name) {
+    AcquireSRWLockExclusive(&oot_checks_lock);
+    int best = -1, elsewhere = -1, others = 0;
+    float nearest = 1e30f;
+    for (int i = 0; i < oot_check_count; i++) {
+        if (oot_checks[i].done == 1 || strcmp(oot_checks[i].item, name)) continue;
+        if (!oot_banc_in_folder(oot_link_map, oot_checks[i].folder)) {
+            others++, elsewhere = i;
+            continue;
+        }
+        const float dx = oot_checks[i].place[0] - oot_link_place[0], dy = oot_checks[i].place[1] - oot_link_place[1],
+                    dz = oot_checks[i].place[2] - oot_link_place[2];
+        const float away = sqrtf(dx * dx + dy * dy + dz * dz);
+        if (away < nearest) nearest = away, best = i;
+    }
+    if (best >= 0 && nearest > OOT_CHECK_NEAR) best = -1;
+    if (best < 0 && others == 1 && nearest > 1e29f) best = elsewhere;   /* (the one check left that gives it, in another map's file) */
+    if (best >= 0) {
+        oot_checks[best].done = 1;
+        oot_tracker_save();
+        if (nearest < 1e29f) hos_log("rando: tracker: %s got: check %d is collected (%.1f m from Link)", name, best, nearest);
+        else hos_log("rando: tracker: %s got: check %d is collected (the one left that gives it)", name, best);
+    }
+    ReleaseSRWLockExclusive(&oot_checks_lock);
+}
+
+/* The record forgotten (the Tracker tab's first row: a new game of the same seed) */
+static void oot_tracker_forget(void) {
+    AcquireSRWLockExclusive(&oot_checks_lock);
+    for (int i = 0; i < oot_check_count; i++) oot_checks[i].done = 0;
+    oot_tracker_save();
+    ReleaseSRWLockExclusive(&oot_checks_lock);
+    hos_log("rando: tracker: the record of what is collected is forgotten");
+}
+
+/* Where Link is, each frame, and each second: the seed's checks read when the seed is another, and each check's word to
+   the menu, in the file's order */
+static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
     void rx_option_set(int id, int value);
-    static int64_t next, next_load;
-    static uint64_t keys[OOT_TRACKER_MAX];
-    static int count = -1;
+    static int64_t next, next_stamp;
+    for (unsigned i = 0; i < 3; i++) oot_link_place[i] = oot_load_float(c, actor + 796 + i * 4);
     if (now < next) return;
     next = now + 1000000000LL;
     if (!hos_rando_on()) return;
-    if (count < 0 || now >= next_load) {   /* (read again now and then: a seed made anew while the game runs is not, but costs nothing) */
-        next_load = now + 15000000000LL;
-        char path[MAX_PATH + 48];
-        const DWORD n = hos_game_path_a(path, MAX_PATH);
-        char *slash = n && n < MAX_PATH ? strrchr(path, '\\') : NULL;
-        char *other = n && n < MAX_PATH ? strrchr(path, '/') : NULL;
-        if (other > slash) slash = other;
-        count = 0;
-        if (slash) {
-            snprintf(slash, (size_t)(path + sizeof path - slash), "/mods/rando-seed/checks.txt");
-            FILE *f = fopen(path, "r");
-            char line[320];
-            while (f && count < OOT_TRACKER_MAX && fgets(line, sizeof line, f)) {
-                char area[48], kind[80], folder[40], ages[4], needs[64] = "", hash[32] = "";
-                float place[3];
-                if (line[0] == '#') continue;
-                const int got = sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]|%31[0-9a-fA-F]", area, kind, folder, ages,
-                                       &place[0], &place[1], &place[2], needs, hash);
-                if (got < 7) continue;
-                keys[count++] = got >= 9 ? strtoull(hash, NULL, 16) : 0;
-            }
-            if (f) fclose(f);
-        }
+    char map[80];
+    oot_gamedata_string(c, 0x1d6189dau, map, sizeof map);   /* Sequence_CurrentBanc */
+    AcquireSRWLockExclusive(&oot_checks_lock);
+    memcpy(oot_link_map, map, sizeof oot_link_map);
+    if (oot_check_count < 0 || now >= next_stamp) {   /* (a seed made anew while the game runs: its checks, and no record of another's) */
+        next_stamp = now + 15000000000LL;
+        char stamp[sizeof oot_checks_seed];
+        oot_tracker_stamp(stamp, sizeof stamp);
+        if (oot_check_count < 0 || strcmp(stamp, oot_checks_seed)) oot_tracker_load(stamp);
     }
-    int collected = 0, known = 0;
-    for (int i = 0; i < count; i++) {
-        int done = keys[i] ? oot_flag64(c, keys[i]) : -1;
-        if (done == 0 && oot_flag64(c, keys[i] + 2) == 1) done = 1;
-        rx_option_set(OOT_TRACKER_BASE + i, done);
-        static signed char said[OOT_TRACKER_MAX];   /* (what was last said of each, + 2: a change goes to the log) */
-        if (said[i] != done + 2) {
-            if (said[i] && done == 1) hos_log("rando: tracker: check %d (%016llx) is collected", i, (unsigned long long)keys[i]);
-            said[i] = (signed char)(done + 2);
-        }
-        known += done >= 0, collected += done == 1;
-    }
-    static int told = -1;
-    if (told != collected + known * 1000) {
-        told = collected + known * 1000;
-        hos_log("rando: tracker: %d of the seed's %d checks have a flag of the game's, %d of them collected", known, count, collected);
-    }
+    for (int i = 0; i < oot_check_count; i++) rx_option_set(OOT_TRACKER_BASE + i, oot_checks[i].done == 1);
+    ReleaseSRWLockExclusive(&oot_checks_lock);
 }
 
 /* Age toggle: flips Sequence_IsChildhood (what the Temple of Time event sets) and reloads the current map, or the
@@ -1357,7 +1442,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     if (!action) action = __atomic_exchange_n(&hos_oot_live_action, 0, __ATOMIC_RELAXED);
     oot_teleport_followup(c);
     oot_inventory_refresh(c, now);
-    oot_tracker_refresh(c, now);
+    oot_tracker_refresh(c, now, actor);
     oot_player_speed(c, components);
     if (action >= OOT_CHEAT_ITEM_ACTION && action < OOT_CHEAT_ITEM_ACTION + 256 * (int)OOT_ITEM_COUNT) {
         oot_inventory_edit(c, action);
@@ -1367,6 +1452,8 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
         oot_teleport(c, actor, (unsigned)(action - OOT_TELEPORT_ACTION));
     } else if (action >= 200) {
         oot_edit_pouch(c, action);
+    } else if (action == 6) {   /* (the Tracker tab's first row: forget what is collected) */
+        oot_tracker_forget();
     } else if (action >= 100 && action < 124) {
         oot_set_time(c, action - 100);
     }
@@ -1645,6 +1732,10 @@ int hos_oot_pouch_add(Ctx *c) {
         hos_log("rando: the Bomb Bag the game gives with bombs is not given");
         return 1;
     }
+    /* (an item given: the tracker's record. Not the pouch as a save is loaded (from 0x8112d4b8), an add inside another (a bag
+       filled, a bundle's own: from 0x8112f998 and 0x8112e19c), nor the debug inventory's (x4 9)) */
+    if ((int32_t)c->x[3] > 0 && c->x[30] != 0x8112d4b8ULL && c->x[30] != 0x8112f998ULL && c->x[30] != 0x8112e19cULL && (uint32_t)c->x[4] != 9)
+        oot_tracker_item(name);
     if ((int32_t)c->x[3] <= 0 || !hos_rando_progressive()) return 0;
     for (unsigned f = 0; f < sizeof families / sizeof families[0]; f++) {
         int spelling = -1, tiers = 0;
