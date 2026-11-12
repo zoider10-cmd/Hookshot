@@ -384,6 +384,9 @@ not known without reading that format.
   **Seen without a player:** a seed with all 25 is written (19 flows) and the game starts and loads a save with it.
   **Seen in play:** the cucco lady (`Minigame_CatchCucco`) made to give a purple rupee: Link got it with its text and
   50 rupees, no bottle, and she gave nothing more when spoken to again.
+  The Lost Woods target (`Dm_LostWood_0040`) made to give the Megaton Hammer: the scrub holds out a seed bag, which is
+  the hammer when Link holds it up (the scene's prop is its own actor, the gift another), and a second win gives
+  the green rupee.
   **Not seen in play yet:** the other scenes (but Darunia's) giving another item; whether each gives only once (they
   were chosen for having a flag of their own for that); a gift's item (a scale, a bag, a wallet, the Stone of
   Agony, a bottle, the Light Arrows) coming out of a chest, though each has the chest items' base as the others do.
