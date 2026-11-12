@@ -239,6 +239,10 @@ def main():
     got = [a["Gyaml"] for a in read(new)["Actors"]]
     check(count == 2 and got == [name, "Shop_Heart", "Shop_Rando_Other", "Npc_Keeper"], "the shelves are not found by actor and place in the row (none: the first): %r" % got)
     check(seed.shelf_actors(byml(world), {("Shop_Heart", 5): name}) == (None, 0), "a file with none of the shelves is written anew")
+    high = {"Actors": [{"Gyaml": "Shop_Heart", "Translate": [1.0, 2.0, 3.0]}, {"Gyaml": "Shop_DekuStick", "Translate": [4.0, 5.0, 6.0], "Dynamic": {"ShopItemIndex": 7}}]}
+    lifted = read(seed.shelf_actors(byml(high), {("Shop_Heart", 0): name, ("Shop_DekuStick", 7): "Shop_Rando_Other"}, {name: 0.25})[0])["Actors"]
+    check(lifted[0]["Translate"] == [1.0, 2.25, 3.0] and lifted[1]["Translate"] == [4.0, 5.0, 6.0], "a shelf whose item asks for it is not put higher, or another is")
+    check(set(seed.SHELF_LIFT) <= set(seed.ITEM_WORDS) and "Item_Gauntlet_Gold" in seed.SHELF_LIFT, "the Golden Gauntlets' shelf is not put higher")
 
     # ---- the words under an item's name ----
     lines = [("Item_Thing_Name", b"Thing"), ("Item_Thing_Caption", b"A thing.\nIt does things."), ("Item_Other_Name", b"Other"),
@@ -267,12 +271,12 @@ def main():
 
     # ---- the script ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_shops": 0' in script and '(" shops %d prices 2" % a.shops if a.shops else "")' in script and 'a.shops = a.shops if 0 <= a.shops <= 2 else 0' in script,
+    check('"rando_shops": 0' in script and '(" shops %d prices 3" % a.shops if a.shops else "")' in script and 'a.shops = a.shops if 0 <= a.shops <= 2 else 0' in script,
           "the script does not read the setting, or does not name it in the seed's stamp")
     check('spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]' in script and "if gives[h] != g.item and g.flow:" in script,
           "the shelves are not spots among the chests', or a shelf is taken for a scene's gift")
     check('shop_files["Pack/Actor/%s.pack.zs" % actor] = new' in script and 'shop_files["RSDB/" + n] = table' in script and
-          "parts[name] = shop_goods(parts[name], sells)" in script and "new, count = shelf_actors(data, on_shelf)" in script and
+          "parts[name] = shop_goods(parts[name], sells)" in script and "new, count = shelf_actors(data, on_shelf, {actor: SHELF_LIFT[item]" in script and
           "text = shop_caption(text, name) or text" in script and "list(shop_files.items())" in script and
           'new_tables["System/Resource/" + n] = shop_table(' in script,
           "a shelf actor's pack, its rows, the goods lists, the map's shelves or the words are not written with the seed, or the size table does not know them")

@@ -322,6 +322,12 @@ SHOP_PRICE_MAX = 1000
 WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,))))
 
 
+# An item whose model is not made to stand on a shelf: the Golden Gauntlets lay half under their shelf's board, one
+# of the pair above it and one below (seen in play). Such a shelf's actor is put this much higher in the map file.
+# The other gauntlets are taken to be made as they are; not seen.
+SHELF_LIFT = {"Item_Gauntlet_Gold": 0.22, "Item_Gauntlet_Silver": 0.22, "Item_Gauntlet_Goron": 0.22}
+
+
 def shelf_item(actor):
     """what goes into the pool for a shelf's own actor: the chests' kind of it, or a red rupee"""
     return next((item for start, item in SHELF_ITEMS if actor.startswith(start)), SHELF_OTHER)
@@ -450,9 +456,10 @@ def shop_goods(data, sells):
     return byml_build(tree, version)
 
 
-def shelf_actors(data, sells):
+def shelf_actors(data, sells, lifts=None):
     """A map file with its shelves of `sells` ({(the game's own shelf actor, its place in the row): the new one})
-    made the new actor: (the file written anew, or None when it has none of them; how many)."""
+    made the new actor: (the file written anew, or None when it has none of them; how many). lifts: {a new actor:
+    how much higher its shelf's actor is put}."""
     tree, version = byml_parse(data)
     actors = tree[1].get("Actors")
     n = 0
@@ -462,6 +469,9 @@ def shelf_actors(data, sells):
         new = sells.get((gyaml, struct.unpack("<I", index[1])[0] if index and isinstance(index[1], bytes) and len(index[1]) == 4 else 0))
         if new and actor[1].get("Gyaml", ("", ""))[0] == "string":
             actor[1]["Gyaml"] = ("string", new)
+            at = actor[1].get("Translate")
+            if (lifts or {}).get(new) and at and at[0] == "array" and len(at[1]) == 3 and isinstance(at[1][1][1], bytes) and len(at[1][1][1]) == 4:
+                at[1][1] = (at[1][1][0], struct.pack("<f", struct.unpack("<f", at[1][1][1])[0] + lifts[new]))
             n += 1
     return (byml_build(tree, version) if n else None), n
 
@@ -2137,7 +2147,7 @@ ITEM_WORDS = {
     "Item_Sword_Kokiri": "Kokiri Sword", "Item_Range_SlingShot": "Slingshot", "Item_BombBag_Small": "Bomb Bag", "Item_Boomerang": "Boomerang",
     "Item_GlassTruth": "Lens of Truth", "Item_Range_Bow": "Bow", "Item_Hammer": "Megaton Hammer", "Item_HeavyBoot": "Iron Boots",
     "Item_HoverBoot": "Hover Boots", "Item_Longshot": "Longshot", "Item_Gauntlet_Silver": "Silver Gauntlets", "Item_Shield_Mirror": "Mirror Shield",
-    "Item_Gauntlet_Gold": "Golden Gauntlets", "Item_Dungeon_SmallKey": "small key", "Item_Dungeon_BossKey": "boss key", "Item_Dungeon_Map": "map",
+    "Item_Gauntlet_Gold": "Golden Gauntlets", "Item_Gauntlet_Goron": "Goron's Bracelet", "Item_Dungeon_SmallKey": "small key", "Item_Dungeon_BossKey": "boss key", "Item_Dungeon_Map": "map",
     "Item_Dungeon_Compass": "compass",
 }
 EXIT_NEAR = 40.0
@@ -2425,7 +2435,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 2" % a.shops if a.shops else "") + " checks 5" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 3" % a.shops if a.shops else "") + " checks 5" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2830,7 +2840,7 @@ def main():
                         data = changed[rel] if rel in changed else unpack(open(os.path.join(folder_map, n), "rb").read(), zs, dicts)
                         if not any(actor.encode() in data for actor, _ in on_shelf):
                             continue
-                        new, count = shelf_actors(data, on_shelf)
+                        new, count = shelf_actors(data, on_shelf, {actor: SHELF_LIFT[item] for actor, (item, _) in on_sale.items() if item in SHELF_LIFT})
                         if new is not None:
                             changed[rel] = new
                             sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
