@@ -1888,8 +1888,9 @@ def flow_reach(data, entry):
     return seen
 
 
-def gift_items(data, swaps):
-    """gift_item for several items of one flow at once: swaps is {old: new}. All are found before any is changed, so
+def gift_items(data, swaps, kinds=(4,)):
+    """gift_item for several items of one flow at once: swaps is {old: new}. kinds: the steps looked at (4 a call of a
+    sub-flow, the gifts'; 0 an action and 1 a question too, for a name the flow sets or asks about: the songs'). All are found before any is changed, so
     that one gift's new item is not taken for another's old one (a flow with two gifts whose items changed places).
     A key (entry, old) in place of old is only that entry point's calls (flow_reach): two sales of one flow that
     name the same item. Such a key comes before a plain one for the same name.
@@ -1913,7 +1914,7 @@ def gift_items(data, swaps):
     where = []
     for i in range(count):
         e = events + 0x30 * i
-        if data[e + 8] != 4:   # (4: a call of a sub-flow)
+        if data[e + 8] not in kinds:   # (4: a call of a sub-flow)
             continue
         params = u64(e + 0x10)
         if not params or data[params] != 1:   # (1: a container of named parameters)
@@ -2045,7 +2046,7 @@ def settings(game):
     """the randomizer's lines of the options file (0 where it does not say)"""
     got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
            "rando_skip_intro": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0,
-           "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0}
+           "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -2130,7 +2131,9 @@ CHECK_CODES = collections.OrderedDict((
     ("Item_Sword_Kokiri", "KS"), ("Item_Range_SlingShot", "SL"), ("Item_BombBag_Small", "BB"), ("Item_Boomerang", "BM"),
     ("Item_GlassTruth", "LT"), ("Item_Range_Bow", "BW"), ("Item_Hammer", "HM"), ("Item_HeavyBoot", "IB"), ("Item_HoverBoot", "HB"),
     ("Item_Longshot", "LS"), ("Item_Gauntlet_Silver", "SG"), ("Item_Shield_Mirror", "MS"), ("Item_Gauntlet_Gold", "GG"),
-    ("Item_Gauntlet_Goron", "GB"), ("Item_Scale_Silver", "SS"), ("Item_Wallet_Medium", "AW"), ("Item_Wallet_Large", "GW")))
+    ("Item_Gauntlet_Goron", "GB"), ("Item_Scale_Silver", "SS"), ("Item_Wallet_Medium", "AW"), ("Item_Wallet_Large", "GW"),
+    ("Item_Melody_ZeldaLullaby", "ZL"), ("Item_Melody_EponaSong", "EP"), ("Item_Melody_SariaSong", "SR"), ("Item_Melody_TimeSong", "ST"),
+    ("Item_Melody_StormSong", "SO"), ("Item_Melody_SpiritRequiem", "RQ"), ("Item_Melody_ShadowNocturne", "NC")))
 
 
 def check_ages(names):
@@ -2174,6 +2177,18 @@ GIFT_PLACES = {
     "scrub_heart_secret": ("C", (-23.0, 119.1, 33.0)),
     "scrub_sticks": ("CA", (-45.2, 95.2, 72.6)),
     "scrub_nuts": ("CA", (7.3, 82.9, -85.6)),
+    "song_zelda": ("C", (5.1, 126.8, -236.4)),             # (DoorOfTime_MeetImpa_StartPos: before Impa, in the castle's courtyard)
+    "song_epona": ("C", (-91.9, 150.6, 247.0)),            # (Npc_Hylia_Malon_Child at z 245.4, Lon Lon Ranch)
+    "song_saria": ("C", (-6.9, 114.4, -85.2)),             # (Dm_MelodyGet_Saria_Start)
+    "song_sun": ("CA", (149.5, 98.7, 2.7)),                # (Dm_MelodyGet_Sun_Child: in the royal tomb)
+    "song_time": ("C", (0.2, 150.2, 56.8)),                # (GetOcarinaOfTime_AreaOut_Destination: before the Market's bridge)
+    "song_storms": ("A", (1.2, 105.1, 49.5)),              # (Npc_Hylia_009_Adult at z 51.3, in the windmill)
+    "song_minuet": ("A", (-7.0, 114.4, -84.3)),            # (Dm_MelodyGet_Forest_Position)
+    "song_bolero": ("A", (-17.5, 114.0, -10.2)),           # (Dm_MelodyGet_Fire_LinkPosition)
+    "song_serenade": ("A", (-45.1, 109.7, 41.8)),          # (before the chest whose opening starts the lesson, SageOfWater_MelodyGet_Water)
+    "song_requiem": ("A", (-156.0, 95.4, 10.3)),           # (Dm_MelodyGet_Spilit_Player_pos)
+    "song_nocturne": ("A", (-119.8, 96.6, 58.7)),          # (KakarikoVillage_Entrance: the lesson starts as Link comes in)
+    "song_prelude": ("A", (134.0, 106.4, -34.0)),          # (before Npc_Hylia_Sheik_Adult at x 139.0, past the Door of Time)
 }
 
 
@@ -2268,6 +2283,98 @@ def chest_front(pos, turned, far=CHEST_FRONT):
     return (round(pos[0] + far * x / flat, 1), pos[1], round(pos[2] + far * z / flat, 1))
 
 
+# ---- Songs: the twelve songs, shuffled among the twelve places that teach one ----
+# Each lesson gives its song as a character gives a gift: its flow (Dm_MelodyGet_...) calls the game's
+# GetPouchContent with the song's name. So a lesson is a gift whose item is a song (SONGS), and the song it gives is
+# changed as a gift's is. The lesson's scene is as it was: its teacher plays the notes of the song the game has there,
+# and the scene of the song got names the one the shuffle put there.
+# A song is not only named where it is given. The game asks "has Link this song" to know whether a lesson is done
+# (the windmill man, Sheik, the Kokiri: IsGet.Item_Melody_..., EventQueryCheckIsGet), the Bolero's lesson sets its
+# flag itself before the gift, and the royal tomb's two stones talk as after the lesson once Link has the Sun's Song
+# (their AIScheduleParam's ConditionFlag). With the songs shuffled each of these means the lesson, not the song, so
+# each is made to name the song its lesson gives now (SONG_FLOWS, SONG_STONES): a song found elsewhere does not shut
+# the place that taught it. The flows that play a song (Dm_SY_Ocarina...) are left: there the song is the song.
+# Left as the game has them, not looked into: Kakariko's adult logic (Logic/KakarikoVillage_Adult_Common_*, which
+# names the Song of Storms' flag and cannot be changed in place), Navi's hints, the Scarecrow's Song.
+# The rules: a song that gates the game is a gating item (SONG_GATES), placed by the logic with the others, and only
+# in a lesson (place's `bound`). What the rules had folded in is named (song_need): an adult has Zelda's Lullaby (the
+# Zoras' and Darunia's doors), Saria's Song (Darunia), the Song of Time (the Door of Time) and, asked for too much
+# rather than too little, the Song of Storms (the well, the grottos); the Zoras' places ask for the Lullaby; the
+# Shadow Temple for the Nocturne (the only way in), the Spirit Temple and the Colossus for the Requiem (a child's only
+# way there); Ganon's Castle for all of them. Epona's Song gates the horseback archery only. The other five gate
+# nothing. A lesson asks for what its line says, the songs named: none asks for the song the game teaches there.
+ZL, EPONA, SARIA, SUN, TIME, STORMS, MINUET, BOLERO, SERENADE, REQUIEM, NOCTURNE, PRELUDE = SONG_ITEMS = tuple(
+    "Item_Melody_" + n for n in ("ZeldaLullaby", "EponaSong", "SariaSong", "SunSong", "TimeSong", "StormSong", "ForestMinuet", "FireBolero",
+                                 "WaterSerenade", "SpiritRequiem", "ShadowNocturne", "LightPrelude"))
+SONG_GATES = frozenset((ZL, EPONA, SARIA, TIME, STORMS, REQUIEM, NOCTURNE))
+SONG_GROWN = frozenset((ZL, SARIA, TIME, STORMS))   # (what an adult's check asks for)
+SONG_ADULT = ADULT | {ZL, SARIA, TIME}              # (what an adult's lesson asks for: an adult, without the Song of Storms)
+SONG_AREAS = {"ZoraDomain": {ZL}, "ZoraFountain": {ZL}, "InsideJabuJabuBelly": {ZL}, "BottomOfTheWell": {STORMS}, "ShadowTemple": {NOCTURNE},
+              "SpiritTemple": {REQUIEM}, "DesertColossus": {REQUIEM}, "InsideGanonCastle": set(SONG_GATES)}
+SONG_GIFTS = {"darunia": {ZL, SARIA}, "skull_kid_song": {SARIA}, "archery_heart": {EPONA}, "archery_quiver": {EPONA}}
+SONGS_HARD = ("frogs",)   # (the frogs ask for six songs: with the songs shuffled, for everything, so no gating item is theirs)
+SONGS = (
+    Gift("song_zelda", "Dm_MelodyGet_Zelda", (ZL,), ZL, "HyruleCastle", "Impa's lesson: Zelda's Lullaby", CHILD, "songs"),
+    Gift("song_epona", "Dm_MelodyGet_Epona", (EPONA,), EPONA, "HyruleField", "Malon's lesson: Epona's Song", CHILD, "songs"),
+    Gift("song_saria", "Dm_MelodyGet_Saria", (SARIA,), SARIA, "SacredForestMeadow", "Saria's lesson: Saria's Song", CHILD, "songs"),
+    Gift("song_sun", "Dm_MelodyGet_Sun_03", (SUN,), SUN, "Graveyard", "the royal tomb: the Sun's Song", CHILD | {ZL}, "songs"),
+    Gift("song_time", "Dm_MelodyGet_Time", (TIME,), TIME, "HyruleField", "the Ocarina of Time: the Song of Time", ADULT | {ZL, SARIA}, "songs"),
+    Gift("song_storms", "Dm_MelodyGet_Storm", (STORMS,), STORMS, "KakarikoVillage", "the windmill man: the Song of Storms", SONG_ADULT, "songs"),
+    Gift("song_minuet", "Dm_MelodyGet_Forest", (MINUET,), MINUET, "SacredForestMeadow", "Sheik, the meadow: the Minuet of Forest", SONG_ADULT, "songs"),
+    Gift("song_bolero", "Dm_MelodyGet_Fire", (BOLERO,), BOLERO, "DeathMountainCrater", "Sheik, the crater: the Bolero of Fire", SONG_ADULT | {HAM}, "songs"),
+    Gift("song_serenade", "Dm_MelodyGet_Water", (SERENADE,), SERENADE, "IceCavern", "Sheik, the Ice Cavern: the Serenade of Water", SONG_ADULT, "songs"),
+    Gift("song_requiem", "Dm_MelodyGet_Spilit", (REQUIEM,), REQUIEM, "DesertColossus", "Sheik, the Colossus: the Requiem of Spirit", SONG_ADULT | DESERT, "songs"),
+    Gift("song_nocturne", "Dm_MelodyGet_Shadow", (NOCTURNE,), NOCTURNE, "KakarikoVillage", "Sheik, Kakariko: the Nocturne of Shadow", SONG_ADULT | MEDALS3, "songs"),
+    Gift("song_prelude", "Dm_MelodyGet_Shine", (PRELUDE,), PRELUDE, "Market", "Sheik, the Temple of Time: the Prelude of Light", SONG_ADULT | {BOW}, "songs"),
+)
+# (the flows that name a song where the lesson is meant: the lessons, and who asks whether one is done)
+SONG_FLOWS = tuple(g.flow for g in SONGS) + (
+    "AllSage", "BottomOfTheWell", "SageOfWater", "Npc_Hylia_007_Adult", "Npc_Hylia_009_Adult", "Npc_Hylia_009_Child", "Npc_Hylia_051_Adult",
+    "Npc_Hylia_Sheik_Adult", "Npc_Kokiri_009_Child", "Npc_Kokiri_011_Child", "Npc_Kokiri_012_Child", "Npc_Kokiri_013_Child",
+    "Npc_Kokiri_Fado_Child", "Npc_Kokiri_Mido_Child")
+SONG_WORDS = ("", "IsGet.", "HavePlayedGetEvent.")   # (a song's name, its flag, and the flag of its scene)
+SONG_STONES = tuple("Component/AIScheduleParam/Obj_Graveyard_Tombstone_A_0%d.game__component__AIScheduleParam.bgyml" % k for k in (1, 2))
+
+
+def song_need(need, area, key=None):
+    """what a check asks for with the songs named (see above). key: a gift's, for the ones that ask for a song of
+    their own. A lesson's own line is not put through this: it names its songs itself."""
+    need = set(need)
+    if need >= ADULT:
+        need |= SONG_GROWN
+    return frozenset(need | SONG_AREAS.get(area, set()) | SONG_GIFTS.get(key, set()))
+
+
+def song_words(now):
+    """{what a flow names: what it names now} for the songs that changed places: now is {a lesson's own song: the
+    song it gives}. Each song's name, its flag and its scene's flag."""
+    return {word + old: word + new for old, new in now.items() if old != new for word in SONG_WORDS}
+
+
+def song_stone(data, now):
+    """A royal tomb's stone (an AIScheduleParam file) asking for the song its lesson gives now, or None when it does
+    not ask for the Sun's Song's flag. now: as song_words'."""
+    words = song_words(now)
+    tree, version = byml_parse(data)
+    found = []
+
+    def walk(node):
+        kind, value = node if isinstance(node, tuple) and len(node) == 2 else (None, None)
+        if kind == "dict":
+            for k, v in list(value.items()):
+                if k == "ConditionFlag" and v[0] == "string" and v[1] in words:
+                    value[k] = ("string", words[v[1]])
+                    found.append(k)
+                else:
+                    walk(v)
+        elif kind == "array":
+            for v in value:
+                walk(v)
+
+    walk(tree)
+    return byml_build(tree, version) if found else None
+
+
 def check_name(kind, item, about, pos, exits=(), parts=()):
     """A check's name. kind: "Chest" or "Gold Skulltula". item: what a chest held. about: what its actor says
     ({"big", "room", "night", "soil"}). exits: [(place, where it leads)] and parts: [(place, how far it reaches, its
@@ -2343,12 +2450,16 @@ def remove_old(mod):
     return n
 
 
-def place(rng, spots, which, keys_mode, needs=None):
+def place(rng, spots, which, keys_mode, needs=None, bound=None):
     """What each chest holds. spots: {hash: (area, item, is a dungeon's chest, why it stays or None)}, in a fixed order.
     needs: {hash: what the chest asks for} for the logic, or None: no logic.
     Returns ({hash: item} for the chests that take part, how many chests stay for each reason, the spheres or None).
     With the logic, the thirteen gating items are placed so that each can be reached with the others (an assumed
-    fill), counting the ones that stay in their own chests; then the rest goes where there is room."""
+    fill), counting the ones that stay in their own chests; then the rest goes where there is room.
+    bound: None, or (items, hashes): those items go to those spots only, and those spots hold nothing else (the songs
+    and the lessons)."""
+    bound_items, bound_spots = bound or ((), ())
+    fits = lambda item, h: (item in bound_items) == (h in bound_spots)
     stays = collections.Counter()
     pool = []
     for h, (area, item, dungeon, why) in spots.items():
@@ -2367,6 +2478,8 @@ def place(rng, spots, which, keys_mode, needs=None):
         by_area.setdefault(spots[h][0], []).append(h)
     for area, here in by_area.items():
         own = [spots[h][1] for h in here if spots[h][1] in DUNGEON_ITEMS]
+        if bound:   # (a lesson in a dungeon's area is not one of its chests)
+            here = [h for h in here if h not in bound_spots]
         for h, item in zip(rng.sample(here, len(own)), own):
             gives[h] = item
     rest = [h for h in pool if h not in gives]
@@ -2383,7 +2496,7 @@ def place(rng, spots, which, keys_mode, needs=None):
             for k, item in enumerate(order):
                 # Link with every gating item still to be placed, and what the chests filled so far then give him
                 have = reach(order[k + 1:], fixed + [(needs[h], i) for h, i in placed.items()])
-                free = [h for h in rest if h not in placed and needs[h] <= have]
+                free = [h for h in rest if h not in placed and needs[h] <= have and (not bound or fits(item, h))]
                 if not free:
                     ok = False
                     break
@@ -2398,6 +2511,11 @@ def place(rng, spots, which, keys_mode, needs=None):
         gives.update(placed)
         rest = [h for h in rest if h not in placed]
         items = [i for i in items if i not in PROGRESSION]
+    if bound:   # (the songs that are left, among the lessons that are left)
+        mine, theirs = [h for h in rest if h in bound_spots], [i for i in items if i in bound_items]
+        rng.shuffle(theirs)
+        gives.update(zip(mine, theirs))
+        rest, items = [h for h in rest if h not in bound_spots], [i for i in items if i not in bound_items]
     # everything else among the chests that are left, wherever they are
     rng.shuffle(items)
     for h, item in zip(rest, items):
@@ -2425,6 +2543,8 @@ def main():
     p.add_argument("--scrubs", action="store_true", help="as rando_scrubs=1: the Business Scrubs' four one-time sales take part with the chests (SCRUBS)")
     p.add_argument("--shops", type=int, choices=(0, 1, 2), help="in place of rando_shops: four shelves of each shop sell a shuffled item, once (SHOPS). "
                                                                "2: with rolled prices")
+    p.add_argument("--songs", type=int, choices=(0, 1, 2), help="in place of rando_songs: the twelve songs are shuffled among the twelve lessons (SONGS). "
+                                                               "2, a song in any item's place, is not made yet: as 1")
     p.add_argument("--progressive", action="store_true", help="as rando_progressive=1: the rules count an upgrade found as the next of its family")
     p.add_argument("--start-rupees", action="store_true", help="as rando_start_rupees=1: a new game starts with %d rupees" % START_RUPEES)
     p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already this seed's (the launcher, at Play)")
@@ -2452,7 +2572,10 @@ def main():
         ini["rando_major"] = 1
         print("this seed was made with the big items shuffled: Major items is now On in the options, to keep it as it is")
     a.event_chests = a.event_chests or ini["rando_major"] != 0
-    logic_now = a.event_chests and not a.no_logic
+    a.songs = a.songs if a.songs is not None else ini["rando_songs"]
+    a.songs = 1 if a.songs in (1, 2) else 0
+    # (the songs gate the game: with them shuffled the logic places them, whatever Major items says)
+    logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic
     # (the options file's rando_open_deku and rando_open_forest too, so that the launcher's run at Play keeps them)
     a.open_deku = a.open_deku or ini["rando_open_deku"] != 0
     a.open_forest = a.open_forest or ini["rando_open_forest"] != 0
@@ -2513,7 +2636,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + " checks 8" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + (" songs 1" if a.songs else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2643,6 +2766,12 @@ def main():
         for g in SCRUBS:
             gifts[gift_hash(g.key)] = g
             spots[gift_hash(g.key)] = [g.area, g.item, None, None, "scrub", g.name, ""]
+    lessons = collections.OrderedDict()   # a lesson's hash -> its Gift
+    if a.songs:   # (Songs: with or without the others)
+        PROGRESSION = PROGRESSION | SONG_GATES
+        for g in SONGS:
+            gifts[gift_hash(g.key)] = lessons[gift_hash(g.key)] = g
+            spots[gift_hash(g.key)] = [g.area, g.item, None, None, "song", g.name, ""]
     shelves = collections.OrderedDict()   # a shop shelf's hash -> (its Shop, its place in the goods list, the game's own actor there)
     shelf_prices = {}                     # the same -> what it costs
     if a.shops:   # (Shops: with or without the others)
@@ -2660,18 +2789,25 @@ def main():
                 gifts[gift_hash(g.key)], shelves[gift_hash(g.key)], shelf_prices[gift_hash(g.key)] = g, (shop, index, actor), price
                 spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]
     # (a string seed: the same on every Python 3. The seeds made before --event-chests keep their shuffle without it)
-    logic = a.event_chests and not a.no_logic   # (without the event chests no gating item moves: nothing to ask)
-    rng = random.Random("stage2:%d:%d:%d%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else ""))
+    logic = logic_now   # (without the event chests or the songs no gating item moves: nothing to ask)
+    rng = random.Random("stage2:%d:%d:%d%s%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else "",
+                                                   ":songs" if a.songs else ""))
     needs = {h: rule(s[0], s[6]) for h, s in spots.items()}
     if a.quests:   # (the rules with the gifts' two gating items named; a gift asks for what its line of GIFTS says)
         needs = {h: quest_need(gifts[h].need, gifts[h].area) if h in gifts else quest_need(n, spots[h][0]) for h, n in needs.items()}
     elif gifts:    # (the scrubs alone)
         needs = {h: gifts[h].need if h in gifts else n for h, n in needs.items()}
+    if a.songs:    # (the songs named: a lesson's line names its own; the frogs ask for everything)
+        needs = {h: n if h in lessons else frozenset(PROGRESSION) if h in gifts and gifts[h].key in SONGS_HARD else
+                 song_need(n, spots[h][0], gifts[h].key if h in gifts else None) for h, n in needs.items()}
     step = (lambda need: progressive_need(need, PROGRESSION)) if a.progressive else (lambda need: need)
     needs = {h: step(n) for h, n in needs.items()}
+    # (what a Gold Skulltula asks for, by the same settings)
+    skull_asks = lambda h: step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
+        quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0])))
     try:
         gives, stays, spheres = place(rng, collections.OrderedDict((h, tuple(s[:4])) for h, s in spots.items()), which, keys_mode,
-                                      needs if logic else None)
+                                      needs if logic else None, (frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs else None)
     except ValueError as e:
         sys.exit("%s. Nothing written. Try Chests: All, or --no-logic." % e)
     unknown = sorted({s[0] for h, s in spots.items() if s[0] not in RULES and h not in gifts})
@@ -2691,8 +2827,8 @@ def main():
             fixed = [(needs[h], spots[h][1]) for h in spots if h not in gives and spots[h][1] in PROGRESSION]
             gives, skull_drops, spheres, gated = gate_skulltulas(
                 random.Random("skulltulas gated:%d:%d:%d" % (seed, a.skulltulas, len(able))), gives, skull_drops,
-                able, needs, {h: step(quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0]))
-                              for h in able}, fixed, never=((SSC,) if a.quests else ()) + (tuple(SHOP_GATES) if a.shops else ()))
+                able, needs, {h: skull_asks(h) for h in able}, fixed,
+                never=((SSC,) if a.quests else ()) + (tuple(SHOP_GATES) if a.shops else ()) + (tuple(SONG_GATES) if a.songs else ()))
             print("Gold Skulltulas: %d gating item%s now dropped by one" % (gated, "" if gated == 1 else "s"))
         for h, item in skull_drops.items():
             drops.setdefault(h, item)   # (a test's drop for the same Skulltula stays)
@@ -2730,7 +2866,7 @@ def main():
     moved = sum(1 for h, item in gives.items() if item != spots[h][1] and h not in gifts)
     print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives) - len(gifts), moved, len(changed)))
     if a.quests:
-        mine = [h for h, g in gifts.items() if g.when not in ("scrubs", "shops")]
+        mine = [h for h, g in gifts.items() if g.when not in ("scrubs", "shops", "songs")]
         print("Quest rewards: %d gifts take part%s%s, %d now give another item" % (
             len(mine), "" if a.frogs else " (not the frogs: their setting is off)", "" if a.light_arrows else " (not the Light Arrows: their setting is off)",
             sum(1 for h in mine if gives[h] != gifts[h].item)))
@@ -2830,7 +2966,7 @@ def main():
     gift_files, gift_sizes = {}, {}
     swaps = collections.OrderedDict()   # a flow -> {the item it names: the item it gives now}
     for h, g in gifts.items():
-        if gives[h] != g.item and g.flow:   # (a shop's shelf has no scene: its actor is the sale)
+        if gives[h] != g.item and g.flow and h not in lessons:   # (a shop's shelf has no scene: its actor is the sale; the songs: below)
             swaps.setdefault(g.flow, {}).update(((g.entry, old) if g.entry else old, gives[h]) for old in g.olds)
     for flow, old, new in test_gifts:
         swaps.setdefault(flow, {})[old] = new
@@ -2845,6 +2981,36 @@ def main():
             sys.exit("%s gives no %s (rando\\test_gifts.txt, or the game's flow is not the one the gifts were listed from). Nothing written." % (
                 flow, ", ".join(sorted(str(k) for k in set(change) - found))))
         gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
+    # ---- the songs: each lesson gives the song the shuffle put there, and who asks about a lesson asks for that song ----
+    song_parts = set()
+    if lessons:
+        now_gives = {g.item: gives[h] for h, g in lessons.items()}
+        words = song_words(now_gives)
+        taught = set()
+        for flow in SONG_FLOWS if words else ():
+            rel = "%s/%s.bfevfl.zs" % (GIFT_FLOWS, flow)
+            try:
+                was = gift_files[rel] if rel in gift_files else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
+                now, found = gift_items(was, words, kinds=(0, 1, 4))
+            except (OSError, ValueError, struct.error) as e:
+                sys.exit("a song's flow, %s: %s. Nothing written." % (flow, e))
+            taught |= found
+            if now is not None:
+                gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
+        missed = sorted(old for old, new in now_gives.items() if old != new and old not in taught)
+        if missed:
+            sys.exit("no lesson gives %s (the game's flows are not the ones the songs were listed from). Nothing written." % ", ".join(missed))
+        for rel in SONG_STONES if words else ():
+            try:
+                now = song_stone(open(os.path.join(romfs, *rel.split("/")), "rb").read(), now_gives)
+            except (OSError, ValueError, struct.error, IndexError) as e:
+                sys.exit("a royal tomb's stone, %s: %s. Nothing written." % (rel, e))
+            if now is not None:
+                gift_files[rel] = now
+                song_parts.add(rel)
+        print("Songs: %d lessons take part, %d now teach another song%s" % (
+            len(lessons), sum(1 for old, new in now_gives.items() if old != new),
+            "; the royal tomb's stones ask for %s" % now_gives[SUN] if song_parts else ""))
     # ---- a scrub that sells another item no longer names its own (English) ----
     lines = sorted({label for h, g in gifts.items() if g.key in SCRUB_LINES and gives[h] != g.item for label in SCRUB_LINES[g.key]})
     for lang in SCRUB_LANGS if lines else ():
@@ -2957,7 +3123,7 @@ def main():
         lists raised, the lists of actors and the texts' archives made to fit"""
         for path, size in shop_packs.items():
             tbl = size_table_add(tbl, [path], size_entry(size, PACK_EXTRA))
-        return size_table_update(size_table_raise(size_table_add(tbl, shop_new), shop_parts), shop_sizes, SHOP_EXTRA)
+        return size_table_update(size_table_raise(size_table_add(tbl, shop_new), shop_parts | song_parts), shop_sizes, SHOP_EXTRA)
 
     # ---- the size table ----
     folder = os.path.join(romfs, "System", "Resource")
@@ -3028,7 +3194,7 @@ def main():
         f.write("\n".join(tracker_lines(collections.Counter(spots[h][0] for h in gives if h not in gifts), collections.Counter(skulls[h][0] for h in took),
                                         collections.Counter(g.area for g in gifts.values()))) + "\n")
     with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\n") as f:   # (for the Tracker tab's Go there)
-        skull_need = lambda h: step(quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0]))
+        skull_need = skull_asks
         named = lambda kind, h, area, pos, item="": check_name(kind, item, about.get(h, {}), pos, exits[area], sub_areas[area])
         f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h]), needs[h], named("Chest", h, spots[h][0], spots[h][5], spots[h][1]), h, gives[h],
                                         chest_front(spots[h][5], about[h]["turned"]) if len(spots[h][5]) == 3 and "turned" in about.get(h, {}) else None)

@@ -51,7 +51,7 @@
       "What some characters give takes part with the chests: Darunia, mini-games, side quests and the Gold Skulltula family. Needs Chests.", \
       "Off", "On") \
     X(SONGS, "Songs", "rando_songs", \
-      "Song spots: the songs are shuffled among the places that teach one. Anywhere: a song can be any item's place.", \
+      "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere is not made yet: the same as Song spots.", \
       "Off", "Song spots", "Anywhere") \
     X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \
       "Heart Pieces and the other items lying in the world are shuffled.", \

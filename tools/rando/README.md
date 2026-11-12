@@ -93,6 +93,30 @@ chests that start an event when opened (most of the big items).
   numbers of that file so both entry points go on to what follows their cutscene. Seen in play: a new game starts in
   Link's house with both cutscenes passed over.
 
+**Songs** (`rando_songs`, `--songs`, `SONGS`): the twelve songs are shuffled among the twelve lessons (Song spots;
+Anywhere, a song in any item's place, is not made yet and is the same). A lesson gives its song as a character gives
+a gift: its flow (`Dm_MelodyGet_...`) calls `GetPouchContent` with the song's name, so the name is changed as a gift's
+is. The teacher still plays the notes of the song the game has there; the scene of the song got names the new one.
+- The game also asks "has Link this song" to know whether a lesson is done (the windmill man, Sheik, the Kokiri,
+  the sages' flows), the Bolero's lesson sets its flag itself, and the royal tomb's two stones talk as after the
+  lesson once Link has the Sun's Song (`Component/AIScheduleParam/Obj_Graveyard_Tombstone_A_0x`, `ConditionFlag`).
+  Each is made to name the song its lesson gives now (`SONG_FLOWS`, `SONG_STONES`, `song_words`), so a song found
+  elsewhere does not shut the place that taught it. The flows that play a song (`Dm_SY_Ocarina...`) are left.
+- Left as the game has them, not looked into: Kakariko's adult logic file, which names the Song of Storms' flag (an
+  `ainb`, not changed in place), Navi's hints, the Scarecrow's Song. The Serenade's lesson is started by the Ice
+  Cavern's big chest (`SageOfWater_MelodyGet_Water`), whatever that chest holds.
+- The rules: seven songs gate the game (`SONG_GATES`: Zelda's Lullaby, Epona's Song, Saria's Song, the Song of Time,
+  the Song of Storms, the Requiem, the Nocturne) and are placed by the logic, in lessons only (`place`'s `bound`);
+  the logic is on with Songs whatever Major items says. `song_need` names what the rules had folded in: an adult's
+  check asks for the Lullaby, Saria's Song, the Song of Time and (too much rather than too little) the Song of
+  Storms; the Zoras' places for the Lullaby; the Shadow Temple for the Nocturne; the Spirit Temple and the Colossus
+  for the Requiem; Ganon's Castle for all; the horseback archery for Epona's Song; the frogs for everything. A lesson
+  asks for what its line of `SONGS` says and never for the song the game teaches there.
+- The tracker: the lessons are checks (their places are from the map files, none walked to), the seven songs have
+  letters in a rule (`ZL EP SR ST SO RQ NC`), and a rule's letters now fit 95 characters.
+- Seen so far, without a window: a seed with the songs loads, and the graveyard (the changed stones) and the Sacred
+  Forest Meadow load with it. No lesson has been played yet: that needs the notes played by hand.
+
 **Skip cutscenes** (`rando_skip_cutscenes`; the game's side only, the seed is the same with it): each cutscene is
 passed over as soon as it starts, by the game's own skip. The game has one (`SeqOneShotEventRequestForceSkip`, and
 only three of its events turn it off, by a `SkipSetting`), and the host asks it (`host/hos_main.c`

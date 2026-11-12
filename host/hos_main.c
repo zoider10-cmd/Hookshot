@@ -1208,9 +1208,9 @@ static void oot_tracker_load(const char *stamp) {
     snprintf(oot_checks_seed, sizeof oot_checks_seed, "%s", stamp);
     FILE *f = oot_game_file(path, sizeof path, "mods/rando-seed/checks.txt") ? fopen(path, "r") : NULL;
     while (f && oot_check_count < OOT_TRACKER_MAX && fgets(line, sizeof line, f)) {
-        char area[48], kind[80], ages[4], needs[64] = "", hash[32] = "", item[64] = "";
+        char area[48], kind[80], ages[4], needs[96] = "", hash[32] = "", item[64] = "";
         if (line[0] == '#') continue;   /* (the lines the menu takes, in its order: gpu/vk/vk_menu.cpp tracker_load) */
-        const int got = sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]|%31[0-9a-fA-F-]|%63[A-Za-z0-9_]", area, kind,
+        const int got = sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%95[A-Z,-]|%31[0-9a-fA-F-]|%63[A-Za-z0-9_]", area, kind,
                                oot_checks[oot_check_count].folder, ages, &oot_checks[oot_check_count].place[0],
                                &oot_checks[oot_check_count].place[1], &oot_checks[oot_check_count].place[2], needs, hash, item);
         if (got < 7) continue;

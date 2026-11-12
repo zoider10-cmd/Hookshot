@@ -280,7 +280,7 @@ def main():
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
     check('"rando_shops": 0' in script and '(" shops %d prices 5" % a.shops if a.shops else "")' in script and 'a.shops = a.shops if 0 <= a.shops <= 2 else 0' in script,
           "the script does not read the setting, or does not name it in the seed's stamp")
-    check('spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]' in script and "if gives[h] != g.item and g.flow:" in script,
+    check('spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]' in script and "if gives[h] != g.item and g.flow and h not in lessons:" in script,
           "the shelves are not spots among the chests', or a shelf is taken for a scene's gift")
     check('shop_files["Pack/Actor/%s.pack.zs" % actor] = new' in script and 'shop_files["RSDB/" + n] = table' in script and
           "parts[name] = shop_goods(parts[name], sells)" in script and "new, count = shelf_actors(data, on_shelf, lifts)" in script and

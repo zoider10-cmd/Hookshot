@@ -906,7 +906,7 @@ class LauncherForm : Form {
         new object[] { "rando_quests", "Quest rewards", new[] { "Off", "On" }, new[] { 0, 1 },
             "What some characters give takes part with the chests: Darunia, mini-games, side quests and the Gold Skulltula family. Needs Chests." },
         new object[] { "rando_songs", "Songs", new[] { "Off", "Song spots", "Anywhere" }, new[] { 0, 1, 2 },
-            "Song spots: the songs are shuffled among the places that teach one. Anywhere: a song can be any item's place." },
+            "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere is not made yet: the same as Song spots." },
         new object[] { "rando_heart_pieces", "Heart Pieces", new[] { "Off", "On" }, new[] { 0, 1 },
             "Heart Pieces and the other items lying in the world are shuffled." },
         new object[] { "rando_shops", "Shops", new[] { "Off", "Low prices", "Any price" }, new[] { 0, 1, 2 },

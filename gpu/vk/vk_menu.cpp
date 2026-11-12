@@ -120,7 +120,7 @@ struct TrackerCheck {
     char area[48], kind[80], folder[40], ages[4];   // (kind: the check's name; Chest or Gold Skulltula in a file without names)
     float pos[3];
     float stand[3];   // (where Link is put to go to it: a chest's front; its own place where the file has no other)
-    char needs[64];   // (what the seed's rules ask for: kLogicItems' letters with commas, "-" nothing, "?" a file without it)
+    char needs[96];   // (with the songs a rule names up to 24 items. what the seed's rules ask for: kLogicItems' letters with commas, "-" nothing, "?" a file without it)
 };
 /// A check with what Link carries: 1 in logic (he has all its rule asks for), 0 not (missing, when given: what he has
 /// not, by name), -1 not known (the file does not say, or no save's inventory has been read). Below the inventory's counts
@@ -1229,6 +1229,14 @@ constexpr LogicItem kLogicItems[] = {
     {"SS", "Silver Scale", {"Silver Scale", "Golden Scale"}},
     {"AW", "Adult's Wallet", {"Adult's Wallet", "Giant's Wallet"}},
     {"GW", "Giant's Wallet", {"Giant's Wallet"}},
+    // (Songs: the seven that gate the game. tools/rando/rando_seed.py SONG_GATES)
+    {"ZL", "Zelda's Lullaby", {"Zelda's Lullaby"}},
+    {"EP", "Epona's Song", {"Epona's Song"}},
+    {"SR", "Saria's Song", {"Saria's Song"}},
+    {"ST", "Song of Time", {"Song of Time"}},
+    {"SO", "Song of Storms", {"Song of Storms"}},
+    {"RQ", "Requiem of Spirit", {"Requiem of Spirit"}},
+    {"NC", "Nocturne of Shadow", {"Nocturne of Shadow"}},
 };
 int tracker_in_logic(const TrackerCheck& k, std::string* missing) {
     if (k.needs[0] == '?' || item_counts[0].load(std::memory_order_relaxed) < 0) return -1;
@@ -1428,7 +1436,7 @@ void tracker_load() {
             TrackerCheck& k = tracker_checks[checks];
             k.needs[0] = '?', k.needs[1] = 0;   // (a file written before the rules were in it)
             char hash[32], gives[64];   // (the game side's: host/hos_main.c oot_tracker_load)
-            const int got = line[0] == '#' ? 0 : sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]|%31[^|]|%63[^|]|%f %f %f", k.area, k.kind,
+            const int got = line[0] == '#' ? 0 : sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%95[A-Z,-]|%31[^|]|%63[^|]|%f %f %f", k.area, k.kind,
                                                         k.folder, k.ages, &k.pos[0], &k.pos[1], &k.pos[2], k.needs, hash, gives, &k.stand[0], &k.stand[1],
                                                         &k.stand[2]);
             if (got >= 7) {

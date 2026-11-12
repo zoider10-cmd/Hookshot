@@ -74,7 +74,7 @@ def main():
         "Kokiri Forest|Gold Skulltula|KokiriForest|CA|5.0 6.0 7.0|KS", "Zora's River|Chest|ZoraRiver|CA|1.0 2.0 3.0|KS,SL,BB,BM"],
         "the checks' lines are not the area's name, the kind, the folder, the ages, the place and what the rules ask for, by area: %r" % lines[1:])
     # ---- the gifts and the scrubs' sales among them ----
-    check(set(seed.GIFT_PLACES) == {g.key for g in seed.GIFTS + seed.SCRUBS}, "a gift or a scrub's sale has no place for the tracker, or a place is of no gift: %r" % sorted(
+    check(set(seed.GIFT_PLACES) == {g.key for g in seed.GIFTS + seed.SCRUBS + seed.SONGS}, "a gift or a scrub's sale has no place for the tracker, or a place is of no gift: %r" % sorted(
         set(seed.GIFT_PLACES) ^ {g.key for g in seed.GIFTS + seed.SCRUBS}))
     check(all(ages in ("C", "A", "CA") and len(pos) == 3 and g.area in seed.AREA_NAMES and len(g.name) <= 55
               for g in seed.GIFTS + seed.SCRUBS for ages, pos in [seed.GIFT_PLACES[g.key]]), "a gift's place is not ages and three numbers, or its name is too long for a row")
@@ -126,7 +126,7 @@ def main():
     check(m and int(m.group(1)) == seed.CHECK_ROWS and "#define OOT_TRACKER_BASE 8192" in items and
           "static_assert(kTrackerChecks == OOT_TRACKER_MAX" in menu, "the game's side does not report as many checks as the script writes and the menu keeps")
     host_text = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]|%31[0-9a-fA-F-]|%63[A-Za-z0-9_]"' in host_text and "if (got < 7) continue;" in host_text and
+    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%95[A-Z,-]|%31[0-9a-fA-F-]|%63[A-Za-z0-9_]"' in host_text and "if (got < 7) continue;" in host_text and
           "rx_option_set(OOT_TRACKER_BASE + i, oot_checks[i].done == 1);" in host_text,
           "the game's side does not take the lines the menu takes, in their order, with what each gives")
     check("if (oot_checks[i].done == 1 || strcmp(oot_checks[i].item, name)) continue;" in host_text and
@@ -181,7 +181,7 @@ def main():
     check("named = lambda kind, h, area, pos, item=\"\": check_name(kind, item, about.get(h, {}), pos, exits[area], sub_areas[area])" in script and
           "for h, gyaml, pos, scale, words in marks(data):" in script and "%79[^|]" in block,
           "the checks are not written with their names, or the menu does not read a name whole")
-    check(set(seed.CHECK_CODES) == set(seed.PROGRESSION | seed.QUEST_GATES | seed.SHOP_GATES) and len(set(seed.CHECK_CODES.values())) == len(seed.CHECK_CODES),
+    check(set(seed.CHECK_CODES) == set(seed.PROGRESSION | seed.QUEST_GATES | seed.SHOP_GATES | seed.SONG_GATES) and len(set(seed.CHECK_CODES.values())) == len(seed.CHECK_CODES),
           "a gating item of the rules has no letters for the tracker, or two have the same")
     codes = re.findall(r'^    \{"([A-Z]{2})", "[^"]+", \{[^}]+\}\},$', menu, re.M)
     check(codes == list(seed.CHECK_CODES.values()), "the menu's gating items are not the script's letters: %r" % codes)
@@ -201,10 +201,10 @@ def main():
           seed.check_ages({"A_Child_Static", "A_Adult_Static"}) == "CA" and seed.check_ages({"FireTemple_Static.bcett.byml.zs"}) == "CA" and
           seed.check_ages(set()) == "", "the ages whose map has a check are not read from its files' names")
     check('with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\\n") as f:' in script and seed.CHECKS == "checks.txt" and
-          '" checks 8" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
+          '" checks 9" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
     m = re.search(r"constexpr int kTrackerChecks = (\d+);", menu)
     check(m and int(m.group(1)) == seed.CHECK_ROWS, "the menu does not keep as many checks as the script may write")
-    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%63[A-Z,-]|%31[^|]|%63[^|]|%f %f %f"' in menu and "char area[48], kind[80], folder[40], ages[4];" in menu and seed.CHECK_NAME == 79 and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
+    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%95[A-Z,-]|%31[^|]|%63[^|]|%f %f %f"' in menu and "char area[48], kind[80], folder[40], ages[4];" in menu and seed.CHECK_NAME == 79 and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
     check("if (press[3] || press[4]) tracker_pick[row] = (tracker_pick[row] + n + 1 + (press[4] ? 1 : -1)) % (n + 1), changed = true;" in menu and
           "else if (r.tracker >= 0) tracker_press(r.tracker, press, changed);" in menu,
           "Left and Right do not step through a row's checks and back to its own words")
