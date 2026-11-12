@@ -1206,10 +1206,24 @@ static int oot_flight_moved_away(Ctx *c, uint64_t actor, const float held[3]) {
     return apart > 2.0f * 2.0f;
 }
 
+/* (the randomizer's fork) <game folder>/rando/<name>, into out: 1, or 0 when the game's folder is not known */
+static int oot_place_file(char *out, size_t size, const char *name) {
+    char exe[MAX_PATH];
+    const DWORD n = hos_game_path_a(exe, MAX_PATH);
+    if (!n || n >= MAX_PATH) return 0;
+    char *slash = strrchr(exe, '\\');
+    char *other = strrchr(exe, '/');
+    if (other > slash) slash = other;
+    if (!slash) return 0;
+    *slash = 0;
+    snprintf(out, size, "%s/rando/%s", exe, name);
+    return 1;
+}
+
 static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components) {
     int rx_option(int id, int otherwise);
     static uint64_t flying_actor, marked_actor, marked_controller;
-    static int64_t last_tick, last_player_tick;
+    static int64_t last_tick, last_player_tick, hold_until, trace_until, trace_next;
     static float target[3], velocity[3], mark[3], yaw;
     int flying = rx_option(HOS_OPT_CHEAT_FLIGHT, 0) > 0;
     /* An event that takes Link (a map change he flew into, the age toggle's, a cutscene) waits for him to stand, and the
@@ -1238,7 +1252,12 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     } else if (action >= 100 && action < 124) {
         oot_set_time(c, action - 100);
     }
-    if (!flying && action != 2 && action != 3) return;
+    if (now < trace_until && now >= trace_next) {   /* (where Link is, twice a second, for a while after a go-to) */
+        trace_next = now + 500000000LL;
+        hos_log("cheats: go-to trace: Link at %.2f %.2f %.2f%s", oot_load_float(c, actor + 796), oot_load_float(c, actor + 800),
+                oot_load_float(c, actor + 804), now < hold_until ? " (held)" : "");
+    }
+    if (!flying && action != 2 && action != 3 && now >= hold_until) return;
 
     // Follow OneShotPhysicsCctChangePosition to Link's controller.
     const uint64_t controller = oot_player_controller(c, components);
@@ -1254,8 +1273,38 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
         marked_actor = actor;
         marked_controller = controller;
         hos_log("cheats: marked position %.2f %.2f %.2f", mark[0], mark[1], mark[2]);
+        {   /* (the randomizer's fork) and written beside the game, <game folder>/rando/position.txt: where Link stands, in
+               the map files' own coordinates, for finding what a map file has at a place */
+            char path[MAX_PATH + 32];
+            FILE *f = oot_place_file(path, sizeof path, "position.txt") ? fopen(path, "w") : NULL;
+            if (f) fprintf(f, "%.2f %.2f %.2f\n", mark[0], mark[1], mark[2]), fclose(f);
+        }
     }
-    const int returning = action == 3 && marked_controller == controller;
+    if (action == 3) {
+        /* (the randomizer's fork) Return to mark goes to the place written in <game folder>/rando/goto.txt, "x y z" in the
+           map files' coordinates, when that file says another place than the last one taken from it: a map's actor (a
+           Business Scrub, a chest) is reached by its coordinates. A place marked after that is the mark again. */
+        static char taken[96];
+        char path[MAX_PATH + 32], line[96] = "";
+        FILE *f = oot_place_file(path, sizeof path, "goto.txt") ? fopen(path, "r") : NULL;
+        if (f) {
+            float place[3], hold = 3;
+            if (fgets(line, sizeof line, f) && strcmp(line, taken) && sscanf(line, "%f %f %f %f", &place[0], &place[1], &place[2], &hold) >= 3) {
+                memcpy(mark, place, sizeof mark);
+                memcpy(taken, line, sizeof taken);
+                marked_actor = actor;
+                marked_controller = controller;
+                /* A place far from where Link stood has no ground yet (seen in play: he fell out of the map and was put
+                   back, a heart less): he is held there for three seconds, while the map around him is loaded. */
+                hold_until = now + (int64_t)(fminf(fmaxf(hold, 0), 60) * 1e9f);
+                trace_until = hold_until + 8000000000LL, trace_next = 0;
+                hos_log("cheats: the mark is rando/goto.txt's place, %.2f %.2f %.2f", mark[0], mark[1], mark[2]);
+            }
+            fclose(f);
+        }
+    }
+    if (action == 2 || marked_controller != controller) hold_until = 0;
+    const int returning = (action == 3 || now < hold_until) && marked_controller == controller;
     if (action == 3 && !returning) hos_log("cheats: no mark for this player controller");
     if (!flying && !returning) return;
     const int64_t elapsed = now - last_tick;
@@ -1327,7 +1376,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     change_position(c);
     flight_transform_controller = 0;
     *c = saved;
-    if (returning) hos_log("cheats: returned to %.2f %.2f %.2f", mark[0], mark[1], mark[2]);
+    if (action == 3 && returning) hos_log("cheats: returned to %.2f %.2f %.2f", mark[0], mark[1], mark[2]);
 }
 #endif
 

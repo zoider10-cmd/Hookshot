@@ -466,3 +466,19 @@ launcher's page and the build match it.
 `tests/test_rando_newgame.py` checks the open ways' flags and the opening's change on made-up files.
 `tests/test_rando_seed.py` checks `rando_seed.py`'s file changes and its shuffle on made-up map files;
 `tests/test_rando_shutters.py` checks which chests `rando_shutters.py` marks, on made-up actors.
+
+## Going to a place by its coordinates (the debug tools)
+
+For finding what a map file has at a place, and for standing where a map's actor is:
+
+- **Mark position** also writes where Link stands to `<game folder>/rando/position.txt`, as `x y z` in the map files'
+  own coordinates (an actor's `Translate`).
+- **Return to mark** goes to the place written in `<game folder>/rando/goto.txt` (`x y z`, and optionally the seconds
+  Link is held there, 3 when left out), once for each new line written there; a place marked after that is the mark
+  again. The log (`cheats: go-to trace`) says where Link is twice a second for a while after.
+
+The coordinates are those of the map Link is in: go to that map first (the Debug tab's teleport). Seen in play: jumps
+of 90 metres in Kokiri Forest, and one into the Lost Woods grotto of the two Business Scrubs (`9.5 83.6 -83.0`, after
+the teleport to the Lost Woods), land and stay. A place outside what the map lets Link stand on does not: the Business
+Scrub of Kokiri Forest's map file (`-128.0 114.6 -15.3`, a copy of the Lost Woods' start past the village's west exit)
+has ground under it, and the game takes Link back to his last safe place a second after he lands, a heart less.
