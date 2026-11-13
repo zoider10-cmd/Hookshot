@@ -94,6 +94,19 @@ Say "delete" ([SaveSlots]::Delete($dir, "save_rando", "Hard seed"))
 Say "names3" (Names "save_rando")
 Say "deleted" ((Test-Path (Join-Path $dir "user\save_slots\save_rando\Hard seed")) -eq $false)
 Say "end" (Read "save_rando")
+# (a copy of a save: of the one played, and of one waiting; the two go their own ways)
+Set-Content -Path (Join-Path $dir "rando\collected.txt") -Value "record main" -NoNewline
+Say "copynoname" ([SaveSlots]::Copy($dir, "save_rando", "Main", " . "))
+Say "copyempty" ([SaveSlots]::Copy($dir, "save_rando", "Save 3", "Of nothing"))
+Say "copytaken" ([SaveSlots]::Copy($dir, "save_rando", "Main", "save 2"))
+Say "copy" ([SaveSlots]::Copy($dir, "save_rando", "Main", "Main copy"))
+Say "copied" (Get-Content -Raw (Join-Path $dir "user\save_slots\save_rando\Main copy\0001\slot_00\progress.sav"))
+Say "copyrecord" (Get-Content -Raw (Join-Path $dir "user\save_slots\save_rando\Main copy.collected.txt"))
+Say "copynames" (Names "save_rando")
+Say "copyplayed" (Read "save_rando")
+Say "copywaiting" ([SaveSlots]::Copy($dir, "save_rando", "Main copy", "Third"))
+Say "copiedwaiting" (Get-Content -Raw (Join-Path $dir "user\save_slots\save_rando\Third\0001\slot_00\progress.sav"))
+Say "copyleft" ((Test-Path (Join-Path $dir "user\save_slots\save_rando\Third.part")) -or (Test-Path (Join-Path $dir "user\save_slots\save_rando\Main copy.part")))
 '''
 
 
@@ -162,6 +175,15 @@ def main():
     check(got["again"] == "" and got["againnow"] == "two" and got["back2"] == "", "a renamed save is not played with its own saves: %r" % got)
     check(got["delete"] == "" and got["names3"] == "Main,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10|Main" and got["deleted"] == "True" and got["end"] == "one",
           "a deleted save is not gone with what it held, or the save played was touched: %r" % got)
+    check(got["copynoname"] != "" and got["copyempty"] != "" and got["copytaken"] != "",
+          "a copy without a name, of an empty save, or under a name there is already, was made: %r" % got)
+    check(got["copy"] == "" and got["copied"] == "one" and got["copyrecord"] == "record main" and got["copyplayed"] == "one" and
+          got["copynames"].startswith("Main,Main copy,Save 2,") and got["copynames"].endswith("|Main"),
+          "a copy of the save played is not that save, whole, with its record, listed after it, or the save played is touched: %r" % got)
+    check(got["copywaiting"] == "" and got["copiedwaiting"] == "one" and got["copyleft"] == "False",
+          "a copy of a save that waits is not made, or a half-made folder is left: %r" % got)
+    check("copy.Click += (o, e) => OnCopy();" in src and "SaveSlots.Copy(dir, SaveCopies.Folders[Mode], (string)list.SelectedItem, to);" in src and
+          "SaveSlots.Copy(dir, saveFolder, from, to);" in src, "the windows have no button to copy a save")
     print("PASS: the launcher's saves to play")
 
 

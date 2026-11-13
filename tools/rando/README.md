@@ -63,7 +63,8 @@ save folder under a name: the one played is in the game's folder (`user/save`, `
 others wait in `user/save_slots/<save folder>/<name>`, and choosing another moves the one played out and the chosen
 one in, so each keeps its own progress. There are ten to begin with, "Save 1" to "Save 10": the first is the saves the player
 already had and the others are empty slots without a name ("Slot 3: empty"), given one when first played, as a new
-file is in the first Zelda (`SaveNameForm`); more can be made, with a name, beyond the ten. Nothing is moved or
+file is in the first Zelda (`SaveNameForm`); more can be made, with a name, beyond the ten, and a save
+can be copied, whole, as one more save (`SaveSlots.Copy`: the two go their own ways from then on). Nothing is moved or
 written until another is chosen. The randomizer's record of the checks collected (`rando/collected.txt`) goes with
 its save. The seed does not: two randomizer saves of different seeds need the seed set again when changing
 (`SaveSlots`, launcher/Launcher.cs; `tests/test_save_slots.py`).

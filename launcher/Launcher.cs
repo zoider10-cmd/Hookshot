@@ -202,6 +202,36 @@ public static class SaveSlots {
         } catch (Exception ex) { return ex.Message; }
     }
 
+    // A copy of the save named `name`, whole, as one more save named `to`: the two go their own ways from then on.
+    // Returns null, or what went wrong (then nothing is made).
+    public static string Copy(string dir, string saveFolder, string name, string to) {
+        string clean = SaveCopies.Clean(to), current;
+        if (clean.Length == 0) return "Give the copy a name.";
+        var names = Names(dir, saveFolder, out current);
+        int at = names.FindIndex(n => Same(n, name));
+        if (at < 0) return "That save is not there any more.";
+        if (Has(names, clean)) return "There is already a save named \"" + clean + "\".";
+        bool played = Same(current, names[at]);
+        string root = Root(dir, saveFolder), from = played ? Path.Combine(dir, "user", saveFolder) : Path.Combine(root, names[at]);
+        if (!HasFiles(from)) return "That save is empty: there is nothing to copy.";
+        string dest = Path.Combine(root, clean), part = dest + ".part";
+        try {
+            if (Directory.Exists(dest)) return "\"" + clean + "\" has saves waiting already. Look in:\n" + dest;
+            if (Directory.Exists(part)) Directory.Delete(part, true);
+            SaveCopies.CopyTree(from, part);
+            Directory.Move(part, dest);   // (whole, or not there)
+            // (the randomizer's record of the checks collected is copied with its save)
+            string record = played ? (saveFolder == "save_rando" ? Path.Combine(dir, "rando", "collected.txt") : null) : from + ".collected.txt";
+            try { if (record != null && File.Exists(record)) File.Copy(record, dest + ".collected.txt", true); } catch { }
+            names.Insert(at + 1, clean);
+            Write(dir, saveFolder, current, names);
+            return null;
+        } catch (Exception ex) {
+            try { if (Directory.Exists(part)) Directory.Delete(part, true); } catch { }
+            return ex.Message;
+        }
+    }
+
     // (a save that is not being played, and what it held, gone for good)
     public static string Delete(string dir, string saveFolder, string name) {
         string current;
@@ -309,6 +339,7 @@ class SaveSlotsForm : Form {
     readonly TextBox name = new TextBox();
     readonly ListBox list = new ListBox();
     readonly Button play = new Button(), add = new Button(), rename = new Button(), delete = new Button(), close = new Button();
+    readonly Button copy = new Button();
     readonly HashSet<string> empty = new HashSet<string>();   // (the saves that hold nothing)
     string current;
 
@@ -324,14 +355,16 @@ class SaveSlotsForm : Form {
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
         list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (playing)", n => SaveSlots.Shown(n, empty.Contains(n)));
-        Style(play, "Play this save", 16, 264, 150); Style(delete, "Delete", 176, 264, 110); Style(close, "Close", 394, 264, 110);
-        var mid = new Label { Text = "A name, for a new save or to rename the chosen one:", AutoSize = true, Location = new Point(16, 312) };
+        Style(play, "Play this save", 16, 264, 150); Style(delete, "Delete", 176, 264, 100); Style(copy, "Copy", 284, 264, 100);
+        Style(close, "Close", 394, 264, 110);
+        var mid = new Label { Text = "A name, for a new save, a copy of the chosen one, or to rename it:", AutoSize = true, Location = new Point(16, 312) };
         name.SetBounds(16, 338, 248, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         Style(add, "New save", 274, 336, 110); Style(rename, "Rename", 394, 336, 110);
         var foot = new Label { Text = "A new save starts a new game. Save copies keeps snapshots of the save being played. Close the game first.",
                                AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 384), Size = new Size(488, 38), Font = new Font("Segoe UI", 8.5f) };
-        Controls.AddRange(new Control[] { top, list, play, delete, close, mid, name, add, rename, foot });
+        Controls.AddRange(new Control[] { top, list, play, delete, copy, close, mid, name, add, rename, foot });
+        copy.Click += (o, e) => OnCopy();
         CancelButton = close;
         play.Click += (o, e) => OnSelect();
         add.Click += (o, e) => OnNew();
@@ -352,6 +385,7 @@ class SaveSlotsForm : Form {
         string n = list.SelectedIndex >= 0 ? (string)list.SelectedItem : null;
         play.Enabled = delete.Enabled = n != null && n != current;
         rename.Enabled = n != null;
+        copy.Enabled = n != null && !empty.Contains(n);
     }
 
     void Fill(string select) {
@@ -388,6 +422,15 @@ class SaveSlotsForm : Form {
         Fill(n);
     }
 
+    void OnCopy() {
+        if (list.SelectedIndex < 0) return;
+        string from = (string)list.SelectedItem, to = SaveCopies.Clean(name.Text);
+        string error = SaveSlots.Copy(dir, saveFolder, from, to);
+        if (error != null) { Say(error, MessageBoxIcon.Warning); return; }
+        name.Text = "";
+        Fill(to);
+    }
+
     void OnRename() {
         if (list.SelectedIndex < 0) return;
         string from = (string)list.SelectedItem, to = SaveCopies.Clean(name.Text);
@@ -419,7 +462,7 @@ class PlayChoiceForm : Form {
     readonly Button[] modes = new Button[3];
     readonly ListBox list = new ListBox();
     readonly TextBox name = new TextBox();
-    readonly Button add = new Button(), play = new Button(), cancel = new Button();
+    readonly Button add = new Button(), play = new Button(), cancel = new Button(), copy = new Button();
     readonly HashSet<string> empty = new HashSet<string>();   // (the saves that hold nothing)
     string current;
 
@@ -444,13 +487,15 @@ class PlayChoiceForm : Form {
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
         list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (last played)", n => SaveSlots.Shown(n, empty.Contains(n)));
-        var low = new Label { Text = "One more save, beyond these (a new game):", AutoSize = true, Location = new Point(16, 360) };
-        name.SetBounds(16, 386, 368, 26); name.MaxLength = 80;
+        var low = new Label { Text = "A name, for one more save (a new game) or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 360) };
+        name.SetBounds(16, 386, 252, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
-        Style(add, "New save", 394, 384, 110);
+        Style(add, "New save", 278, 384, 110); Style(copy, "Copy save", 394, 384, 110);
         Style(play, "Play", 278, 444, 110); Style(cancel, "Cancel", 394, 444, 110);
         play.BackColor = Theme.Blue;
-        Controls.AddRange(new Control[] { mid, list, low, name, add, play, cancel });
+        Controls.AddRange(new Control[] { mid, list, low, name, add, copy, play, cancel });
+        copy.Click += (o, e) => OnCopy();
+        list.SelectedIndexChanged += (o, e) => copy.Enabled = list.SelectedIndex >= 0 && !empty.Contains((string)list.SelectedItem);
         AcceptButton = play; CancelButton = cancel;
         add.Click += (o, e) => OnNew();
         play.Click += (o, e) => OnPlay();
@@ -484,6 +529,15 @@ class PlayChoiceForm : Form {
         if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         name.Text = "";
         Fill(n);
+    }
+
+    void OnCopy() {
+        if (list.SelectedIndex < 0) return;
+        string to = SaveCopies.Clean(name.Text);
+        string error = SaveSlots.Copy(dir, SaveCopies.Folders[Mode], (string)list.SelectedItem, to);
+        if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        name.Text = "";
+        Fill(to);
     }
 
     void OnPlay() {
@@ -560,7 +614,7 @@ public static class SaveCopies {
         return found;
     }
 
-    static void CopyTree(string from, string to) {
+    public static void CopyTree(string from, string to) {
         Directory.CreateDirectory(to);
         foreach (string f in Directory.GetFiles(from)) File.Copy(f, Path.Combine(to, Path.GetFileName(f)), true);
         foreach (string d in Directory.GetDirectories(from)) CopyTree(d, Path.Combine(to, Path.GetFileName(d)));
