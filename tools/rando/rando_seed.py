@@ -405,7 +405,7 @@ WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,
 # to stand (SHELF_TURN, added to its shelf's angles), twice its size and a little higher, its frame shows in the
 # Bazaar's light; in the Kokiri and the Goron shops it was still not made out. Its name and words are right when its
 # shelf is looked at. Not solved.
-SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": 0.15}
+SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": 0.15, "Item_Range_Bow": 0.15}
 
 
 def shelf_lift(item, floor):
@@ -453,8 +453,11 @@ SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_
                "Item_Gauntlet_Gold": 1.0, "Item_Gauntlet_Silver": 1.0, "Item_Gauntlet_Goron": 1.0}
 # (the Fairy Bow's model is long front to back, 1.36 m along its own Z: on the Kokiri shop's shelf it lay pointing at
 # the viewer, its end alone to be seen behind the price board (its owner's picture, 2026-11-13). A quarter turn about
-# the upright lays it across. Not seen yet with the turn; the hammer, the sword and the stick bundle are long the same way.)
-SHELF_TURN = {"Item_GlassTruth": (-1.57, 0.0, 0.0), "Item_Range_Bow": (0.0, 1.57, 0.0)}
+# the upright laid it across, flat: a thin line. With a quarter turn about Z too it lies across with its curve and
+# string to the viewer: seen so on a shelf of the Bazaar and one of the Goron shop, whose own angles differ (of four
+# turns tried on each, the one that showed it the same in both). The hammer, the sword and the stick bundle are long
+# the same way and lie as they did: seen, and left.)
+SHELF_TURN = {"Item_GlassTruth": (-1.57, 0.0, 0.0), "Item_Range_Bow": (0.0, 1.57, 1.57)}
 # An item whose model is made where it is worn, not at its own origin (the gauntlets: 1.17 m up): its shelf's actor is
 # put that much lower (shelf_fit). The gauntlets keep their size: their box is the pair's, 1.6 m from one to the other.
 SHELF_WORN = 0.5
