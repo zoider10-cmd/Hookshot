@@ -103,15 +103,16 @@ static class RandoId {
 // The game has one save folder a game (user\save, user\save_rando, user\save_mq) and its load menu lists one save of the
 // player's own and five it makes itself. A save here is that whole folder under a name: the one being played is in the
 // game's folder, the others wait in <game folder>\user\save_slots\<save folder>\<name>. Choosing another moves the one
-// played out to its name and the chosen one in, so each keeps its own progress. There are five to begin with, "Save 1"
-// to "Save 5": the first is the saves the player had, the others are empty (a new game), and nothing is moved or
-// written until another is chosen.
+// played out to its name and the chosen one in, so each keeps its own progress. There are ten to begin with, "Save 1"
+// to "Save 10": the first is the saves the player had, the others are empty (a new game), and nothing is moved or
+// written until another is chosen. An empty one of those is a slot without a name ("Slot 3: empty"), and is given one
+// when it is first played (SaveNameForm); more can be made, with a name, beyond the ten.
 // <game folder>\user\save_slots\<save folder>.txt: the name being played, then every name in its order.
 // The randomizer's record of the checks collected (rando\collected.txt) goes with its save. tests/test_save_slots.py
 public static class SaveSlots {
     public const string Folder = "save_slots";
     public const string First = "Save 1";
-    public const int Defaults = 5;
+    public const int Defaults = 10;
 
     public static string Root(string dir, string saveFolder) { return Path.Combine(dir, "user", Folder, saveFolder); }
     static string ListFile(string dir, string saveFolder) { return Path.Combine(dir, "user", Folder, saveFolder + ".txt"); }
@@ -134,7 +135,7 @@ public static class SaveSlots {
                 else if (!Has(names, n)) names.Add(n);
             }
         } catch { }
-        // (with no list yet there are five, "Save 1" to "Save 5": the first is the saves in the game, the others are empty)
+        // (with no list yet there are ten, "Save 1" to "Save 10": the first is the saves in the game, the others are empty)
         if (!listed) { current = First; for (int i = 1; i <= Defaults; i++) names.Add("Save " + i); }
         // (a save waiting in its folder that the list forgot is still a save)
         try {
@@ -161,6 +162,17 @@ public static class SaveSlots {
 
     static bool HasFiles(string path) {
         return Directory.Exists(path) && Directory.GetFiles(path, "*", SearchOption.AllDirectories).Length > 0;
+    }
+
+    // (a save that holds nothing: the one played with no saves in the game's folder, or one waiting with no folder)
+    public static bool IsEmpty(string dir, string saveFolder, string name) {
+        return !HasFiles(Same(Current(dir, saveFolder), name) ? Path.Combine(dir, "user", saveFolder) : Path.Combine(Root(dir, saveFolder), name));
+    }
+    // (one of the slots there are to begin with, not named by the player yet)
+    public static bool Unnamed(string name) { return Regex.IsMatch(name ?? "", @"^Save \d+$"); }
+    // (what the lists say for a save: an empty slot without a name is "Slot 3:  empty")
+    public static string Shown(string name, bool empty) {
+        return !empty ? name : Unnamed(name) ? "Slot " + name.Substring(5) + ":  empty" : name + "   (empty)";
     }
 
     // A save of that name, empty: a new game when it is played. Returns null, or what went wrong.
@@ -249,12 +261,55 @@ public static class SaveSlots {
     }
 }
 
+// (a save that holds nothing yet is given its name before it is first played, as a new file is in the first Zelda: the
+// slot is "Save N" until then)
+class SaveNameForm : Form {
+    public string Value;
+    readonly TextBox name = new TextBox();
+
+    SaveNameForm(string slot) {
+        Text = "Name the new save";
+        FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(400, 150);
+        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        var top = new Label { Text = SaveSlots.Shown(slot, true).Replace(":  empty", "") + " is empty. Give the new game a name:", AutoSize = true, Location = new Point(16, 16) };
+        name.SetBounds(16, 46, 368, 26); name.MaxLength = 40;
+        name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
+        var ok = new Button { Text = "Start", DialogResult = DialogResult.None };
+        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
+        foreach (var b in new[] { ok, cancel }) {
+            b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White;
+            b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+        }
+        ok.SetBounds(158, 100, 110, 30); cancel.SetBounds(274, 100, 110, 30); ok.BackColor = Theme.Blue;
+        Controls.AddRange(new Control[] { top, name, ok, cancel });
+        AcceptButton = ok; CancelButton = cancel;
+        ok.Click += (o, e) => { Value = SaveCopies.Clean(name.Text); if (Value.Length > 0) { DialogResult = DialogResult.OK; Close(); } };
+    }
+
+    // The save named `name` of that game, when it is empty and not named yet, is given the name the player types. false:
+    // the player gave none (nothing is played). ref name: the save's name from then on.
+    public static bool Ask(IWin32Window owner, string dir, string saveFolder, ref string name) {
+        if (!SaveSlots.Unnamed(name) || !SaveSlots.IsEmpty(dir, saveFolder, name)) return true;
+        while (true) {
+            using (var f = new SaveNameForm(name)) {
+                if (f.ShowDialog(owner) != DialogResult.OK) return false;
+                string error = SaveSlots.Rename(dir, saveFolder, name, f.Value);
+                if (error == null) { name = f.Value; return true; }
+                MessageBox.Show(owner, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+    }
+}
+
 // (the window of the Save button: the saves of one game, to choose the one played, make a new one, rename or delete)
 class SaveSlotsForm : Form {
     readonly string dir, saveFolder;
     readonly TextBox name = new TextBox();
     readonly ListBox list = new ListBox();
     readonly Button play = new Button(), add = new Button(), rename = new Button(), delete = new Button(), close = new Button();
+    readonly HashSet<string> empty = new HashSet<string>();   // (the saves that hold nothing)
     string current;
 
     public SaveSlotsForm(string dir, string saveFolder) {
@@ -268,7 +323,7 @@ class SaveSlotsForm : Form {
         list.SetBounds(16, 40, 488, 212); list.IntegralHeight = false;
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
-        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (playing)");
+        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (playing)", n => SaveSlots.Shown(n, empty.Contains(n)));
         Style(play, "Play this save", 16, 264, 150); Style(delete, "Delete", 176, 264, 110); Style(close, "Close", 394, 264, 110);
         var mid = new Label { Text = "A name, for a new save or to rename the chosen one:", AutoSize = true, Location = new Point(16, 312) };
         name.SetBounds(16, 338, 248, 26); name.MaxLength = 80;
@@ -300,8 +355,11 @@ class SaveSlotsForm : Form {
     }
 
     void Fill(string select) {
-        list.Items.Clear();
-        foreach (string n in SaveSlots.Names(dir, saveFolder, out current)) list.Items.Add(n);
+        list.Items.Clear(); empty.Clear();
+        foreach (string n in SaveSlots.Names(dir, saveFolder, out current)) {
+            list.Items.Add(n);
+            if (SaveSlots.IsEmpty(dir, saveFolder, n)) empty.Add(n);
+        }
         list.SelectedItem = select ?? current;
         Buttons();
     }
@@ -316,6 +374,7 @@ class SaveSlotsForm : Form {
     void OnSelect() {
         if (list.SelectedIndex < 0 || (string)list.SelectedItem == current || Running()) return;
         string n = (string)list.SelectedItem;
+        if (!SaveNameForm.Ask(this, dir, saveFolder, ref n)) return;   // (an empty slot is named before it is played)
         string error = SaveSlots.Select(dir, saveFolder, n);
         if (error != null) Say(error, MessageBoxIcon.Warning);
         Fill(n);
@@ -361,6 +420,7 @@ class PlayChoiceForm : Form {
     readonly ListBox list = new ListBox();
     readonly TextBox name = new TextBox();
     readonly Button add = new Button(), play = new Button(), cancel = new Button();
+    readonly HashSet<string> empty = new HashSet<string>();   // (the saves that hold nothing)
     string current;
 
     public PlayChoiceForm(string dir, int mode) {
@@ -368,7 +428,7 @@ class PlayChoiceForm : Form {
         Text = "Choose the game and the save";
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(520, 452);
+        ClientSize = new Size(520, 492);
         BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
         var top = new Label { Text = "The game:", AutoSize = true, Location = new Point(16, 14) };
         Controls.Add(top);
@@ -380,15 +440,15 @@ class PlayChoiceForm : Form {
             Controls.Add(modes[i]);
         }
         var mid = new Label { Text = "Its save. Each keeps its own progress:", AutoSize = true, Location = new Point(16, 92) };
-        list.SetBounds(16, 118, 488, 190); list.IntegralHeight = false;
+        list.SetBounds(16, 118, 488, 230); list.IntegralHeight = false;
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
-        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (last played)");
-        var low = new Label { Text = "A new save starts a new game:", AutoSize = true, Location = new Point(16, 320) };
-        name.SetBounds(16, 346, 368, 26); name.MaxLength = 80;
+        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (last played)", n => SaveSlots.Shown(n, empty.Contains(n)));
+        var low = new Label { Text = "One more save, beyond these (a new game):", AutoSize = true, Location = new Point(16, 360) };
+        name.SetBounds(16, 386, 368, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
-        Style(add, "New save", 394, 344, 110);
-        Style(play, "Play", 278, 404, 110); Style(cancel, "Cancel", 394, 404, 110);
+        Style(add, "New save", 394, 384, 110);
+        Style(play, "Play", 278, 444, 110); Style(cancel, "Cancel", 394, 444, 110);
         play.BackColor = Theme.Blue;
         Controls.AddRange(new Control[] { mid, list, low, name, add, play, cancel });
         AcceptButton = play; CancelButton = cancel;
@@ -410,8 +470,11 @@ class PlayChoiceForm : Form {
             modes[i].BackColor = on ? (i == 2 ? Color.FromArgb(150, 110, 46) : Theme.Blue) : Color.FromArgb(30, 46, 78);
             modes[i].FlatAppearance.BorderColor = on ? Color.White : Color.FromArgb(60, 90, 150);
         }
-        list.Items.Clear();
-        foreach (string n in SaveSlots.Names(dir, SaveCopies.Folders[Mode], out current)) list.Items.Add(n);
+        list.Items.Clear(); empty.Clear();
+        foreach (string n in SaveSlots.Names(dir, SaveCopies.Folders[Mode], out current)) {
+            list.Items.Add(n);
+            if (SaveSlots.IsEmpty(dir, SaveCopies.Folders[Mode], n)) empty.Add(n);
+        }
         list.SelectedItem = select ?? current;
     }
 
@@ -426,6 +489,7 @@ class PlayChoiceForm : Form {
     void OnPlay() {
         if (list.SelectedIndex < 0) return;
         Save = (string)list.SelectedItem;
+        if (!SaveNameForm.Ask(this, dir, SaveCopies.Folders[Mode], ref Save)) return;   // (an empty slot is named before it is played)
         DialogResult = DialogResult.OK; Close();
     }
 }
@@ -595,12 +659,14 @@ class SaveCopiesForm : Form {
     public static readonly Color Gold = Color.FromArgb(232, 190, 96);
 
     // (a list of copies drawn with the current one in gold and named so)
-    public static void DrawCopy(ListBox list, DrawItemEventArgs e, string current, int from = 0, string mark = "   (current)") {
+    public static void DrawCopy(ListBox list, DrawItemEventArgs e, string current, int from = 0, string mark = "   (current)",
+                                Func<string, string> shown = null) {
         if (e.Index < 0) return;
         string n = (string)list.Items[e.Index];
+        string text = shown != null ? shown(n) : n;   // (what is said for it: an empty slot's, dim)
         bool chosen = (e.State & DrawItemState.Selected) != 0, cur = e.Index >= from && n == current;
         using (var b = new SolidBrush(chosen ? Theme.Blue : list.BackColor)) e.Graphics.FillRectangle(b, e.Bounds);
-        TextRenderer.DrawText(e.Graphics, cur ? n + mark : n, list.Font, e.Bounds, chosen ? Color.White : cur ? Gold : Theme.Text,
+        TextRenderer.DrawText(e.Graphics, cur ? text + mark : text, list.Font, e.Bounds, chosen ? Color.White : cur ? Gold : text != n ? Theme.Dim : Theme.Text,
                               TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
     }
 

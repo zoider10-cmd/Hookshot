@@ -6,8 +6,8 @@ read on every platform: the button is on the page for the game the Randomizer se
 page, and a change is refused while the game runs. On Windows the launcher's source is compiled with the .NET
 Framework's own compiler, as launcher/build.ps1 does, and SaveSlots is run on a made-up game folder:
 
-- with nothing made yet there are five saves, "Save 1" to "Save 5"; the first is the saves the player had and the
-  others are empty: nothing is moved or written;
+- with nothing made yet there are ten saves, "Save 1" to "Save 10"; the first is the saves the player had and the
+  others are empty slots without a name ("Slot 3:  empty"), named when first played: nothing is moved or written;
 - a new save is empty, and choosing it moves the saves played out to their name, whole, and leaves the game's folder
   empty (a new game); choosing the first again brings its saves back and takes the other's out;
 - each game's saves are apart (the normal game's, the randomizer's, Master Quest's);
@@ -54,6 +54,10 @@ New-Item -ItemType Directory -Force (Join-Path $dir "rando") | Out-Null
 Set-Content -Path (Join-Path $dir "rando\collected.txt") -Value "record one" -NoNewline
 Say "first" (Names "save_rando")
 Say "untouched" ((Test-Path (Join-Path $dir "user\save_slots")) -eq $false)
+Say "emptyfirst" ([SaveSlots]::IsEmpty($dir, "save_rando", "Save 1"))
+Say "emptythird" ([SaveSlots]::IsEmpty($dir, "save_rando", "Save 3"))
+Say "shown" (([SaveSlots]::Shown("Save 3", $true)) + "|" + ([SaveSlots]::Shown("Save 3", $false)) + "|" + ([SaveSlots]::Shown("Zelda", $true)))
+Say "unnamed" ("" + [SaveSlots]::Unnamed("Save 12") + [SaveSlots]::Unnamed("Save one") + [SaveSlots]::Unnamed("My Save 3"))
 Say "sameagain" ([SaveSlots]::Select($dir, "save_rando", "Save 1"))
 Say "noname" ([SaveSlots]::Add($dir, "save_rando", " .. "))
 Say "new" ([SaveSlots]::Add($dir, "save_rando", "Second run"))
@@ -132,11 +136,18 @@ def main():
                              capture_output=True, text=True)
         check(ran.returncode == 0, "the saves to play could not be run:\n" + ran.stdout + ran.stderr)
         got = dict(line.split("=", 1) for line in ran.stdout.splitlines() if "=" in line)
-    check(got["first"] == "Save 1,Save 2,Save 3,Save 4,Save 5|Save 1" and got["untouched"] == "True" and got["sameagain"] == "",
-          "with nothing made yet there are not five saves with the first the saves the player had, or something is moved: %r" % got)
-    check(got["noname"] != "" and got["new"] == "" and got["twice"] != "" and got["listed"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Second run|Save 1" and got["stillone"] == "one",
+    check(got["first"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10|Save 1" and got["untouched"] == "True" and got["sameagain"] == "",
+          "with nothing made yet there are not ten saves with the first the saves the player had, or something is moved: %r" % got)
+    check(got["emptyfirst"] == "False" and got["emptythird"] == "True" and got["shown"] == "Slot 3:  empty|Save 3|Zelda   (empty)" and
+          got["unnamed"] == "TrueFalseFalse", "an empty slot is not told from one with saves, or is not shown as a slot without a name: %r" % got)
+    check("if (!SaveNameForm.Ask(this, dir, saveFolder, ref n)) return;" in src and
+          "if (!SaveNameForm.Ask(this, dir, SaveCopies.Folders[Mode], ref Save)) return;" in src and
+          "if (!SaveSlots.Unnamed(name) || !SaveSlots.IsEmpty(dir, saveFolder, name)) return true;" in src and
+          "public const int Defaults = 10;" in src,
+          "an empty slot is played without being named first, or there are not ten to begin with")
+    check(got["noname"] != "" and got["new"] == "" and got["twice"] != "" and got["listed"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10,Second run|Save 1" and got["stillone"] == "one",
           "a new save is not listed after the first, a name is used twice, or making one changes the saves played: %r" % got)
-    check(got["select"] == "" and got["empty"] == "none" and got["waiting"] == "one" and got["playing"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Second run|Second run",
+    check(got["select"] == "" and got["empty"] == "none" and got["waiting"] == "one" and got["playing"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10,Second run|Second run",
           "choosing a new save does not move the saves played out, whole, and leave a new game: %r" % got)
     check(got["recordout"] == "True" and got["recordback"] == "record one" and got["againrecord"] == "record two",
           "the randomizer's record of the checks collected does not go with its save: %r" % got)
@@ -144,12 +155,12 @@ def main():
     check(got["back"] == "" and got["backnow"] == "one" and got["otherwaits"] == "two",
           "choosing the first save again does not bring its saves back and take the other's out: %r" % got)
     check(got["gone"] != "" and got["outside"] != "", "a save that is not there, or a path out of the saves, was chosen")
-    check(got["normal"] == "normal" and got["normalnames"] == "Save 1,Save 2,Save 3,Save 4,Save 5|Save 1" and got["mqnames"] == "Save 1,Save 2,Save 3,Save 4,Save 5|Save 1",
+    check(got["normal"] == "normal" and got["normalnames"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10|Save 1" and got["mqnames"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10|Save 1",
           "the normal game's saves, or Master Quest's, are not apart from the randomizer's: %r" % got)
     check(got["rename"] == "" and got["renamed"] == "two" and got["renameplayed"] == "" and got["renametaken"] != "" and
-          got["names2"] == "Main,Save 2,Save 3,Save 4,Save 5,Hard seed|Main", "a save is not renamed, played or waiting, or takes another's name: %r" % got)
+          got["names2"] == "Main,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10,Hard seed|Main", "a save is not renamed, played or waiting, or takes another's name: %r" % got)
     check(got["again"] == "" and got["againnow"] == "two" and got["back2"] == "", "a renamed save is not played with its own saves: %r" % got)
-    check(got["delete"] == "" and got["names3"] == "Main,Save 2,Save 3,Save 4,Save 5|Main" and got["deleted"] == "True" and got["end"] == "one",
+    check(got["delete"] == "" and got["names3"] == "Main,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10|Main" and got["deleted"] == "True" and got["end"] == "one",
           "a deleted save is not gone with what it held, or the save played was touched: %r" % got)
     print("PASS: the launcher's saves to play")
 
