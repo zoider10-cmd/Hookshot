@@ -75,7 +75,7 @@ def main():
     imp = block(boot, "static void save_folder_import(")
     check(imp.count("hos_save_folder()") == 2 and '"%s\\\\save"' not in imp and "%s\\\\save\\\\5a3c" not in imp,
           "host/hos_main.c: the SAVE FOLDER import does not go into the saves this start plays with")
-    check('string SaveFolder() { return settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0 ? "save_rando" : "save"; }' in launcher and
+    check('string SaveFolder() { return mqMode ? "save_mq" : settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0 ? "save_rando" : "save"; }' in launcher and
           'OpenFolder(Path.Combine(dir, "user", SaveFolder()))' in launcher, "the launcher's Saves button does not open the folder the next Play uses")
     check('if (hos_master_quest()) return "save_mq";' in side and 'if (hos_master_quest() && !_stricmp(mods[i].name, "rando-seed")) {' in read("host", "mods.c"),
           "Master Quest does not keep its saves apart, or loads the randomizer's seed over its own dungeons")

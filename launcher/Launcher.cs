@@ -1070,6 +1070,34 @@ class GoldChoice : Widget {
     }
 }
 
+// (the game Play starts, over the Play button: the normal game, the randomizer, Master Quest. One is on)
+class ModeStrip : Widget {
+    public string[] Names; public Func<int> Get; public Action<int> Set;
+    public override void Down(PointF p, LauncherForm ui) {
+        int i = (int)((p.X - R.X) / (R.Width / Names.Length));
+        if (i >= 0 && i < Names.Length && Set != null) Set(i);
+    }
+    public override void Paint(Graphics g, LauncherForm ui) {
+        int on = Get();
+        using (var path = Theme.Round(R, 10)) {
+            using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, path);
+            using (var pen = new Pen(Theme.Line, 1f)) g.DrawPath(pen, path);
+        }
+        float w = R.Width / Names.Length;
+        for (int i = 0; i < Names.Length; i++) {
+            var r = new RectangleF(R.X + i * w + 3, R.Y + 3, w - 6, R.Height - 6);
+            if (i == on) {
+                Color c = i == 2 ? Color.FromArgb(226, 184, 106) : Theme.Blue;
+                using (var path = Theme.Round(r, 8)) {
+                    using (var b = new SolidBrush(Theme.A(c, i == 2 ? 46 : 120))) g.FillPath(b, path);
+                    using (var pen = new Pen(c, 1.2f)) g.DrawPath(pen, path);
+                }
+            }
+            Theme.Text_(g, Names[i], Theme.Label, i == on ? Color.White : Theme.Mix(Theme.Dim, Theme.Text, Hover), r, StringAlignment.Center, StringAlignment.Center);
+        }
+    }
+}
+
 class TabW : Widget {
     public string Text; public int Index;
     public override void Down(PointF p, LauncherForm ui) { ui.ShowPage(Index); }
@@ -1327,14 +1355,18 @@ class LauncherForm : Form {
         updateButton = new Btn { Text = "Check again", R = new RectangleF(236, 448, 116, 30), Font = Theme.Label, Enabled = false };
         updateButton.Click = OnUpdateButton;
         widgets.Add(updateButton);
-        playButton = new Btn { Text = "PLAY", Style = Btn.Kind.Play, R = new RectangleF(32, 504, 336, 62), Click = OnPlay };
+        // (one Play button, and over it the game it starts: the normal game, the randomizer or Master Quest. PlayMode)
+        widgets.Add(new ModeStrip { Names = new[] { "Normal", "Randomizer", "Master Quest" }, R = new RectangleF(32, 504, 336, 34),
+                                    Get = PlayMode, Set = SetPlayMode });
+        playButton = new Btn { Text = "PLAY", Style = Btn.Kind.Play, R = new RectangleF(32, 548, 336, 84), Click = OnPlay };
         widgets.Add(playButton);
         // (Mako) Master Quest's own Play, under it: its logo on the button (prompts/mq/logo.png, made by the build from the player's files)
         try {
             string mqPath = Path.Combine(dir, "prompts", "mq", "logo.png");
             if (File.Exists(mqPath)) mqLogo = Image.FromStream(new MemoryStream(File.ReadAllBytes(mqPath)));
         } catch { }
-        widgets.Add(new Btn { Text = "MASTER QUEST", Style = Btn.Kind.Play, Gold = true, Logo = mqLogo, R = new RectangleF(32, 576, 336, 64), Click = () => OnPlay(true) });
+        try { mqMode = File.ReadAllText(ModeFile).Trim() == "mq"; } catch { }
+        SyncPlay();
         widgets.Add(new Btn { Text = "Made by sharkiix  ·  based on Hookshot", Style = Btn.Kind.Link, R = new RectangleF(32, 648, 300, 24),
                               Click = () => OpenUrl(Fork.Home) });
 
@@ -1895,7 +1927,25 @@ class LauncherForm : Form {
 
     // (the game keeps a seed's saves apart from its own: host/oot_rando.c hos_save_folder. The Saves button opens the ones
     // the next Play uses)
-    string SaveFolder() { return settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0 ? "save_rando" : "save"; }
+    string SaveFolder() { return mqMode ? "save_mq" : settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0 ? "save_rando" : "save"; }
+
+    // The game Play starts: 0 the normal game, 1 the randomizer, 2 Master Quest. The randomizer is the Randomizer page's
+    // own setting (rando_on), so the two say the same; Master Quest is kept in <game folder>\user\play_mode.txt ("mq")
+    // and comes first, as in the game (host/oot_rando.c hos_save_folder). The Play button is Master Quest's gold one then.
+    bool mqMode;
+    string ModeFile { get { return Path.Combine(dir, "user", "play_mode.txt"); } }
+    public int PlayMode() { return mqMode ? 2 : settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0 ? 1 : 0; }
+    void SetPlayMode(int mode) {
+        mqMode = mode == 2;
+        if (mode != 2 && settings.ContainsKey("rando_on")) settings["rando_on"].Set(mode == 1 ? 1 : 0, true);
+        try { Directory.CreateDirectory(Path.Combine(dir, "user")); File.WriteAllText(ModeFile, mqMode ? "mq" : "game"); } catch { }
+        SyncPlay();
+    }
+    void SyncPlay() {
+        if (playButton == null) return;
+        playButton.Gold = mqMode; playButton.Logo = mqMode ? mqLogo : null;
+        Invalidate();
+    }
 
     // (the saves of one game, to choose the one played; the Save buttons read the name again after it)
     public bool SlotsChanged;
@@ -2601,7 +2651,7 @@ class LauncherForm : Form {
                         "Import saves", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
-    void OnPlay() { OnPlay(false); }
+    void OnPlay() { OnPlay(mqMode); }
     void OnPlay(bool masterQuest) {
         string exe = Path.Combine(dir, Fork.GameExe);
         if (!File.Exists(exe)) {
