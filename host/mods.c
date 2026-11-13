@@ -174,6 +174,14 @@ void hos_mods_init(const char *image_path) {
             hos_log("mods: %s is left out in Master Quest (a seed is of the normal game's dungeons)", mods[i].name);
             continue;
         }
+        /* (the randomizer's fork) and with the randomizer off: the seed stays in its folder for the next game with it on (the
+           launcher's Normal and Randomizer are one choice away from each other), and the normal game is the game's own.
+           hos_save_folder reads the options itself, as it must for the saves, and says whose game this is */
+        const char *hos_save_folder(void);
+        if (!_stricmp(mods[i].name, "rando-seed") && strcmp(hos_save_folder(), "save_rando")) {
+            hos_log("mods: %s is left out: the randomizer is off (the seed is kept for the next game with it on)", mods[i].name);
+            continue;
+        }
         char dir[MAX_PATH];
         snprintf(dir, sizeof dir, "%s\\romfs", mods[i].path);
         const int files = index_romfs(dir, "", 0);

@@ -113,6 +113,15 @@ def main():
         check(folder("rando_on=1\nrando_seed=7\n", env={"HOS_MASTER_QUEST": "1"}) == "save_mq" and folder("rando_on=0\n", env={"HOS_MASTER_QUEST": "1"}) == "save_mq",
               "Master Quest does not keep its own saves")
         check(folder("rando_on=1\nrando_seed=7\n", env={"HOS_MASTER_QUEST": "0"}) == "save_rando", "the randomizer's saves are not its own when Master Quest is off")
+    # (seen in play: a normal game with a seed's chests. The script took the randomizer for on whatever the options said,
+    #  its switch written over by a loop's variable; and the game loaded the seed whoever's game it was)
+    script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
+    mods = (ROOT / "host" / "mods.c").read_text(encoding="utf-8")
+    check("for name, on in" not in script and 'for name, opened in (("deku", a.open_deku), ("forest", a.open_forest)):' in script,
+          "the seed's script writes over the randomizer's switch again")
+    check('if (!_stricmp(mods[i].name, "rando-seed") && strcmp(hos_save_folder(), "save_rando")) {' in mods and
+          "if (!on || mqMode) return true;" in launcher,
+          "the game loads a seed with the randomizer off, or the launcher takes the seed away for a normal game")
     print("PASS: the randomizer's saves")
 
 

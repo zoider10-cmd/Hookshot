@@ -313,16 +313,16 @@ class SaveNameForm : Form {
     public string Value;
     readonly TextBox name = new TextBox();
 
-    SaveNameForm(string slot) {
-        Text = "Name the new save";
+    SaveNameForm(string title, string asks, string start, string go) {
+        Text = title;
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(400, 150);
         BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
-        var top = new Label { Text = SaveSlots.Shown(slot, true).Replace(":  empty", "") + " is empty. A name for the new game (or none):", AutoSize = true, Location = new Point(16, 16) };
-        name.SetBounds(16, 46, 368, 26); name.MaxLength = 40;
+        var top = new Label { Text = asks, AutoSize = true, Location = new Point(16, 16) };
+        name.SetBounds(16, 46, 368, 26); name.MaxLength = 40; name.Text = start; name.SelectAll();
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
-        var ok = new Button { Text = "Start", DialogResult = DialogResult.None };
+        var ok = new Button { Text = go, DialogResult = DialogResult.None };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
         foreach (var b in new[] { ok, cancel }) {
             b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White;
@@ -334,13 +334,29 @@ class SaveNameForm : Form {
         ok.Click += (o, e) => { Value = SaveCopies.Clean(name.Text); DialogResult = DialogResult.OK; Close(); };
     }
 
+    // A save's new name, asked and given (the Rename buttons). false: the player turned back or typed none.
+    public static bool Rename(IWin32Window owner, string dir, string saveFolder, string name, ref string to) {
+        string start = SaveSlots.Unnamed(name) ? "" : name;
+        while (true) {
+            using (var f = new SaveNameForm("Rename the save", "A new name for \"" + SaveSlots.Shown(name, false) + "\":", start, "Rename")) {
+                if (f.ShowDialog(owner) != DialogResult.OK || f.Value.Length == 0) return false;
+                if (f.Value == name) return false;
+                string error = SaveSlots.Rename(dir, saveFolder, name, f.Value);
+                if (error == null) { to = f.Value; return true; }
+                MessageBox.Show(owner, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                start = f.Value;
+            }
+        }
+    }
+
     // The save named `name` of that game, when it is empty and not named yet, is given the name the player types; with
     // none typed it keeps the one it has. false: the player turned back (nothing is played). ref name: the save's name
     // from then on.
     public static bool Ask(IWin32Window owner, string dir, string saveFolder, ref string name) {
         if (!SaveSlots.Unnamed(name) || !SaveSlots.IsEmpty(dir, saveFolder, name)) return true;
         while (true) {
-            using (var f = new SaveNameForm(name)) {
+            using (var f = new SaveNameForm("Name the new save", SaveSlots.Shown(name, true).Replace(":  empty", "") +
+                                            " is empty. A name for the new game (or none):", "", "Start")) {
                 if (f.ShowDialog(owner) != DialogResult.OK) return false;
                 if (f.Value.Length == 0) return true;   // (no name given: the slot keeps the one it has, "Save 3")
                 string error = SaveSlots.Rename(dir, saveFolder, name, f.Value);
@@ -348,6 +364,14 @@ class SaveNameForm : Form {
                 MessageBox.Show(owner, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
+    }
+}
+
+// (SaveNameForm, the other use: a save's new name, asked by the Rename buttons. false: none given, nothing renamed)
+static class SaveRename {
+    public static bool Ask(IWin32Window owner, string dir, string saveFolder, string name, out string to) {
+        to = name;
+        return SaveNameForm.Rename(owner, dir, saveFolder, name, ref to);
     }
 }
 
@@ -375,7 +399,7 @@ class SaveSlotsForm : Form {
         list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (playing)", n => SaveSlots.Shown(n, empty.Contains(n)));
         Style(play, "Play this save", 16, 264, 150); Style(delete, "Delete", 176, 264, 100); Style(copy, "Copy", 284, 264, 100);
         Style(close, "Close", 394, 264, 110);
-        var mid = new Label { Text = "A name (none needed for a new save or a copy), or to rename the chosen one:", AutoSize = true, Location = new Point(16, 312) };
+        var mid = new Label { Text = "A name (or none), for a new save or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 312) };
         name.SetBounds(16, 338, 248, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         Style(add, "New save", 274, 336, 110); Style(rename, "Rename", 394, 336, 110);
@@ -453,11 +477,9 @@ class SaveSlotsForm : Form {
 
     void OnRename() {
         if (list.SelectedIndex < 0) return;
-        string from = (string)list.SelectedItem, to = SaveCopies.Clean(name.Text);
+        string from = (string)list.SelectedItem, to;
         if (from != current && Running()) return;
-        string error = SaveSlots.Rename(dir, saveFolder, from, to);
-        if (error != null) { Say(error, MessageBoxIcon.Warning); return; }
-        name.Text = "";
+        if (!SaveRename.Ask(this, dir, saveFolder, from, out to)) return;   // (the new name is asked in a window of its own)
         Fill(to);
     }
 
@@ -507,7 +529,7 @@ class PlayChoiceForm : Form {
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
         list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (last played)", n => SaveSlots.Shown(n, empty.Contains(n)));
-        var low = new Label { Text = "A name: for one more save or a copy (or none), or to rename the chosen one:", AutoSize = true, Location = new Point(16, 360) };
+        var low = new Label { Text = "A name (or none), for one more save or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 360) };
         name.SetBounds(16, 386, 170, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         Style(add, "New save", 196, 384, 100); Style(copy, "Copy save", 302, 384, 100); Style(rename, "Rename", 408, 384, 96);
@@ -565,13 +587,11 @@ class PlayChoiceForm : Form {
 
     void OnRename() {
         if (list.SelectedIndex < 0) return;
-        string from = (string)list.SelectedItem, to = SaveCopies.Clean(name.Text);
+        string from = (string)list.SelectedItem, to;
         if (from != current && LauncherForm.GameRunning()) {
             MessageBox.Show(this, "Close the game first: it is using its saves.", "Saves", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
         }
-        string error = SaveSlots.Rename(dir, SaveCopies.Folders[Mode], from, to);
-        if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-        name.Text = "";
+        if (!SaveRename.Ask(this, dir, SaveCopies.Folders[Mode], from, out to)) return;   // (the new name is asked in a window of its own)
         Fill(to);
     }
 
@@ -2914,10 +2934,13 @@ class LauncherForm : Form {
 
     // (the randomizer: a seed's chests are placed by <game folder>\rando\rando_seed.py (tools/rando in the source: the build puts
     // it there), run with the player's Python before the game starts. It writes mods\rando-seed, does nothing when that is
-    // already this seed's, and takes it away when the randomizer is off. What it said is kept in rando\last_run.txt.
+    // already this seed's. With the randomizer off it is not run. What it said is kept in rando\last_run.txt.
     // false: it failed and the player chose not to start the game)
     bool RunRandomizer() {
         bool on = settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0;
+        // (off: the seed is left where it is and the game leaves it out, host/mods.c, so that going from the normal game to
+        // the randomizer and back makes no seed again. Master Quest leaves it out too)
+        if (!on || mqMode) return true;
         return RunAtPlay("rando_seed.py", "rando-seed", on, "last_run.txt", "The randomizer seed could not be made");
     }
 

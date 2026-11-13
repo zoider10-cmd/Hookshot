@@ -2673,8 +2673,11 @@ def main():
     except OSError:
         pass
     flags = {}
-    for name, on in (("deku", a.open_deku), ("forest", a.open_forest)):
-        if on:
+    # (the loop's variable was named `on` once and wrote over the randomizer's switch: with the forest's way open the
+    #  script took the randomizer for on whatever the options said, and never took a seed away. Seen in play: a normal
+    #  game with a seed's chests)
+    for name, opened in (("deku", a.open_deku), ("forest", a.open_forest)):
+        if opened:
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
