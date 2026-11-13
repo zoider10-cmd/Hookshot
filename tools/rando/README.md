@@ -666,6 +666,25 @@ Not the Happy Mask Shop, and not the shelves a game buys from again and again or
 tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
 the same goods list, and both sell the shuffled items.
 
+**Which shelves: Every shop shelf (`rando_shop_shelves`, `--shop-shelves`).** Off, four shelves of each shop sell a
+shuffled item (`slots`) and the others sell what they always did. On, the other four do too (`rest`: every place of a
+keeper's goods list), each once: the shields, the tunics, the potions and the bombs, arrows, nuts and sticks a game
+buys again and again are then not for sale, and come from grass, pots and enemies (the tunics from the Goron and King
+Zora, who still give them). What such a shelf sold goes into the pool as the chests' kind of it where there is one
+(the shields: `TBox_Shield_Deku`, `TBox_Shield_Hylian`), a red rupee for a potion, a tunic, a fairy or a heart.
+
+**Sword and shield (`rando_sword_shield`, `--sword-shield`).** Off, the Kokiri Sword is in its chest and the Deku
+Shield on the Kokiri shop's shelf, whatever the other settings say. On, the chest takes part as an event's chest does
+(with Major items) and the shelf as a shop's does (with Shops; it is not one of Every shop shelf's). Mido lets Link by
+with a sword and a shield, so with the shelf shuffled the Deku Shield is a gating item: every rule that asks for the
+sword asks for the shield too, unless Open Deku Tree is on (`shield_need`). A Deku Shield burns; one lost after Mido
+is passed is not needed again. Before this setting the sword's chest took part with Major items and the shield's
+shelf never did: a seed made then keeps what it had, and a new one starts with both kept.
+
+Both are named in a seed's stamp only when on, so a seed made before them is not made again. Made on the game's
+files with both on: 48 shelf actors, and with Mido's way closed the shield was in the first things to get in each
+of three seeds. Not yet played.
+
 **How an item stands on its shelf.** A shelf's actor does not take the item's pose and animation: they are those of
 the scene where Link gets the item, and lifted it, tilted it or drew it twice (the Iron Boots, one pair under the
 other). Without them the item is as its model is made, and its model's box (the list of actors) says where: one that

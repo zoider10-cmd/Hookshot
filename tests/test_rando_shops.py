@@ -245,7 +245,7 @@ def main():
     high = {"Actors": [{"Gyaml": "Shop_Heart", "Translate": [1.0, 2.0, 3.0]}, {"Gyaml": "Shop_DekuStick", "Translate": [4.0, 5.0, 6.0], "Dynamic": {"ShopItemIndex": 7}}]}
     lifted = read(seed.shelf_actors(byml(high), {("Shop_Heart", 0): name, ("Shop_DekuStick", 7): "Shop_Rando_Other"}, {name: 0.25})[0])["Actors"]
     check(lifted[0]["Translate"] == [1.0, 2.25, 3.0] and lifted[1]["Translate"] == [4.0, 5.0, 6.0], "a shelf whose item asks for it is not put higher, or another is")
-    check("Item_Gauntlet_Gold" not in seed.SHELF_LIFT and seed.SHELF_SCALE["Item_Gauntlet_Gold"] == 1.0 and set(seed.SHELF_TURN) == {"Item_GlassTruth"},
+    check("Item_Gauntlet_Gold" not in seed.SHELF_LIFT and seed.SHELF_SCALE["Item_Gauntlet_Gold"] == 1.0 and set(seed.SHELF_TURN) == {"Item_GlassTruth", "Item_Range_Bow"},
           "the gauntlets have a height of their own again (their box is right without the pose), or are made smaller, or another item is turned")
     info = byml([{"ModelAabbMin": {"X": -0.2, "Y": -0.193, "Z": 0.0}, "__RowId": "Item_Token_Gold"}, {"ModelAabbMin": {"X": 0.0, "Y": 1.171, "Z": 0.0}, "__RowId": "Item_Gauntlet_Gold"},
                  {"__RowId": "Item_Bare"}])
@@ -322,6 +322,40 @@ def main():
           "table = shop_rows(table, kind, item, price, actor)" in script, "a shelf has not an actor of its own, with its own price")
     check("[(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name, None, gives[h])" in script and "for h, (shop, _, _) in shelves.items() if h in gives]" in script,
           "the shelves are not among the tracker's checks")
+    # ---- Every shop shelf, and Sword and shield: which shelves take part ----
+    for shop in seed.SHOPS:
+        every = seed.shop_slots(shop, True, True)
+        check(seed.shop_slots(shop) == list(shop.slots) and every[:4] == list(shop.slots),
+              "%s: its four shelves are not the ones that take part with the settings off, or are not first (a shelf's number is its place)" % shop.key)
+        check(sorted(index for index, _ in every) == list(range(8)) and len({actor for _, actor in every} | {""}) > 1,
+              "%s: every shelf is not its eight places, each once: %r" % (shop.key, every))
+        check(all(seed.shelf_item(actor) in seed.ITEM_WORDS for _, actor in every), "%s: what a shelf puts in the pool has no words for the tracker" % shop.key)
+    kokiri = next(shop for shop in seed.SHOPS if shop.key == "kokiri")
+    shield = seed.SHIELD_SHELF[1:]
+    check(seed.SHIELD_SHELF == ("kokiri", 6, "Shop_Weapon_Shield_Deku") and shield not in seed.shop_slots(kokiri, True, False) and
+          shield in seed.shop_slots(kokiri, False, True) and len(seed.shop_slots(kokiri, False, True)) == 5 and
+          not any("Shield_Deku" in actor for shop in seed.SHOPS for _, actor in shop.slots + shop.rest),
+          "the Deku Shield's shelf is not its own setting's: in with Sword and shield alone, out with Every shop shelf alone")
+    check(seed.shelf_item("Shop_Weapon_Shield_Deku") == seed.DS == "TBox_Shield_Deku" and seed.shelf_item("Shop_Weapon_Shield_Hylian") == "TBox_Shield_Hylian" and
+          seed.shelf_item("Shop_Armor_Goron") == seed.SHELF_OTHER and seed.shelf_item("Shop_Bottle_RedPotion") == seed.SHELF_OTHER,
+          "a shield's shelf does not put the chests' shield in the pool, or a tunic's or a potion's something other than a red rupee")
+    # (Mido lets Link by with a sword and a shield: with the shield's shelf shuffled, every rule that names the sword names the shield)
+    check(seed.shield_need(seed.CHILD) == seed.CHILD | {seed.DS} and seed.shield_need(seed.NONE) == seed.NONE and
+          seed.shield_need(frozenset((seed.BB,))) == frozenset((seed.BB,)) and seed.SHIELD_GATES == {seed.DS},
+          "the shield is not asked for wherever the sword is, or where it is not")
+    check("gear = shield_need if shield_shelf and not a.open_deku else (lambda need: need)" in script and
+          "PROGRESSION = PROGRESSION | SHIELD_GATES" in script and
+          "step = (lambda need: progressive_need(gear(need), PROGRESSION)) if a.progressive else gear" in script,
+          "the shield is not a gating item when its shelf is shuffled, or is asked for with Open Deku Tree on")
+    check('if c.event == SWORD_EVENT and not a.sword_shield:' in script and
+          'a.shop_shelves = (a.shop_shelves if a.shop_shelves is not None else ini["rando_shop_shelves"]) == 1 and a.shops != 0' in script and
+          "shield_shelf = a.sword_shield and a.shops != 0" in script and
+          "for k, (index, actor) in enumerate(shop_slots(shop, a.shop_shelves, shield_shelf)):" in script and
+          "for index, actor in shop_slots(shop, a.shop_shelves, shield_shelf)}" in script,
+          "the two settings do not reach the sword's chest, the shelves priced or the shelves written")
+    # (named in the stamp only when set: a seed made before the settings keeps its stamp, and is not made again)
+    check('(" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "")' in script,
+          "the two settings are not in the seed's stamp, or are named when off")
     # ---- the Bombchu Shop: young Link's, at night, once Dodongo's Cavern is done (the door's own condition) ----
     chu = next(shop for shop in seed.SHOPS if shop.key == "bombchu")
     check(chu.ages == "C" and chu.need == seed.DODONGO_DONE == seed.RULES["DodongoCavern"][0] and seed.BB in chu.need,

@@ -305,24 +305,61 @@ SCRUBS = (
 # the quest's step, not an item, is the gate, and bombs found early do not open it. Seen in play: shut at night
 # before King Dodongo. Its name says so for the tracker.
 DODONGO_DONE = CHILD | {BB}
-Shop = collections.namedtuple("Shop", "key params areas name need place ages slots")
+# Which shelves (rando_shop_shelves, --shop-shelves). Off: the four of each shop above (slots). On: its other four
+# too (rest), every shelf of a keeper's goods list, each sold once: the shields, the tunics, the potions and the bombs,
+# arrows, nuts and sticks a game buys again and again are then not for sale, and come from grass, pots and enemies
+# (the tunics from the Goron and King Zora, who give them still). What such a shelf sold goes into the pool as the
+# chests' kind of it where there is one (SHELF_ITEMS: the shields are TBox_Shield_Deku and TBox_Shield_Hylian), a red
+# rupee for the rest (a potion, a tunic, a fairy, a heart).
+# One shelf is its own setting's: the Kokiri shop's Deku Shield (SHIELD_SHELF), with the Kokiri Sword's chest
+# (rando_sword_shield, --sword-shield). Off: the sword is in its chest and the shield on its shelf whatever the
+# other settings say. On: the chest takes part as an event's chest does (with Major items) and the shelf as a
+# shop's does (with Shops, whichever its shelves). Mido lets Link by with a sword and a shield (OPEN), so with the shelf
+# shuffled the shield is a gating item (DS, SHIELD_GATES): every rule that asks for the sword asks for it too, unless
+# Open Deku Tree is on (shield_need). A Deku Shield burns: one found and lost after Mido is passed is not needed again.
+DS = "TBox_Shield_Deku"
+SHIELD_GATES = frozenset((DS,))
+SHIELD_SHELF = ("kokiri", 6, "Shop_Weapon_Shield_Deku")
+Shop = collections.namedtuple("Shop", "key params areas name need place ages slots rest")
 SHOPS = (
     Shop("kokiri", ("Npc_Kokiri_001_Shop_Child", "Npc_Kokiri_001_Shop_Child_ShortStock"), ("KokiriForest",), "the Kokiri shop", NONE,
-         (-1.9, 110.7, -22.6), "CA", ((0, "Shop_Heart"), (1, "Shop_DekuSeedBundle_02"), (3, "Shop_DekuNutBundle_02"), (5, "Shop_DekuStickBundle_Medium"))),
+         (-1.9, 110.7, -22.6), "CA", ((0, "Shop_Heart"), (1, "Shop_DekuSeedBundle_02"), (3, "Shop_DekuNutBundle_02"), (5, "Shop_DekuStickBundle_Medium")),
+         ((2, "Shop_DekuNutBundle_01"), (4, "Shop_DekuSeedBundle_01"), (7, "Shop_DekuStick"))),   # (and SHIELD_SHELF, 6)
     Shop("general", ("Npc_Hylia_018_Shop", "Npc_Hylia_018_Shop_Adult"), ("Market", "KakarikoVillage"), "the Bazaar", CHILD,
-         (19.5, 100.4, 16.1), "C", ((0, "Shop_Heart"), (1, "Shop_MagicJar_Small"), (2, "Shop_DekuSeedBundle_02"), (7, "Shop_DekuStick"))),
+         (19.5, 100.4, 16.1), "C", ((0, "Shop_Heart"), (1, "Shop_MagicJar_Small"), (2, "Shop_DekuSeedBundle_02"), (7, "Shop_DekuStick")),
+         ((3, "Shop_ArrowBundle_01"), (4, "Shop_BombBundle_01"), (5, "Shop_DekuNutBundle_01"), (6, "Shop_Weapon_Shield_Hylian"))),
     Shop("medicine", ("Npc_Hylia_020_Shop",), ("Market", "KakarikoVillage"), "the Potion Shop", CHILD,
-         (20.6, 100.1, 6.0), "C", ((2, "Shop_Bottle_HalfMilk"), (5, "Shop_Bottle_Poe"), (6, "Shop_Bottle_Bug"), (7, "Shop_Bottle_Fish"))),
+         (20.6, 100.1, 6.0), "C", ((2, "Shop_Bottle_HalfMilk"), (5, "Shop_Bottle_Poe"), (6, "Shop_Bottle_Bug"), (7, "Shop_Bottle_Fish")),
+         ((0, "Shop_Bottle_RedPotion"), (1, "Shop_Bottle_GreenPotion"), (3, "Shop_Bottle_Fairy"), (4, "Shop_Bottle_BlueFire"))),
     Shop("bombchu", ("Npc_Hylia_021_Shop",), ("Market",), "the Bombchu Shop (at night, after Dodongo's Cavern)", DODONGO_DONE,
-         (-24.1, 100.4, 32.4), "C", ((4, "Shop_BombchuBundle_01"), (5, "Shop_BombchuBundle_07"), (6, "Shop_BombchuBundle_02"), (7, "Shop_BombchuBundle_08"))),
+         (-24.1, 100.4, 32.4), "C", ((4, "Shop_BombchuBundle_01"), (5, "Shop_BombchuBundle_07"), (6, "Shop_BombchuBundle_02"), (7, "Shop_BombchuBundle_08")),
+         ((0, "Shop_BombchuBundle_03"), (1, "Shop_BombchuBundle_04"), (2, "Shop_BombchuBundle_05"), (3, "Shop_BombchuBundle_06"))),
     Shop("goron", ("Npc_Goron_011_Shop_Child",), ("GoronCity",), "the Goron shop", CHILD | {BB},
-         (-16.6, 98.0, -20.2), "CA", ((0, "Shop_Heart"), (2, "Shop_Bottle_Bug"), (6, "Shop_BombBundle_03"), (7, "Shop_BombBundle_04"))),
+         (-16.6, 98.0, -20.2), "CA", ((0, "Shop_Heart"), (2, "Shop_Bottle_Bug"), (6, "Shop_BombBundle_03"), (7, "Shop_BombBundle_04")),
+         ((1, "Shop_Bottle_RedPotion"), (3, "Shop_Armor_Goron"), (4, "Shop_BombBundle_01"), (5, "Shop_BombBundle_02"))),
     Shop("zora", ("Npc_Zora_011_Shop",), ("ZoraDomain",), "the Zora shop", ADULT,
-         (-27.1, 104.9, 18.2), "CA", ((2, "Shop_Bottle_Bug"), (5, "Shop_ArrowBundle_02"), (6, "Shop_Bottle_Fish"), (7, "Shop_ArrowBundle_03"))),
+         (-27.1, 104.9, 18.2), "CA", ((2, "Shop_Bottle_Bug"), (5, "Shop_ArrowBundle_02"), (6, "Shop_Bottle_Fish"), (7, "Shop_ArrowBundle_03")),
+         ((0, "Shop_Bottle_RedPotion"), (1, "Shop_Bottle_GreenPotion"), (3, "Shop_Armor_Zora"), (4, "Shop_ArrowBundle_01"))),
 )
+
+
+def shop_slots(shop, every=False, shield=False):
+    """the shelves of a shop that sell a shuffled item, [(its place in the goods list, the game's own actor there)]:
+    its four; every: its other shelves too; shield: the Deku Shield's (the Kokiri shop's), whichever the others are.
+    The four come first, in their order: a shelf's number in its name is its place here."""
+    slots = list(shop.slots) + (list(shop.rest) if every else [])
+    if shield and shop.key == SHIELD_SHELF[0]:
+        slots.append(SHIELD_SHELF[1:])
+    return slots
+
+
+def shield_need(need):
+    """what a rule asks for with the Deku Shield's shelf shuffled and Mido in the way: the shield wherever the sword"""
+    return frozenset(need | SHIELD_GATES) if S in need else need
+
 SHELF_ITEMS = (("Shop_DekuSeedBundle", "Item_ScrubBusinessSeed"), ("Shop_DekuNutBundle", "TBox_DekuNutBundle"), ("Shop_DekuStick", "Item_DekuStickBundle_Small"),
                ("Shop_MagicJar", "Tbox_MagicJar_Large"), ("Shop_BombBundle", "Item_BombBundle_Small"), ("Shop_BombchuBundle", "Item_BombchuBundle_Small"),
-               ("Shop_ArrowBundle", "TBox_ArrowBundle_Medium"))
+               ("Shop_ArrowBundle", "TBox_ArrowBundle_Medium"), ("Shop_Weapon_Shield_Deku", DS), ("Shop_Weapon_Shield_Hylian", "TBox_Shield_Hylian"))
 SHELF_OTHER = "TBox_Rupee_Red"
 SHOP_BASE, SHOP_SAMPLE = "Shop_Item_Base", "Shop_ArrowBundle_01"
 SHOP_TABLES = ("ActorInfo", "GameActorInfo", "PouchActorInfo")
@@ -414,7 +451,10 @@ def model_box(data, item):
 SHELF_LONG = 0.9
 SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_GlassTruth": 2.0,
                "Item_Gauntlet_Gold": 1.0, "Item_Gauntlet_Silver": 1.0, "Item_Gauntlet_Goron": 1.0}
-SHELF_TURN = {"Item_GlassTruth": (-1.57, 0.0, 0.0)}
+# (the Fairy Bow's model is long front to back, 1.36 m along its own Z: on the Kokiri shop's shelf it lay pointing at
+# the viewer, its end alone to be seen behind the price board (its owner's picture, 2026-11-13). A quarter turn about
+# the upright lays it across. Not seen yet with the turn; the hammer, the sword and the stick bundle are long the same way.)
+SHELF_TURN = {"Item_GlassTruth": (-1.57, 0.0, 0.0), "Item_Range_Bow": (0.0, 1.57, 0.0)}
 # An item whose model is made where it is worn, not at its own origin (the gauntlets: 1.17 m up): its shelf's actor is
 # put that much lower (shelf_fit). The gauntlets keep their size: their box is the pair's, 1.6 m from one to the other.
 SHELF_WORN = 0.5
@@ -2169,7 +2209,8 @@ def settings(game):
     """the randomizer's lines of the options file (0 where it does not say)"""
     got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
            "rando_skip_intro": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0,
-           "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0}
+           "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
+           "rando_shop_shelves": 0, "rando_sword_shield": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -2325,6 +2366,7 @@ GIFT_PLACES = {
 # Nobody has gone through them: they tell one check from the next, and are not the names a player would give.
 ITEM_WORDS = {
     "TBox_Rupee_Green": "green rupee", "TBox_Rupee_Blue": "blue rupee", "TBox_Rupee_Red": "red rupee", "TBox_Rupee_Purple": "purple rupee",
+    "TBox_Shield_Deku": "Deku Shield", "TBox_Shield_Hylian": "Hylian Shield",
     "TBox_Rupee_Silver": "silver rupee", "TBox_Rupee_Gold": "gold rupee", "Item_ScrubBusinessSeed": "Deku Seeds", "Obj_Heart_Piece": "Piece of Heart",
     "Item_Token_Gold": "Skulltula token", "TBox_DekuNutBundle": "Deku Nuts", "TBox_ArrowBundle_Small": "arrows", "TBox_ArrowBundle_Medium": "arrows",
     "TBox_ArrowBundle_Large": "arrows", "Item_BombchuBundle_Small": "Bombchus", "Item_BombBundle_Small": "bombs", "Tbox_MagicJar_Large": "magic jar",
@@ -2704,6 +2746,9 @@ def main():
     p.add_argument("--scrubs", action="store_true", help="as rando_scrubs=1: the Business Scrubs' four one-time sales take part with the chests (SCRUBS)")
     p.add_argument("--shops", type=int, choices=(0, 1, 2), help="in place of rando_shops: four shelves of each shop sell a shuffled item, once (SHOPS). "
                                                                "2: with rolled prices")
+    p.add_argument("--shop-shelves", type=int, choices=(0, 1), help="in place of rando_shop_shelves: with Shops, 0 four shelves of each shop, 1 every shelf (shop_slots)")
+    p.add_argument("--sword-shield", type=int, choices=(0, 1), help="in place of rando_sword_shield: 0 the Kokiri Sword stays in its chest and the Deku Shield on "
+                                                                     "its shelf, 1 both take part (the chest with Major items, the shelf with Shops)")
     p.add_argument("--heart-pieces", action="store_true", help="as rando_heart_pieces=1: the Pieces of Heart lying in the world change places with "
                                                                 "the chests' items a pick-up can be, and may hold a gating item")
     p.add_argument("--songs", type=int, choices=(0, 1, 2), help="in place of rando_songs: the twelve songs are shuffled among the twelve lessons (SONGS). "
@@ -2749,6 +2794,9 @@ def main():
     a.progressive = a.progressive or ini["rando_progressive"] != 0
     a.shops = a.shops if a.shops is not None else ini["rando_shops"]
     a.shops = a.shops if 0 <= a.shops <= 2 else 0
+    a.shop_shelves = (a.shop_shelves if a.shop_shelves is not None else ini["rando_shop_shelves"]) == 1 and a.shops != 0
+    a.sword_shield = (a.sword_shield if a.sword_shield is not None else ini["rando_sword_shield"]) == 1
+    shield_shelf = a.sword_shield and a.shops != 0   # (the Deku Shield's shelf takes part: with Shops)
     a.skulltulas = a.skulltulas if a.skulltulas is not None else ini["rando_skulltulas"]
     a.skulltulas = a.skulltulas if 0 <= a.skulltulas <= 3 else 0
     a.quests = a.quests or ini["rando_quests"] != 0
@@ -2803,7 +2851,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" progressive 1" if a.progressive else "") + (" songs 2" if a.songs else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2" if a.songs else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -2919,6 +2967,8 @@ def main():
                 continue
             maps[c.hash].add(parts[-1])
             why = stays_why(c, a.event_chests, placement)
+            if c.event == SWORD_EVENT and not a.sword_shield:   # (Sword and shield: Off)
+                why = why or "the Kokiri Sword stays in its chest (Sword and shield: Off)"
             dungeon = "DefaultDungeonRoomIndex" in c.params
             if c.hash not in spots:
                 spots[c.hash] = [area, c.item, dungeon, why, c.gyaml, c.pos, c.event]
@@ -2959,7 +3009,7 @@ def main():
                 spots[gift_hash(g.key)] = [g.area, g.item, None, None, "gift", g.name, ""]
         roll = random.Random("shop prices:%d:%d" % (seed, a.shops))
         for shop in SHOPS:
-            for k, (index, actor) in enumerate(shop.slots):
+            for k, (index, actor) in enumerate(shop_slots(shop, a.shop_shelves, shield_shelf)):
                 price = shop_price(roll, a.shops)
                 g = Gift("shop_%s_%d" % (shop.key, index), "", (), shelf_item(actor), shop.areas[0],
                          "%s: shelf %d, %d rupee%s" % (shop.name, k + 1, price, "" if price == 1 else "s"), shop.need | wallet_need(price), "shops", None)
@@ -2977,7 +3027,10 @@ def main():
     if a.songs:    # (the songs named: a lesson's line names its own; the frogs ask for everything)
         needs = {h: n if h in lessons else frozenset(PROGRESSION) if h in gifts and gifts[h].key in SONGS_HARD else
                  song_need(n, spots[h][0], gifts[h].key if h in gifts else None) for h, n in needs.items()}
-    step = (lambda need: progressive_need(need, PROGRESSION)) if a.progressive else (lambda need: need)
+    gear = shield_need if shield_shelf and not a.open_deku else (lambda need: need)   # (the shield with the sword: Mido)
+    if shield_shelf:
+        PROGRESSION = PROGRESSION | SHIELD_GATES
+    step = (lambda need: progressive_need(gear(need), PROGRESSION)) if a.progressive else gear
     needs = {h: step(n) for h, n in needs.items()}
     # (what a Gold Skulltula asks for, by the same settings)
     skull_asks = lambda h: step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
@@ -3292,7 +3345,7 @@ def main():
                 shop_sizes["RSDB/" + (n[:-3] if n.lower().endswith(".zs") else n)] = len(table)
             packs = sorted(n[:-len(".pack.zs")] for n in os.listdir(os.path.join(romfs, "Pack", "Actor")) if "Shop" in n and n.startswith("Npc_") and n.endswith(".pack.zs"))
             for shop in SHOPS:   # (the goods lists, in every pack that has a copy, and the shelves of the map files)
-                sells = {index: (actor, shop_actor("%s_%d" % (shop.key, index))) for index, actor in shop.slots}
+                sells = {index: (actor, shop_actor("%s_%d" % (shop.key, index))) for index, actor in shop_slots(shop, a.shop_shelves, shield_shelf)}
                 for param in shop.params:
                     name, found = SHOP_PARAM % param, 0
                     for keeper in packs:

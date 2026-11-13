@@ -26,7 +26,7 @@
 
    What is not here: the item placement. tools/rando/rando_seed.py reads rando_on, rando_seed, rando_chests,
    rando_skulltulas, rando_quests (with rando_frogs and rando_light_arrows), rando_keys, rando_major, rando_open_deku,
-   rando_open_forest, rando_skip_intro, rando_start_rupees, rando_scrubs, rando_shops and rando_progressive (rando_skip_cutscenes is the game's own: host/hos_main.c), shuffles the chests, the Gold Skulltulas' drops and some characters' gifts and
+   rando_open_forest, rando_skip_intro, rando_start_rupees, rando_scrubs, rando_shops (with rando_shop_shelves), rando_sword_shield and rando_progressive (rando_skip_cutscenes is the game's own: host/hos_main.c), shuffles the chests, the Gold Skulltulas' drops and some characters' gifts and
    makes the open ways' and the opening's changes as a mod (the launcher runs it at Play); the other settings are not placed yet
    (host/oot_rando.c). */
 #ifndef OOT_RANDO_H
@@ -96,6 +96,12 @@
       "Off", "On") \
     X(SKIP_CUTSCENES, "Skip cutscenes", "rando_skip_cutscenes", \
       "Cutscenes are passed over as soon as they start, with the game's own skip: Saria's goodbye, the Deku Tree's story and the like. Talk, chests and item scenes still play. Not the title, the opening narration or the credits.", \
+      "Off", "On") \
+    X(SHOP_SHELVES, "Every shop shelf", "rando_shop_shelves", \
+      "With Shops. Off: four shelves of each shop sell a shuffled item, and what a game buys again and again stays for sale (bombs, arrows, nuts, potions, shields, tunics). On: every shelf of the six shops does, each sold once; those supplies then come from grass, pots and enemies.", \
+      "Off", "On") \
+    X(SWORD_SHIELD, "Sword and shield", "rando_sword_shield", \
+      "The Kokiri Sword in its chest and the Deku Shield on the Kokiri shop's shelf. Off: both stay where the game has them. On: the sword's chest takes part with Major items and the shield's shelf with Shops, and the way past Mido asks for both unless Open Deku Tree is on.", \
       "Off", "On")
 
 enum {

@@ -51,7 +51,7 @@ def main():
     check('"rando_progressive": 0' in script and '(" progressive 1" if a.progressive else "")' in script and
           'a.progressive = a.progressive or ini["rando_progressive"] != 0' in script,
           "the script does not read the setting, or does not name it in the seed's stamp")
-    check("step = (lambda need: progressive_need(need, PROGRESSION)) if a.progressive else (lambda need: need)" in script and
+    check("step = (lambda need: progressive_need(gear(need), PROGRESSION)) if a.progressive else gear" in script and
           "needs = {h: step(n) for h, n in needs.items()}" in script and "skull_asks = lambda h: step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(" in script and "{h: skull_asks(h) for h in able}" in script and "skull_need = skull_asks" in script,
           "the chests', the gifts' or the Gold Skulltulas' rules are not passed through it")
 

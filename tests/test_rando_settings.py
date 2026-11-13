@@ -101,7 +101,7 @@ def sources(rows):
           "the build does not put the randomizer's script beside the game, where the launcher runs it")
     script = read("tools", "rando", "rando_seed.py")
     check(all('"%s"' % key in script for key in ("rando_on", "rando_seed", "rando_chests", "rando_skulltulas", "rando_keys", "rando_major", "rando_open_deku",
-                                                    "rando_open_forest", "rando_skip_intro", "rando_quests", "rando_frogs", "rando_light_arrows", "rando_start_rupees", "rando_scrubs", "rando_shops", "rando_progressive")),
+                                                    "rando_open_forest", "rando_skip_intro", "rando_quests", "rando_frogs", "rando_light_arrows", "rando_start_rupees", "rando_scrubs", "rando_shops", "rando_shop_shelves", "rando_sword_shield", "rando_progressive")),
           "rando_seed.py does not read the settings the menu keeps")
     check("hos_rando_init();" in main, "the game does not read the randomizer's settings at its start")
     # ---- Skip cutscenes: the game's own skip, asked of a cutscene's player only ----
