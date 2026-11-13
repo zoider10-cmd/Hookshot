@@ -59,7 +59,6 @@ Say "emptythird" ([SaveSlots]::IsEmpty($dir, "save_rando", "Save 3"))
 Say "shown" (([SaveSlots]::Shown("Save 3", $true)) + "|" + ([SaveSlots]::Shown("Save 3", $false)) + "|" + ([SaveSlots]::Shown("Zelda", $true)))
 Say "unnamed" ("" + [SaveSlots]::Unnamed("Save 12") + [SaveSlots]::Unnamed("Save one") + [SaveSlots]::Unnamed("My Save 3"))
 Say "sameagain" ([SaveSlots]::Select($dir, "save_rando", "Save 1"))
-Say "noname" ([SaveSlots]::Add($dir, "save_rando", " .. "))
 Say "new" ([SaveSlots]::Add($dir, "save_rando", "Second run"))
 Say "twice" ([SaveSlots]::Add($dir, "save_rando", "second RUN"))
 Say "listed" (Names "save_rando")
@@ -96,7 +95,6 @@ Say "deleted" ((Test-Path (Join-Path $dir "user\save_slots\save_rando\Hard seed"
 Say "end" (Read "save_rando")
 # (a copy of a save: of the one played, and of one waiting; the two go their own ways)
 Set-Content -Path (Join-Path $dir "rando\collected.txt") -Value "record main" -NoNewline
-Say "copynoname" ([SaveSlots]::Copy($dir, "save_rando", "Main", " . "))
 Say "copyempty" ([SaveSlots]::Copy($dir, "save_rando", "Save 3", "Of nothing"))
 Say "copytaken" ([SaveSlots]::Copy($dir, "save_rando", "Main", "save 2"))
 Say "copy" ([SaveSlots]::Copy($dir, "save_rando", "Main", "Main copy"))
@@ -106,6 +104,12 @@ Say "copynames" (Names "save_rando")
 Say "copyplayed" (Read "save_rando")
 Say "copywaiting" ([SaveSlots]::Copy($dir, "save_rando", "Main copy", "Third"))
 Say "copiedwaiting" (Get-Content -Raw (Join-Path $dir "user\save_slots\save_rando\Third\0001\slot_00\progress.sav"))
+# (the name's box left empty: one more slot without a name, and "<the save> copy", then "<the save> copy 2")
+Say "newname" ([SaveSlots]::NewName($dir, "save_rando"))
+Say "blanknew" ([SaveSlots]::Add($dir, "save_rando", " .. "))
+Say "blankcopy" ([SaveSlots]::Copy($dir, "save_rando", "Main", " . "))
+Say "blankcopied" (Get-Content -Raw (Join-Path $dir "user\save_slots\save_rando\Main copy 2\0001\slot_00\progress.sav"))
+Say "blanknames" (Names "save_rando")
 Say "copyleft" ((Test-Path (Join-Path $dir "user\save_slots\save_rando\Third.part")) -or (Test-Path (Join-Path $dir "user\save_slots\save_rando\Main copy.part")))
 '''
 
@@ -158,7 +162,7 @@ def main():
           "if (!SaveSlots.Unnamed(name) || !SaveSlots.IsEmpty(dir, saveFolder, name)) return true;" in src and
           "public const int Defaults = 10;" in src,
           "an empty slot is played without being named first, or there are not ten to begin with")
-    check(got["noname"] != "" and got["new"] == "" and got["twice"] != "" and got["listed"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10,Second run|Save 1" and got["stillone"] == "one",
+    check(got["new"] == "" and got["twice"] != "" and got["listed"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10,Second run|Save 1" and got["stillone"] == "one",
           "a new save is not listed after the first, a name is used twice, or making one changes the saves played: %r" % got)
     check(got["select"] == "" and got["empty"] == "none" and got["waiting"] == "one" and got["playing"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10,Second run|Second run",
           "choosing a new save does not move the saves played out, whole, and leave a new game: %r" % got)
@@ -175,8 +179,10 @@ def main():
     check(got["again"] == "" and got["againnow"] == "two" and got["back2"] == "", "a renamed save is not played with its own saves: %r" % got)
     check(got["delete"] == "" and got["names3"] == "Main,Save 2,Save 3,Save 4,Save 5,Save 6,Save 7,Save 8,Save 9,Save 10|Main" and got["deleted"] == "True" and got["end"] == "one",
           "a deleted save is not gone with what it held, or the save played was touched: %r" % got)
-    check(got["copynoname"] != "" and got["copyempty"] != "" and got["copytaken"] != "",
-          "a copy without a name, of an empty save, or under a name there is already, was made: %r" % got)
+    check(got["copyempty"] != "" and got["copytaken"] != "", "a copy of an empty save, or under a name there is already, was made: %r" % got)
+    check(got["newname"] == "Save 11" and got["blanknew"] == "" and got["blankcopy"] == "" and got["blankcopied"] == "one" and
+          "Main,Main copy 2,Main copy," in got["blanknames"] and got["blanknames"].endswith(",Save 11|Main"),
+          "with no name given a new save is not one more slot, or a copy is not named after its save: %r" % got)
     check(got["copy"] == "" and got["copied"] == "one" and got["copyrecord"] == "record main" and got["copyplayed"] == "one" and
           got["copynames"].startswith("Main,Main copy,Save 2,") and got["copynames"].endswith("|Main"),
           "a copy of the save played is not that save, whole, with its record, listed after it, or the save played is touched: %r" % got)

@@ -175,10 +175,26 @@ public static class SaveSlots {
         return !empty ? name : Unnamed(name) ? "Slot " + name.Substring(5) + ":  empty" : name + "   (empty)";
     }
 
-    // A save of that name, empty: a new game when it is played. Returns null, or what went wrong.
+    // (the names given when the name's box is left empty: one more slot without a name, "Save 11", named when it is
+    // first played as the ten are; and for a copy "<the save> copy", then "<the save> copy 2")
+    public static string NewName(string dir, string saveFolder) {
+        string current;
+        var names = Names(dir, saveFolder, out current);
+        for (int i = Defaults + 1; ; i++) if (!Has(names, "Save " + i)) return "Save " + i;   // (after the ten, whatever they are named now)
+    }
+    public static string CopyName(string dir, string saveFolder, string name) {
+        string current;
+        var names = Names(dir, saveFolder, out current);
+        string stem = SaveCopies.Clean(name + " copy");
+        if (!Has(names, stem)) return stem;
+        for (int i = 2; ; i++) if (!Has(names, stem + " " + i)) return stem + " " + i;
+    }
+
+    // A save of that name, empty: a new game when it is played. With no name, one more slot (NewName). Returns null, or
+    // what went wrong.
     public static string Add(string dir, string saveFolder, string name) {
         string clean = SaveCopies.Clean(name), current;
-        if (clean.Length == 0) return "Give the save a name.";
+        if (clean.Length == 0) clean = NewName(dir, saveFolder);
         var names = Names(dir, saveFolder, out current);
         if (Has(names, clean)) return "There is already a save named \"" + clean + "\".";
         try { names.Add(clean); Write(dir, saveFolder, current, names); return null; } catch (Exception ex) { return ex.Message; }
@@ -203,10 +219,10 @@ public static class SaveSlots {
     }
 
     // A copy of the save named `name`, whole, as one more save named `to`: the two go their own ways from then on.
-    // Returns null, or what went wrong (then nothing is made).
+    // With no name, "<the save> copy" (CopyName). Returns null, or what went wrong (then nothing is made).
     public static string Copy(string dir, string saveFolder, string name, string to) {
         string clean = SaveCopies.Clean(to), current;
-        if (clean.Length == 0) return "Give the copy a name.";
+        if (clean.Length == 0) clean = CopyName(dir, saveFolder, name);
         var names = Names(dir, saveFolder, out current);
         int at = names.FindIndex(n => Same(n, name));
         if (at < 0) return "That save is not there any more.";
@@ -357,7 +373,7 @@ class SaveSlotsForm : Form {
         list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (playing)", n => SaveSlots.Shown(n, empty.Contains(n)));
         Style(play, "Play this save", 16, 264, 150); Style(delete, "Delete", 176, 264, 100); Style(copy, "Copy", 284, 264, 100);
         Style(close, "Close", 394, 264, 110);
-        var mid = new Label { Text = "A name, for a new save, a copy of the chosen one, or to rename it:", AutoSize = true, Location = new Point(16, 312) };
+        var mid = new Label { Text = "A name (none needed for a new save or a copy), or to rename the chosen one:", AutoSize = true, Location = new Point(16, 312) };
         name.SetBounds(16, 338, 248, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         Style(add, "New save", 274, 336, 110); Style(rename, "Rename", 394, 336, 110);
@@ -416,6 +432,7 @@ class SaveSlotsForm : Form {
 
     void OnNew() {
         string n = SaveCopies.Clean(name.Text);
+        if (n.Length == 0) n = SaveSlots.NewName(dir, saveFolder);   // (no name: one more slot, named when first played)
         string error = SaveSlots.Add(dir, saveFolder, n);
         if (error != null) { Say(error, MessageBoxIcon.Warning); return; }
         name.Text = "";
@@ -425,6 +442,7 @@ class SaveSlotsForm : Form {
     void OnCopy() {
         if (list.SelectedIndex < 0) return;
         string from = (string)list.SelectedItem, to = SaveCopies.Clean(name.Text);
+        if (to.Length == 0) to = SaveSlots.CopyName(dir, saveFolder, from);   // (no name: "<the save> copy")
         string error = SaveSlots.Copy(dir, saveFolder, from, to);
         if (error != null) { Say(error, MessageBoxIcon.Warning); return; }
         name.Text = "";
@@ -487,7 +505,7 @@ class PlayChoiceForm : Form {
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
         list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (last played)", n => SaveSlots.Shown(n, empty.Contains(n)));
-        var low = new Label { Text = "A name, for one more save (a new game) or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 360) };
+        var low = new Label { Text = "A name (or none), for one more save or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 360) };
         name.SetBounds(16, 386, 252, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         Style(add, "New save", 278, 384, 110); Style(copy, "Copy save", 394, 384, 110);
@@ -525,6 +543,7 @@ class PlayChoiceForm : Form {
 
     void OnNew() {
         string n = SaveCopies.Clean(name.Text);
+        if (n.Length == 0) n = SaveSlots.NewName(dir, SaveCopies.Folders[Mode]);   // (no name: one more slot, named when first played)
         string error = SaveSlots.Add(dir, SaveCopies.Folders[Mode], n);
         if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         name.Text = "";
@@ -534,6 +553,7 @@ class PlayChoiceForm : Form {
     void OnCopy() {
         if (list.SelectedIndex < 0) return;
         string to = SaveCopies.Clean(name.Text);
+        if (to.Length == 0) to = SaveSlots.CopyName(dir, SaveCopies.Folders[Mode], (string)list.SelectedItem);   // (no name: "<the save> copy")
         string error = SaveSlots.Copy(dir, SaveCopies.Folders[Mode], (string)list.SelectedItem, to);
         if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         name.Text = "";
