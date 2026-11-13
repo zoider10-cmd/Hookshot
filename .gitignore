@@ -42,3 +42,6 @@ rando_actors.txt
 rando_room.txt
 # ---- NVIDIA's DLSS SDK (scripts/ngx_sdk.py): NVIDIA's files, never committed ----
 ngx-sdk/
+
+# (Mako 4.0) the Send logs webhook: never in the public source
+launcher/report_webhook.txt

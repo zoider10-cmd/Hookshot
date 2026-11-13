@@ -71,6 +71,11 @@ const char *hos_save_folder(void) {
     /* (Mako 3.5) Master Quest keeps its saves apart too (master_quest.c: save_mq), and comes first: it is a game of its own,
        started from its own button, whatever the randomizer's switch says */
     int hos_master_quest(void);
+    /* (Mako 4.0) and the launcher's Test my PC, HOS_BENCH=1: the copy it made of the saves (user\save_bench, master_quest.c
+       hos_save_dir), whatever game is set: a test run never writes the player's own, the randomizer's neither */
+    static int bench = -1;
+    if (bench < 0) { const char *e = getenv("HOS_BENCH"); bench = e && *e && *e != '0'; }
+    if (bench) return "save_bench";
     if (hos_master_quest()) return "save_mq";
     return on ? "save_rando" : "save";
 }
@@ -83,6 +88,11 @@ void hos_rando_init(void) {
     /* (Master Quest is a game of its own: its saves are its own, the seed is left out (mods.c), and nothing of the
        randomizer is on in it, whatever the switch says. The launcher's Master Quest leaves the switch as it was, so
        it was on there: Progressive items, Skip cutscenes, the Bomb Bag kept back and the Tracker's record) */
+    /* (and in the launcher's Test my PC: it plays a copy of the saves by itself, as the game shipped) */
+    if (!strcmp(hos_save_folder(), "save_bench")) {
+        hos_log("rando: off in the launcher's test run (HOS_BENCH)");
+        return;
+    }
     int hos_master_quest(void);
     if (hos_master_quest()) {
         hos_log("rando: off in Master Quest (the randomizer's switch is on: it is for the normal game's dungeons)");

@@ -2300,7 +2300,7 @@ void texture_begin_recording(VkCommandBuffer upload, uint64_t value) {
 /// textures after the next signal, was baked from the one before. The earth floor turned into another tile's material
 /// before the player's eyes (Dodongo's Cavern, Fire Temple). Every texture is checked again from here. RX_VK_EPOCH_AT_RESUME=0: as before
 void texture_memory_changed() {
-    static const bool on = !getenv("RX_VK_EPOCH_AT_RESUME") || atoi(getenv("RX_VK_EPOCH_AT_RESUME")) != 0;
+    static const bool on = !getenv("RX_VK_EPOCH_AT_RESUME") || atoi(getenv("RX_VK_EPOCH_AT_RESUME")) != 0;   // (3.6.2: kept on: this is what fixed the floor, §77)
     if (on) epoch++;
 }
 VkCommandBuffer upload_command_buffer() {

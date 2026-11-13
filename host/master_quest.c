@@ -48,7 +48,13 @@ int hos_master_quest(void) {
 }
 
 /* The saves' folder under user\: Master Quest has its own (save_mq), never mixed with the normal game's (save) */
-const char *hos_save_dir(void) { return hos_master_quest() ? "save_mq" : "save"; }
+/* (Mako 4.0) HOS_BENCH=1, the launcher's Test my PC: a copy of the saves (user\save_bench, made by the launcher), so a test run
+   never writes the player's own */
+const char *hos_save_dir(void) {
+    static int bench = -1;
+    if (bench < 0) { const char *e = getenv("HOS_BENCH"); bench = e && *e && *e != '0'; }
+    return bench ? "save_bench" : hos_master_quest() ? "save_mq" : "save";
+}
 
 /* nx2/oot_patches.py patch_life: Link's life going from old to new (a hit, a fall, lava...), the value to write instead: the
    hearts cheat keeps it, Master Quest multiplies the loss. Retried compare-and-swaps come back with the fresh old value, so a

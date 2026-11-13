@@ -130,6 +130,59 @@ static int fps_max(void) {
     }
     return v;
 }
+/* (Mako 4.0) A steady pace under 60: where the game cannot hold 60 (Castle Town's market: 18-30 ms frames, 45-48 fps on a
+   Ryzen 5 7500F), each frame is shown one 1/N s after the last, so they come evenly instead of in short and long steps; frame
+   generation doubles an even rate. The game's time step stays real time (realtime_step follows the frames' own time).
+   hookshot_options.ini steady_fps=<30-59> (0: off, the default), HOS_PACE_FPS over it; only with the 60 cap.
+   steady_fps=1: adaptive (pace_period): the highest of 60, 54, 48, 45, 40, 36, 33, 30 the game keeps. A fixed 40 lost the open
+   field's 50-60 and still missed where the game's own work grew (Kakariko in view from Hyrule Field: its navigation workers,
+   frames of 30-45 ms against 25). */
+static int pace_fps(void) {   /* 0 off, 30-59 fixed, -1 adaptive */
+    static int v = -2;
+    if (v == -2) {
+        const char *e = getenv("HOS_PACE_FPS");
+        const int want = e ? atoi(e) : hos_ini_option("steady_fps", 0);
+        v = fps_max() != 60 ? 0 : want == 1 ? -1 : want >= 30 && want < 60 ? want : 0;
+        if (v > 0) hos_log("vi: steady pace %d fps: each frame shown 1/%d s after the last", v, v);
+        if (v < 0) hos_log("vi: adaptive steady pace: the highest of 60/54/48/45/40/36/33/30 fps the game keeps");
+    }
+    return v;
+}
+static volatile LONG64 pace_slept_ns;   /* (the acquire's pacing sleep since the last present: not the game's work) */
+/* The frame's period for the adaptive pace: down a step when 3 of 30 frames' own work (present to present, less the pacing
+   sleep) ran over the period, up a step after 180 frames (3-6 s) all under 85% of the higher one's. A load's long frames
+   (over 250 ms) count for nothing. */
+static int64_t pace_period(int64_t now) {
+    static const int levels[] = {60, 54, 48, 45, 40, 36, 33, 30};
+    enum { LEVELS = sizeof levels / sizeof levels[0] };
+    static int lvl, win_n, win_over, up_n;
+    static int64_t last_now;
+    const int64_t slept = InterlockedExchange64(&pace_slept_ns, 0);
+    if (last_now) {
+        const int64_t work = now - last_now - slept, cur = 1000000000LL / levels[lvl];
+        if (work > 0 && work < 250000000LL) {
+            win_n++;
+            if (work > cur + 1000000) win_over++;
+            if (win_n >= 30) {
+                if (win_over >= 3 && lvl < LEVELS - 1) {
+                    lvl++, up_n = 0;
+                    hos_log("vi: adaptive pace down to %d fps (%d of 30 frames over %.1f ms)", levels[lvl], win_over, cur / 1e6);
+                }
+                win_n = win_over = 0;
+            }
+            if (lvl > 0) {
+                const int64_t higher = 1000000000LL / levels[lvl - 1];
+                up_n = work < higher * 85 / 100 ? up_n + 1 : 0;
+                if (up_n >= 180) {
+                    lvl--, up_n = 0, win_n = win_over = 0;
+                    hos_log("vi: adaptive pace up to %d fps", levels[lvl]);
+                }
+            }
+        }
+    }
+    last_now = now;
+    return 1000000000LL / levels[lvl];
+}
 static int64_t next_frame_at, window_start, frames_in_window;
 static volatile LONG64 presents;
 int hos_vi_native_interval(Ctx *c, int requested) {
@@ -172,6 +225,7 @@ void hos_vi_native_acquire(int active) {
         extern volatile int hos_fps_timing;
         hos_sleep_ns(until - now);
         if (hos_fps_timing) InterlockedAdd64(&hos_acquire_slept_ns, hos_now_ns() - now);
+        InterlockedAdd64(&pace_slept_ns, hos_now_ns() - now);
     }
 }
 /* (mkw-recomp) MKW's frame pacer (0x806bcbb0, x19 when it sets the interval: nvn_native.c): its measured frame time
@@ -524,7 +578,9 @@ void hos_vi_native_presented(const int64_t phases[4]) {
         if (ms < 0) ms = getenv("HOS_FRAME_SLEEP_MS") ? atoi(getenv("HOS_FRAME_SLEEP_MS")) : 0;
         if (ms) hos_sleep_ns(ms * 1000000LL);
     }
-    const int64_t period = 1000000000LL / fps_max() * present_interval, now = hos_now_ns();
+    const int64_t now = hos_now_ns();
+    const int64_t period = pace_fps() > 0 ? 1000000000LL / pace_fps() : pace_fps() < 0 ? pace_period(now)
+                                                                       : 1000000000LL / fps_max() * present_interval;
     realtime_step(now);
     /* (behind by more than a frame: the next one is paced from now, with no burst to catch up) */
     next_frame_at = next_frame_at && now - next_frame_at < period ? next_frame_at + period : now + period;

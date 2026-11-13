@@ -1382,10 +1382,51 @@ class PcInfo {
     public int RamGB { get { return (int)Math.Round(RamMB / 1024.0); } }
 }
 
+// (Mako 4.0) Test my PC: what one run of the game measured, read from its own log lines (host/nn_vi.c "frames presented" and
+// "present intervals", gpu/vk "status: 600 frames ... VRAM x of y GB")
+class Bench {
+    public double Fps, LowFps, SlowPct, Slowest, VramUsed, VramTotal;
+    public int Samples, Crashes;
+    public bool DeviceLost, Exited, HadSave;
+    public string Error;
+
+    public static Bench Read(List<string> lines, int from) {
+        var b = new Bench();
+        double sum = 0; long all = 0, slow = 0;
+        b.LowFps = double.MaxValue;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        for (int i = Math.Max(0, from); i < lines.Count; i++) {
+            string l = lines[i];
+            var m = Regex.Match(l, @"frames presented \(([\d.]+) fps");
+            if (m.Success) { double f = double.Parse(m.Groups[1].Value, ci); sum += f; b.Samples++; b.LowFps = Math.Min(b.LowFps, f); continue; }
+            m = Regex.Match(l, @"present intervals: <15\.5 ms (\d+), 15\.5-17\.8 (\d+), 17\.8-22 (\d+), 22-30 (\d+), 30-40 (\d+), over 40 (\d+)");
+            if (m.Success) {
+                for (int k = 1; k <= 6; k++) all += long.Parse(m.Groups[k].Value);
+                slow += long.Parse(m.Groups[5].Value) + long.Parse(m.Groups[6].Value);
+                continue;
+            }
+            m = Regex.Match(l, @"status: \d+ frames, the slowest ([\d.]+) ms; VRAM ([\d.]+) of ([\d.]+) GB");
+            if (m.Success) {
+                b.Slowest = Math.Max(b.Slowest, double.Parse(m.Groups[1].Value, ci));
+                b.VramUsed = Math.Max(b.VramUsed, double.Parse(m.Groups[2].Value, ci));
+                b.VramTotal = double.Parse(m.Groups[3].Value, ci);
+                continue;
+            }
+            if (l.Contains("CRASH")) b.Crashes++;
+            if (l.IndexOf("device lost", StringComparison.OrdinalIgnoreCase) >= 0) b.DeviceLost = true;
+        }
+        if (b.Samples > 0) b.Fps = sum / b.Samples; else b.LowFps = 0;
+        b.SlowPct = all > 0 ? 100.0 * slow / all : 0;
+        if (b.Samples < 6) b.Error = "the game showed too few frames to measure";
+        return b;
+    }
+}
+
 // (one line of the Recommended tab: a setting, the value for this PC, why; apply: the options.ini key and value the Apply button
 // writes, null for advice only)
 class RecRow {
     public string What, Value, Why, Key; public int Set; public bool Good = true;
+    public string Env; public bool EnvOn;   // (a Fixes switch Apply sets: only after Test my PC)
     public RecRow(string what, string value, string why) { What = what; Value = value; Why = why; }
 }
 
@@ -1393,8 +1434,8 @@ static class Fork {
     public const string Name = "Mako";
     // (the update check compares the first number of the tags: the first Mako release must be numbered above amd-fix-2.1, or the
     // 2.x launchers players have would think it older and never offer it)
-    public const string Base = "mako-3.6";      // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
-    public const string Version = "mako-3.6"; // (HOOKSHOT_FORK_VERSION)
+    public const string Base = "mako-4.0";      // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
+    public const string Version = "mako-4.0";   // (HOOKSHOT_FORK_VERSION)
     public const int Api = 15;                  // (gpu/vk/vk_api.h MKWVK_API_VERSION)
     public const string Api_Url = "https://api.github.com/repos/Shakoquo/Mako/releases/latest";
     public const string Page = "https://github.com/Shakoquo/Mako/releases/latest";
@@ -1474,7 +1515,7 @@ static class Theme {
 abstract class Widget {
     public RectangleF R;
     public int Page = -1;        // (-1: always shown; else the tab it belongs to)
-    public int HideOn = -1;      // (an always-shown widget left out on this page)
+    public int HideOn = -1, HideOn2 = -1;   // (an always-shown widget left out on these pages)
     public float Hover;          // (0..1, eased toward the mouse)
     public bool Enabled = true;
     public bool Scrolls;         // (a row of a list that scrolls: shown and pressed only inside the list's view. The Randomizer page's settings)
@@ -1758,7 +1799,8 @@ class LauncherForm : Form {
     readonly Dictionary<string, Toggle> fixes = new Dictionary<string, Toggle>();
     readonly List<TabW> tabs = new List<TabW>();
     Selector langSel;
-    Btn updateButton, playButton, fsrButton;
+    Btn updateButton, playButton, fsrButton, benchButton;
+    Bench bench; bool benchBusy;   // (Mako 4.0: Test my PC, its last result)
     string fsrLine = ""; Color fsrLineColor = Theme.Dim; bool fsrBusy;
     Image logo, mqLogo;
     Bitmap backdrop;
@@ -2051,22 +2093,25 @@ class LauncherForm : Form {
                               Click = () => { Directory.CreateDirectory(Path.Combine(dir, "user", "save_mq")); OpenFolder(Path.Combine(dir, "user", "save_mq")); } });
 
         // (bottom row: folders)
-        widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 80, 42), HideOn = 8, Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
-        widgets.Add(new Btn { Text = "Import saves", R = new RectangleF(cx + 86, 612, 110, 42), HideOn = 8, Click = OnImport });
-        widgets.Add(new Btn { Text = "Game folder", R = new RectangleF(cx + 202, 612, 106, 42), HideOn = 8, Click = () => OpenFolder(dir) });
+        // (not on the Recommended tab, which has Test my PC and Apply in the row's place, nor on Master Quest's page)
+        widgets.Add(new Btn { Text = "Saves", HideOn2 = 0, R = new RectangleF(cx, 612, 80, 42), HideOn = 8, Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
+        widgets.Add(new Btn { Text = "Import saves", HideOn2 = 0, R = new RectangleF(cx + 86, 612, 110, 42), HideOn = 8, Click = OnImport });
+        widgets.Add(new Btn { Text = "Send logs", HideOn2 = 0, R = new RectangleF(cx + 202, 612, 92, 42), HideOn = 8, Click = OnSendLogs });
+        widgets.Add(new Btn { Text = "Game folder", HideOn2 = 0, R = new RectangleF(cx + 300, 612, 106, 42), HideOn = 8, Click = () => OpenFolder(dir) });
         // (kept copies of the saves: more than the game's one save of the player's own. The window opens on the folder the
         // Randomizer setting names, and its list chooses the normal game's, the randomizer's or Master Quest's)
-        widgets.Add(new Btn { Text = "Save copies", R = new RectangleF(cx + 314, 612, 106, 42), HideOn = 8,
+        widgets.Add(new Btn { Text = "Save copies", HideOn2 = 0, R = new RectangleF(cx + 412, 612, 106, 42), HideOn = 8,
                               Click = () => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } });
 
-        // (the save the next Play plays, of the game the Randomizer setting names: SaveSlots. The row leaves its right end to
-        // the Recommended tab's Apply button: the two were in one place, and a press on this one applied the settings)
-        widgets.Add(new SlotBtn { R = new RectangleF(cx + 426, 612, 116, 42), HideOn = 8, Dir = dir, Saves = SaveFolder,
+        // (the save the next Play plays, of the game the Randomizer setting names: SaveSlots)
+        widgets.Add(new SlotBtn { HideOn2 = 0, R = new RectangleF(cx + 524, 612, cw - 524, 42), HideOn = 8, Dir = dir, Saves = SaveFolder,
                                   Click = () => OpenSlots(SaveFolder()) });
 
         // (Mako) the Recommended tab: this PC read once, and its Apply button
         BuildRecommendations();
-        widgets.Add(new Btn { Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 548, 612, cw - 548, 42), Page = 0, Click = OnApplyRecommended });
+        benchButton = new Btn { Text = "Test my PC", R = new RectangleF(cx, 612, 300, 42), Page = 0, Click = OnBench };
+        widgets.Add(benchButton);
+        widgets.Add(new Btn { Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 312, 612, cw - 312, 42), Page = 0, Click = OnApplyRecommended });
 
         LoadAll();
         int first;
@@ -2075,6 +2120,9 @@ class LauncherForm : Form {
         tabX = tabs[PageNow].R.X; tabW = tabs[PageNow].R.Width;
         float scroll0;   // (a third argument: the Recommended tab scrolled, for screenshots)
         if (cmd.Length > 3 && float.TryParse(cmd[3], out scroll0)) { recScroll = scroll0; if (PageNow == 3) ScrollRando(scroll0); }
+
+        // (MAKO_TEST_BENCH=1: Test my PC starts with the window, no question: for testing the test)
+        if (Environment.GetEnvironmentVariable("MAKO_TEST_BENCH") == "1") Shown += (s, e) => { if (!GameRunning()) StartBench(); };
 
         timer = new System.Windows.Forms.Timer { Interval = 16 };
         timer.Tick += (s, e) => Step();
@@ -2127,7 +2175,7 @@ class LauncherForm : Form {
         float dt = 1 / 60f;
         Time = (float)clock.Elapsed.TotalSeconds;
         foreach (var w in widgets) {
-            bool visible = (w.Page < 0 && w.HideOn != PageNow) || w.Page == PageNow;
+            bool visible = (w.Page < 0 && w.HideOn != PageNow && w.HideOn2 != PageNow) || w.Page == PageNow;
             float target = visible && w.Enabled && w.R.Contains(mouse) && InView(w, mouse) ? 1 : 0;
             w.Hover += (target - w.Hover) * 0.22f;
             w.Tick();
@@ -2230,7 +2278,7 @@ class LauncherForm : Form {
             Theme.Text_(g, helpShown, Theme.Small, Theme.A(Theme.Text, (int)(230 * helpFade)), new RectangleF(r.X + 30, r.Y, r.Width - 40, r.Height),
                         StringAlignment.Near, StringAlignment.Center);
         }
-        foreach (var w in widgets) if (w.Page < 0 && w.HideOn != PageNow) w.Paint(g, this);
+        foreach (var w in widgets) if (w.Page < 0 && w.HideOn != PageNow && w.HideOn2 != PageNow) w.Paint(g, this);
     }
 
     static float Ease(float t) { t = Math.Max(0, Math.Min(1, t)); return 1 - (1 - t) * (1 - t) * (1 - t); }
@@ -2402,7 +2450,7 @@ class LauncherForm : Form {
     Widget At(PointF p) {
         for (int i = widgets.Count - 1; i >= 0; i--) {
             var w = widgets[i];
-            if (((w.Page < 0 && w.HideOn != PageNow) || w.Page == PageNow) && w.Hit(p) && InView(w, p)) return w;
+            if (((w.Page < 0 && w.HideOn != PageNow && w.HideOn2 != PageNow) || w.Page == PageNow) && w.Hit(p) && InView(w, p)) return w;
         }
         return null;
     }
@@ -2994,12 +3042,13 @@ class LauncherForm : Form {
         if (pc.Integrated) recVerdict = "A graphics chip built into the processor: Mako runs, at the lightest settings. Expect around 30 fps.";
         else if (!knownVram) recVerdict = "The graphics card's memory could not be read: these are middle settings. Lower the Quality preset if it stutters.";
         else if (v >= 14) recVerdict = "A strong PC for Mako: high settings, with room for AMD FSR 4 and frame generation.";
-        else if (v >= 10) recVerdict = "A good PC for Mako: high settings at your screen's resolution.";
+        else if (v >= 13) recVerdict = "A good PC for Mako: high settings at your screen's resolution.";
+        else if (v >= 10) recVerdict = "A good PC for Mako. With " + v + " GB of video memory the settings stay one step lighter: the game's textures fill it during long sessions.";
         else if (v >= 7) recVerdict = "A solid PC for Mako: balanced settings. 8 GB of video memory is the limit to watch.";
         else recVerdict = "A light PC for Mako: low settings keep it smooth. Video memory is the limit here.";
 
         // (Quality preset: from the video memory, as its own names say)
-        int preset = low ? 1 : !knownVram ? 3 : v < 7 ? 2 : v < 10 ? 3 : v < 14 ? 4 : 5;
+        int preset = low ? 1 : !knownVram ? 3 : v < 7 ? 2 : v <= 12 ? 3 : v < 14 ? 4 : 5;   // (12 GB or less: Balanced, a step lighter)
         Opt("Quality preset", "quality_preset", preset,
             knownVram ? "Your card has " + v + " GB of video memory. The preset fits the game's textures and effects to it; one step lower if the game stutters after a while."
                       : "Set from a middle guess. One step lower if the game stutters after a while.");
@@ -3053,7 +3102,7 @@ class LauncherForm : Form {
         recFixes.Add(new RecRow("Basic controller mode", "Off", "Only if your controller is not detected, presses twice or has wrong buttons."));
         recFixes.Add(new RecRow("Quick first start", "Off", "Off, the game prepares every effect once after each update" + (pc.Threads < 8 ? " (longer on your " + pc.Threads + "-thread processor)" : "") +
                                 ", then plays smoothly. On reaches the title sooner, but the preparation then runs during play for hours, with stutters and objects appearing late."));
-        bool redstone = pc.Tier == 2 && (!knownVram || v >= 12);
+        bool redstone = pc.Tier == 2 && (!knownVram || v > 12);
         recFixes.Add(new RecRow("Redstone frame gen.", redstone ? "On, with FSR 4 and 2x" : "Off",
                                 pc.Tier == 2 ? (redstone ? "Your RX 9000 has the memory for it: AMD's frame generation, made by AI, gives cleaner motion and a steady HUD. Needs AMD's files (FSR tab), the Upscaler on AMD FSR 4 and Frame generation on 2x."
                                                          : "Your RX 9000 has " + v + " GB: Redstone takes video memory the game needs. Keep it off, or try it with the Quality preset one step lower.")
@@ -3068,12 +3117,209 @@ class LauncherForm : Form {
         if (pc.Threads > 0 && pc.Threads < 8) recNotes.Add(new[] { "Processor: " + pc.Threads + " threads", "The first start after each update takes longer here: let it finish once, the next starts are quick." });
         if (pc.Integrated) recNotes.Add(new[] { "Laptop or built-in graphics", "Keep it plugged in. If the PC also has a graphics card, in Windows Settings > System > Display > Graphics set hookshot.exe to High performance." });
         if (pc.Nvidia) recNotes.Add(new[] { "NVIDIA card", "Mako is tuned and tested on AMD cards first. NVIDIA works; tell us on GitHub if something looks wrong." });
-        if (knownVram && v <= 8) recNotes.Add(new[] { "Video memory: " + v + " GB", "The limit to watch. If the game starts to stutter after a while, lower the Quality preset one step. Leave Native AA and Redstone off." });
+        if (knownVram && v <= 12) recNotes.Add(new[] { "Video memory: " + v + " GB", "The limit to watch: the settings here are a step lighter for it. If the game starts to stutter after a while, lower the Quality preset one more step. Leave Native AA and Redstone off." });
         recNotes.Add(new[] { "After every update", "The first start prepares the game's effects (up to about 40 minutes on AMD cards, once). Let it finish: the following starts are quick." });
         recNotes.Add(new[] { "Graphics driver", "Keep it up to date: AMD Software: Adrenalin Edition, the NVIDIA App or Intel Graphics Software." });
         recNotes.Add(new[] { "In game", "Insert opens the menu: the same settings, applied at once. The launcher's tabs change the same file." });
         recNotes.Add(new[] { "Troubleshooting", "Blue flashes: No blue light flashes (Fixes). Controller problems: Basic controller mode. Stutters for hours after an update: Quick first start off. " +
                                                        "Shaking HUD with frame generation: Redstone on an RX 9000, or Frame generation off. Too slow: Quality preset one step lower." });
+        if (bench != null) FitToBench();
+    }
+
+    // ---- (Mako 4.0) Test my PC: the game run by itself on a copy of the player's last save, measured, the advice fitted ----
+    static readonly int[] OutBySize = { 2, 1, 0, 3, 5, 6 };   // (output_res values, largest first)
+    static readonly int[] CapFps = { 60, 90, 120, 144, 165, 240 };
+
+    int Now(string key) { Selector s; return settings.TryGetValue(key, out s) ? s.Value : 0; }
+    RecRow Row(string key) { return recGraphics.Find(r => r.Key == key); }
+    void Change(string key, int value, string why) {
+        var r = Row(key);
+        if (r == null || r.Set == value) return;
+        r.Set = value; r.Value = ItemOf(key, value); r.Why = "Test: " + why + " " + r.Why; r.Good = false;
+    }
+
+    void FitToBench() {
+        var b = bench;
+        if (b.Error != null) {
+            recVerdict = "The test did not finish (" + b.Error + "). These settings come from your PC's parts alone.";
+            return;
+        }
+        int v = pc.VramGB;
+        int fg = Now("frame_generation"), cap = CapFps[Math.Max(0, Math.Min(CapFps.Length - 1, Now("frame_rate_cap")))];
+        int target = Math.Max(30, Math.Min(60, fg >= 2 ? cap / fg : cap));   // (the game's own frames: 60 at most, as the console)
+        double vramShare = b.VramTotal > 0 ? b.VramUsed / b.VramTotal : 0;
+        bool full = vramShare >= 0.9, veryHeavy = b.Fps < target * 0.6, heavy = b.Fps < target * 0.8;
+        bool stutter = b.SlowPct >= 2.0, room = b.Fps >= target * 0.97 && b.SlowPct < 0.5 && vramShare < 0.75 && !b.Exited && b.Crashes == 0;
+        int presetNow = Now("quality_preset");
+        var pr = Row("quality_preset"); var outRow = Row("output_res");
+        int presetBase = presetNow > 0 ? Math.Min(pr.Set, presetNow) : pr.Set;
+        int outBase = Math.Max(0, Array.IndexOf(OutBySize, outRow.Set));
+        int outNow = Array.IndexOf(OutBySize, Now("output_res"));
+        if (outNow > outBase) outBase = outNow;   // (the smaller of the two)
+        string measured = Math.Round(b.Fps) + " fps where the game aims at " + target;
+        string verdict;
+
+        if (b.Exited || b.Crashes > 0 || b.DeviceLost) {
+            verdict = "The game closed during the test" + (b.DeviceLost ? " (the graphics card stopped answering)" : "") + ": the settings below are lighter. Update the graphics driver, and tell us on GitHub if it happens again.";
+            Change("quality_preset", Math.Max(1, presetBase - 1), "the game closed during the test: one step lighter.");
+            Change("output_res", OutBySize[Math.Min(OutBySize.Length - 1, outBase + 1)], "the game closed during the test: one step smaller.");
+        } else if (full || veryHeavy) {
+            verdict = "Too heavy for this PC: " + measured + (full ? ", and the video memory full (" + b.VramUsed.ToString("0.0") + " of " + b.VramTotal.ToString("0.0") + " GB)" : "") + ". The settings below are lighter.";
+            Change("quality_preset", Math.Max(1, presetBase - 1), full ? "the video memory was full: one step lighter." : "the game ran too slowly: one step lighter.");
+            Change("output_res", OutBySize[Math.Min(OutBySize.Length - 1, outBase + 1)], "one step smaller, for " + (full ? "the video memory." : "speed."));
+            Change("resolution", 0, "Auto draws the 3D smaller only when the card is busy.");
+            if (Row("dlss").Set == 5 || Now("dlss") == 5) Change("dlss", 4, "Native AA was too heavy:");
+        } else if (heavy) {
+            verdict = "A little heavy: " + measured + ". The settings below are one step lighter.";
+            Change("quality_preset", Math.Max(1, presetBase - 1), "the game was a little slow: one step lighter.");
+            Change("resolution", 0, "Auto draws the 3D smaller only when the card is busy.");
+            if (Row("dlss").Set == 5 || Now("dlss") == 5) Change("dlss", 4, "Native AA was too heavy:");
+        } else if (room) {
+            int top = v > 0 && v <= 12 ? 4 : 5;
+            int up = Math.Min(top, Math.Max(pr.Set, presetNow) + 1);
+            verdict = "Smooth, with room to spare: " + measured + ", " + b.SlowPct.ToString("0.0") + "% of frames late." + (up > pr.Set ? " The Quality preset can go one step higher." : "");
+            if (up > pr.Set) Change("quality_preset", up, "smooth with room to spare: one step higher.");
+        } else {
+            verdict = "Smooth: " + measured + ". The settings below suit this PC.";
+        }
+        if (stutter) {
+            verdict += " Some frames came late (" + b.SlowPct.ToString("0.0") + "% over 30 ms): frame pacing on, and Quick first start off.";
+            Change("frame_pacing", 1, "frames came late during the test:");
+        }
+        recVerdict = verdict + (b.HadSave ? "" : " (No save yet: the test measured the start of a new game. Play a while, then test again for a truer measure.)");
+
+        // (the Fixes switches the test sets too)
+        foreach (var r in recFixes) {
+            if (r.What.StartsWith("No blue")) { r.Env = "RX_VK_WAIT_GPU"; r.EnvOn = true; }
+            else if (r.What.StartsWith("Occlusion")) { r.Env = "HOOKSHOT_OCCLUSION_OFF"; r.EnvOn = pc.Amd; }
+            else if (r.What.StartsWith("Quick first")) { r.Env = "RX_VK_PREDICT_BG"; r.EnvOn = false; }
+        }
+        recNotes.Insert(0, new[] { "Test result", Math.Round(b.Fps) + " fps on average (lowest " + Math.Round(b.LowFps) + "), " + b.SlowPct.ToString("0.0") + "% of frames late (over 30 ms)" +
+                                   (b.VramTotal > 0 ? ", video memory " + b.VramUsed.ToString("0.0") + " of " + b.VramTotal.ToString("0.0") + " GB" : "") +
+                                   ". Measured with the settings you had; values in amber are what the test changed." });
+    }
+
+    static void CopyDir(string from, string to) {
+        Directory.CreateDirectory(to);
+        foreach (var f in Directory.GetFiles(from)) File.Copy(f, Path.Combine(to, Path.GetFileName(f)), true);
+        foreach (var d in Directory.GetDirectories(from)) CopyDir(d, Path.Combine(to, Path.GetFileName(d)));
+    }
+
+    void OnBench() {
+        if (benchBusy) return;
+        string exe = Path.Combine(dir, Fork.GameExe);
+        if (!File.Exists(exe)) { MessageBox.Show(this, "The game is not in this folder:\n" + dir, Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        if (GameRunning()) { MessageBox.Show(this, "Close the game first: the test starts it itself.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (MessageBox.Show(this, "Test my PC starts the game with your current settings, without sound, loads a copy of your last save and walks Link around by itself for about two minutes. " +
+                            "Then it closes the game and fits the recommendations to what it measured.\n\n" +
+                            "Your own saves are never touched.\nLeave the mouse, keyboard and controller alone until the game closes.\n" +
+                            "(After an update the game first prepares its effects, once: that start takes longer.)\n\nStart the test?",
+                            Fork.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        StartBench();
+    }
+
+    void StartBench() {
+        string exe = Path.Combine(dir, Fork.GameExe);
+        string user = Path.Combine(dir, "user"), save = Path.Combine(user, SaveFolder()), copy = Path.Combine(user, "save_bench"), input = Path.Combine(user, "bench_input.txt");
+        bool hadSave;
+        try {
+            if (Directory.Exists(copy)) Directory.Delete(copy, true);
+            hadSave = Directory.Exists(save) && Directory.GetFiles(save, "*", SearchOption.AllDirectories).Length > 0;
+            if (hadSave) CopyDir(save, copy);
+            Directory.CreateDirectory(user);
+            File.WriteAllText(input, "");
+        } catch (Exception ex) {
+            MessageBox.Show(this, "The test could not copy your saves:\n" + ex.Message, Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        benchBusy = true; benchButton.Enabled = false; benchButton.Text = "Starting the game...";
+        new Thread(() => RunBench(exe, input, hadSave)) { IsBackground = true }.Start();
+    }
+
+    void RunBench(string exe, string input, bool hadSave) {
+        var lines = new List<string>();
+        Process game = null;
+        Bench b;
+        Action<string> say = t => { try { BeginInvoke((Action)(() => { benchButton.Text = t; })); } catch { } };
+        Action<string> press = t => { try { File.AppendAllText(input, t + "\n"); } catch { } };
+        Func<int, bool> running = ms => !game.WaitForExit(ms);
+        try {
+            var psi = new ProcessStartInfo(exe) { WorkingDirectory = dir, UseShellExecute = false, RedirectStandardError = true };
+            psi.EnvironmentVariables["HOS_BENCH"] = "1";                  // (host/master_quest.c: the saves' copy, user\save_bench)
+            psi.EnvironmentVariables["HOS_AUDIO"] = "0";                  // (silent)
+            psi.EnvironmentVariables["HOS_NO_SAVE_FOLDER"] = "1";
+            psi.EnvironmentVariables["HOS_MASTER_QUEST"] = "0";
+            psi.EnvironmentVariables["HOOKSHOT_NO_UPDATE_CHECK"] = "1";
+            psi.EnvironmentVariables["HOS_INPUT_LIVE"] = input;           // (host/nn_hid.c: the presses below)
+            game = new Process { StartInfo = psi };
+            game.ErrorDataReceived += (s, e) => { if (e.Data != null) lock (lines) lines.Add(e.Data); };
+            game.Start();
+            game.BeginErrorReadLine();
+            // (the time left, said all along: from the title screen the test takes AfterTitle seconds; before it, the game's own
+            // "start-up: pipelines N of M" lines give the preparation's pace)
+            const int secs = 92, AfterTitle = 12 + 27 + 20 + secs;
+            Func<int, string> left = t => t >= 90 ? "about " + (t + 30) / 60 + " min left" : t >= 60 ? "about 1 min " + (t - 60) / 10 * 10 + " s left" : "about " + Math.Max(5, t / 5 * 5) + " s left";
+            // (1) the title screen: the first frames counted
+            var sw = Stopwatch.StartNew();
+            Func<bool> atTitle = () => { lock (lines) return lines.Exists(l => l.Contains("frames presented")); };
+            double prepT0 = -1; long prepN0 = 0;
+            while (!atTitle()) {
+                if (!running(1000)) throw new Exception("the game closed before its title screen");
+                if (sw.Elapsed.TotalMinutes > 60) throw new Exception("no title screen after an hour");
+                Match pm = null;
+                lock (lines) for (int k = lines.Count - 1; k >= 0 && k >= lines.Count - 400; k--) {
+                    var m = Regex.Match(lines[k], @"start-up: pipelines (\d+) of (\d+)");
+                    if (m.Success) { pm = m; break; }
+                }
+                if (pm == null) { say(sw.Elapsed.TotalSeconds < 30 ? "Starting the game...  " + left(AfterTitle + 20) : "Starting the game..."); continue; }
+                long n = long.Parse(pm.Groups[1].Value), all = Math.Max(1, long.Parse(pm.Groups[2].Value));
+                double now = sw.Elapsed.TotalSeconds;
+                if (prepT0 < 0) { prepT0 = now; prepN0 = n; }
+                string eta = "";
+                if (n > prepN0 && now - prepT0 >= 20) eta = "  ·  " + left((int)((all - n) * (now - prepT0) / (n - prepN0)) + AfterTitle);
+                say("Preparing effects (once) " + (100 * n / all) + "%" + eta);
+            }
+            say("Title screen...  " + left(AfterTitle));
+            if (!running(12000)) throw new Exception("the game closed at its title screen");
+            // (2) Continue: the copy of the last save
+            int rest = AfterTitle - 12;
+            for (int i = 0; i < 6; i++) {
+                say("Loading your save...  " + left(rest));
+                press("0:A");
+                int wait = i < 3 ? 4000 : 5000;
+                if (!running(wait)) throw new Exception("the game closed while loading");
+                rest -= wait / 1000;
+            }
+            say("Loading your save...  " + left(rest));
+            if (!running(20000)) throw new Exception("the game closed while loading");
+            // (3) walking around; measured after its first 12 seconds
+            string[] moves = { "LUP/3000", "RLEFT/800", "LUP/2500", "LLEFT/1500", "LUP/3000", "RRIGHT/1200", "LDOWN/2000", "LRIGHT/1500", "LUP/3000", "RLEFT/1500" };
+            int from = -1;
+            bool exited = false;
+            for (int t = 0, i = 0; t < secs; t += 4, i++) {
+                if (t >= 12 && from < 0) lock (lines) from = lines.Count;
+                press("0:" + moves[i % moves.Length]);
+                say("Testing...  " + left(secs - t));
+                if (!running(4000)) { exited = true; break; }
+            }
+            lock (lines) b = Bench.Read(new List<string>(lines), Math.Max(0, from));
+            b.HadSave = hadSave; b.Exited = exited;
+            if (exited) b.Error = null;
+        } catch (Exception ex) {
+            b = new Bench { Error = ex.Message };
+        } finally {
+            try { if (game != null && !game.HasExited) { game.Kill(); game.WaitForExit(10000); } } catch { }
+        }
+        try { File.Delete(input); } catch { }
+        try {
+            BeginInvoke((Action)(() => {
+                bench = b; benchBusy = false;
+                benchButton.Enabled = true; benchButton.Text = "Test again";
+                BuildRecommendations(); recPage = null; recScroll = 0;
+                ShowPage(0);
+                Activate();
+            }));
+        } catch { }
     }
 
     float LayoutRec(Graphics g, float w, bool draw) {
@@ -3174,12 +3420,19 @@ class LauncherForm : Form {
     }
 
     void OnApplyRecommended() {
+        bool envToo = recFixes.Exists(r => r.Env != null);
         if (MessageBox.Show(this, "This sets the Graphics tab to the values shown here. Your current graphics settings are replaced.\n" +
-                            "(The Fixes and FSR tabs are left as they are.)\n\nApply?", Fork.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+                            (envToo ? "(The test also sets the switches it named in the Fixes tab; the FSR tab is left as it is.)" : "(The Fixes and FSR tabs are left as they are.)") +
+                            "\n\nApply?", Fork.Name, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
         loading = true;
         foreach (var r in recGraphics) if (r.Key != null) SetSetting(r.Key, r.Set);
+        foreach (var r in recFixes) {
+            Toggle t;
+            if (r.Env != null && fixes.TryGetValue(r.Env, out t)) { t.On = r.EnvOn; t.Snap(); }
+        }
         loading = false;
         SaveOptions();
+        if (envToo) SaveEnv();
         MessageBox.Show(this, "Done: the recommended settings are saved. You can still change any of them in the Graphics tab.", Fork.Name,
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
@@ -3272,6 +3525,137 @@ class LauncherForm : Form {
         MessageBox.Show(this, "Put saves from another emulator here (the folder holding slot_00, slot_01… or a folder above it).\n" +
                         "They are copied into the game at the next start, and the saves you had are kept in a backup folder.",
                         "Import saves", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    // ---- (Mako 4.0) Send logs: the player's words and the game's last logs, to the Mako server's private reports channel ----
+    // (the Discord webhook is launcher\report_webhook.txt, embedded at build time and kept out of the public source)
+    static string ReportHook() {
+        try {
+            using (var st = typeof(LauncherForm).Assembly.GetManifestResourceStream("report_webhook.txt"))
+                if (st != null) using (var r = new StreamReader(st)) return r.ReadToEnd().Trim();
+        } catch { }
+        return "";
+    }
+
+    // (the Windows account's name appears in the logs' paths: replaced before anything leaves the PC)
+    static string Scrub(string text) {
+        string name = Environment.UserName ?? "";
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ?? "";
+        if (home.Length > 3) text = Regex.Replace(text, Regex.Escape(home), @"C:\Users\<user>", RegexOptions.IgnoreCase);
+        if (name.Length >= 3) text = Regex.Replace(text, @"(?<![A-Za-z0-9])" + Regex.Escape(name) + @"(?![A-Za-z0-9])", "<user>", RegexOptions.IgnoreCase);
+        return text;
+    }
+
+    void OnSendLogs() {
+        string hook = ReportHook();
+        if (hook.Length == 0) {
+            MessageBox.Show(this, "Sending logs is not set up in this build. Open the game folder and send hookshot_log.txt on the Mako Discord.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        string stamp = Path.Combine(dir, "user", "report_last.txt");
+        try {
+            if (File.Exists(stamp) && (DateTime.UtcNow - File.GetLastWriteTimeUtc(stamp)).TotalMinutes < 5) {
+                MessageBox.Show(this, "A report was sent a moment ago. Wait a few minutes before sending another.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+        } catch { }
+        var logs = new List<string>();
+        foreach (var n in new[] { "hookshot_log.txt", "hookshot_log.1.txt" }) if (File.Exists(Path.Combine(dir, n))) logs.Add(n);
+        if (logs.Count == 0) {
+            MessageBox.Show(this, "There is no game log yet: start the game once, then send.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using (var f = new Form()) {
+            f.Text = "Send logs"; f.FormBorderStyle = FormBorderStyle.FixedDialog; f.MaximizeBox = false; f.MinimizeBox = false;
+            f.StartPosition = FormStartPosition.CenterParent; f.ClientSize = new Size(520, 330); f.BackColor = Theme.Bg1; f.ForeColor = Theme.Text;
+            f.Font = new Font("Segoe UI", 9.5f);
+            var head = new Label { Text = "What went wrong? Where were you in the game, and what happened?", AutoSize = false, Bounds = new Rectangle(16, 14, 488, 22) };
+            var box = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 1500, Bounds = new Rectangle(16, 40, 488, 150),
+                                    BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
+            var what = new Label { AutoSize = false, Bounds = new Rectangle(16, 198, 488, 74), ForeColor = Theme.Dim,
+                                   Text = "Sent to the Mako team's private channel: your text, the game's last logs (" + string.Join(", ", logs) + "), " +
+                                          "your graphics card, processor, memory and Mako version. Your Windows account name is removed from the logs. " +
+                                          "Nothing else: no saves, no game files." };
+            var send = new Button { Text = "Send", Bounds = new Rectangle(300, 284, 100, 32), FlatStyle = FlatStyle.Flat, BackColor = Theme.Blue, ForeColor = Color.White };
+            var cancel = new Button { Text = "Cancel", Bounds = new Rectangle(404, 284, 100, 32), FlatStyle = FlatStyle.Flat, BackColor = Theme.Card, ForeColor = Theme.Text, DialogResult = DialogResult.Cancel };
+            send.Click += (s, e) => {
+                if (box.Text.Trim().Length < 5) { MessageBox.Show(f, "Describe the problem in a few words first.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+                f.DialogResult = DialogResult.OK;
+            };
+            f.Controls.AddRange(new Control[] { head, box, what, send, cancel });
+            f.AcceptButton = null; f.CancelButton = cancel;
+            if (f.ShowDialog(this) != DialogResult.OK) return;
+            string problem = box.Text.Trim();
+            string err = SendReport(hook, problem, logs);
+            if (err == null) {
+                try { Directory.CreateDirectory(Path.Combine(dir, "user")); File.WriteAllText(stamp, DateTime.UtcNow.ToString("o")); } catch { }
+                MessageBox.Show(this, "Sent. Thank you: the Mako team will read it.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            } else
+                MessageBox.Show(this, "The report could not be sent:\n" + err + "\n\nYou can send hookshot_log.txt (game folder) on the Mako Discord instead.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    string SendReport(string hook, string problem, List<string> logs) {
+        try {
+            var pc = PcInfo.Read();
+            string ver = "";
+            try { string vf = Path.Combine(dir, "user", "hookshot_vk_version.txt"); if (File.Exists(vf)) ver = File.ReadAllText(vf).Replace("version=", "").Trim(); } catch { }
+            if (ver.Length == 0) ver = Fork.Version;
+            // (the logs, zipped: a log is under 1 MB, about 100 KB zipped)
+            byte[] zip;
+            using (var ms = new MemoryStream()) {
+                using (var za = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, true))
+                    foreach (var n in logs) {
+                        string text;
+                        using (var fs = new FileStream(Path.Combine(dir, n), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                        using (var r = new StreamReader(fs, Encoding.UTF8)) text = r.ReadToEnd();
+                        var e = za.CreateEntry(n, System.IO.Compression.CompressionLevel.Optimal);
+                        using (var w = new StreamWriter(e.Open(), new UTF8Encoding(false))) w.Write(Scrub(text));
+                    }
+                zip = ms.ToArray();
+            }
+            string clean = Scrub(problem).Replace("```", "` ` `");
+            string content = "**Report** · Mako " + ver + "\n" +
+                             "GPU: " + (pc.Gpu.Length > 0 ? pc.Gpu : "?") + (pc.VramMB > 0 ? " (" + pc.VramGB + " GB)" : "") +
+                             " · CPU: " + (pc.Cpu.Length > 0 ? pc.Cpu : "?") + " (" + pc.Threads + " threads) · RAM: " + pc.RamGB + " GB · Screen: " +
+                             pc.ScreenW + "x" + pc.ScreenH + " " + pc.Hz + " Hz\n```\n" + clean + "\n```";
+            if (content.Length > 1990) content = content.Substring(0, 1986) + "\n```";
+            string json = "{\"content\":" + JsonString(content) + ",\"allowed_mentions\":{\"parse\":[]}}";
+            string boundary = "----mako" + Guid.NewGuid().ToString("N");
+            byte[] body;
+            using (var ms = new MemoryStream()) {
+                Action<string> put = t => { var b = Encoding.UTF8.GetBytes(t); ms.Write(b, 0, b.Length); };
+                put("--" + boundary + "\r\nContent-Disposition: form-data; name=\"payload_json\"\r\nContent-Type: application/json\r\n\r\n" + json + "\r\n");
+                put("--" + boundary + "\r\nContent-Disposition: form-data; name=\"files[0]\"; filename=\"mako-logs.zip\"\r\nContent-Type: application/zip\r\n\r\n");
+                ms.Write(zip, 0, zip.Length);
+                put("\r\n--" + boundary + "--\r\n");
+                body = ms.ToArray();
+            }
+            var req = (HttpWebRequest)WebRequest.Create(hook);
+            req.Method = "POST"; req.ContentType = "multipart/form-data; boundary=" + boundary; req.UserAgent = "Mako-launcher"; req.Timeout = 30000;
+            req.ContentLength = body.Length;
+            using (var rs = req.GetRequestStream()) rs.Write(body, 0, body.Length);
+            using (var resp = (HttpWebResponse)req.GetResponse()) { }
+            return null;
+        } catch (WebException we) {
+            var hr = we.Response as HttpWebResponse;
+            return hr != null ? "the server answered " + (int)hr.StatusCode : we.Message;
+        } catch (Exception ex) { return ex.Message; }
+    }
+
+    static string JsonString(string t) {
+        var sb = new StringBuilder("\"");
+        foreach (char c in t) {
+            if (c == '"') sb.Append("\\\"");
+            else if (c == '\\') sb.Append("\\\\");
+            else if (c == '\n') sb.Append("\\n");
+            else if (c == '\r') { }
+            else if (c == '\t') sb.Append("\\t");
+            else if (c < 0x20) sb.Append("\\u").Append(((int)c).ToString("x4"));
+            else sb.Append(c);
+        }
+        return sb.Append('"').ToString();
     }
 
     void OnPlay() { OnPlay(mqMode); }

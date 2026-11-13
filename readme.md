@@ -5,7 +5,7 @@
 <h1 align="center">MAKO</h1>
 
 <p align="center">
-  <b>The Legend of Zelda: Ocarina of Time (Nintendo Switch 2), running natively on PC: tuned for AMD, smooth everywhere.</b><br>
+  <b>A free, open-source tool that builds a native PC version of your own copy of Ocarina of Time (Nintendo Switch 2).</b><br>
   <a href="#already-playing-update">Update</a> ·
   <a href="#new-player-install">Install</a> ·
   <a href="#the-launcher">Launcher</a> ·
@@ -13,10 +13,11 @@
   <a href="#amd-fsr-4">AMD FSR 4</a> ·
   <a href="#whats-in-mako">What's in Mako</a> ·
   <a href="#known-issues">Known issues</a> ·
-  <a href="#credits">Credits</a>
+  <a href="#credits">Credits</a> ·
+  <a href="#legal">Legal</a>
 </p>
 
-Mako is a fork of [Hookshot](https://github.com/NotRexed/Hookshot), the static recompilation of Ocarina of Time. It started as
+Mako is a fork of Hookshot, the static recompilation of Ocarina of Time. It started as
 "Hookshot AMD fix (sharkiix version)" and is now its own project, built for one thing: **the best way to play Ocarina of Time on
 PC**. It keeps up with every Hookshot improvement and adds what you will not find there.
 
@@ -35,7 +36,7 @@ PC**. It keeps up with every Hookshot improvement and adds what you will not fin
 | Controller button icons (Xbox, PlayStation, Steam Deck) | ✅ | ✅ + **Steam Controller**, new pictures |
 | **Fast build** option (about 1/3 less compile time) | — | ✅ |
 | **SAVE FOLDER**: drop a save, it is imported | — | ✅ |
-| Discord Rich Presence with Ocarina of Time art | — | ✅ |
+| Discord Rich Presence | — | ✅ |
 | **Safe defaults**: risky options off until you turn them on | — | ✅ |
 
 > [!IMPORTANT]
@@ -144,6 +145,16 @@ launcher is `launcher/` (`build.ps1`), the builder app `builder/HookshotBuilder`
 - **DoctorTwitch**: the controller pictures ([GameBanana mod 737074](https://gamebanana.com/mods/737074), CC BY-NC-ND 4.0).
 - **NotRexed** and everyone credited in [Hookshot's readme](docs/hookshot-readme.md#credits): Hookshot itself, which Mako is built on.
 - **Eden**, **Eglantine**, **suyu**, **EvilBoyce / EvilOOT**, **Lichii**, **Mesa** and the other projects listed there.
+
+## Legal
+
+- Mako is a **tool**. It contains **no game code, no game data, no keys and no game executable**, and it does not explain how
+  to get them. You need **your own legally obtained copy** of the game; the game is built on your PC from it.
+- **Never share** what the build makes (`hookshot.exe`, game files, shader caches, saves), and never ask for or post game
+  files or keys in the issues or on Discord: such posts are removed.
+- Mako is free and makes no money: no donations, no paid versions.
+- Rights holders: if you believe something here should not be, open an [issue](https://github.com/Shakoquo/Mako/issues)
+  and it will be looked at and removed quickly.
 
 ## License
 

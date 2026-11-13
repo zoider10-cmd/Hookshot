@@ -184,9 +184,12 @@ def main():
     check('if (list.SelectedIndex < 0 || (string)list.SelectedItem == current || Running()) return;' in src and
           'if (Same(current, names[at])) return "That is the save being played. Choose another first.";' in src,
           "another save is chosen while the game runs, or the save played can be deleted")
-    # (seen in play: the Save button lay where the Recommended tab's Apply button is, and a press on it applied the settings)
-    check("new SlotBtn { R = new RectangleF(cx + 426, 612, 116, 42), HideOn = 8," in src and
-          'Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 548, 612, cw - 548, 42), Page = 0,' in src,
+    # (seen in play: the Save button lay where the Recommended tab's Apply button is, and a press on it applied the settings.
+    #  Since Mako 4.0 the whole row is left out on the Recommended tab, which has Test my PC and Apply in its place)
+    check("new SlotBtn { HideOn2 = 0, R = new RectangleF(cx + 524, 612, cw - 524, 42), HideOn = 8," in src and
+          'Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 312, 612, cw - 312, 42), Page = 0,' in src and
+          'Text = "Save copies", HideOn2 = 0,' in src and
+          "bool visible = (w.Page < 0 && w.HideOn != PageNow && w.HideOn2 != PageNow) || w.Page == PageNow;" in src,
           "the Save button and the Recommended tab's Apply button are in one place again")
     # (Continue plays the game and the save played last; the button under it opens the window to choose them, then plays)
     check('playButton = new Btn { Text = "CONTINUE", Style = Btn.Kind.Play,' in src and "void OnPlay() { OnPlay(mqMode); }" in src and

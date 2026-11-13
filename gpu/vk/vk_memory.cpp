@@ -1038,7 +1038,9 @@ void shadow_drop_range(uint64_t lo, uint64_t hi) {   // (shadow_mu held)
 /// there: a chunk baked from another tile's texels, the earth floor turning into another material before the player's eyes
 /// (Dodongo's Cavern, Fire Temple). The shadow pages stay bounded by kShadowMax whatever the spans. 0: never dropped
 uint64_t tex_span_keep() {
-    static const uint64_t v = getenv("RX_VK_TEX_SPAN_KEEP") ? (uint64_t)std::max(0, atoi(getenv("RX_VK_TEX_SPAN_KEEP"))) : 36000;
+/// (Mako 3.6.2) Back to 1800: kept 36000 presents, the spans held 2.5-3.1 GB of texture storage after an hour (317 MB before) and
+/// the per-frame memory sync took 3-8x longer; players saw the game slow down and crash in long sessions (3.6.1 logs). RX_VK_TEX_SPAN_KEEP=36000: the §77 setting
+    static const uint64_t v = getenv("RX_VK_TEX_SPAN_KEEP") ? (uint64_t)std::max(0, atoi(getenv("RX_VK_TEX_SPAN_KEEP"))) : 1800;   // (3.6.2: back to 3.5.1, see below)
     return v;
 }
 std::unordered_set<uint64_t> tex_spans_dropped;   // (the spans dropped so far, for the log when one comes back; shadow_mu)

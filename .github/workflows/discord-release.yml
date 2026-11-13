@@ -1,0 +1,83 @@
+# (Mako) A published release is announced on the Discord server: @everyone, the version, its notes, how to update and the
+# launcher's link. The Discord webhook's address is the repository secret DISCORD_WEBHOOK (never written here).
+# With the secret DISCORD_WEBHOOK_CHANGELOG too, the full notes also go to the changelog channel (no ping there).
+# Release notes with a line <!-- changelog -->: the part above it is the announcement, the part below the changelog.
+name: Discord announcement
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  announce:
+    if: ${{ !github.event.release.prerelease && !github.event.release.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Post to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          CHANGELOG: ${{ secrets.DISCORD_WEBHOOK_CHANGELOG }}
+          TAG: ${{ github.event.release.tag_name }}
+          NAME: ${{ github.event.release.name }}
+          NOTES: ${{ github.event.release.body }}
+          URL: ${{ github.event.release.html_url }}
+          LATEST: https://github.com/${{ github.repository }}/releases/latest
+        run: |
+          if [ -z "$WEBHOOK" ]; then echo "DISCORD_WEBHOOK is not set: nothing posted"; exit 0; fi
+          title="${NAME:-$TAG}"
+          # (the announcement: the notes above <!-- changelog -->; the changelog: below it; without the line, the whole notes)
+          NOTES="$(printf '%s' "$NOTES" | tr -d '\r')"
+          if printf '%s' "$NOTES" | grep -q '^<!-- changelog -->'; then
+            FULL="$(printf '%s\n' "$NOTES" | sed '1,/^<!-- changelog -->/d')"
+            NOTES="$(printf '%s\n' "$NOTES" | sed '/^<!-- changelog -->/,$d')"
+          else
+            FULL="$NOTES"
+          fi
+          version="$(printf '%s' "$TAG" | sed -E 's/^[^0-9]*//')"
+          # (Discord: an embed's text holds at most 4096 characters)
+          notes="$(printf '%s' "$NOTES" | head -c 3300)"
+          [ "${#NOTES}" -gt 3300 ] && notes="$notes"$'\n\n'"… the full list is on the release page."
+          how=$'**How to update**\nOpen the Mako Launcher and click Update: one rebuild, your saves and settings are kept.\n\n'
+          how+=$'**New here?**\nDownload MakoBuilder.zip from the release page: '"$LATEST"
+          jq -n --arg title "$title" --arg version "$version" --arg notes "$notes" --arg how "$how" --arg url "$URL" '{
+              content: ("@everyone **Mako " + $version + " is out!**"),
+              allowed_mentions: { parse: ["everyone"] },
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: 3721471,
+                description: (if $notes == "" then $how else ($notes + "\n\n" + $how) end),
+                footer: { text: "Mako · a free, open-source tool" }
+              }]
+            }' > payload.json
+          curl -sS --fail-with-body -H "Content-Type: application/json" -d @payload.json "$WEBHOOK"
+          echo "posted to Discord"
+          # (the changelog channel: the whole notes, cut in parts of at most 4000 characters, no ping)
+          if [ -n "$CHANGELOG" ] && [ -n "$FULL" ]; then
+            printf '%s' "$FULL" > notes.txt
+            python3 - "$title" "$URL" <<'PY'
+          import json, sys
+          title, url = sys.argv[1], sys.argv[2]
+          text = open("notes.txt", encoding="utf-8").read()
+          parts, cur = [], ""
+          for line in text.splitlines(keepends=True):
+              while len(line) > 4000:
+                  parts.append(cur) if cur else None; cur = ""; parts.append(line[:4000]); line = line[4000:]
+              if len(cur) + len(line) > 4000:
+                  parts.append(cur); cur = ""
+              cur += line
+          if cur: parts.append(cur)
+          for i, p in enumerate(parts):
+              e = {"description": p, "color": 3721471}
+              if i == 0: e.update(title="Changelog · " + title, url=url)
+              json.dump({"allowed_mentions": {"parse": []}, "embeds": [e]}, open("changelog_%d.json" % i, "w"))
+          PY
+            for f in $(ls changelog_*.json | sort -V); do
+              curl -sS --fail-with-body -H "Content-Type: application/json" -d @"$f" "$CHANGELOG"; sleep 1
+            done
+            echo "changelog posted"
+          fi
