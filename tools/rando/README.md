@@ -102,6 +102,14 @@ leaves gives the Piece of Heart. A piece holds its own piece or a gating item, n
   (`host/hos_main.c` `oot_piece_gives`: a Piece of Heart entering the pouch within 12 m of such a check, not from an
   event's action, which is how a chest's and a character's piece come). The scene is the piece's: it shows a Piece
   of Heart and says so; the tracker's row and the inventory say what was got.
+- The piece is counted all the same: its own taking counts it, apart from the pouch's add (an ordinary piece some
+  tenths of a second after the add, Gerudo Valley's two seconds before it: runs with `HOS_OOT_PIECES=1`, which logs
+  the count as it changes). Changing the add's name, and the name the caller tells the item got by, did not stop it.
+  So one piece is taken out of the pouch again: at the add when Link has one (before the count for an ordinary
+  piece, so three are never made four), else when the count has come. Seen in runs without a window: the count stays
+  as it was for a piece of Kakariko Village made the Megaton Hammer and for Gerudo Valley's (the Mirror Shield), and
+  an ordinary piece still adds one. Left: Gerudo Valley's piece, when it gives an item and Link has three, has made
+  a heart by the time of the add, and that heart stays.
 - Tried first, and left: the item itself lying there, made a pick-up. Made from the token (as a Skulltula's drop is)
   it was there again each time its map was entered. Made from the piece too: seen in play, the Megaton Hammer of
   Zora's River was got with its scene, and was there again (taken a second time it went over Link's head with no
@@ -112,7 +120,8 @@ leaves gives the Piece of Heart. A piece holds its own piece or a gating item, n
 - The rules: a piece asks for its area's rule, which asks for an adult everywhere a piece lies; Lon Lon Ranch's asks
   for what a child out of the forest has (`HEART_RULES`). None has been walked to.
 - The pieces are checks of the tracker ("Piece of Heart, Lon Lon Ranch"). `RANDO_TEST_HEARTS="<hash>=<item>"` makes
-  a piece an item, for a test. Not seen yet: a piece giving its item.
+  a piece an item, for a test. Seen in play: Zora's River's piece gave the Megaton Hammer and stayed taken. Not seen
+  yet: a piece taken with none in the pouch (the piece to come is taken out).
 
 **Songs** (`rando_songs`, `--songs`, `SONGS`): the twelve songs are shuffled among the twelve lessons (Song spots;
 Anywhere, a song in any item's place, is not made yet and is the same). A lesson gives its song as a character gives

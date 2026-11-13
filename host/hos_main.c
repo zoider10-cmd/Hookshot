@@ -1271,9 +1271,18 @@ static void oot_tracker_item(const char *name) {
    Tried before this, and left: the item itself lying there, made a pick-up. Made from the token it was there again
    each time its map was entered; made from the piece too (seen in play, the Megaton Hammer of Zora's River); and with
    the saved truth value of the piece's own hash set by the game's setter (f_80f27130, as the piece's own
-   OneShotHeartPieceTakenDeadAfter calls it) it was there again all the same. out: the item, when 1 is returned. */
+   OneShotHeartPieceTakenDeadAfter calls it) it was there again all the same. out: the item, when 1 is returned.
+   The piece is counted all the same: its own taking counts it, apart from the pouch's add (seen in play and in runs
+   with HOS_OOT_PIECES=1, which logs the count as it changes: an ordinary piece is counted some tenths of a second
+   after the add, the Gerudo Valley's two seconds before it; with the add's name changed, and the name the caller
+   tells the item got by changed too, it was counted still). So one piece is taken out of the pouch again
+   (hos_oot_pouch_add, and oot_piece_back for a piece counted when Link had none). Left: the Gerudo Valley's piece
+   taken with three in the pouch has made a heart by the time of the add, and that heart stays. */
 #define OOT_PIECE_NEAR 12.0f
 #define OOT_PIECE "Obj_Heart_Piece"
+#define OOT_PIECE_VALLEY "Obj_GerudoValley_Heart_Piece"
+#define OOT_PIECE_WAIT 600   /* (the player's updates a piece counted late is waited for: some seconds) */
+static int oot_piece_back;   /* (a piece to take back out of the pouch: the updates it is still waited for) */
 static int oot_piece_gives(char *out, size_t size) {
     int best = -1;
     float nearest = OOT_PIECE_NEAR;
@@ -1513,6 +1522,21 @@ static void oot_skip_cutscene(Ctx *c) {
 static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components) {
     int rx_option(int id, int otherwise);
     oot_skip_cutscene(c);
+    if (__atomic_load_n(&oot_piece_back, __ATOMIC_ACQUIRE) > 0) {   /* (Heart Pieces: hos_oot_pouch_add) */
+        const int left = __atomic_sub_fetch(&oot_piece_back, 1, __ATOMIC_RELEASE);
+        if (!(left % 4) && oot_pouch_count(c, OOT_PIECE) > 0) {
+            const int result = oot_pouch_change(c, OOT_PIECE, -1);
+            __atomic_store_n(&oot_piece_back, 0, __ATOMIC_RELEASE);
+            hos_log("rando: the Piece of Heart counted with the seed's item is taken out (%d)", result);
+        }
+    }
+    if (getenv("HOS_OOT_PIECES")) {   /* (a test's: the count as it changes) */
+        static int last = -2, turn;
+        if (!(turn++ % 4)) {
+            const int now = oot_pouch_count(c, OOT_PIECE);
+            if (now != last) hos_log("rando: Pieces of Heart in the pouch: %d -> %d", last, now), last = now;
+        }
+    }
     static uint64_t flying_actor, marked_actor, marked_controller;
     static int64_t last_tick, last_player_tick, hold_until, trace_until, trace_next;
     /* (the randomizer's fork) the Tracker tab's Go there: a check's place and its map's folder, read from
@@ -1853,9 +1877,20 @@ int hos_oot_pouch_add(Ctx *c) {
     if ((int32_t)c->x[3] > 0 && c->x[30] != 0x8112d4b8ULL && c->x[30] != 0x8112f998ULL && c->x[30] != 0x8112e19cULL && (uint32_t)c->x[4] != 9) {
         /* (Heart Pieces: a piece lying in the world that the seed made another item gives that item) */
         char gives[64];
-        if ((!strcmp(name, OOT_PIECE) || !strcmp(name, "Obj_GerudoValley_Heart_Piece")) && c->x[30] != 0x828d50acULL &&
+        if ((!strcmp(name, OOT_PIECE) || !strcmp(name, OOT_PIECE_VALLEY)) && c->x[30] != 0x828d50acULL &&
             oot_piece_gives(gives, sizeof gives)) {
             hos_log("rando: the Piece of Heart lying here is the seed's %s: that is given", gives);
+            /* (the piece is counted all the same, by its own taking and not by this add: see oot_piece_gives. The
+               valley's has been counted by now, the others are counted after it. One piece is taken out again: now
+               when Link has one, so that the count to come cannot make the fourth of three; else when it has come) */
+            const int has = oot_pouch_count(c, OOT_PIECE);
+            const int valley = !strcmp(name, OOT_PIECE_VALLEY);
+            int result = -2;
+            if (has > 0) result = oot_pouch_change(c, OOT_PIECE, -1);
+            else if (!valley) __atomic_store_n(&oot_piece_back, OOT_PIECE_WAIT, __ATOMIC_RELEASE);
+            hos_log("rando: Link had %d Pieces of Heart at the add: %s", has,
+                    has > 0 ? (result >= 0 ? "one is taken out" : "one could not be taken out") :
+                    valley ? "none is taken out (the piece made a heart of three)" : "the one to come is taken out");
             view = oot_pouch_name(c, view, gives);
             snprintf(name, sizeof name, "%s", gives);
         }

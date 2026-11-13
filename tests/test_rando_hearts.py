@@ -11,7 +11,8 @@ gives the Piece of Heart. (The item itself lying there was there again each time
 - the script reads the setting, names it in the seed's stamp, leaves the map files and the pick-ups alone, and
   writes the pieces with the checks;
 - the game's side: a Piece of Heart entering the pouch near such a check, not from an event's action, is made the
-  check's item before the tracker's record and Progressive items see it.
+  check's item before the tracker's record and Progressive items see it, and the piece its taking counts all the
+  same is taken out of the pouch again.
 
     python -I -B tests/test_rando_hearts.py
 """
@@ -82,12 +83,19 @@ def main():
     check('oot_checks[oot_check_count].piece = got >= 9 && !strncmp(kind, "Piece of Heart", 14) ? strtoull(hash, NULL, 16) : 0;' in host and
           'named("Piece of Heart", h,' in script, "the game's side does not know which checks are pieces lying in the world")
     block = host[host.index("int hos_oot_pouch_add(Ctx *c) {"):]
-    check('(!strcmp(name, OOT_PIECE) || !strcmp(name, "Obj_GerudoValley_Heart_Piece")) && c->x[30] != 0x828d50acULL &&' in block and
+    check('(!strcmp(name, OOT_PIECE) || !strcmp(name, OOT_PIECE_VALLEY)) && c->x[30] != 0x828d50acULL &&' in block and
           "view = oot_pouch_name(c, view, gives);" in block and 'snprintf(name, sizeof name, "%s", gives);' in block and
           block.index("view = oot_pouch_name(c, view, gives);") < block.index("oot_tracker_item(name);") < block.index("hos_rando_progressive()"),
           "a piece lying in the world does not give its check's item, a chest's piece does, or the record and Progressive items see the piece")
     check("const int other = best >= 0 && oot_checks[best].item[0] && strcmp(oot_checks[best].item, OOT_PIECE);" in host and "#define OOT_PIECE_NEAR 12.0f" in host,
           "a piece that is its own piece is made another item, or one far from Link is")
+    # (the piece's own taking counts it apart from the add: one is taken out again, before the count when Link has one,
+    #  so that three are never made four, and after it when he has none)
+    check("if (has > 0) result = oot_pouch_change(c, OOT_PIECE, -1);" in block and
+          "else if (!valley) __atomic_store_n(&oot_piece_back, OOT_PIECE_WAIT, __ATOMIC_RELEASE);" in block and
+          block.index("oot_pouch_change(c, OOT_PIECE, -1);") < block.index("view = oot_pouch_name(c, view, gives);") and
+          "if (!(left % 4) && oot_pouch_count(c, OOT_PIECE) > 0) {" in host,
+          "the piece counted with the seed's item is not taken out of the pouch again")
     print("PASS: Heart Pieces")
 
 
