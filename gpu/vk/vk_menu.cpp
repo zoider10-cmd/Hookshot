@@ -99,6 +99,9 @@ char tracker_name[kTrackerRows][48];
 char tracker_value[kTrackerRows][72];
 int tracker_count = 0;
 std::atomic<int> tracker_on{0};   // (the game side said the randomizer's game is the one played: OOT_TRACKER_ON)
+// (the strip's tabs: the Tracker, the last, is the randomizer's and is not there in the normal game or in Master Quest)
+static_assert(TAB_TRACKER == TAB_COUNT - 1, "the Tracker is the strip's last tab: it is left out by counting one less");
+int tabs_shown() { return tracker_on.load(std::memory_order_relaxed) ? TAB_COUNT : TAB_TRACKER; }
 void tracker_load();
 const char kTrackerHelp[] =
     "The checks of this area that take part in the randomizer's seed: treasure chests, Gold Skulltulas, gifts and shop shelves. It is what the seed "
@@ -2163,7 +2166,8 @@ void draw_options(ui::Ctx& c) {
     // is the previous or the next tab)
     const char* const tab_titles[TAB_COUNT] = {"Graphics", "Audio", "Gameplay", "Controls", "Debug", "Tracker"};
     float tw[TAB_COUNT], total = 0;
-    for (int i = 0; i < TAB_COUNT; i++) tw[i] = ui::size_of(c.f.heading, 23 * s, tab_titles[i]).x + 56 * s, total += tw[i];
+    const int tabs = tabs_shown();
+    for (int i = 0; i < tabs; i++) tw[i] = ui::size_of(c.f.heading, 23 * s, tab_titles[i]).x + 56 * s, total += tw[i];
     float x = (c.w - total) * 0.5f;
     const float ty = hh * 0.5f + s;
     const char* const keys[2] = {c.pad ? "L" : "Q", c.pad ? "R" : "E"};
@@ -2174,7 +2178,7 @@ void draw_options(ui::Ctx& c) {
         ui::text_mid_centre(c, c.f.strong, 14 * s, cx + cw * 0.5f, ty, ui::kInk, keys[i]);
         hits.add(i ? cx - 10 * s : 0, 0, i ? c.w : cx + cw + 10 * s, hh, i ? menu_hit::kTabNext : menu_hit::kTabPrev, -1);
     }
-    for (int i = 0; i < TAB_COUNT; i++) {
+    for (int i = 0; i < tabs; i++) {
         const bool shown = i == (cur_tab == TAB_MOTION ? TAB_CONTROLS : cur_tab);   // (the Motion page: under Controls)
         if (shown || i == hover_tab) {
             const ImU32 foot = shown ? ui::kTabInset : ui::alpha(ui::kTabInset, 0.45f), clear = ui::alpha(ui::kTabInset, 0);
@@ -3919,8 +3923,9 @@ void menu_tick() {
         else if (press[5]) open_now = false;
         // (the tabs: LB and RB, Q and E, or Tab; from the Motion page, as from Controls)
         if ((tab_left || tab_right) && cur_tab == TAB_MOTION) cur_tab = TAB_CONTROLS;
-        if (tab_left) cur_tab = (cur_tab + TAB_COUNT - 1) % TAB_COUNT, changed = true;
-        else if (tab_right) cur_tab = (cur_tab + 1) % TAB_COUNT, changed = true;
+        const int tabs = tabs_shown();   // (without the Tracker outside the randomizer)
+        if (tab_left) cur_tab = (std::min(cur_tab, tabs - 1) + tabs - 1) % tabs, changed = true;
+        else if (tab_right) cur_tab = (cur_tab + 1) % tabs, changed = true;
         const int tab_count = tab_row_count(cur_tab);
         int& selected = tab_selected[cur_tab];
         if (selected >= tab_count) selected = tab_count - 1;   // (a row gone since: the debug tools turned off, HDR turned off: row_shown)
