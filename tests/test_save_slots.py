@@ -105,11 +105,15 @@ def main():
     check("new SlotBtn { R = new RectangleF(cx + 426, 612, 116, 42), HideOn = 8," in src and
           'Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 548, 612, cw - 548, 42), Page = 0,' in src,
           "the Save button and the Recommended tab's Apply button are in one place again")
-    # (one Play button and the game it starts chosen over it: the saves' buttons are of that game)
-    check('Names = new[] { "Normal", "Randomizer", "Master Quest" }' in src and "Get = PlayMode, Set = SetPlayMode });" in src and
-          "void OnPlay() { OnPlay(mqMode); }" in src and 'Text = "MASTER QUEST", Style = Btn.Kind.Play' not in src and
-          'if (mode != 2 && settings.ContainsKey("rando_on")) settings["rando_on"].Set(mode == 1 ? 1 : 0, true);' in src,
-          "there is not one Play button with the game it starts chosen over it, or the randomizer's choice is not the Randomizer setting")
+    # (Continue plays the game and the save played last; the button under it opens the window to choose them, then plays)
+    check('playButton = new Btn { Text = "CONTINUE", Style = Btn.Kind.Play,' in src and "void OnPlay() { OnPlay(mqMode); }" in src and
+          'new ChoiceBtn { Text = "CHOOSE GAME AND SAVE",' in src and "Click = OnChoose," in src,
+          "the left panel has no Continue button for the game played last, or no button to choose the game and the save")
+    check("SetPlayMode(f.Mode);" in src and "string error = SaveSlots.Select(dir, SaveFolder(), f.Save);" in src and
+          src.index("SetPlayMode(f.Mode);") < src.index("string error = SaveSlots.Select(dir, SaveFolder(), f.Save);") and
+          'if (mode != 2 && settings.ContainsKey("rando_on")) settings["rando_on"].Set(mode == 1 ? 1 : 0, true);' in src and
+          "ModeStrip" not in src,
+          "the game and the save chosen are not made the ones Continue plays before the game starts, or the randomizer's choice is not the Randomizer setting")
     check("AskAtPlay" not in src and "PlaySaveForm" not in src, "the question at Play, tried and left, is still there")
     csc = Path(os.environ.get("WINDIR", "")) / "Microsoft.NET" / "Framework64" / "v4.0.30319" / "csc.exe"
     if os.name != "nt" or not csc.is_file():

@@ -45,10 +45,11 @@ as they are (`tracker_load`, gpu/vk/vk_menu.cpp; 48 rows at most), so it is the 
 with the randomizer off. It is what the seed has in an area, not what is left: the menu does not know what has been
 opened. Seen without a window (`RX_VK_MENU_SCRIPT`, `RX_VK_SHOT_MENU=1`); `tests/test_rando_tracker.py`.
 
-**The game to play.** The launcher has one Play button, and over it the game it starts: Normal, Randomizer or
-Master Quest (`ModeStrip`, `PlayMode`). Randomizer is the Randomizer page's own setting, so the two say the same;
-Master Quest is kept in `user/play_mode.txt` and its Play button is the gold one. The Saves, Save copies and Save
-buttons are of the game chosen.
+**The game to play.** The launcher's left panel has two buttons. **Continue** plays the game and the save played
+last, without asking. **Choose game and save** opens a window to choose the game (Normal, Randomizer or Master
+Quest) and its save, or make a new one, and plays those; they are what Continue plays from then on (`PlayChoiceForm`,
+`PlayMode`). Randomizer is the Randomizer page's own setting, so the two say the same; Master Quest is kept in
+`user/play_mode.txt`. The Saves, Save copies and Save buttons are of the game chosen.
 
 **The save to play.** The launcher's **Save** button (bottom row; Master Quest's page has its own) names the save the
 next Play plays and opens a window to choose another, make a new one, rename or delete. A save is the game's whole

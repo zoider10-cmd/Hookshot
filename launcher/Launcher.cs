@@ -344,6 +344,86 @@ class SaveSlotsForm : Form {
     }
 }
 
+// (the window of the second button of the left panel: the game to play and its save, chosen, then played. Continue
+// plays the last ones without asking)
+class PlayChoiceForm : Form {
+    public static readonly string[] Modes = { "Normal", "Randomizer", "Master Quest" };
+    public int Mode;       // (0 the normal game, 1 the randomizer, 2 Master Quest)
+    public string Save;    // (the save chosen, of that game)
+    readonly string dir;
+    readonly Button[] modes = new Button[3];
+    readonly ListBox list = new ListBox();
+    readonly TextBox name = new TextBox();
+    readonly Button add = new Button(), play = new Button(), cancel = new Button();
+    string current;
+
+    public PlayChoiceForm(string dir, int mode) {
+        this.dir = dir; Mode = mode;
+        Text = "Choose the game and the save";
+        FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(520, 452);
+        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        var top = new Label { Text = "The game:", AutoSize = true, Location = new Point(16, 14) };
+        Controls.Add(top);
+        for (int i = 0; i < 3; i++) {
+            int at = i;
+            modes[i] = new Button();
+            Style(modes[i], Modes[i], 16 + i * 166, 40, 156); modes[i].Height = 36;
+            modes[i].Click += (o, e) => { Mode = at; Fill(null); };
+            Controls.Add(modes[i]);
+        }
+        var mid = new Label { Text = "Its save. Each keeps its own progress:", AutoSize = true, Location = new Point(16, 92) };
+        list.SetBounds(16, 118, 488, 190); list.IntegralHeight = false;
+        list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
+        list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
+        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (last played)");
+        var low = new Label { Text = "A new save starts a new game:", AutoSize = true, Location = new Point(16, 320) };
+        name.SetBounds(16, 346, 368, 26); name.MaxLength = 80;
+        name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
+        Style(add, "New save", 394, 344, 110);
+        Style(play, "Play", 278, 404, 110); Style(cancel, "Cancel", 394, 404, 110);
+        play.BackColor = Theme.Blue;
+        Controls.AddRange(new Control[] { mid, list, low, name, add, play, cancel });
+        AcceptButton = play; CancelButton = cancel;
+        add.Click += (o, e) => OnNew();
+        play.Click += (o, e) => OnPlay();
+        list.DoubleClick += (o, e) => OnPlay();
+        cancel.Click += (o, e) => { DialogResult = DialogResult.Cancel; Close(); };
+        Fill(null);
+    }
+
+    static void Style(Button b, string text, int x, int y, int w) {
+        b.Text = text; b.SetBounds(x, y, w, 30); b.FlatStyle = FlatStyle.Flat;
+        b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+    }
+
+    void Fill(string select) {
+        for (int i = 0; i < 3; i++) {
+            bool on = i == Mode;
+            modes[i].BackColor = on ? (i == 2 ? Color.FromArgb(150, 110, 46) : Theme.Blue) : Color.FromArgb(30, 46, 78);
+            modes[i].FlatAppearance.BorderColor = on ? Color.White : Color.FromArgb(60, 90, 150);
+        }
+        list.Items.Clear();
+        foreach (string n in SaveSlots.Names(dir, SaveCopies.Folders[Mode], out current)) list.Items.Add(n);
+        list.SelectedItem = select ?? current;
+    }
+
+    void OnNew() {
+        string n = SaveCopies.Clean(name.Text);
+        string error = SaveSlots.Add(dir, SaveCopies.Folders[Mode], n);
+        if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        name.Text = "";
+        Fill(n);
+    }
+
+    void OnPlay() {
+        if (list.SelectedIndex < 0) return;
+        Save = (string)list.SelectedItem;
+        DialogResult = DialogResult.OK; Close();
+    }
+}
+
 // ---- kept copies of the saves ----
 // The game has one save of the player's own and five it makes itself (slot_00, and slot_01 to slot_05), and its load menu
 // lists no more. A kept copy is the whole save folder under a name, in <game folder>\user\save_copies\<save folder>\<name>:
@@ -1070,31 +1150,21 @@ class GoldChoice : Widget {
     }
 }
 
-// (the game Play starts, over the Play button: the normal game, the randomizer, Master Quest. One is on)
-class ModeStrip : Widget {
-    public string[] Names; public Func<int> Get; public Action<int> Set;
-    public override void Down(PointF p, LauncherForm ui) {
-        int i = (int)((p.X - R.X) / (R.Width / Names.Length));
-        if (i >= 0 && i < Names.Length && Set != null) Set(i);
-    }
+// (the second button of the left panel: it opens the window to choose the game and the save, and says under its name
+// what Continue plays now)
+class ChoiceBtn : Widget {
+    public string Text; public Func<string> Now; public Action Click;
+    public override void Down(PointF p, LauncherForm ui) { if (Click != null) Click(); }
     public override void Paint(Graphics g, LauncherForm ui) {
-        int on = Get();
-        using (var path = Theme.Round(R, 10)) {
-            using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, path);
-            using (var pen = new Pen(Theme.Line, 1f)) g.DrawPath(pen, path);
+        float h = Hover;
+        using (var path = Theme.Round(R, 14)) {
+            using (var br = new SolidBrush(Theme.Mix(Theme.Card, Theme.CardHi, h))) g.FillPath(br, path);
+            using (var pen = new Pen(Theme.Mix(Theme.Line, Theme.Blue, h), 1.2f)) g.DrawPath(pen, path);
         }
-        float w = R.Width / Names.Length;
-        for (int i = 0; i < Names.Length; i++) {
-            var r = new RectangleF(R.X + i * w + 3, R.Y + 3, w - 6, R.Height - 6);
-            if (i == on) {
-                Color c = i == 2 ? Color.FromArgb(226, 184, 106) : Theme.Blue;
-                using (var path = Theme.Round(r, 8)) {
-                    using (var b = new SolidBrush(Theme.A(c, i == 2 ? 46 : 120))) g.FillPath(b, path);
-                    using (var pen = new Pen(c, 1.2f)) g.DrawPath(pen, path);
-                }
-            }
-            Theme.Text_(g, Names[i], Theme.Label, i == on ? Color.White : Theme.Mix(Theme.Dim, Theme.Text, Hover), r, StringAlignment.Center, StringAlignment.Center);
-        }
+        using (var b = new SolidBrush(Theme.Mix(Theme.Text, Color.White, h)))
+            Theme.Spaced(g, Text, Theme.Pick(13f, FontStyle.Bold, "Bahnschrift", "Segoe UI Semibold", "Segoe UI"), b, R.X + R.Width / 2, R.Y + 11, 3);
+        Theme.Text_(g, Now(), Theme.Small, Theme.Mix(Theme.Dim, Theme.Cyan, h), new RectangleF(R.X + 8, R.Y + 34, R.Width - 16, 22),
+                    StringAlignment.Center, StringAlignment.Center);
     }
 }
 
@@ -1355,11 +1425,12 @@ class LauncherForm : Form {
         updateButton = new Btn { Text = "Check again", R = new RectangleF(236, 448, 116, 30), Font = Theme.Label, Enabled = false };
         updateButton.Click = OnUpdateButton;
         widgets.Add(updateButton);
-        // (one Play button, and over it the game it starts: the normal game, the randomizer or Master Quest. PlayMode)
-        widgets.Add(new ModeStrip { Names = new[] { "Normal", "Randomizer", "Master Quest" }, R = new RectangleF(32, 504, 336, 34),
-                                    Get = PlayMode, Set = SetPlayMode });
-        playButton = new Btn { Text = "PLAY", Style = Btn.Kind.Play, R = new RectangleF(32, 548, 336, 84), Click = OnPlay };
+        // (Continue plays the game and the save played last, without asking; the button under it opens the window to choose
+        // the game (the normal one, the randomizer, Master Quest) and its save, and plays those. PlayMode, SaveSlots)
+        playButton = new Btn { Text = "CONTINUE", Style = Btn.Kind.Play, R = new RectangleF(32, 504, 336, 62), Click = OnPlay };
         widgets.Add(playButton);
+        widgets.Add(new ChoiceBtn { Text = "CHOOSE GAME AND SAVE", R = new RectangleF(32, 576, 336, 64), Click = OnChoose,
+                                    Now = () => PlayChoiceForm.Modes[PlayMode()] + "  ·  " + SaveSlots.Current(dir, SaveFolder()) });
         // (Mako) Master Quest's own Play, under it: its logo on the button (prompts/mq/logo.png, made by the build from the player's files)
         try {
             string mqPath = Path.Combine(dir, "prompts", "mq", "logo.png");
@@ -1931,7 +2002,7 @@ class LauncherForm : Form {
 
     // The game Play starts: 0 the normal game, 1 the randomizer, 2 Master Quest. The randomizer is the Randomizer page's
     // own setting (rando_on), so the two say the same; Master Quest is kept in <game folder>\user\play_mode.txt ("mq")
-    // and comes first, as in the game (host/oot_rando.c hos_save_folder). The Play button is Master Quest's gold one then.
+    // and comes first, as in the game (host/oot_rando.c hos_save_folder).
     bool mqMode;
     string ModeFile { get { return Path.Combine(dir, "user", "play_mode.txt"); } }
     public int PlayMode() { return mqMode ? 2 : settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0 ? 1 : 0; }
@@ -1941,10 +2012,19 @@ class LauncherForm : Form {
         try { Directory.CreateDirectory(Path.Combine(dir, "user")); File.WriteAllText(ModeFile, mqMode ? "mq" : "game"); } catch { }
         SyncPlay();
     }
-    void SyncPlay() {
-        if (playButton == null) return;
-        playButton.Gold = mqMode; playButton.Logo = mqMode ? mqLogo : null;
-        Invalidate();
+    void SyncPlay() { Invalidate(); }
+
+    // (the second button: the game and the save are chosen in a window, made the ones Continue plays, and played)
+    void OnChoose() {
+        using (var f = new PlayChoiceForm(dir, PlayMode())) {
+            if (f.ShowDialog(this) != DialogResult.OK) return;
+            if (GameRunning()) { MessageBox.Show(this, "The game is already running.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+            SetPlayMode(f.Mode);
+            string error = SaveSlots.Select(dir, SaveFolder(), f.Save);
+            SlotsChanged = true; Refresh(); SlotsChanged = false;
+            if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        }
+        OnPlay(mqMode);
     }
 
     // (the saves of one game, to choose the one played; the Save buttons read the name again after it)
