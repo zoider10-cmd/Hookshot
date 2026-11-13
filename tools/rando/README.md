@@ -572,8 +572,6 @@ and the seed was not finished.
 | `rando_room.py` | A report of every actor around one chest, with the links between them: how a room is wired. |
 | `rando_shutters.py` | Lists every shutter that turns saving and the warp songs off, with the chests and switches near it, and marks the chests to look at in play. |
 | `rando_sizetable.py` | Finds the size table and shows how much room a map file's entry has. |
-| `rando_poc.py` | The first test: one chest's item swapped in place. |
-| `rando_poc2.py` | The second test: one chest given any item (its own block, a new name, the size table). Its mod, `rando-zz-test2`, must be deleted before a seed is played: it carries a size table of its own. |
 
 | `rando_cosmetics.py` | Cosmetics: writes the colours of the tunics, the hearts and the magic meter, and the shields' looks, as a mod of its own, `cosmetics`, from the launcher's Cosmetics page. |
 

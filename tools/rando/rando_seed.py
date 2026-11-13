@@ -38,7 +38,7 @@ been checked against the remake chest by chest, and they do not look at a dungeo
 So a seed is meant to be finishable, not proven to be. Without --event-chests no gating item moves, and the game's own
 order holds. mods\\rando-seed\\spoiler.txt says where everything went and the order the rules found.
 
-How a map file is changed (each step shown to work in game by rando_poc.py and rando_poc2.py):
+How a map file is changed (each step shown to work in game, one chest at a time, before this was written):
   - a changed chest gets a parameter block of its own at the end of the file (the files store equal blocks once, so
     changing the shared one would change its twins);
   - item names the file does not have yet go into a copy of its string table at the end, after the names it has;
