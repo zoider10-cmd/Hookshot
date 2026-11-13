@@ -110,6 +110,20 @@ Say "blanknew" ([SaveSlots]::Add($dir, "save_rando", " .. "))
 Say "blankcopy" ([SaveSlots]::Copy($dir, "save_rando", "Main", " . "))
 Say "blankcopied" (Get-Content -Raw (Join-Path $dir "user\save_slots\save_rando\Main copy 2\0001\slot_00\progress.sav"))
 Say "blanknames" (Names "save_rando")
+# (one of the ten slots deleted is that slot, empty, again; a save made beyond them is gone from the list)
+Say "slotof" ("" + [SaveSlots]::SlotOf($dir, "save_rando", "Save 4") + [SaveSlots]::SlotOf($dir, "save_rando", "Main") + [SaveSlots]::SlotOf($dir, "save_rando", "Main copy"))
+Say "slotrename" ([SaveSlots]::Rename($dir, "save_rando", "Save 4", "Zelda"))
+Say "slotkept" ([SaveSlots]::SlotOf($dir, "save_rando", "Zelda"))
+Say "slotplay" ([SaveSlots]::Select($dir, "save_rando", "Zelda"))
+Slot "save_rando" "zelda"
+Say "slotleave" ([SaveSlots]::Select($dir, "save_rando", "Main"))
+Say "slotheld" (Get-Content -Raw (Join-Path $dir "user\save_slots\save_rando\Zelda\0001\slot_00\progress.sav"))
+Say "slotdelete" ([SaveSlots]::Delete($dir, "save_rando", "Zelda"))
+Say "slotgone" ((Test-Path (Join-Path $dir "user\save_slots\save_rando\Zelda")) -eq $false)
+Say "slotnames" (Names "save_rando")
+Say "slotagain" ("" + [SaveSlots]::SlotOf($dir, "save_rando", "Save 4") + [SaveSlots]::IsEmpty($dir, "save_rando", "Save 4"))
+Say "customdelete" ([SaveSlots]::Delete($dir, "save_rando", "Third"))
+Say "customnames" (Names "save_rando")
 Say "copyleft" ((Test-Path (Join-Path $dir "user\save_slots\save_rando\Third.part")) -or (Test-Path (Join-Path $dir "user\save_slots\save_rando\Main copy.part")))
 '''
 
@@ -186,6 +200,13 @@ def main():
     check(got["copy"] == "" and got["copied"] == "one" and got["copyrecord"] == "record main" and got["copyplayed"] == "one" and
           got["copynames"].startswith("Main,Main copy,Save 2,") and got["copynames"].endswith("|Main"),
           "a copy of the save played is not that save, whole, with its record, listed after it, or the save played is touched: %r" % got)
+    check(got["slotof"] == "410" and got["slotrename"] == "" and got["slotkept"] == "4" and got["slotplay"] == "" and got["slotleave"] == "" and
+          got["slotheld"] == "zelda", "a slot does not keep its number under a new name, or is not played under it: %r" % got)
+    check(got["slotdelete"] == "" and got["slotgone"] == "True" and ",Save 3,Save 4,Save 5," in got["slotnames"] and "Zelda" not in got["slotnames"] and
+          got["slotagain"] == "4True", "one of the ten slots, deleted, is not that slot, empty and without a name, again: %r" % got)
+    check(got["customdelete"] == "" and "Third" not in got["customnames"], "a save made beyond the ten, deleted, is still in the list: %r" % got)
+    check("delete.Click += (o, e) => OnDelete();" in src and 'MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;\n        string error = SaveSlots.Delete(dir, folder, n);' in src.replace("\r\n", "\n"),
+          "the window to choose has no Delete button, or it does not ask first")
     check(got["copywaiting"] == "" and got["copiedwaiting"] == "one" and got["copyleft"] == "False",
           "a copy of a save that waits is not made, or a half-made folder is left: %r" % got)
     check("copy.Click += (o, e) => OnCopy();" in src and "SaveSlots.Copy(dir, SaveCopies.Folders[Mode], (string)list.SelectedItem, to);" in src and

@@ -107,7 +107,9 @@ static class RandoId {
 // to "Save 10": the first is the saves the player had, the others are empty (a new game), and nothing is moved or
 // written until another is chosen. An empty one of those is a slot without a name ("Slot 3: empty"), and is given one
 // when it is first played (SaveNameForm); more can be made, with a name, beyond the ten.
-// <game folder>\user\save_slots\<save folder>.txt: the name being played, then every name in its order.
+// <game folder>\user\save_slots\<save folder>.txt: the name being played, then every name in its order; one of the
+// ten slots there are to begin with has its number before its name ("3|Zelda"), so that deleting it makes it slot 3,
+// empty, again (a list written before that has no numbers: a slot still named "Save 3" is slot 3).
 // The randomizer's record of the checks collected (rando\collected.txt) goes with its save. tests/test_save_slots.py
 public static class SaveSlots {
     public const string Folder = "save_slots";
@@ -128,7 +130,7 @@ public static class SaveSlots {
         try {
             string[] lines = File.ReadAllLines(ListFile(dir, saveFolder));
             for (int i = 0; i < lines.Length; i++) {
-                string n = SaveCopies.Clean(lines[i]);
+                string n = SaveCopies.Clean(i == 0 ? lines[i] : lines[i].Substring(lines[i].IndexOf('|') + 1));   // (a slot's number is before its name)
                 if (n.Length == 0) continue;
                 listed = true;
                 if (i == 0) current = n;
@@ -153,10 +155,42 @@ public static class SaveSlots {
     public static string Current(string dir, string saveFolder) { string c; Names(dir, saveFolder, out c); return c; }
     public static List<string> Names(string dir, string saveFolder) { string c; return Names(dir, saveFolder, out c); }
 
-    static void Write(string dir, string saveFolder, string current, List<string> names) {
+    // Which of the ten slots there are to begin with each save is: name -> 1..10. A save made beyond them, or a copy, is
+    // none. The list's lines say it ("3|Zelda"); a line without a number that is still "Save 3" is slot 3, when no other is.
+    static Dictionary<string, int> Slots(string dir, string saveFolder) {
+        var slots = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var used = new HashSet<int>();
+        var plain = new List<string>();
+        string[] lines = null;
+        try { lines = File.ReadAllLines(ListFile(dir, saveFolder)); } catch { }
+        bool listed = false;
+        for (int i = 1; lines != null && i < lines.Length; i++) {
+            int bar = lines[i].IndexOf('|'), n;
+            string name = SaveCopies.Clean(lines[i].Substring(bar + 1));
+            if (name.Length == 0) continue;
+            listed = true;
+            if (bar > 0 && int.TryParse(lines[i].Substring(0, bar), out n) && n >= 1 && n <= Defaults && used.Add(n)) slots[name] = n;
+            else plain.Add(name);
+        }
+        if (!listed && (lines == null || lines.Length == 0 || SaveCopies.Clean(lines[0]).Length == 0))
+            for (int i = 1; i <= Defaults; i++) plain.Add("Save " + i);
+        foreach (string name in plain) {
+            int n;
+            if (Unnamed(name) && int.TryParse(name.Substring(5), out n) && n >= 1 && n <= Defaults && !slots.ContainsKey(name) && used.Add(n)) slots[name] = n;
+        }
+        return slots;
+    }
+    // (the slot a save is, 1 to 10, or 0: one made beyond them)
+    public static int SlotOf(string dir, string saveFolder, string name) {
+        int n;
+        return Slots(dir, saveFolder).TryGetValue(name, out n) ? n : 0;
+    }
+
+    static void Write(string dir, string saveFolder, string current, List<string> names, Dictionary<string, int> slots = null) {
+        if (slots == null) slots = Slots(dir, saveFolder);   // (as the list has them: no name changed)
         Directory.CreateDirectory(Path.Combine(dir, "user", Folder));
         var lines = new List<string> { current };
-        lines.AddRange(names);
+        foreach (string name in names) { int n; lines.Add(slots.TryGetValue(name, out n) ? n + "|" + name : name); }
         File.WriteAllLines(ListFile(dir, saveFolder), lines.ToArray());
     }
 
@@ -212,8 +246,11 @@ public static class SaveSlots {
             if (Directory.Exists(from) && names[at] != clean) Directory.Move(from, Path.Combine(Root(dir, saveFolder), clean));
             if (File.Exists(kept) && names[at] != clean) File.Move(kept, Path.Combine(Root(dir, saveFolder), clean) + ".collected.txt");
             if (Same(current, names[at])) current = clean;
+            var slots = Slots(dir, saveFolder);   // (the slot it is goes with it to its new name)
+            int slot;
+            if (slots.TryGetValue(names[at], out slot)) { slots.Remove(names[at]); slots[clean] = slot; }
             names[at] = clean;
-            Write(dir, saveFolder, current, names);
+            Write(dir, saveFolder, current, names, slots);
             return null;
         } catch (Exception ex) { return ex.Message; }
     }
@@ -248,7 +285,8 @@ public static class SaveSlots {
         }
     }
 
-    // (a save that is not being played, and what it held, gone for good)
+    // A save that is not being played, and what it held, gone for good. One of the ten slots there are to begin with is
+    // not taken from the list: it is that slot, empty and without a name, again ("Slot 3: empty").
     public static string Delete(string dir, string saveFolder, string name) {
         string current;
         var names = Names(dir, saveFolder, out current);
@@ -259,8 +297,14 @@ public static class SaveSlots {
             string path = Path.Combine(Root(dir, saveFolder), names[at]);
             if (Directory.Exists(path)) Directory.Delete(path, true);
             if (File.Exists(path + ".collected.txt")) File.Delete(path + ".collected.txt");
-            names.RemoveAt(at);
-            Write(dir, saveFolder, current, names);
+            var slots = Slots(dir, saveFolder);
+            int slot;
+            bool one = slots.TryGetValue(names[at], out slot);
+            slots.Remove(names[at]);
+            string back = "Save " + slot;
+            if (one && (Same(names[at], back) || !Has(names, back))) { names[at] = back; slots[back] = slot; }
+            else names.RemoveAt(at);
+            Write(dir, saveFolder, current, names, slots);
             return null;
         } catch (Exception ex) { return ex.Message; }
     }
@@ -505,6 +549,7 @@ class PlayChoiceForm : Form {
     readonly ListBox list = new ListBox();
     readonly TextBox name = new TextBox();
     readonly Button add = new Button(), play = new Button(), cancel = new Button(), copy = new Button(), rename = new Button();
+    readonly Button delete = new Button();
     readonly HashSet<string> empty = new HashSet<string>();   // (the saves that hold nothing)
     string current;
 
@@ -533,12 +578,18 @@ class PlayChoiceForm : Form {
         name.SetBounds(16, 386, 170, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         Style(add, "New save", 196, 384, 100); Style(copy, "Copy save", 302, 384, 100); Style(rename, "Rename", 408, 384, 96);
-        Style(play, "Play", 278, 444, 110); Style(cancel, "Cancel", 394, 444, 110);
+        Style(play, "Play", 278, 444, 110); Style(cancel, "Cancel", 394, 444, 110); Style(delete, "Delete", 16, 444, 100);
         play.BackColor = Theme.Blue;
-        Controls.AddRange(new Control[] { mid, list, low, name, add, copy, rename, play, cancel });
+        Controls.AddRange(new Control[] { mid, list, low, name, add, copy, rename, play, cancel, delete });
+        delete.Click += (o, e) => OnDelete();
         copy.Click += (o, e) => OnCopy();
         rename.Click += (o, e) => OnRename();
-        list.SelectedIndexChanged += (o, e) => copy.Enabled = list.SelectedIndex >= 0 && !empty.Contains((string)list.SelectedItem);
+        list.SelectedIndexChanged += (o, e) => {
+            string n = list.SelectedIndex >= 0 ? (string)list.SelectedItem : null;
+            copy.Enabled = n != null && !empty.Contains(n);
+            // (not the save in the game, and not a slot that is empty and without a name already)
+            delete.Enabled = n != null && n != current && !(empty.Contains(n) && SaveSlots.Unnamed(n) && SaveSlots.SlotOf(dir, SaveCopies.Folders[Mode], n) > 0);
+        };
         AcceptButton = play; CancelButton = cancel;
         add.Click += (o, e) => OnNew();
         play.Click += (o, e) => OnPlay();
@@ -593,6 +644,21 @@ class PlayChoiceForm : Form {
         }
         if (!SaveRename.Ask(this, dir, SaveCopies.Folders[Mode], from, out to)) return;   // (the new name is asked in a window of its own)
         Fill(to);
+    }
+
+    void OnDelete() {
+        if (list.SelectedIndex < 0) return;
+        string n = (string)list.SelectedItem, folder = SaveCopies.Folders[Mode];
+        if (LauncherForm.GameRunning()) {
+            MessageBox.Show(this, "Close the game first: it is using its saves.", "Saves", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
+        }
+        int slot = SaveSlots.SlotOf(dir, folder, n);
+        if (MessageBox.Show(this, "Delete the save \"" + n + "\" and all its progress? It cannot be brought back." +
+                            (slot > 0 ? "\n\nSlot " + slot + " is empty again after it." : ""), "Saves",
+                            MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
+        string error = SaveSlots.Delete(dir, folder, n);
+        if (error != null) MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        Fill(null);
     }
 
     void OnPlay() {

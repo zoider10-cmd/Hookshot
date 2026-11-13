@@ -65,7 +65,8 @@ one in, so each keeps its own progress. There are ten to begin with, "Save 1" to
 already had and the others are empty slots without a name ("Slot 3: empty"), given one when first played, as a new
 file is in the first Zelda (`SaveNameForm`); more can be made, with a name, beyond the ten, and a save
 can be copied, whole, as one more save (`SaveSlots.Copy`: the two go their own ways from then on). The name can be left out: a new save is then one
-more slot ("Save 11"), a copy "<the save> copy". Nothing is moved or
+more slot ("Save 11"), a copy "<the save> copy". Deleting one of the ten slots makes it that slot, empty, again; a
+save made beyond them is gone from the list. Nothing is moved or
 written until another is chosen. The randomizer's record of the checks collected (`rando/collected.txt`) goes with
 its save. The seed does not: two randomizer saves of different seeds need the seed set again when changing
 (`SaveSlots`, launcher/Launcher.cs; `tests/test_save_slots.py`).
