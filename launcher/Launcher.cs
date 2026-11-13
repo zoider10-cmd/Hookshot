@@ -100,6 +100,77 @@ static class RandoId {
 }
 
 // ---- kept copies of the saves ----
+// (a test) The question at Play, when the Save copies window's tick box is on and the game to be played has copies: go on
+// with the saves as they are, or play one of the copies (SaveCopies.Switch). The game's own load menu lists one save of
+// the player's and five of its own and no more, so the choice among more is made here, before the game starts.
+class PlaySaveForm : Form {
+    readonly string dir, saveFolder, current;
+    readonly ListBox list = new ListBox();
+    readonly CheckBox saveFirst = new CheckBox(), ask = new CheckBox();
+    readonly Label what = new Label();
+    readonly Button play = new Button(), cancel = new Button();
+
+    public PlaySaveForm(string dir, string saveFolder) {
+        this.dir = dir; this.saveFolder = saveFolder;
+        current = SaveCopies.Current(dir, saveFolder);
+        int which = Math.Max(0, Array.IndexOf(SaveCopies.Folders, saveFolder));
+        Text = "Which save to play: " + SaveCopies.Names[which];
+        FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(520, 432);
+        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        var top = new Label { Text = "Go on with the saves in the game, or play a kept copy:", AutoSize = true, Location = new Point(16, 14) };
+        list.SetBounds(16, 40, 488, 252); list.IntegralHeight = false;
+        list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
+        list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 20;
+        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 1);
+        list.Items.Add(current != null ? "Continue: the saves as they are (from \"" + current + "\")" : "Continue: the saves as they are");
+        foreach (string n in SaveCopies.List(dir, saveFolder)) list.Items.Add(n);
+        list.SelectedIndex = 0;
+        saveFirst.SetBounds(16, 300, 488, 24); saveFirst.ForeColor = Theme.Text; saveFirst.FlatStyle = FlatStyle.Flat;
+        saveFirst.Text = current != null ? "First save my progress into \"" + current + "\"" : "";
+        saveFirst.Visible = current != null;
+        what.SetBounds(16, 328, 488, 36); what.ForeColor = Theme.Dim; what.Font = new Font("Segoe UI", 8.5f);
+        ask.Text = "Ask this each time I press Play"; ask.Checked = true;
+        ask.SetBounds(16, 394, 260, 24); ask.ForeColor = Theme.Text; ask.FlatStyle = FlatStyle.Flat;
+        Style(play, "Play", 284, 390, 104); Style(cancel, "Cancel", 400, 390, 104);
+        Controls.AddRange(new Control[] { top, list, saveFirst, what, ask, play, cancel });
+        AcceptButton = play; CancelButton = cancel;
+        list.SelectedIndexChanged += (o, e) => Says();
+        saveFirst.CheckedChanged += (o, e) => Says();
+        list.DoubleClick += (o, e) => OnPlay();
+        play.Click += (o, e) => OnPlay();
+        cancel.Click += (o, e) => { DialogResult = DialogResult.Cancel; Close(); };
+        Says();
+    }
+
+    static void Style(Button b, string text, int x, int y, int w) {
+        b.Text = text; b.SetBounds(x, y, w, 30); b.FlatStyle = FlatStyle.Flat;
+        b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+    }
+
+    // (what Play does with the saves in the game, said before it is done)
+    void Says() {
+        bool copy = list.SelectedIndex > 0;
+        string n = copy ? (string)list.SelectedItem : null;
+        saveFirst.Enabled = copy && current != null && n != current;
+        if (!copy) what.Text = "Nothing is changed: the game starts with the saves it has.";
+        else if (saveFirst.Enabled && saveFirst.Checked) what.Text = "\"" + current + "\" becomes the saves you have now, then \"" + n + "\" is put in the game.";
+        else if (SaveCopies.KeepBefore(dir)) what.Text = "The saves you have now are kept as a \"Before restore\" copy, then \"" + n + "\" is put in the game.";
+        else what.Text = "The saves you have now are replaced by \"" + n + "\" and NOT kept (the Save copies window's box is off).";
+    }
+
+    void OnPlay() {
+        if (list.SelectedIndex > 0) {
+            string n = (string)list.SelectedItem;
+            string error = SaveCopies.Switch(dir, saveFolder, n, DateTime.Now, saveFirst.Enabled && saveFirst.Checked, SaveCopies.KeepBefore(dir));
+            if (error != null) { MessageBox.Show(this, error, "Save copies", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        }
+        if (!ask.Checked) SaveCopies.SetAskAtPlay(dir, false);
+        DialogResult = DialogResult.OK; Close();
+    }
+}
+
 // The game has one save of the player's own and five it makes itself (slot_00, and slot_01 to slot_05), and its load menu
 // lists no more. A kept copy is the whole save folder under a name, in <game folder>\user\save_copies\<save folder>\<name>:
 // the normal game's saves (save), the randomizer's (save_rando) and Master Quest's (save_mq) have their own, and the
@@ -126,6 +197,52 @@ public static class SaveCopies {
             Directory.CreateDirectory(Path.Combine(dir, "user", Folder));
             File.WriteAllText(KeepFile(dir), on ? "1" : "0");
         } catch { }
+    }
+
+    // The current copy of a save folder: the one the saves in the game were last restored from, kept as or updated to
+    // (<game folder>\user\save_copies\<save folder>_current.txt holds its name). The saves go on from there as the game
+    // is played, so it names where they came from, not what they hold now. null: none, or it was deleted.
+    static string CurrentFile(string dir, string saveFolder) { return Path.Combine(dir, "user", Folder, saveFolder + "_current.txt"); }
+    public static string Current(string dir, string saveFolder) {
+        try {
+            string n = File.ReadAllText(CurrentFile(dir, saveFolder)).Trim();
+            return n.Length > 0 && n == Clean(n) && Directory.Exists(Path.Combine(Root(dir, saveFolder), n)) ? n : null;
+        } catch { return null; }
+    }
+    public static void SetCurrent(string dir, string saveFolder, string name) {
+        try {
+            Directory.CreateDirectory(Path.Combine(dir, "user", Folder));
+            File.WriteAllText(CurrentFile(dir, saveFolder), name ?? "");
+        } catch { }
+    }
+
+    // Whether Play asks which save to play first (PlaySaveForm): <game folder>\user\save_copies\ask_at_play.txt, "1" on.
+    // Off until turned on: a test.
+    static string AskFile(string dir) { return Path.Combine(dir, "user", Folder, "ask_at_play.txt"); }
+    public static bool AskAtPlay(string dir) {
+        try { return File.ReadAllText(AskFile(dir)).Trim() == "1"; } catch { return false; }
+    }
+    public static void SetAskAtPlay(string dir, bool on) {
+        try {
+            Directory.CreateDirectory(Path.Combine(dir, "user", Folder));
+            File.WriteAllText(AskFile(dir), on ? "1" : "0");
+        } catch { }
+    }
+
+    // The copy named `name` made the saves to play, and the current one. With saveCurrentFirst the saves as they are go
+    // into the current copy first (it is updated: the copies used as save slots); else, with keepFirst, they are kept as
+    // a "Before restore" copy, as Restore does. Returns null, or what went wrong (then the saves are as they were).
+    public static string Switch(string dir, string saveFolder, string name, DateTime now, bool saveCurrentFirst, bool keepFirst) {
+        string current = Current(dir, saveFolder);
+        bool saved = false;
+        if (saveCurrentFirst && current != null && current != name && HasFiles(Path.Combine(dir, "user", saveFolder))) {
+            string first = Update(dir, saveFolder, current);
+            if (first != null) return "The saves you have now could not be saved into \"" + current + "\" first, so nothing was changed:\n" + first;
+            saved = true;
+        }
+        string error = Restore(dir, saveFolder, name, now, keepFirst && !saved);
+        if (error == null) SetCurrent(dir, saveFolder, name);
+        return error;
     }
 
     // (a name that can be a folder's: no path, no character Windows refuses, no dot or space at its end)
@@ -241,14 +358,27 @@ class SaveCopiesForm : Form {
     readonly TextBox name = new TextBox();
     readonly ListBox list = new ListBox();
     readonly Button keep = new Button(), restore = new Button(), update = new Button(), delete = new Button(), close = new Button();
-    readonly CheckBox keepFirst = new CheckBox();
+    readonly CheckBox keepFirst = new CheckBox(), askAtPlay = new CheckBox();
+    readonly Label now = new Label();
+    string current;   // (the current copy of the folder shown: SaveCopies.Current)
+    public static readonly Color Gold = Color.FromArgb(232, 190, 96);
+
+    // (a list of copies drawn with the current one in gold and named so)
+    public static void DrawCopy(ListBox list, DrawItemEventArgs e, string current, int from = 0) {
+        if (e.Index < 0) return;
+        string n = (string)list.Items[e.Index];
+        bool chosen = (e.State & DrawItemState.Selected) != 0, cur = e.Index >= from && n == current;
+        using (var b = new SolidBrush(chosen ? Theme.Blue : list.BackColor)) e.Graphics.FillRectangle(b, e.Bounds);
+        TextRenderer.DrawText(e.Graphics, cur ? n + "   (current)" : n, list.Font, e.Bounds, chosen ? Color.White : cur ? Gold : Theme.Text,
+                              TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+    }
 
     public SaveCopiesForm(string dir, string saveFolder) {
         this.dir = dir; this.saveFolder = saveFolder;
         Text = "Save copies";
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(520, 498);
+        ClientSize = new Size(520, 526);
         BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
         // (whose saves: the game the launcher is set to play is chosen first, and any of the three can be)
         var whose = new Label { Text = "Saves of:", AutoSize = true, Location = new Point(16, 17) };
@@ -263,6 +393,13 @@ class SaveCopiesForm : Form {
         Style(keep, "Keep a copy", 394, 78, 110);
         var mid = new Label { Text = "Kept copies, the newest first:", AutoSize = true, Location = new Point(16, 124) };
         list.SetBounds(16, 150, 488, 232); list.IntegralHeight = false;
+        list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 20;
+        list.DrawItem += (o, e) => DrawCopy(list, e, current);
+        now.SetBounds(232, 124, 272, 20); now.TextAlign = ContentAlignment.TopRight; now.AutoEllipsis = true; now.ForeColor = Gold;
+        askAtPlay.Text = "When I press Play, ask which save to play (a test)";
+        askAtPlay.SetBounds(16, 460, 488, 24); askAtPlay.ForeColor = Theme.Text; askAtPlay.FlatStyle = FlatStyle.Flat;
+        askAtPlay.Checked = SaveCopies.AskAtPlay(dir);
+        askAtPlay.CheckedChanged += (o, e) => SaveCopies.SetAskAtPlay(dir, askAtPlay.Checked);
         keepFirst.Text = "Before a restore, keep the saves I have now as a \"Before restore\" copy";
         keepFirst.SetBounds(16, 434, 488, 24); keepFirst.ForeColor = Theme.Text; keepFirst.FlatStyle = FlatStyle.Flat;
         keepFirst.Checked = SaveCopies.KeepBefore(dir);
@@ -271,8 +408,8 @@ class SaveCopiesForm : Form {
         Style(restore, "Restore", 16, 394, 110); Style(update, "Update", 136, 394, 110); Style(delete, "Delete", 256, 394, 110);
         Style(close, "Close", 394, 394, 110);
         var foot = new Label { Text = "Update: the copy becomes the saves you have now. Close the game before a restore.",
-                               AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 466), Size = new Size(488, 24), Font = new Font("Segoe UI", 8.5f) };
-        Controls.AddRange(new Control[] { whose, which, top, name, keep, mid, list, restore, update, delete, close, keepFirst, foot });
+                               AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 494), Size = new Size(488, 24), Font = new Font("Segoe UI", 8.5f) };
+        Controls.AddRange(new Control[] { whose, which, top, name, keep, mid, now, list, restore, update, delete, close, keepFirst, askAtPlay, foot });
         AcceptButton = keep; CancelButton = close;
         keep.Click += (o, e) => OnKeep();
         restore.Click += (o, e) => OnRestore();
@@ -293,6 +430,8 @@ class SaveCopiesForm : Form {
 
     void Fill(string select) {
         list.Items.Clear();
+        current = SaveCopies.Current(dir, saveFolder);
+        now.Text = current != null ? "Current: " + current : "Current: none chosen yet";
         foreach (string n in SaveCopies.List(dir, saveFolder)) list.Items.Add(n);
         if (select != null) list.SelectedItem = select;
         Buttons();
@@ -305,6 +444,7 @@ class SaveCopiesForm : Form {
         string error = SaveCopies.Keep(dir, saveFolder, n);
         if (error != null) { Say(error, MessageBoxIcon.Warning); return; }
         name.Text = "";
+        SaveCopies.SetCurrent(dir, saveFolder, n);
         Fill(n);
     }
 
@@ -319,6 +459,7 @@ class SaveCopiesForm : Form {
                             first ? MessageBoxDefaultButton.Button1 : MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
         string error = SaveCopies.Restore(dir, saveFolder, n, DateTime.Now, first);
         if (error != null) { Say(error, MessageBoxIcon.Warning); Fill(n); return; }
+        SaveCopies.SetCurrent(dir, saveFolder, n);
         Fill(n);
         Say("\"" + n + "\" is restored. It is in the game's load menu at the next start.", MessageBoxIcon.Information);
     }
@@ -330,6 +471,7 @@ class SaveCopiesForm : Form {
                             MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
         string error = SaveCopies.Update(dir, saveFolder, n);
         if (error != null) Say(error, MessageBoxIcon.Warning);
+        else SaveCopies.SetCurrent(dir, saveFolder, n);
         Fill(n);
     }
 
@@ -2299,6 +2441,10 @@ class LauncherForm : Form {
             return;
         }
         if (GameRunning()) { MessageBox.Show(this, "The game is already running.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        // (a test: which save to play, asked when the Save copies window's box is on and this game has copies)
+        string saves = masterQuest ? "save_mq" : SaveFolder();
+        if (SaveCopies.AskAtPlay(dir) && SaveCopies.List(dir, saves).Count > 0)
+            using (var f = new PlaySaveForm(dir, saves)) if (f.ShowDialog(this) != DialogResult.OK) return;
         if (!RunRandomizer()) return;
         if (!RunCosmetics()) return;
         try {

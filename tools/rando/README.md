@@ -49,7 +49,12 @@ opened. Seen without a window (`RX_VK_MENU_SCRIPT`, `RX_VK_SHOT_MENU=1`); `tests
 its load menu lists no more. The launcher's **Save copies** button (its window's list chooses the normal game's saves, the randomizer's or
 Master Quest's; Master Quest's page has a link of its own) keeps the whole save folder under a name
 (`user/save_copies/<save folder>/<name>`) and puts a kept copy back, after keeping the saves that were there as
-"Before restore <date and time>". The randomizer's copies and the normal game's are apart, as their saves are. A
+"Before restore <date and time>". The randomizer's copies and the normal game's are apart, as their saves are. The
+window names the **current** copy (the one the saves were last restored from, kept as or updated to: in gold, and
+"Current:" over the list). A test, off until its box in the window is ticked: **Play asks which save to play** when
+that game has copies, to go on with the saves as they are or to put a copy in the game first (`PlaySaveForm`,
+`SaveCopies.Switch`; the saves in the game go into the current copy first when asked, else are kept as a "Before
+restore" copy). A
 restore is refused while the game runs (`SaveCopies`, launcher/Launcher.cs; `tests/test_save_copies.py`).
 
 | Setting | What `rando_seed.py` does with it |
