@@ -748,9 +748,13 @@ class RandoSeedForm : Form {
             var label = new Label { Text = (string)row[1], AutoSize = false, Location = new Point(10, y + 3), Size = new Size(200, 24) };
             var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat, Location = new Point(216, y), Size = new Size(240, 26),
                                      BackColor = Color.FromArgb(24, 36, 60), ForeColor = Theme.Text };
-            box.Items.AddRange((string[])row[2]);
+            // (the choices not available yet are left out; with only Off left the row says so and cannot be changed)
+            var names = (string[])row[2];
+            int choices = LauncherForm.RandoChoices(key, names.Length);
+            if (choices <= 1) { box.Items.Add(Selector.NotYet); box.Enabled = false; label.ForeColor = Theme.Faint; }
+            else for (int k = 0; k < choices; k++) box.Items.Add(names[k]);
             int at = has.ContainsKey(key) ? Array.IndexOf(values, has[key]) : 0;
-            box.SelectedIndex = Math.Max(0, at);
+            box.SelectedIndex = Math.Max(0, Math.Min(box.Items.Count - 1, at));
             if (row.Length > 4 && row[4] is string) { tips.SetToolTip(label, (string)row[4]); tips.SetToolTip(box, (string)row[4]); }
             panel.Controls.Add(label); panel.Controls.Add(box);
             boxes.Add(box); rows.Add(row);
@@ -1625,18 +1629,24 @@ class Btn : Widget {
 class Selector : Widget {
     public string Key, Label, HelpText; public string[] Items; public int[] Values; public int Index;
     public Action<Selector> Changed;
+    // (how many of its choices can be picked, from the first; 0: all of them. The randomizer's settings that are not
+    // made yet, LauncherForm.RandoNotYet: with one choice left the row says so and does nothing)
+    public int Limit;
+    public int Last { get { return (Limit > 0 ? Math.Min(Limit, Items.Length) : Items.Length) - 1; } }
+    public const string NotYet = "Not available yet";
     float flash;
-    public override string Help { get { return HelpText; } }
+    public override string Help { get { return Limit > 0 ? HelpText + (Last == 0 ? " Not available yet." : " " + Items[Last + 1] + " is not available yet.") : HelpText; } }
     RectangleF Left { get { return new RectangleF(R.Right - 72, R.Y + 14, 30, R.Height - 28); } }
     RectangleF Right { get { return new RectangleF(R.Right - 38, R.Y + 14, 30, R.Height - 28); } }
     public void Set(int i, bool notify) {
-        i = Math.Max(0, Math.Min(Items.Length - 1, i));
+        i = Math.Max(0, Math.Min(Last, i));
         if (i == Index) return;
         Index = i; flash = 1;
         if (notify && Changed != null) Changed(this);
     }
     public int Value { get { return Values[Math.Max(0, Index)]; } }
     public override void Down(PointF p, LauncherForm ui) {
+        if (Last == 0) return;   // (not available yet: nothing to choose)
         if (Left.Contains(p)) { Set(Index - 1, true); return; }
         if (Right.Contains(p)) { Set(Index + 1, true); return; }
         ui.ShowList(this);
@@ -1653,10 +1663,10 @@ class Selector : Widget {
         using (var b = new SolidBrush(Theme.A(Theme.Cyan, (int)(40 + 180 * Math.Max(h, flash)))))
             using (var p = Theme.Round(new RectangleF(R.X + 1, R.Y + 14, 3, R.Height - 28), 1.5f)) g.FillPath(b, p);
         Theme.Text_(g, Label.ToUpperInvariant(), Theme.Label, Theme.Dim, new RectangleF(R.X + 16, R.Y + 9, R.Width - 90, 18), StringAlignment.Near, StringAlignment.Near);
-        Theme.Text_(g, Index >= 0 ? Items[Index] : "", Theme.Value, Theme.Mix(Theme.Text, Color.White, flash),
+        Theme.Text_(g, Last == 0 ? NotYet : Index >= 0 ? Items[Index] : "", Theme.Value, Last == 0 ? Theme.Faint : Theme.Mix(Theme.Text, Color.White, flash),
                     new RectangleF(R.X + 16, R.Y + 27, R.Width - 92, 24), StringAlignment.Near, StringAlignment.Near);
         Arrow(g, Left, true, Index > 0, ui.MouseIn(Left));
-        Arrow(g, Right, false, Index < Items.Length - 1, ui.MouseIn(Right));
+        Arrow(g, Right, false, Index < Last, ui.MouseIn(Right));
     }
     static void Arrow(Graphics g, RectangleF r, bool left, bool on, bool over) {
         if (over && on) using (var p = Theme.Round(r, 8)) using (var b = new SolidBrush(Theme.A(Theme.Blue, 60))) g.FillPath(b, p);
@@ -1877,6 +1887,12 @@ class LauncherForm : Form {
     // checks them against that file. The seed's random part, rando_seed, is the New seed button's. The game's Insert menu
     // has no Randomizer tab since Mako 3.3 (its menu was written anew): this page is where they are set, and where a
     // seed's ID is copied and pasted)
+    // (the settings a seed does nothing with yet, and the first of each one's choices that is so: the row offers the
+    // choices before it, and with only Off left says "Not available yet". Dungeon rewards and the frogs are not made;
+    // Songs' and Dungeon keys' Anywhere are made as the choice before. tools/rando/rando_seed.py is what places a seed)
+    internal static readonly Dictionary<string, int> RandoNotYet = new Dictionary<string, int> {
+        { "rando_dungeon_rewards", 1 }, { "rando_frogs", 1 }, { "rando_songs", 2 }, { "rando_keys", 2 } };
+    internal static int RandoChoices(string key, int count) { int n; return RandoNotYet.TryGetValue(key, out n) ? Math.Min(n, count) : count; }
     internal static readonly object[][] RandoRows = {
         new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
             "Turns the seed on. Chests, Gold Skulltulas, Quest rewards (with Frogs and Light Arrows), Deku Scrubs, Starting rupees, Dungeon keys, Major items, the forest's two ways and the opening are made when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
@@ -2166,6 +2182,7 @@ class LauncherForm : Form {
             var s = new Selector { Key = (string)row[0], Label = (string)row[1], Items = (string[])row[2], Values = (int[])row[3], HelpText = (string)row[4],
                                    Page = page, R = new RectangleF(x0 + col * (colW + 14), 112 + line * pitch, colW, height),
                                    Scrolls = scrolls, HomeY = 112 + line * pitch };
+            if (RandoNotYet.ContainsKey(s.Key)) s.Limit = RandoNotYet[s.Key];
             if (into == null) { s.Changed = OnSetting; settings[s.Key] = s; }
             else { s.Changed = OnCosmetic; into[s.Key] = s; }
             widgets.Add(s);
@@ -2483,7 +2500,7 @@ class LauncherForm : Form {
 
     public void ShowList(Selector s) {
         var m = new ContextMenuStrip { Renderer = new DarkMenu(), ShowImageMargin = true, Font = new Font("Segoe UI", 10f), BackColor = Color.FromArgb(16, 25, 43) };
-        for (int i = 0; i < s.Items.Length; i++) {
+        for (int i = 0; i <= s.Last; i++) {   // (not the choices that are not available yet)
             int k = i;
             var it = new ToolStripMenuItem(s.Items[i]) { Checked = i == s.Index, ForeColor = Theme.Text, Padding = new Padding(4, 3, 4, 3) };
             it.Click += (o, e) => s.Set(k, true);
@@ -2515,6 +2532,7 @@ class LauncherForm : Form {
         if (key == "frame_generation" && value == 2 && IsRedstone()) return;   // (2x stays AMD's when it was)
         int best = 0;
         for (int i = 0; i < s.Values.Length; i++) if (Math.Abs(s.Values[i] - value) < Math.Abs(s.Values[best] - value)) best = i;
+        best = Math.Min(best, s.Last);   // (a choice not available yet, from an older file or a pasted ID: the last that is)
         if (s.Index < 0) s.Index = best; else s.Set(best, false);
     }
 

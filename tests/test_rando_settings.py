@@ -63,6 +63,21 @@ def sources(rows):
     got = [(key, label, re.findall(r'"([^"]*)"', choices), [int(v) for v in values.split(",")], help_)
            for key, label, choices, values, help_ in found[1:]]
     check(got == want, "the launcher's Randomizer page and gpu/vk/oot_rando.h differ:\n  %r\n  %r" % (got, want))
+    # (the settings a seed does nothing with yet cannot be picked: the page's rows, its list, a pasted ID or an older
+    #  file's value, and the New seed window)
+    not_yet = re.search(r"RandoNotYet = new Dictionary<string, int> \{\s*([^;]*?) \};", launcher)
+    limits = dict((k, int(n)) for k, n in re.findall(r'\{ "(\w+)", (\d+) \}', not_yet.group(1))) if not_yet else {}
+    check(limits == {"rando_dungeon_rewards": 1, "rando_frogs": 1, "rando_songs": 2, "rando_keys": 2},
+          "the launcher's list of settings not available yet is not the four known (%r)" % limits)
+    check(all(key in {f[0] for f in found} for key in limits), "a setting listed as not available yet is not a row of the page")
+    check("if (RandoNotYet.ContainsKey(s.Key)) s.Limit = RandoNotYet[s.Key];" in launcher and "i = Math.Max(0, Math.Min(Last, i));" in launcher and
+          "for (int i = 0; i <= s.Last; i++) {" in launcher and "best = Math.Min(best, s.Last);" in launcher and
+          "if (Last == 0) return;" in launcher and "int choices = LauncherForm.RandoChoices(key, names.Length);" in launcher and
+          "if (choices <= 1) { box.Items.Add(Selector.NotYet); box.Enabled = false;" in launcher,
+          "a setting not available yet can still be picked on the page, from its list, by a pasted ID or in the New seed window")
+    check('"2, a song in any item\'s place, is not made yet: as 1"' in read("tools", "rando", "rando_seed.py") and
+          '"rando_dungeon_rewards"' not in read("tools", "rando", "rando_seed.py"),
+          "Songs' Anywhere or Dungeon rewards is made now: take it off the launcher's list of settings not available yet")
     check("AddSelectors(RandoRows, 3, cx, colW, null, 47, 45, true);" in launcher and '"Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About"' in launcher,
           "the launcher does not show its Randomizer page")
     # (more settings than the page has room for: the list scrolls, and a row is shown, lit and pressed only inside its view)
