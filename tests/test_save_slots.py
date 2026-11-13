@@ -177,8 +177,10 @@ Say "copyleft" ((Test-Path (Join-Path $dir "user\save_slots\save_rando\Third.par
 
 def main():
     src = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
-    check("Saves = SaveFolder," in src and 'Saves = () => "save_mq",' in src and "new SaveSlotsForm(dir, saveFolder)" in src,
-          "the launcher has no Save button for the game the Randomizer setting names, or none on Master Quest's page")
+    # (the save played is named under the left panel's second button; the row's own Save button said the same and is gone)
+    check('Now = () => PlayChoiceForm.Modes[PlayMode()] + "  ·  " + SaveSlots.Current(dir, SaveFolder())' in src and
+          'Saves = () => "save_mq",' in src and "new SaveSlotsForm(dir, saveFolder)" in src and "Saves = SaveFolder," not in src,
+          "the launcher does not name the save played under its second button, has none on Master Quest's page, or the row's Save button is back")
     check('public const string First = "Save 1";' in src and 'return Path.Combine(dir, "user", Folder, saveFolder);' in src and
           'public const string Folder = "save_slots";' in src, "the saves that wait are not kept under the game folder's user folder, apart for each game")
     check('if (list.SelectedIndex < 0 || (string)list.SelectedItem == current || Running()) return;' in src and
@@ -186,8 +188,7 @@ def main():
           "another save is chosen while the game runs, or the save played can be deleted")
     # (seen in play: the Save button lay where the Recommended tab's Apply button is, and a press on it applied the settings.
     #  Since Mako 4.0 the whole row is left out on the Recommended tab, which has Test my PC and Apply in its place)
-    check("new SlotBtn { HideOn2 = 0, R = new RectangleF(cx + 524, 612, cw - 524, 42), HideOn = 8," in src and
-          'Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 312, 612, cw - 312, 42), Page = 0,' in src and
+    check('Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 312, 612, cw - 312, 42), Page = 0,' in src and
           'Text = "Save copies", HideOn2 = 0,' in src and
           "bool visible = (w.Page < 0 && w.HideOn != PageNow && w.HideOn2 != PageNow) || w.Page == PageNow;" in src,
           "the Save button and the Recommended tab's Apply button are in one place again")

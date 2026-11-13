@@ -2094,18 +2094,17 @@ class LauncherForm : Form {
 
         // (bottom row: folders)
         // (not on the Recommended tab, which has Test my PC and Apply in the row's place, nor on Master Quest's page)
-        widgets.Add(new Btn { Text = "Saves", HideOn2 = 0, R = new RectangleF(cx, 612, 80, 42), HideOn = 8, Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
-        widgets.Add(new Btn { Text = "Import saves", HideOn2 = 0, R = new RectangleF(cx + 86, 612, 110, 42), HideOn = 8, Click = OnImport });
-        widgets.Add(new Btn { Text = "Send logs", HideOn2 = 0, R = new RectangleF(cx + 202, 612, 92, 42), HideOn = 8, Click = OnSendLogs });
-        widgets.Add(new Btn { Text = "Game folder", HideOn2 = 0, R = new RectangleF(cx + 300, 612, 106, 42), HideOn = 8, Click = () => OpenFolder(dir) });
+        widgets.Add(new Btn { Text = "Saves", HideOn2 = 0, R = new RectangleF(cx, 612, 110, 42), HideOn = 8, Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
+        widgets.Add(new Btn { Text = "Import saves", HideOn2 = 0, R = new RectangleF(cx + 118, 612, 140, 42), HideOn = 8, Click = OnImport });
+        widgets.Add(new Btn { Text = "Send logs", HideOn2 = 0, R = new RectangleF(cx + 266, 612, 112, 42), HideOn = 8, Click = OnSendLogs });
+        widgets.Add(new Btn { Text = "Game folder", HideOn2 = 0, R = new RectangleF(cx + 386, 612, 128, 42), HideOn = 8, Click = () => OpenFolder(dir) });
         // (kept copies of the saves: more than the game's one save of the player's own. The window opens on the folder the
         // Randomizer setting names, and its list chooses the normal game's, the randomizer's or Master Quest's)
-        widgets.Add(new Btn { Text = "Save copies", HideOn2 = 0, R = new RectangleF(cx + 412, 612, 106, 42), HideOn = 8,
+        widgets.Add(new Btn { Text = "Save copies", HideOn2 = 0, R = new RectangleF(cx + 522, 612, cw - 522, 42), HideOn = 8,
                               Click = () => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } });
 
-        // (the save the next Play plays, of the game the Randomizer setting names: SaveSlots)
-        widgets.Add(new SlotBtn { HideOn2 = 0, R = new RectangleF(cx + 524, 612, cw - 524, 42), HideOn = 8, Dir = dir, Saves = SaveFolder,
-                                  Click = () => OpenSlots(SaveFolder()) });
+        // (the save the next Play plays is named under the left panel's second button, which opens the window to choose it:
+        //  a button for it in this row said the same twice, its owner's word, and is gone)
 
         // (Mako) the Recommended tab: this PC read once, and its Apply button
         BuildRecommendations();
