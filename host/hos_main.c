@@ -1927,6 +1927,23 @@ int hos_oot_pouch_add(Ctx *c) {
 #endif
 }
 
+/* The clock's log (nx2/oot_patches.py TIME_HOOK): every request for a time of day, with who made it (the return address:
+   through ExecuteWmSetTime, f_834722d0, it is that one's caller's) and its other arguments. A request the same as the
+   last, from the same place, is counted and said once it changes. Seen in play and looked for with this: the Sun's
+   Song made it night and it was day again at once. At most 400 lines a run. */
+void hos_oot_time_set(Ctx *c) {
+    static uint32_t last_time = 0xffffffffu;
+    static uint64_t last_from;
+    static unsigned same, lines;
+    const uint32_t time = (uint32_t)c->x[1];
+    if (time == last_time && c->x[30] == last_from) { same++; return; }
+    if (lines++ >= 400) return;
+    if (same) hos_log("clock: the same request %u more times", same);
+    same = 0, last_time = time, last_from = c->x[30];
+    hos_log("clock: %02u:%02u asked for (%u s, x2 %llu, x3 %lld) from %#llx", time / 3600 % 24, time / 60 % 60, time,
+            (unsigned long long)c->x[2], (long long)(int32_t)c->x[3], (unsigned long long)c->x[30]);
+}
+
 void hos_oot_lift_player(Ctx *c, uint64_t actor) {
 #if defined(_WIN32) || defined(__linux__)   /* (the debug tools: host/posix has what they call) */
     flight_pose_actor = 0;

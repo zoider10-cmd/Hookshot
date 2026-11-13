@@ -3126,6 +3126,11 @@ def main():
         def pack(name):
             rel = "Pack/Actor/%s.pack.zs" % name
             return pack_files[rel] if rel in pack_files else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
+        # (a test: RANDO_TEST_SHOPS="<item> <item> ..." puts those items on the shelves in their order, the Kokiri shop's
+        #  four first, then the Bazaar's, the Potion Shop's, the Bombchu Shop's, the Goron shop's and the Zora shop's: to
+        #  see how every item stands on a shelf and what its name and words are there. The seed's rules are not asked)
+        for h, item in zip(shelves, os.environ.get("RANDO_TEST_SHOPS", "").split()):
+            gives[h] = item
         try:
             # (a shelf actor for each shelf: its item, at its price)
             on_sale = collections.OrderedDict((shop_actor("%s_%d" % (shop.key, index)), (gives[h], shelf_prices[h])) for h, (shop, index, _) in shelves.items())
