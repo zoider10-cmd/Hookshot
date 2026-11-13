@@ -45,6 +45,12 @@ as they are (`tracker_load`, gpu/vk/vk_menu.cpp; 48 rows at most), so it is the 
 with the randomizer off. It is what the seed has in an area, not what is left: the menu does not know what has been
 opened. Seen without a window (`RX_VK_MENU_SCRIPT`, `RX_VK_SHOT_MENU=1`); `tests/test_rando_tracker.py`.
 
+**Sharing the fork.** `tools/rando/install.ps1` is one file to pass on: run on a PC with a Mako game folder already
+built, it downloads this fork's source from GitHub, builds that folder again from the game files it keeps
+(`nx2/make_game.py --update`, with the tools of the Mako builder that made it) and puts the fork's launcher in it.
+No game files, and nothing made from them, are downloaded or sent; saves and settings stay. Seen working here from a
+local source folder (`-Source`); the download and a builder's tools folder have not been tried.
+
 **The game to play.** The launcher's left panel has two buttons. **Continue** plays the game and the save played
 last, without asking. **Choose game and save** opens a window to choose the game (Normal, Randomizer or Master
 Quest) and its save, or make a new one, and plays those; they are what Continue plays from then on (`PlayChoiceForm`,
