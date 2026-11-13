@@ -55,8 +55,8 @@ Quest) and its save, or make a new one, and plays those; they are what Continue 
 next Play plays and opens a window to choose another, make a new one, rename or delete. A save is the game's whole
 save folder under a name: the one played is in the game's folder (`user/save`, `user/save_rando`, `user/save_mq`), the
 others wait in `user/save_slots/<save folder>/<name>`, and choosing another moves the one played out and the chosen
-one in, so each keeps its own progress. The first, "Save 1", is the saves the player already had; nothing is moved
-until a second is made and chosen. The randomizer's record of the checks collected (`rando/collected.txt`) goes with
+one in, so each keeps its own progress. There are five to begin with, "Save 1" to "Save 5": the first is the saves the player
+already had and the others are empty, and nothing is moved or written until another is chosen. The randomizer's record of the checks collected (`rando/collected.txt`) goes with
 its save. The seed does not: two randomizer saves of different seeds need the seed set again when changing
 (`SaveSlots`, launcher/Launcher.cs; `tests/test_save_slots.py`).
 

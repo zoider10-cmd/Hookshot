@@ -103,13 +103,15 @@ static class RandoId {
 // The game has one save folder a game (user\save, user\save_rando, user\save_mq) and its load menu lists one save of the
 // player's own and five it makes itself. A save here is that whole folder under a name: the one being played is in the
 // game's folder, the others wait in <game folder>\user\save_slots\<save folder>\<name>. Choosing another moves the one
-// played out to its name and the chosen one in, so each keeps its own progress. The first, "Save 1", is the saves the
-// player had before there were any others: nothing is moved until a second one is made and chosen.
+// played out to its name and the chosen one in, so each keeps its own progress. There are five to begin with, "Save 1"
+// to "Save 5": the first is the saves the player had, the others are empty (a new game), and nothing is moved or
+// written until another is chosen.
 // <game folder>\user\save_slots\<save folder>.txt: the name being played, then every name in its order.
 // The randomizer's record of the checks collected (rando\collected.txt) goes with its save. tests/test_save_slots.py
 public static class SaveSlots {
     public const string Folder = "save_slots";
     public const string First = "Save 1";
+    public const int Defaults = 5;
 
     public static string Root(string dir, string saveFolder) { return Path.Combine(dir, "user", Folder, saveFolder); }
     static string ListFile(string dir, string saveFolder) { return Path.Combine(dir, "user", Folder, saveFolder + ".txt"); }
@@ -121,15 +123,19 @@ public static class SaveSlots {
     public static List<string> Names(string dir, string saveFolder, out string current) {
         var names = new List<string>();
         current = null;
+        bool listed = false;
         try {
             string[] lines = File.ReadAllLines(ListFile(dir, saveFolder));
             for (int i = 0; i < lines.Length; i++) {
                 string n = SaveCopies.Clean(lines[i]);
                 if (n.Length == 0) continue;
+                listed = true;
                 if (i == 0) current = n;
                 else if (!Has(names, n)) names.Add(n);
             }
         } catch { }
+        // (with no list yet there are five, "Save 1" to "Save 5": the first is the saves in the game, the others are empty)
+        if (!listed) { current = First; for (int i = 1; i <= Defaults; i++) names.Add("Save " + i); }
         // (a save waiting in its folder that the list forgot is still a save)
         try {
             foreach (string d in Directory.GetDirectories(Root(dir, saveFolder))) {

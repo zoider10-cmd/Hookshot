@@ -6,7 +6,8 @@ read on every platform: the button is on the page for the game the Randomizer se
 page, and a change is refused while the game runs. On Windows the launcher's source is compiled with the .NET
 Framework's own compiler, as launcher/build.ps1 does, and SaveSlots is run on a made-up game folder:
 
-- with nothing made yet there is one save, "Save 1", and it is the saves the player had: nothing is moved;
+- with nothing made yet there are five saves, "Save 1" to "Save 5"; the first is the saves the player had and the
+  others are empty: nothing is moved or written;
 - a new save is empty, and choosing it moves the saves played out to their name, whole, and leaves the game's folder
   empty (a new game); choosing the first again brings its saves back and takes the other's out;
 - each game's saves are apart (the normal game's, the randomizer's, Master Quest's);
@@ -131,11 +132,11 @@ def main():
                              capture_output=True, text=True)
         check(ran.returncode == 0, "the saves to play could not be run:\n" + ran.stdout + ran.stderr)
         got = dict(line.split("=", 1) for line in ran.stdout.splitlines() if "=" in line)
-    check(got["first"] == "Save 1|Save 1" and got["untouched"] == "True" and got["sameagain"] == "",
-          "with nothing made yet the saves the player had are not the one save, or something is moved: %r" % got)
-    check(got["noname"] != "" and got["new"] == "" and got["twice"] != "" and got["listed"] == "Save 1,Second run|Save 1" and got["stillone"] == "one",
+    check(got["first"] == "Save 1,Save 2,Save 3,Save 4,Save 5|Save 1" and got["untouched"] == "True" and got["sameagain"] == "",
+          "with nothing made yet there are not five saves with the first the saves the player had, or something is moved: %r" % got)
+    check(got["noname"] != "" and got["new"] == "" and got["twice"] != "" and got["listed"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Second run|Save 1" and got["stillone"] == "one",
           "a new save is not listed after the first, a name is used twice, or making one changes the saves played: %r" % got)
-    check(got["select"] == "" and got["empty"] == "none" and got["waiting"] == "one" and got["playing"] == "Save 1,Second run|Second run",
+    check(got["select"] == "" and got["empty"] == "none" and got["waiting"] == "one" and got["playing"] == "Save 1,Save 2,Save 3,Save 4,Save 5,Second run|Second run",
           "choosing a new save does not move the saves played out, whole, and leave a new game: %r" % got)
     check(got["recordout"] == "True" and got["recordback"] == "record one" and got["againrecord"] == "record two",
           "the randomizer's record of the checks collected does not go with its save: %r" % got)
@@ -143,12 +144,12 @@ def main():
     check(got["back"] == "" and got["backnow"] == "one" and got["otherwaits"] == "two",
           "choosing the first save again does not bring its saves back and take the other's out: %r" % got)
     check(got["gone"] != "" and got["outside"] != "", "a save that is not there, or a path out of the saves, was chosen")
-    check(got["normal"] == "normal" and got["normalnames"] == "Save 1|Save 1" and got["mqnames"] == "Save 1|Save 1",
+    check(got["normal"] == "normal" and got["normalnames"] == "Save 1,Save 2,Save 3,Save 4,Save 5|Save 1" and got["mqnames"] == "Save 1,Save 2,Save 3,Save 4,Save 5|Save 1",
           "the normal game's saves, or Master Quest's, are not apart from the randomizer's: %r" % got)
     check(got["rename"] == "" and got["renamed"] == "two" and got["renameplayed"] == "" and got["renametaken"] != "" and
-          got["names2"] == "Main,Hard seed|Main", "a save is not renamed, played or waiting, or takes another's name: %r" % got)
+          got["names2"] == "Main,Save 2,Save 3,Save 4,Save 5,Hard seed|Main", "a save is not renamed, played or waiting, or takes another's name: %r" % got)
     check(got["again"] == "" and got["againnow"] == "two" and got["back2"] == "", "a renamed save is not played with its own saves: %r" % got)
-    check(got["delete"] == "" and got["names3"] == "Main|Main" and got["deleted"] == "True" and got["end"] == "one",
+    check(got["delete"] == "" and got["names3"] == "Main,Save 2,Save 3,Save 4,Save 5|Main" and got["deleted"] == "True" and got["end"] == "one",
           "a deleted save is not gone with what it held, or the save played was touched: %r" % got)
     print("PASS: the launcher's saves to play")
 
