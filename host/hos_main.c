@@ -1319,6 +1319,19 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
     next = now + 1000000000LL;
     if (!hos_rando_on()) return;
     rx_option_set(OOT_TRACKER_ON, 1);   /* (the Tracker tab reads the seed only then: vk_menu.cpp tracker_load) */
+    {   /* (the randomizer's fork) Hyrule Field's clock. The flag HyruleField_ChangeENV (its MurmurHash3 below) holds the
+           field's sky and time as the story's from the forest's way out to the owl's first cutscene: no day turned to
+           night, and the Sun's Song's night was day again at once (seen in play; tools/rando/rando_seed.py FIELD_FLOW
+           has the steps). A seed passes the step that sets it over; a save made before that has it set still, and with
+           Skip cutscenes the owl's own step was not come to. So it is put out here, once a second while it is set. */
+        int held = 0;
+        if (oot_gamedata_bool(c, 0x316c53a3u, &held) && held) {
+            const int done = oot_gamedata_set_bool(c, 0x316c53a3u, 0);
+            static int said;
+            if (said++ < 4) hos_log("rando: Hyrule Field's sky and time were held as the story's (HyruleField_ChangeENV): the flag is put out%s",
+                                    done ? "" : ", NOT FOUND");
+        }
+    }
     char map[80];
     oot_gamedata_string(c, 0x1d6189dau, map, sizeof map);   /* Sequence_CurrentBanc */
     AcquireSRWLockExclusive(&oot_checks_lock);

@@ -74,7 +74,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 3   # (1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out)
+FIXES_VERSION = 4   # (1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 3: before Hyrule Field's clock ran from the forest's way out, FIELD_FLOW)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -87,6 +87,18 @@ OPEN = {
     "forest": {"KokiriForest_Npc_Kokiri_007_Child_Blocker_00": False},
 }
 FLAG_LIST = "GameData"   # (the folder of the romfs: GameDataList.Product.<n>.byml.zs in it)
+# The clock of Hyrule Field. Its sky and time are held as the story's while the flag HyruleField_ChangeENV is set. A new
+# game has it put out; leaving the forest sets it (the flow Goto_HyruleCastle, its entry KokiriForest_ArriveLostWood:
+# after Saria's two cutscenes, Dm_Kokiri_0150 and _0155, the step 182 sets the flag True and goes on to 21), and the
+# owl's first cutscene in the field puts it out again (the entry Goto_HyruleCastle_Kaepora_00: after Dm_HrlField_0000 and
+# _0005 it sets the flag False and has the world's time palette made again). Between the two no day turns to night,
+# and the Sun's Song's night is day again at once: seen in play with the log of the clock's requests (the song asked
+# for its time and nothing asked for the day back; after the owl's cutscene the song worked). A seed can give the song
+# before the owl is met, and with Skip cutscenes the owl's steps after its cutscene were not come to (the clock stood
+# until Zelda was met). So in every seed the step that sets the flag is passed over: 7, Saria's second cutscene, goes
+# on to 21 (field_clock). The flag is in a save: a game already past the forest's way out keeps it until the owl.
+FIELD_FLOW = "Event/EventFlow/Goto_HyruleCastle.bfevfl.zs"
+FIELD_FLAG = "HyruleField_ChangeENV"
 # Starting rupees: the list's whole number PlayerStatus.CurrentRupee is what Link has, 0 in a new game. With the
 # setting on a new game starts with START_RUPEES of them (flag_defaults, kind "Int"). A game already begun keeps
 # what its save says.
@@ -1802,6 +1814,40 @@ def opening_skip(data):
     return bytes(out)
 
 
+def field_clock(data):
+    """Goto_HyruleCastle (a BFEVFL file) with the step that holds Hyrule Field's sky and time passed over (see
+    FIELD_FLOW, above): the new bytes, of the same size. Every step it relies on is checked first: a flow that is not
+    the one this was written for is an error."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+    if data[:6] != b"BFEVFL" or u16(0x20) != 1:
+        raise ValueError("not an event flow file of one flowchart")
+    chart = u64(u64(0x28))
+    if data[chart:chart + 4] != b"EVFL" or u16(chart + 0x16) != 210 or u16(chart + 0x18) != 13:
+        raise ValueError("the flowchart is not the one of 210 events and 13 entry points")
+    events = u64(chart + 0x30)
+    event = lambda i: events + 0x30 * i
+
+    def text(ptr):
+        return bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if ptr else ""
+
+    def strings(i):
+        """the strings among a step's parameters"""
+        at, out = u64(event(i) + 0x10), []
+        for k in range(u16(at + 2) if at else 0):
+            item = u64(at + 0x10 + 8 * k)
+            if data[item] in (0, 5) and u16(item + 2) == 1:
+                out.append(text(u64(item + 0x10)))
+        return out
+
+    step = lambda i: (data[event(i) + 8], u16(event(i) + 0x0a))   # (its kind: 0 an action, 1 a switch; its next step)
+    if (step(7) != (0, 182) or "Dm_Kokiri_0155" not in strings(7) or step(182) != (0, 21) or FIELD_FLAG not in strings(182)):
+        raise ValueError("the steps at the forest's way out are not the ones this was written for")
+    out = bytearray(data)
+    struct.pack_into("<H", out, event(7) + 0x0a, 21)       # (Saria's second cutscene goes on to what follows the flag's step)
+    return bytes(out)
+
+
 def sword_chest_plain(data):
     """Get_StoneOfForest (a BFEVFL file) with the Kokiri Sword's chest's own cutscene passed over: the new bytes, of the
     same size. Every step it relies on is checked first (see SWORD_EVENT, above): a flow that is not the one this
@@ -3269,6 +3315,12 @@ def main():
         except (OSError, ValueError, struct.error) as e:
             sys.exit("%s: %s. Nothing written." % (OPENING, e))
         print("a new game starts without its two opening cutscenes")
+    # (Hyrule Field's clock runs from the forest's way out: every seed)
+    try:
+        flag_files[FIELD_FLOW] = field_clock(unpack(open(os.path.join(romfs, *FIELD_FLOW.split("/")), "rb").read(), zs, dicts))
+    except (OSError, ValueError, struct.error) as e:
+        sys.exit("%s: %s. Nothing written." % (FIELD_FLOW, e))
+    print("Hyrule Field's day and night run from the forest's way out (the Sun's Song works before the owl is met)")
     # (the Kokiri Sword's chest with another item in it: without the cutscene of the sword put on Link's back)
     if any(spots[h][6] == SWORD_EVENT and item != S for h, item in gives.items()):
         try:
