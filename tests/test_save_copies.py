@@ -52,9 +52,6 @@ Say "nocurrent" ([string]([SaveCopies]::Current($dir, "save_rando")) -eq "")
 [SaveCopies]::SetCurrent($dir, "save_rando", "second")
 Say "current" ([SaveCopies]::Current($dir, "save_rando"))
 Say "currentmq" ([string]([SaveCopies]::Current($dir, "save_mq")) -eq "")
-Say "askdefault" ([SaveCopies]::AskAtPlay($dir))
-[SaveCopies]::SetAskAtPlay($dir, $true)
-Say "askon" ([SaveCopies]::AskAtPlay($dir))
 [SaveCopies]::SetCurrent($dir, "save_rando", "")
 Slot "save_rando" "three"
 Start-Sleep -Milliseconds 1100
@@ -89,17 +86,7 @@ Say "delete" ([SaveCopies]::Delete($dir, "save_rando", "second"))
 Say "deleteoutside" ([SaveCopies]::Delete($dir, "save_rando", "..\..\save"))
 Say "list3" (([SaveCopies]::List($dir, "save_rando")) -join ",")
 Say "normal2" (Read "save")
-# (the switch at Play: the saves go into the current copy first when asked, and the copy chosen is the current one then)
-[SaveCopies]::SetKeepBefore($dir, $false)
-Say "switchkeep" ([SaveCopies]::Keep($dir, "save_rando", "slot a"))
-[SaveCopies]::SetCurrent($dir, "save_rando", "slot a")
-Slot "save_rando" "five"
-Say "switch" ([SaveCopies]::Switch($dir, "save_rando", "first", $now, $true, $false))
-Say "switchnow" (Read "save_rando")
-Say "switchsaved" (Get-Content -Raw (Join-Path $dir "user\save_copies\save_rando\slot a\0001\slot_00\progress.sav"))
-Say "switchcurrent" ([SaveCopies]::Current($dir, "save_rando"))
-Say "switchgone" ([SaveCopies]::Switch($dir, "save_rando", "nothing", $now, $true, $false))
-Say "switchstill" ([SaveCopies]::Current($dir, "save_rando"))
+[SaveCopies]::SetCurrent($dir, "save_rando", "first")
 Say "deletecurrent" ([SaveCopies]::Delete($dir, "save_rando", "first"))
 Say "aftercurrent" ([string]([SaveCopies]::Current($dir, "save_rando")) -eq "")
 '''
@@ -163,15 +150,9 @@ def main():
     check(got["normal"] == "normal" and got["normal2"] == "normal", "the normal game's saves were touched by the randomizer's copies")
     check(got["nocurrent"] == "True" and got["current"] == "second" and got["currentmq"] == "True",
           "the current copy is not kept by its save folder, or one is named before any was chosen: %r" % got)
-    check(got["askdefault"] == "False" and got["askon"] == "True", "the question at Play is not off until turned on, or is not kept as set")
-    check(got["switchkeep"] == "" and got["switch"] == "" and got["switchnow"] == "one" and got["switchsaved"] == "five" and
-          got["switchcurrent"] == "first", "a switch does not save into the current copy first, put the chosen one in the game and make it current: %r" % got)
-    check(got["switchgone"] != "" and got["switchstill"] == "first", "a switch to a copy that is not there changed the current one")
     check(got["deletecurrent"] == "" and got["aftercurrent"] == "True", "a deleted copy is still named the current one")
-    check("if (SaveCopies.AskAtPlay(dir) && SaveCopies.List(dir, saves).Count > 0)" in src and
-          'string saves = masterQuest ? "save_mq" : SaveFolder();' in src and
-          "list.DrawItem += (o, e) => DrawCopy(list, e, current);" in src,
-          "Play does not ask which save to play for the game it starts, or the window does not show the current copy")
+    check("list.DrawItem += (o, e) => DrawCopy(list, e, current);" in src and 'now.Text = current != null ? "Current: " + current' in src,
+          "the window does not show the current copy")
     print("PASS: the launcher's save copies")
 
 

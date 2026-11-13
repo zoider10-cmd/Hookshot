@@ -45,16 +45,22 @@ as they are (`tracker_load`, gpu/vk/vk_menu.cpp; 48 rows at most), so it is the 
 with the randomizer off. It is what the seed has in an area, not what is left: the menu does not know what has been
 opened. Seen without a window (`RX_VK_MENU_SCRIPT`, `RX_VK_SHOT_MENU=1`); `tests/test_rando_tracker.py`.
 
+**The save to play.** The launcher's **Save** button (bottom row; Master Quest's page has its own) names the save the
+next Play plays and opens a window to choose another, make a new one, rename or delete. A save is the game's whole
+save folder under a name: the one played is in the game's folder (`user/save`, `user/save_rando`, `user/save_mq`), the
+others wait in `user/save_slots/<save folder>/<name>`, and choosing another moves the one played out and the chosen
+one in, so each keeps its own progress. The first, "Save 1", is the saves the player already had; nothing is moved
+until a second is made and chosen. The randomizer's record of the checks collected (`rando/collected.txt`) goes with
+its save. The seed does not: two randomizer saves of different seeds need the seed set again when changing
+(`SaveSlots`, launcher/Launcher.cs; `tests/test_save_slots.py`).
+
 **More saves than the game's one.** The game keeps one save of the player's own (`slot_00`) and five it makes itself;
 its load menu lists no more. The launcher's **Save copies** button (its window's list chooses the normal game's saves, the randomizer's or
 Master Quest's; Master Quest's page has a link of its own) keeps the whole save folder under a name
 (`user/save_copies/<save folder>/<name>`) and puts a kept copy back, after keeping the saves that were there as
 "Before restore <date and time>". The randomizer's copies and the normal game's are apart, as their saves are. The
 window names the **current** copy (the one the saves were last restored from, kept as or updated to: in gold, and
-"Current:" over the list). A test, off until its box in the window is ticked: **Play asks which save to play** when
-that game has copies, to go on with the saves as they are or to put a copy in the game first (`PlaySaveForm`,
-`SaveCopies.Switch`; the saves in the game go into the current copy first when asked, else are kept as a "Before
-restore" copy). A
+"Current:" over the list). A
 restore is refused while the game runs (`SaveCopies`, launcher/Launcher.cs; `tests/test_save_copies.py`).
 
 | Setting | What `rando_seed.py` does with it |

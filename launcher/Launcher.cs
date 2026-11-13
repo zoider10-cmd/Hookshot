@@ -99,49 +99,187 @@ static class RandoId {
     }
 }
 
-// ---- kept copies of the saves ----
-// (a test) The question at Play, when the Save copies window's tick box is on and the game to be played has copies: go on
-// with the saves as they are, or play one of the copies (SaveCopies.Switch). The game's own load menu lists one save of
-// the player's and five of its own and no more, so the choice among more is made here, before the game starts.
-class PlaySaveForm : Form {
-    readonly string dir, saveFolder, current;
-    readonly ListBox list = new ListBox();
-    readonly CheckBox saveFirst = new CheckBox(), ask = new CheckBox();
-    readonly Label what = new Label();
-    readonly Button play = new Button(), cancel = new Button();
+// ---- the saves to play ----
+// The game has one save folder a game (user\save, user\save_rando, user\save_mq) and its load menu lists one save of the
+// player's own and five it makes itself. A save here is that whole folder under a name: the one being played is in the
+// game's folder, the others wait in <game folder>\user\save_slots\<save folder>\<name>. Choosing another moves the one
+// played out to its name and the chosen one in, so each keeps its own progress. The first, "Save 1", is the saves the
+// player had before there were any others: nothing is moved until a second one is made and chosen.
+// <game folder>\user\save_slots\<save folder>.txt: the name being played, then every name in its order.
+// The randomizer's record of the checks collected (rando\collected.txt) goes with its save. tests/test_save_slots.py
+public static class SaveSlots {
+    public const string Folder = "save_slots";
+    public const string First = "Save 1";
 
-    public PlaySaveForm(string dir, string saveFolder) {
+    public static string Root(string dir, string saveFolder) { return Path.Combine(dir, "user", Folder, saveFolder); }
+    static string ListFile(string dir, string saveFolder) { return Path.Combine(dir, "user", Folder, saveFolder + ".txt"); }
+
+    static bool Same(string a, string b) { return string.Equals(a, b, StringComparison.OrdinalIgnoreCase); }
+    static bool Has(List<string> names, string name) { return names.Exists(n => Same(n, name)); }
+
+    // (every save's name in its order; out: the one being played)
+    public static List<string> Names(string dir, string saveFolder, out string current) {
+        var names = new List<string>();
+        current = null;
+        try {
+            string[] lines = File.ReadAllLines(ListFile(dir, saveFolder));
+            for (int i = 0; i < lines.Length; i++) {
+                string n = SaveCopies.Clean(lines[i]);
+                if (n.Length == 0) continue;
+                if (i == 0) current = n;
+                else if (!Has(names, n)) names.Add(n);
+            }
+        } catch { }
+        // (a save waiting in its folder that the list forgot is still a save)
+        try {
+            foreach (string d in Directory.GetDirectories(Root(dir, saveFolder))) {
+                string n = Path.GetFileName(d);
+                if (n == SaveCopies.Clean(n) && !Has(names, n)) names.Add(n);
+            }
+        } catch { }
+        if (current == null || !Has(names, current)) {
+            if (current == null) current = names.Count > 0 && !Directory.Exists(Path.Combine(Root(dir, saveFolder), names[0])) ? names[0] : First;
+            if (!Has(names, current)) names.Insert(0, current);
+        }
+        return names;
+    }
+    public static string Current(string dir, string saveFolder) { string c; Names(dir, saveFolder, out c); return c; }
+    public static List<string> Names(string dir, string saveFolder) { string c; return Names(dir, saveFolder, out c); }
+
+    static void Write(string dir, string saveFolder, string current, List<string> names) {
+        Directory.CreateDirectory(Path.Combine(dir, "user", Folder));
+        var lines = new List<string> { current };
+        lines.AddRange(names);
+        File.WriteAllLines(ListFile(dir, saveFolder), lines.ToArray());
+    }
+
+    static bool HasFiles(string path) {
+        return Directory.Exists(path) && Directory.GetFiles(path, "*", SearchOption.AllDirectories).Length > 0;
+    }
+
+    // A save of that name, empty: a new game when it is played. Returns null, or what went wrong.
+    public static string Add(string dir, string saveFolder, string name) {
+        string clean = SaveCopies.Clean(name), current;
+        if (clean.Length == 0) return "Give the save a name.";
+        var names = Names(dir, saveFolder, out current);
+        if (Has(names, clean)) return "There is already a save named \"" + clean + "\".";
+        try { names.Add(clean); Write(dir, saveFolder, current, names); return null; } catch (Exception ex) { return ex.Message; }
+    }
+
+    public static string Rename(string dir, string saveFolder, string name, string to) {
+        string clean = SaveCopies.Clean(to), current;
+        if (clean.Length == 0) return "Give the save a name.";
+        var names = Names(dir, saveFolder, out current);
+        int at = names.FindIndex(n => Same(n, name));
+        if (at < 0) return "That save is not there any more.";
+        if (!Same(name, clean) && Has(names, clean)) return "There is already a save named \"" + clean + "\".";
+        try {
+            string from = Path.Combine(Root(dir, saveFolder), names[at]), kept = from + ".collected.txt";
+            if (Directory.Exists(from) && names[at] != clean) Directory.Move(from, Path.Combine(Root(dir, saveFolder), clean));
+            if (File.Exists(kept) && names[at] != clean) File.Move(kept, Path.Combine(Root(dir, saveFolder), clean) + ".collected.txt");
+            if (Same(current, names[at])) current = clean;
+            names[at] = clean;
+            Write(dir, saveFolder, current, names);
+            return null;
+        } catch (Exception ex) { return ex.Message; }
+    }
+
+    // (a save that is not being played, and what it held, gone for good)
+    public static string Delete(string dir, string saveFolder, string name) {
+        string current;
+        var names = Names(dir, saveFolder, out current);
+        int at = names.FindIndex(n => Same(n, name));
+        if (at < 0) return "That save is not there any more.";
+        if (Same(current, names[at])) return "That is the save being played. Choose another first.";
+        try {
+            string path = Path.Combine(Root(dir, saveFolder), names[at]);
+            if (Directory.Exists(path)) Directory.Delete(path, true);
+            if (File.Exists(path + ".collected.txt")) File.Delete(path + ".collected.txt");
+            names.RemoveAt(at);
+            Write(dir, saveFolder, current, names);
+            return null;
+        } catch (Exception ex) { return ex.Message; }
+    }
+
+    // The save named `name` made the one the game plays: the one played goes out to its name, whole, and the chosen one
+    // comes in (an empty one leaves the game's folder empty: a new game). Returns null, or what went wrong (then the
+    // saves are as they were).
+    public static string Select(string dir, string saveFolder, string name) {
+        string current;
+        var names = Names(dir, saveFolder, out current);
+        int at = names.FindIndex(n => Same(n, name));
+        if (at < 0) return "That save is not there any more.";
+        if (Same(current, names[at])) return null;
+        string game = Path.Combine(dir, "user", saveFolder), root = Root(dir, saveFolder);
+        string outTo = Path.Combine(root, current), from = Path.Combine(root, names[at]);
+        // (the randomizer's record of the checks collected is its save's)
+        string record = saveFolder == "save_rando" ? Path.Combine(dir, "rando", "collected.txt") : null;
+        bool moved = false;
+        try {
+            Directory.CreateDirectory(root);
+            if (HasFiles(game)) {
+                if (Directory.Exists(outTo)) return "\"" + current + "\" has saves waiting already, so nothing was changed. Look in:\n" + outTo;
+                Directory.Move(game, outTo);
+                moved = true;
+            } else if (Directory.Exists(game)) Directory.Delete(game, true);
+            try {
+                if (Directory.Exists(from)) Directory.Move(from, game);
+                else Directory.CreateDirectory(game);
+            } catch {
+                try { if (Directory.Exists(game) && !HasFiles(game)) Directory.Delete(game, true); } catch { }
+                if (moved) Directory.Move(outTo, game);   // (as they were)
+                throw;
+            }
+            if (record != null) {
+                try {
+                    if (File.Exists(outTo + ".collected.txt")) File.Delete(outTo + ".collected.txt");
+                    if (File.Exists(record)) File.Move(record, outTo + ".collected.txt");
+                    if (File.Exists(from + ".collected.txt")) File.Move(from + ".collected.txt", record);
+                } catch { }
+            }
+            Write(dir, saveFolder, names[at], names);
+            return null;
+        } catch (Exception ex) { return ex.Message; }
+    }
+}
+
+// (the window of the Save button: the saves of one game, to choose the one played, make a new one, rename or delete)
+class SaveSlotsForm : Form {
+    readonly string dir, saveFolder;
+    readonly TextBox name = new TextBox();
+    readonly ListBox list = new ListBox();
+    readonly Button play = new Button(), add = new Button(), rename = new Button(), delete = new Button(), close = new Button();
+    string current;
+
+    public SaveSlotsForm(string dir, string saveFolder) {
         this.dir = dir; this.saveFolder = saveFolder;
-        current = SaveCopies.Current(dir, saveFolder);
-        int which = Math.Max(0, Array.IndexOf(SaveCopies.Folders, saveFolder));
-        Text = "Which save to play: " + SaveCopies.Names[which];
+        Text = "Saves: " + SaveCopies.Names[Math.Max(0, Array.IndexOf(SaveCopies.Folders, saveFolder))];
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(520, 432);
+        ClientSize = new Size(520, 430);
         BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
-        var top = new Label { Text = "Go on with the saves in the game, or play a kept copy:", AutoSize = true, Location = new Point(16, 14) };
-        list.SetBounds(16, 40, 488, 252); list.IntegralHeight = false;
+        var top = new Label { Text = "The save the game plays. Each keeps its own progress:", AutoSize = true, Location = new Point(16, 14) };
+        list.SetBounds(16, 40, 488, 212); list.IntegralHeight = false;
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
-        list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 20;
-        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 1);
-        list.Items.Add(current != null ? "Continue: the saves as they are (from \"" + current + "\")" : "Continue: the saves as they are");
-        foreach (string n in SaveCopies.List(dir, saveFolder)) list.Items.Add(n);
-        list.SelectedIndex = 0;
-        saveFirst.SetBounds(16, 300, 488, 24); saveFirst.ForeColor = Theme.Text; saveFirst.FlatStyle = FlatStyle.Flat;
-        saveFirst.Text = current != null ? "First save my progress into \"" + current + "\"" : "";
-        saveFirst.Visible = current != null;
-        what.SetBounds(16, 328, 488, 36); what.ForeColor = Theme.Dim; what.Font = new Font("Segoe UI", 8.5f);
-        ask.Text = "Ask this each time I press Play"; ask.Checked = true;
-        ask.SetBounds(16, 394, 260, 24); ask.ForeColor = Theme.Text; ask.FlatStyle = FlatStyle.Flat;
-        Style(play, "Play", 284, 390, 104); Style(cancel, "Cancel", 400, 390, 104);
-        Controls.AddRange(new Control[] { top, list, saveFirst, what, ask, play, cancel });
-        AcceptButton = play; CancelButton = cancel;
-        list.SelectedIndexChanged += (o, e) => Says();
-        saveFirst.CheckedChanged += (o, e) => Says();
-        list.DoubleClick += (o, e) => OnPlay();
-        play.Click += (o, e) => OnPlay();
-        cancel.Click += (o, e) => { DialogResult = DialogResult.Cancel; Close(); };
-        Says();
+        list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
+        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (playing)");
+        Style(play, "Play this save", 16, 264, 150); Style(delete, "Delete", 176, 264, 110); Style(close, "Close", 394, 264, 110);
+        var mid = new Label { Text = "A name, for a new save or to rename the chosen one:", AutoSize = true, Location = new Point(16, 312) };
+        name.SetBounds(16, 338, 248, 26); name.MaxLength = 80;
+        name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
+        Style(add, "New save", 274, 336, 110); Style(rename, "Rename", 394, 336, 110);
+        var foot = new Label { Text = "A new save starts a new game. Save copies keeps snapshots of the save being played. Close the game first.",
+                               AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 384), Size = new Size(488, 38), Font = new Font("Segoe UI", 8.5f) };
+        Controls.AddRange(new Control[] { top, list, play, delete, close, mid, name, add, rename, foot });
+        CancelButton = close;
+        play.Click += (o, e) => OnSelect();
+        add.Click += (o, e) => OnNew();
+        rename.Click += (o, e) => OnRename();
+        delete.Click += (o, e) => OnDelete();
+        close.Click += (o, e) => Close();
+        list.SelectedIndexChanged += (o, e) => Buttons();
+        list.DoubleClick += (o, e) => OnSelect();
+        Fill(null);
     }
 
     static void Style(Button b, string text, int x, int y, int w) {
@@ -149,28 +287,64 @@ class PlaySaveForm : Form {
         b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
     }
 
-    // (what Play does with the saves in the game, said before it is done)
-    void Says() {
-        bool copy = list.SelectedIndex > 0;
-        string n = copy ? (string)list.SelectedItem : null;
-        saveFirst.Enabled = copy && current != null && n != current;
-        if (!copy) what.Text = "Nothing is changed: the game starts with the saves it has.";
-        else if (saveFirst.Enabled && saveFirst.Checked) what.Text = "\"" + current + "\" becomes the saves you have now, then \"" + n + "\" is put in the game.";
-        else if (SaveCopies.KeepBefore(dir)) what.Text = "The saves you have now are kept as a \"Before restore\" copy, then \"" + n + "\" is put in the game.";
-        else what.Text = "The saves you have now are replaced by \"" + n + "\" and NOT kept (the Save copies window's box is off).";
+    void Buttons() {
+        string n = list.SelectedIndex >= 0 ? (string)list.SelectedItem : null;
+        play.Enabled = delete.Enabled = n != null && n != current;
+        rename.Enabled = n != null;
     }
 
-    void OnPlay() {
-        if (list.SelectedIndex > 0) {
-            string n = (string)list.SelectedItem;
-            string error = SaveCopies.Switch(dir, saveFolder, n, DateTime.Now, saveFirst.Enabled && saveFirst.Checked, SaveCopies.KeepBefore(dir));
-            if (error != null) { MessageBox.Show(this, error, "Save copies", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-        }
-        if (!ask.Checked) SaveCopies.SetAskAtPlay(dir, false);
-        DialogResult = DialogResult.OK; Close();
+    void Fill(string select) {
+        list.Items.Clear();
+        foreach (string n in SaveSlots.Names(dir, saveFolder, out current)) list.Items.Add(n);
+        list.SelectedItem = select ?? current;
+        Buttons();
+    }
+
+    void Say(string text, MessageBoxIcon icon) { MessageBox.Show(this, text, "Saves", MessageBoxButtons.OK, icon); }
+    bool Running() {
+        if (!LauncherForm.GameRunning()) return false;
+        Say("Close the game first: it is using its saves.", MessageBoxIcon.Information);
+        return true;
+    }
+
+    void OnSelect() {
+        if (list.SelectedIndex < 0 || (string)list.SelectedItem == current || Running()) return;
+        string n = (string)list.SelectedItem;
+        string error = SaveSlots.Select(dir, saveFolder, n);
+        if (error != null) Say(error, MessageBoxIcon.Warning);
+        Fill(n);
+    }
+
+    void OnNew() {
+        string n = SaveCopies.Clean(name.Text);
+        string error = SaveSlots.Add(dir, saveFolder, n);
+        if (error != null) { Say(error, MessageBoxIcon.Warning); return; }
+        name.Text = "";
+        Fill(n);
+    }
+
+    void OnRename() {
+        if (list.SelectedIndex < 0) return;
+        string from = (string)list.SelectedItem, to = SaveCopies.Clean(name.Text);
+        if (from != current && Running()) return;
+        string error = SaveSlots.Rename(dir, saveFolder, from, to);
+        if (error != null) { Say(error, MessageBoxIcon.Warning); return; }
+        name.Text = "";
+        Fill(to);
+    }
+
+    void OnDelete() {
+        if (list.SelectedIndex < 0) return;
+        string n = (string)list.SelectedItem;
+        if (MessageBox.Show(this, "Delete the save \"" + n + "\" and all its progress? It cannot be brought back.", "Saves",
+                            MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
+        string error = SaveSlots.Delete(dir, saveFolder, n);
+        if (error != null) Say(error, MessageBoxIcon.Warning);
+        Fill(null);
     }
 }
 
+// ---- kept copies of the saves ----
 // The game has one save of the player's own and five it makes itself (slot_00, and slot_01 to slot_05), and its load menu
 // lists no more. A kept copy is the whole save folder under a name, in <game folder>\user\save_copies\<save folder>\<name>:
 // the normal game's saves (save), the randomizer's (save_rando) and Master Quest's (save_mq) have their own, and the
@@ -214,35 +388,6 @@ public static class SaveCopies {
             Directory.CreateDirectory(Path.Combine(dir, "user", Folder));
             File.WriteAllText(CurrentFile(dir, saveFolder), name ?? "");
         } catch { }
-    }
-
-    // Whether Play asks which save to play first (PlaySaveForm): <game folder>\user\save_copies\ask_at_play.txt, "1" on.
-    // Off until turned on: a test.
-    static string AskFile(string dir) { return Path.Combine(dir, "user", Folder, "ask_at_play.txt"); }
-    public static bool AskAtPlay(string dir) {
-        try { return File.ReadAllText(AskFile(dir)).Trim() == "1"; } catch { return false; }
-    }
-    public static void SetAskAtPlay(string dir, bool on) {
-        try {
-            Directory.CreateDirectory(Path.Combine(dir, "user", Folder));
-            File.WriteAllText(AskFile(dir), on ? "1" : "0");
-        } catch { }
-    }
-
-    // The copy named `name` made the saves to play, and the current one. With saveCurrentFirst the saves as they are go
-    // into the current copy first (it is updated: the copies used as save slots); else, with keepFirst, they are kept as
-    // a "Before restore" copy, as Restore does. Returns null, or what went wrong (then the saves are as they were).
-    public static string Switch(string dir, string saveFolder, string name, DateTime now, bool saveCurrentFirst, bool keepFirst) {
-        string current = Current(dir, saveFolder);
-        bool saved = false;
-        if (saveCurrentFirst && current != null && current != name && HasFiles(Path.Combine(dir, "user", saveFolder))) {
-            string first = Update(dir, saveFolder, current);
-            if (first != null) return "The saves you have now could not be saved into \"" + current + "\" first, so nothing was changed:\n" + first;
-            saved = true;
-        }
-        string error = Restore(dir, saveFolder, name, now, keepFirst && !saved);
-        if (error == null) SetCurrent(dir, saveFolder, name);
-        return error;
     }
 
     // (a name that can be a folder's: no path, no character Windows refuses, no dot or space at its end)
@@ -358,18 +503,18 @@ class SaveCopiesForm : Form {
     readonly TextBox name = new TextBox();
     readonly ListBox list = new ListBox();
     readonly Button keep = new Button(), restore = new Button(), update = new Button(), delete = new Button(), close = new Button();
-    readonly CheckBox keepFirst = new CheckBox(), askAtPlay = new CheckBox();
+    readonly CheckBox keepFirst = new CheckBox();
     readonly Label now = new Label();
     string current;   // (the current copy of the folder shown: SaveCopies.Current)
     public static readonly Color Gold = Color.FromArgb(232, 190, 96);
 
     // (a list of copies drawn with the current one in gold and named so)
-    public static void DrawCopy(ListBox list, DrawItemEventArgs e, string current, int from = 0) {
+    public static void DrawCopy(ListBox list, DrawItemEventArgs e, string current, int from = 0, string mark = "   (current)") {
         if (e.Index < 0) return;
         string n = (string)list.Items[e.Index];
         bool chosen = (e.State & DrawItemState.Selected) != 0, cur = e.Index >= from && n == current;
         using (var b = new SolidBrush(chosen ? Theme.Blue : list.BackColor)) e.Graphics.FillRectangle(b, e.Bounds);
-        TextRenderer.DrawText(e.Graphics, cur ? n + "   (current)" : n, list.Font, e.Bounds, chosen ? Color.White : cur ? Gold : Theme.Text,
+        TextRenderer.DrawText(e.Graphics, cur ? n + mark : n, list.Font, e.Bounds, chosen ? Color.White : cur ? Gold : Theme.Text,
                               TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
     }
 
@@ -378,7 +523,7 @@ class SaveCopiesForm : Form {
         Text = "Save copies";
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(520, 526);
+        ClientSize = new Size(520, 498);
         BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
         // (whose saves: the game the launcher is set to play is chosen first, and any of the three can be)
         var whose = new Label { Text = "Saves of:", AutoSize = true, Location = new Point(16, 17) };
@@ -396,10 +541,6 @@ class SaveCopiesForm : Form {
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 20;
         list.DrawItem += (o, e) => DrawCopy(list, e, current);
         now.SetBounds(232, 124, 272, 20); now.TextAlign = ContentAlignment.TopRight; now.AutoEllipsis = true; now.ForeColor = Gold;
-        askAtPlay.Text = "When I press Play, ask which save to play (a test)";
-        askAtPlay.SetBounds(16, 460, 488, 24); askAtPlay.ForeColor = Theme.Text; askAtPlay.FlatStyle = FlatStyle.Flat;
-        askAtPlay.Checked = SaveCopies.AskAtPlay(dir);
-        askAtPlay.CheckedChanged += (o, e) => SaveCopies.SetAskAtPlay(dir, askAtPlay.Checked);
         keepFirst.Text = "Before a restore, keep the saves I have now as a \"Before restore\" copy";
         keepFirst.SetBounds(16, 434, 488, 24); keepFirst.ForeColor = Theme.Text; keepFirst.FlatStyle = FlatStyle.Flat;
         keepFirst.Checked = SaveCopies.KeepBefore(dir);
@@ -408,8 +549,8 @@ class SaveCopiesForm : Form {
         Style(restore, "Restore", 16, 394, 110); Style(update, "Update", 136, 394, 110); Style(delete, "Delete", 256, 394, 110);
         Style(close, "Close", 394, 394, 110);
         var foot = new Label { Text = "Update: the copy becomes the saves you have now. Close the game before a restore.",
-                               AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 494), Size = new Size(488, 24), Font = new Font("Segoe UI", 8.5f) };
-        Controls.AddRange(new Control[] { whose, which, top, name, keep, mid, now, list, restore, update, delete, close, keepFirst, askAtPlay, foot });
+                               AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 466), Size = new Size(488, 24), Font = new Font("Segoe UI", 8.5f) };
+        Controls.AddRange(new Control[] { whose, which, top, name, keep, mid, now, list, restore, update, delete, close, keepFirst, foot });
         AcceptButton = keep; CancelButton = close;
         keep.Click += (o, e) => OnKeep();
         restore.Click += (o, e) => OnRestore();
@@ -900,6 +1041,19 @@ class Toggle : Widget {
     }
 }
 
+// (the Save button: it names the save its game plays, SaveSlots, and opens the window to choose another)
+class SlotBtn : Btn {
+    public Func<string> Saves;   // (the save folder of the game it is for)
+    public string Dir;
+    string shown, of;
+    public override void Paint(Graphics g, LauncherForm ui) {
+        string folder = Saves();
+        if (shown == null || of != folder || ui.SlotsChanged) { of = folder; shown = SaveSlots.Current(Dir, folder); }
+        Text = "Save: " + (shown.Length > 13 && Style != Kind.Link ? shown.Substring(0, 12) + "…" : shown);
+        base.Paint(g, ui);
+    }
+}
+
 // (Mako) one of the Master Quest page's trials: a card, gold when chosen
 class GoldChoice : Widget {
     public string Title, Sub; public Func<bool> IsOn; public Action Click;
@@ -1247,6 +1401,8 @@ class LauncherForm : Form {
                                          IsOn = () => settings["master_quest_damage"].Index == at,
                                          Click = () => settings["master_quest_damage"].Set(at, true) });
         }
+        widgets.Add(new SlotBtn { Style = Btn.Kind.Link, R = new RectangleF(cx + 240, 622, 170, 26), Page = 8, Dir = dir, Saves = () => "save_mq",
+                                  Click = () => OpenSlots("save_mq") });
         widgets.Add(new Btn { Text = "Master Quest save copies", Style = Btn.Kind.Link, R = new RectangleF(cx, 622, 230, 26), Page = 8,
                               Click = () => { using (var f = new SaveCopiesForm(dir, "save_mq")) f.ShowDialog(this); } });
         widgets.Add(new Btn { Text = "Open the Master Quest saves", Style = Btn.Kind.Link, R = new RectangleF(cx + cw - 230, 622, 230, 26), Page = 8,
@@ -1260,6 +1416,10 @@ class LauncherForm : Form {
         // Randomizer setting names, and its list chooses the normal game's, the randomizer's or Master Quest's)
         widgets.Add(new Btn { Text = "Save copies", R = new RectangleF(cx + 380, 612, 122, 42), HideOn = 8,
                               Click = () => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } });
+
+        // (the save the next Play plays, of the game the Randomizer setting names: SaveSlots)
+        widgets.Add(new SlotBtn { R = new RectangleF(cx + 510, 612, cw - 510, 42), HideOn = 8, Dir = dir, Saves = SaveFolder,
+                                  Click = () => OpenSlots(SaveFolder()) });
 
         // (Mako) the Recommended tab: this PC read once, and its Apply button
         BuildRecommendations();
@@ -1735,6 +1895,14 @@ class LauncherForm : Form {
     // (the game keeps a seed's saves apart from its own: host/oot_rando.c hos_save_folder. The Saves button opens the ones
     // the next Play uses)
     string SaveFolder() { return settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0 ? "save_rando" : "save"; }
+
+    // (the saves of one game, to choose the one played; the Save buttons read the name again after it)
+    public bool SlotsChanged;
+    void OpenSlots(string saveFolder) {
+        using (var f = new SaveSlotsForm(dir, saveFolder)) f.ShowDialog(this);
+        SlotsChanged = true; Refresh(); SlotsChanged = false;
+        Invalidate();
+    }
 
     void OnNewSeed() {
         randoSeed = NewSeed();
@@ -2441,10 +2609,6 @@ class LauncherForm : Form {
             return;
         }
         if (GameRunning()) { MessageBox.Show(this, "The game is already running.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        // (a test: which save to play, asked when the Save copies window's box is on and this game has copies)
-        string saves = masterQuest ? "save_mq" : SaveFolder();
-        if (SaveCopies.AskAtPlay(dir) && SaveCopies.List(dir, saves).Count > 0)
-            using (var f = new PlaySaveForm(dir, saves)) if (f.ShowDialog(this) != DialogResult.OK) return;
         if (!RunRandomizer()) return;
         if (!RunCosmetics()) return;
         try {
