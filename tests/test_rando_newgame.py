@@ -193,25 +193,20 @@ def main():
     flags()
     opening_event()
     sources()
-    # ---- Hyrule Field's clock: the step that holds its sky and time is passed over, and a save that has the flag set
-    #      has it put out by the game's side ----
-    # (seen in play: no day turned to night before the owl's cutscene, and the Sun's Song's night was day again at once)
+    # ---- Hyrule Field's clock: a new game starts with the flag that ends the field's held day, and the game's side sets
+    #      it for a save that has it put out ----
+    # (seen in play: no day turned to night before the owl's cutscene, and the Sun's Song's night was day again at once.
+    #  Found with a save made before the owl: with HyruleField_ArriveEntrance set, a night asked for stayed)
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    check('FIELD_FLOW = "Event/EventFlow/Goto_HyruleCastle.bfevfl.zs"' in script and 'FIELD_FLAG = "HyruleField_ChangeENV"' in script and
-          "flag_files[FIELD_FLOW] = field_clock(" in script and
-          'if (step(7) != (0, 182) or "Dm_Kokiri_0155" not in strings(7) or step(182) != (0, 21) or FIELD_FLAG not in strings(182)):' in script and
-          'struct.pack_into("<H", out, event(7) + 0x0a, 21)' in script,
-          "a seed does not pass over the step that holds Hyrule Field's sky and time, or does so without checking the steps")
-    check(seed.FIXES_VERSION >= 4, "a seed made before the field's clock ran is not made again")
-    try:
-        seed.field_clock(b"BFEVFL" + bytes(200))
-        check(False, "a file that is not the flow is changed all the same")
-    except (ValueError, struct.error):
-        pass
-    check("if (oot_gamedata_bool(c, 0x316c53a3u, &held) && held) {" in host and "oot_gamedata_set_bool(c, 0x316c53a3u, 0);" in host and
-          host.index("if (!hos_rando_on()) return;", host.index("static void oot_tracker_refresh(")) < host.index("oot_gamedata_bool(c, 0x316c53a3u, &held)"),
-          "the game's side does not put the flag out for a save that has it set, or does so outside the randomizer")
+    check(seed.FIELD_CLOCK == {"HyruleField_ArriveEntrance": True} and "new = flag_defaults(was, dict(flags, **FIELD_CLOCK))" in script and
+          "if True:   # (every seed: Hyrule Field's clock, FIELD_CLOCK" in script,
+          "a seed's new game does not start with the flag that ends Hyrule Field's held day, or only with other settings on")
+    check(seed.FIXES_VERSION >= 5 and "field_clock(" not in script, "a seed made before the field's clock ran is not made again, or the step tried first is still passed over")
+    check("if (oot_gamedata_bool(c, 0x804aec99u, &reached) && !reached) {" in host and "oot_gamedata_set_bool(c, 0x804aec99u, 1);" in host and
+          host.index("if (!hos_rando_on()) return;", host.index("static void oot_tracker_refresh(")) < host.index("oot_gamedata_bool(c, 0x804aec99u, &reached)") and
+          "0x316c53a3u" not in host,
+          "the game's side does not set the flag for a save that has it put out, or does so outside the randomizer")
     print("PASS: a new game's open ways and its opening")
 
 

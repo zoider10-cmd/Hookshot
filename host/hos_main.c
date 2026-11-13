@@ -1319,16 +1319,36 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
     next = now + 1000000000LL;
     if (!hos_rando_on()) return;
     rx_option_set(OOT_TRACKER_ON, 1);   /* (the Tracker tab reads the seed only then: vk_menu.cpp tracker_load) */
-    {   /* (the randomizer's fork) Hyrule Field's clock. The flag HyruleField_ChangeENV (its MurmurHash3 below) holds the
-           field's sky and time as the story's from the forest's way out to the owl's first cutscene: no day turned to
-           night, and the Sun's Song's night was day again at once (seen in play; tools/rando/rando_seed.py FIELD_FLOW
-           has the steps). A seed passes the step that sets it over; a save made before that has it set still, and with
-           Skip cutscenes the owl's own step was not come to. So it is put out here, once a second while it is set. */
-        int held = 0;
-        if (oot_gamedata_bool(c, 0x316c53a3u, &held) && held) {
-            const int done = oot_gamedata_set_bool(c, 0x316c53a3u, 0);
+    {   /* (a test's: HOS_OOT_SETFLAG="<hash in hex>=<0 or 1>,..." sets those truth values of the game's list once, some
+           seconds into the game, and says what each was: to try a scene's steps one at a time) */
+        static int turn;
+        const char *set = getenv("HOS_OOT_SETFLAG");
+        if (set && ++turn == 8) {
+            while (*set) {
+                char *end;
+                const uint32_t hash = (uint32_t)strtoul(set, &end, 16);
+                if (*end != '=') break;
+                const int value = end[1] == '1';
+                int was = -1;
+                const int found = oot_gamedata_bool(c, hash, &was);
+                hos_log("test: flag %08x was %d%s: set to %d (%s)", hash, was, found ? "" : " (not found)", value,
+                        oot_gamedata_set_bool(c, hash, value) ? "done" : "NOT DONE");
+                set = end + 2;
+                if (*set == ',') set++;
+            }
+        }
+    }
+    {   /* (the randomizer's fork) Hyrule Field's clock. Until the owl's first cutscene there the field's sky stays the
+           day's whatever time is asked for: no day turned to night, and the Sun's Song's night was day again at once
+           (seen in play). What ends it is the flag HyruleField_ArriveEntrance (its MurmurHash3 below), the first thing
+           the owl's event sets; tools/rando/rando_seed.py FIELD_CLOCK has how it was found. A seed's new game starts
+           with it set; a save made before that has it put out still, so it is set here, once a second while it is
+           not. The owl's event begins all the same. */
+        int reached = 1;
+        if (oot_gamedata_bool(c, 0x804aec99u, &reached) && !reached) {
+            const int done = oot_gamedata_set_bool(c, 0x804aec99u, 1);
             static int said;
-            if (said++ < 4) hos_log("rando: Hyrule Field's sky and time were held as the story's (HyruleField_ChangeENV): the flag is put out%s",
+            if (said++ < 4) hos_log("rando: Hyrule Field's sky was held as the day's (HyruleField_ArriveEntrance was not set): the flag is set%s",
                                     done ? "" : ", NOT FOUND");
         }
     }
