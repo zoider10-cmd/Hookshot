@@ -1958,12 +1958,26 @@ class LauncherForm : Form {
             "The colour of the hearts in the corner of the screen." },
         new object[] { "cosmetic_magic", "Magic meter", TunicColours, TunicValues,
             "The colour of the magic meter under the hearts." },
+        new object[] { "cosmetic_colour_shield_deku", "Deku Shield emblem", TunicColours, TunicValues,
+            "The colour of the red spiral painted on the Deku Shield. Its wood keeps its own." },
+        new object[] { "cosmetic_colour_shield_hylian", "Hylian Shield face", TunicColours, TunicValues,
+            "The colour of the Hylian Shield's blue face. Its red bird, gold Triforce and metal keep their own." },
+        new object[] { "cosmetic_colour_shield_mirror", "Mirror Shield rim", TunicColours, TunicValues,
+            "The colour of the Mirror Shield's red rim. Its mirror keeps its own; the leather of its back takes a little of the colour." },
+        new object[] { "cosmetic_colour_sword_kokiri", "Kokiri Sword hilt", TunicColours, TunicValues,
+            "The colour of the Kokiri Sword's wooden hilt and guard. Its blade takes a faint tint of it; the red gems keep their own." },
+        new object[] { "cosmetic_colour_sword_master", "Master Sword hilt", TunicColours, TunicValues,
+            "The colour of the Master Sword's purple hilt, in Link's hand and in its pedestal. Its blade and gold keep their own." },
+        new object[] { "cosmetic_colour_sword_biggoron", "Biggoron's Sword grip", TunicColours, TunicValues,
+            "The colour of the blue grip of Biggoron's Sword. Its gold and its blade keep their own." },
     };
     // (the shields' looks: a shield Link carries shown as another's model, and nothing else of it changed. The same
     // looks in the same order as tools/rando/rando_cosmetics.py SHIELD_MODELS; the lines are in hookshot_cosmetics.ini too)
     static readonly string[] ShieldLooks = { "Its own", "Deku Shield", "Hylian Shield", "Mirror Shield", "Dark Link's shield" };
     static readonly int[] ShieldValues = { 0, 1, 2, 3, 4 };
     const string ShieldHelp = " Only its look changes: it guards, burns and reflects as the shield it is, and is held as that shield is at Link's age. No model is resized.";
+    // (the lines the Cosmetics page's selectors take, two to a line)
+    static int CosmeticLines { get { return (CosmeticRows.Length + ShieldRows.Length + 1) / 2; } }
     static readonly object[][] ShieldRows = {
         new object[] { "cosmetic_shield_deku", "Deku Shield looks like", ShieldLooks, ShieldValues,
             "The model shown for the Deku Shield, on Link's back and held up." + ShieldHelp },
@@ -2085,11 +2099,11 @@ class LauncherForm : Form {
         // (more of them than fit over the seed's buttons: closer lines, and the list scrolls by the wheel inside RandoView)
         AddSelectors(RandoRows, 3, cx, colW, null, 47, 45, true);
         randoHeight = 112 + (RandoRows.Length - RandoHidden.Count + 1) / 2 * 47 - 2 - RandoView.Y;
-        AddSelectors(CosmeticRows, 4, cx, colW, cosmetics);
-        // (the shields' looks follow the colours: from the third line's right half on)
-        AddSelectors(ShieldRows, 4, cx, colW, cosmetics, 70, 62, false, 5);
+        // (fourteen of them: the closer lines of the Randomizer page. The shields' looks follow the colours)
+        AddSelectors(CosmeticRows, 4, cx, colW, cosmetics, 47, 45);
+        AddSelectors(ShieldRows, 4, cx, colW, cosmetics, 47, 45, false, CosmeticRows.Length);
         // (under the selectors, over the page's note)
-        widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx, 112 + 4 * 70 + 4, 160, 40), Page = 4, Click = OnRandomCosmetics });
+        widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx, 112 + CosmeticLines * 47 + 6, 160, 40), Page = 4, Click = OnRandomCosmetics });
         // (under the selectors: the seed's three buttons, and its ID beside them)
         widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx, 542, 116, 36), Page = 3, Click = OnNewSeed });
         widgets.Add(new Btn { Text = "Copy seed ID", R = new RectangleF(cx + 126, 542, 136, 36), Page = 3, Click = OnCopySeedId });
@@ -2414,8 +2428,8 @@ class LauncherForm : Form {
         }
         if (PageNow == 4)
             Theme.Text_(g, "Written when Play is pressed: about half a minute after a colour is changed, nothing after that. " +
-                        "The equipment menu's pictures of the tunics and shields keep the game's own.",
-                        Theme.Small, Theme.Faint, new RectangleF(x, 112 + 4 * 70 + 54, W - LeftW - 72, 40), StringAlignment.Near, StringAlignment.Near);
+                        "The equipment menu's pictures of the tunics, shields and swords keep the game's own.",
+                        Theme.Small, Theme.Faint, new RectangleF(x, 112 + CosmeticLines * 47 + 54, W - LeftW - 72, 40), StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 5)
             Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + Fixes.Length * FixPitch, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);

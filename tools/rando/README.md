@@ -269,6 +269,15 @@ the game's own colour the mod is removed. It has nothing to do with the seed: no
 - Not changed: the tunics' pictures in the equipment menu (files of their own), and the Insert menu has no Cosmetics
   tab (the colours are written before the game starts).
 
+- **The shields' and the swords' colours.** Six more colour lines (`cosmetic_colour_shield_deku`, `_hylian`,
+  `_mirror`; `cosmetic_colour_sword_kokiri`, `_master`, `_biggoron`), each one part of one picture: the Deku Shield's
+  red spiral (not its wood), the Hylian Shield's blue face (not its bird, Triforce or metal), the Mirror Shield's red
+  rim (the leather of its back, a hue beside it, takes a little), the Kokiri Sword's wooden hilt (its blade takes a
+  faint tint), the Master Sword's purple hilt (in Link's hand and in its pedestal: one picture), and the blue grip of
+  Biggoron's Sword. Which part and which hues were found by decoding each picture on the PC and looking at it changed
+  (`texture2ddecoder`; nothing leaves the PC). The same pictures are on the shop's and the chests' shields, so those
+  change too. A shield shown as another (below) shows that one's picture, and so that one's colour. Made on the game's
+  files, each file its own size; **not seen in the game yet**.
 - **The shields' looks.** Three more lines, `cosmetic_shield_deku`, `cosmetic_shield_hylian` and
   `cosmetic_shield_mirror`: each of the shields Link carries can be shown as another's model, or as Dark Link's shield
   (a dark Hylian Shield). A carried shield is an actor whose pack names its model in one small file
@@ -284,7 +293,7 @@ the game's own colour the mod is removed. It has nothing to do with the seed: no
   Shield burning with another look (its burnt pieces are the Deku Shield's own model). The shields on shop shelves, in
   chests and in the equipment menu's pictures are other files and keep their looks.
 
-By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron purple --shield-deku mirror`.
+By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron purple --shield-deku mirror --master_hilt red`.
 
 **Navi's colour: looked for, not done.** Her textures (`Tex/Npc_Navi_*`, in two states, `.00` and `.01`) hold almost
 no colour, so there is nothing for the textures' way to change. Her model's material animation

@@ -182,7 +182,8 @@ def colours(block):
     check(names[0] == "The game's" and len(set(names)) == len(names), "the first colour is the game's own, and each has its own name")
     check(t.colour_of("purple") == names.index("Purple") and t.colour_of("3") == 3 and t.colour_of("mauve") is None, "a colour by its name or number")
     by_name = {row[0]: row for row in t.COSMETICS}
-    check(list(by_name) == ["kokiri", "goron", "zora", "hearts", "magic"], "the three tunics, the hearts and the magic meter")
+    check(list(by_name) == ["kokiri", "goron", "zora", "hearts", "magic", "deku_emblem", "hylian_face", "mirror_rim", "kokiri_hilt", "master_hilt", "biggoron_grip"],
+          "the three tunics, the hearts, the magic meter, and the shields' and swords' colours")
     _, _, _, hues, centre, textures = by_name["goron"]
     purple = t.recolour(t.COLOURS[t.colour_of("purple")], hues, centre)
     red, gold, grey = (190, 30, 28), (200, 160, 40), (90, 90, 90)
@@ -212,7 +213,8 @@ def colours(block):
 def mod_and_sources():
     with tempfile.TemporaryDirectory(prefix="rando-cosmetics-") as tmp:
         game = Path(tmp)
-        none = {"kokiri": 0, "goron": 0, "zora": 0, "hearts": 0, "magic": 0, "shield_deku": 0, "shield_hylian": 0, "shield_mirror": 0}
+        none = {"kokiri": 0, "goron": 0, "zora": 0, "hearts": 0, "magic": 0, "shield_deku": 0, "shield_hylian": 0, "shield_mirror": 0,
+                "deku_emblem": 0, "hylian_face": 0, "mirror_rim": 0, "kokiri_hilt": 0, "master_hilt": 0, "biggoron_grip": 0}
         check(t.settings(str(game)) == none, "no file: everything the game's own")
         (game / "hookshot_cosmetics.ini").write_text("cosmetic_tunic_goron=4\ncosmetic_tunic_zora=99\nother=1\ncosmetic_tunic_kokiri=x\ncosmetic_magic=5\n", encoding="utf-8")
         check(t.settings(str(game)) == dict(none, goron=4, magic=5), "the file's lines are read, a colour that is not one is the game's own")
@@ -241,7 +243,7 @@ def mod_and_sources():
     rows = rows[:rows.index("\n    };")]
     check(re.findall(r'new object\[\] \{ "(\w+)", "([^"]*)", TunicColours, TunicValues,', rows) == [(key, label) for _, key, label, _, _, _ in t.COSMETICS],
           "the launcher's Cosmetics page and the script's tunics differ")
-    check("AddSelectors(CosmeticRows, 4, cx, colW, cosmetics);" in launcher and '"hookshot_cosmetics.ini"' in launcher and
+    check("AddSelectors(CosmeticRows, 4, cx, colW, cosmetics, 47, 45);" in launcher and '"hookshot_cosmetics.ini"' in launcher and
           "void SaveCosmetics()" in launcher, "the launcher does not show or keep its Cosmetics page")
     check('Text = "Randomize all"' in launcher and "Click = OnRandomCosmetics" in launcher and "s.Set(r.Next(1, s.Items.Length), false);" in launcher,
           "the launcher's Cosmetics page has no Randomize all button, or it can pick the game's own colour")
@@ -308,7 +310,24 @@ def shields():
     rows = rows[:rows.index("\n    };")]
     check(re.findall(r'new object\[\] \{ "(\w+)", "[^"]*", ShieldLooks, ShieldValues,', rows) == [key for _, key, _, _ in t.SHIELDS],
           "the launcher's shield rows and the script's shields differ")
-    check("AddSelectors(ShieldRows, 4, cx, colW, cosmetics, 70, 62, false, 5);" in launcher and
+    # (the shields' and the swords' colours: six rows, each one picture and the hues of one part of it)
+    gear = [row for row in t.COSMETICS if row[1].startswith("cosmetic_colour_")]
+    check([row[1] for row in gear] == ["cosmetic_colour_shield_deku", "cosmetic_colour_shield_hylian", "cosmetic_colour_shield_mirror",
+                                       "cosmetic_colour_sword_kokiri", "cosmetic_colour_sword_master", "cosmetic_colour_sword_biggoron"] and
+          all(len(row[5]) == 1 and isinstance(row[5][0], str) and ("Shield" in row[5][0] or "Sword" in row[5][0]) for row in gear) and
+          len({row[0] for row in t.COSMETICS} | {row[0] for row in t.SHIELDS}) == len(t.COSMETICS) + len(t.SHIELDS) and t.VERSION >= 7,
+          "the shields' and the swords' colours are not the six, each of one picture of its own, or a name is another setting's")
+    for row in gear:   # (the part's own colour is changed, a colour far from its hues is not)
+        lo, hi = row[3]
+        change = t.recolour(t.COLOURS[t.colour_of("Teal")], row[3], row[4], 0.0)
+        inside = colorsys.hsv_to_rgb(row[4] / 360.0, 0.8, 0.8)
+        far = colorsys.hsv_to_rgb(((row[4] + 180.0) % 360.0) / 360.0, 0.8, 0.8)
+        got = change(tuple(c * 255.0 for c in inside))
+        check(abs(colorsys.rgb_to_hsv(*(c / 255.0 for c in got))[0] * 360.0 - 172.0) < 3.0 and
+              change(tuple(c * 255.0 for c in far)) == tuple(c * 255.0 for c in far),
+              "%s: its own colour is not changed, or one opposite it is" % row[2])
+    check("AddSelectors(CosmeticRows, 4, cx, colW, cosmetics, 47, 45);" in launcher and
+          "AddSelectors(ShieldRows, 4, cx, colW, cosmetics, 47, 45, false, CosmeticRows.Length);" in launcher and
           "int place = first;" in launcher and "int col = place % 2, line = place / 2;" in launcher,
           "the launcher does not show the shields' looks on its Cosmetics page, after the colours")
 

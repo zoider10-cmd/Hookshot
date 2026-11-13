@@ -1,4 +1,4 @@
-"""Cosmetics: the colours of Link's three tunics, the hearts and the magic meter, and the look of his shields, as a mod.
+"""Cosmetics: the colours of Link's three tunics, the hearts, the magic meter, his shields and swords, and the look of his shields, as a mod.
 
 Reads the launcher's Cosmetics page (<game folder>\\hookshot_cosmetics.ini: cosmetic_tunic_kokiri, cosmetic_tunic_goron,
 cosmetic_tunic_zora, cosmetic_hearts, cosmetic_magic, each a colour of COLOURS below, 0 the game's own) and writes
@@ -55,8 +55,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rando_seed as seed   # (the game's zstd dictionaries)
 
 MOD = "cosmetics"
-VERSION = 6   # (raised when the same settings would write other textures: the launcher's run at Play then writes them again.
-# 2: the Kokiri Tunic's cloth, and a pinker Pink; 3: its stitching and fringe; 4: the hearts and the magic meter; 5: young Link's vest and stitching; 6: the shields' looks)
+VERSION = 7   # (raised when the same settings would write other textures: the launcher's run at Play then writes them again.
+# 2: the Kokiri Tunic's cloth, and a pinker Pink; 3: its stitching and fringe; 4: the hearts and the magic meter; 5: young Link's vest and stitching; 6: the shields' looks; 7: the shields' and the swords' colours)
 TRIT_AT, TRIT_N = (0, 2, 4, 5, 7), (2, 2, 1, 2, 1)   # (where a trit block's T bits lie between its values' bits)
 QUINT_AT, QUINT_N = (0, 3, 5), (3, 2, 2)
 
@@ -479,6 +479,25 @@ COSMETICS = (
     ("magic", "cosmetic_magic", "Magic meter", (55.0, 175.0), 140.0,
      ((HUD, ("MpGaugeCenter_00", "MpGaugeFlash_00", "MpGaugeFlash_01", "MpGaugeGlow_00", "MpGaugeGlow_01",
              "MpKiraKira_00", "MpKiraKira_01", "MpKiraKira_02")),)),
+    # (the shields and the swords Link carries: one colour of each one's own picture, found by looking at the pictures
+    # decoded (texture2ddecoder, on the player's PC) and at each one changed. The Deku Shield's red spiral, not its wood;
+    # the Hylian Shield's blue face, not its red bird or its metal; the Mirror Shield's red rim (the brown leather of its
+    # back is a hue beside it and takes a little); the Kokiri Sword's wooden hilt (its blade's grey is faintly of that hue
+    # and takes a tint); the Master Sword's purple hilt, the same picture in Link's hand and in the pedestal; the blue grip
+    # of Biggoron's Sword (its second picture, .01, is grey and is left, as the broken sword's two are). A shield shown
+    # as another (SHIELDS) shows that one's picture, so that one's colour. Not seen in the game yet.)
+    ("deku_emblem", "cosmetic_colour_shield_deku", "Deku Shield emblem", (345.0, 15.0), 5.0,
+     ("Mt_Body_Weapon_Shield_Deku_Alb",)),
+    ("hylian_face", "cosmetic_colour_shield_hylian", "Hylian Shield face", (205.0, 262.0), 235.0,
+     ("Mt_Weapon_Shield_Hylian_Alb",)),
+    ("mirror_rim", "cosmetic_colour_shield_mirror", "Mirror Shield rim", (330.0, 6.0), 2.0,
+     ("Mt_Weapon_Shield_Mirror_Alb",)),
+    ("kokiri_hilt", "cosmetic_colour_sword_kokiri", "Kokiri Sword hilt", (15.0, 50.0), 30.0,
+     ("Mt_Weapon_Sword_Kokiri_Alb",)),
+    ("master_hilt", "cosmetic_colour_sword_master", "Master Sword hilt", (225.0, 275.0), 245.0,
+     ("Mt_Weapon_Sword_Master_Alb",)),
+    ("biggoron_grip", "cosmetic_colour_sword_biggoron", "Biggoron's Sword grip", (195.0, 255.0), 222.0,
+     ("Mt_Weapon_Sword_Biggoron_Alb.00",)),
 )
 # The shields Link carries: its name here, its line in hookshot_cosmetics.ini, its label, its actor (whose pack is
 # changed). And the looks one can be given: a label and the model's name (its project and its model are named alike:
