@@ -168,9 +168,10 @@ def main():
     check(own == [ACTOR % name, TABLE % name, PRICE % name] and named == "Obj_Thing", "the shelf actor's own files, or the name its texts go by, are not given")
     actor = read(files[ACTOR % name])
     check(actor["$parent"] == REF % seed.SHOP_BASE and actor["Components"] == {
-        "ASRef": "?AS/Item_Common.root.asb", "ActorNameRef": "?ActorSystem/ActorName/Obj_Thing.engine__actor__ActorName.bgyml",
+        "ActorNameRef": "?ActorSystem/ActorName/Obj_Thing.engine__actor__ActorName.bgyml",
         "GameParameterTableRef": "?" + TABLE % name, "ModelInfoRef": "?" + MODEL % "Item_Thing", "PouchContentRef": "?" + POUCH % "Item_Thing"},
-        "the shelf actor is not the base's with the item's own name, model and place in the pouch (the item's own before what it is made from): %r" % actor)
+        "the shelf actor is not the base's with the item's own name, model and place in the pouch (the item's own before what it is made from), "
+        "or it has the item's pose, which is its \"item got\" scene's: %r" % actor)
     table = read(files[TABLE % name])
     check(table["$parent"].endswith((TABLE % seed.SHOP_BASE).replace(".bgyml", ".gyml")) and
           table["Components"] == {"PriceParam": "?" + PRICE % name, "ThingParam": "?GameParameter/Thing/Item_Thing.bgyml"},
@@ -242,12 +243,36 @@ def main():
     high = {"Actors": [{"Gyaml": "Shop_Heart", "Translate": [1.0, 2.0, 3.0]}, {"Gyaml": "Shop_DekuStick", "Translate": [4.0, 5.0, 6.0], "Dynamic": {"ShopItemIndex": 7}}]}
     lifted = read(seed.shelf_actors(byml(high), {("Shop_Heart", 0): name, ("Shop_DekuStick", 7): "Shop_Rando_Other"}, {name: 0.25})[0])["Actors"]
     check(lifted[0]["Translate"] == [1.0, 2.25, 3.0] and lifted[1]["Translate"] == [4.0, 5.0, 6.0], "a shelf whose item asks for it is not put higher, or another is")
-    check(set(seed.SHELF_LIFT) <= set(seed.ITEM_WORDS) and "Item_Gauntlet_Gold" in seed.SHELF_LIFT, "the Golden Gauntlets' shelf is not put higher")
+    check("Item_Gauntlet_Gold" not in seed.SHELF_LIFT and seed.SHELF_SCALE["Item_Gauntlet_Gold"] == 1.0 and set(seed.SHELF_TURN) == {"Item_GlassTruth"},
+          "the gauntlets have a height of their own again (their box is right without the pose), or are made smaller, or another item is turned")
     info = byml([{"ModelAabbMin": {"X": -0.2, "Y": -0.193, "Z": 0.0}, "__RowId": "Item_Token_Gold"}, {"ModelAabbMin": {"X": 0.0, "Y": 1.171, "Z": 0.0}, "__RowId": "Item_Gauntlet_Gold"},
                  {"__RowId": "Item_Bare"}])
     check(abs(seed.model_floor(info, "Item_Token_Gold") + 0.193) < 1e-6 and seed.model_floor(info, "Item_Bare") is None and seed.model_floor(info, "Item_None") is None,
           "the lowest of a model's box is not read from the list of actors")
-    check(seed.shelf_lift("Item_Token_Gold", -0.193) == 0.19 and seed.shelf_lift("Item_Gauntlet_Gold", 1.171) == 0.22 and seed.shelf_lift("Item_Thing", 0.01) == 0.0 and
+    # (how an item stands: by its box, lowered when made where it is worn, long ones made smaller, its own numbers first)
+    box = lambda low, high: ((0.0, low, 0.0), (0.1, high, 0.1))
+    check(seed.shelf_fit("Item_Thing", None) == (0.0, 1.0) and seed.shelf_fit("Item_Token_Gold", ((-0.19, -0.193, -0.01), (0.17, 0.19, 0.02))) == (0.19, 1.0) and
+          seed.shelf_fit("Item_Gauntlet_Gold", ((-0.8, 1.171, -0.11), (0.8, 1.33, 0.05))) == (-1.17, 1.0) and
+          seed.shelf_fit("Item_Hammer", ((-0.45, -0.28, -0.33), (0.22, 0.28, 1.45))) == (0.14, 0.51) and
+          seed.shelf_fit("Item_Dungeon_SmallKey", box(0.0, 0.56)) == (0.0, 0.6) and seed.shelf_fit("Item_Arrow_Light", box(-0.38, 0.3)) == (0.1, 1.0) and
+          seed.shelf_fit("Item_GlassTruth", box(0.92, 1.04)) == (0.15, 2.0) and seed.shelf_fit("Item_Thing", box(0.0, 1.0))[1] == 1.0,
+          "an item is not put and sized on its shelf by its box and its own numbers: %r" % (seed.shelf_fit("Item_Hammer", ((-0.45, -0.28, -0.33), (0.22, 0.28, 1.45))),))
+    full = byml([{"ModelAabbMin": {"X": -0.2, "Y": -0.19, "Z": 0.0}, "ModelAabbMax": {"X": 0.2, "Y": 0.2, "Z": 0.1}, "__RowId": "Item_Token_Gold"}, {"__RowId": "Item_Bare"}])
+    got = seed.model_box(full, "Item_Token_Gold")
+    check(got and [round(v, 2) for v in got[0] + got[1]] == [-0.2, -0.19, 0.0, 0.2, 0.2, 0.1] and seed.model_box(full, "Item_Bare") is None and seed.model_box(full, "Item_None") is None,
+          "a model's box is not read from the list of actors")
+    # (its size and its turn in the map file; the board of how many a bundle holds beside it out of sight, and no other)
+    shop = {"Actors": [{"Gyaml": "Shop_Heart", "Translate": [1.0, 2.0, 3.0], "Rotate": [0.0, 1.0, 0.0]},
+                       {"Gyaml": "Shop_Board_Bundle_10", "Translate": [1.2, 1.9, 3.3]}, {"Gyaml": "Shop_Board_Bundle_05", "Translate": [4.0, 2.0, 3.0]},
+                       {"Gyaml": "Shop_Board_SoldOut", "Translate": [1.1, 2.0, 3.1]}]}
+    done = read(seed.shelf_actors(byml(shop), {("Shop_Heart", 0): name}, {name: 0.5}, {name: 0.5}, {name: (-1.5, 0.0, 0.25)})[0])["Actors"]
+    check(done[0]["Scale"] == [0.5, 0.5, 0.5] and done[0]["Rotate"] == [-1.5, 1.0, 0.25] and done[0]["Translate"] == [1.0, 2.5, 3.0],
+          "a shelf's item is not made its size, turned and put higher in the map file: %r" % (done[0],))
+    check(done[1]["Translate"][1] < -1000 and done[2]["Translate"] == [4.0, 2.0, 3.0] and [round(v, 2) for v in done[3]["Translate"]] == [1.1, 2.0, 3.1],
+          "the board of how many beside a shuffled shelf is still in sight, or another shelf's board or a sold-out board is not")
+    plain = read(seed.shelf_actors(byml(shop), {("Shop_Heart", 0): name})[0])["Actors"]
+    check("Scale" not in plain[0] and plain[0]["Rotate"] == [0.0, 1.0, 0.0], "an item of its own size is given a size, or one not turned a turn")
+    check(seed.shelf_lift("Item_Token_Gold", -0.193) == 0.19 and seed.shelf_lift("Item_Gauntlet_Gold", 1.171) == 0.0 and seed.shelf_lift("Item_Thing", 0.01) == 0.0 and
           seed.shelf_lift("Item_Thing", None) == 0.0 and seed.shelf_lift("Item_Thing", -0.9) == 0.0 and seed.shelf_lift("Item_Thing", -0.276) == 0.28,
           "a shelf is not put as high as its item's model reaches under its origin, or one whose model is made elsewhere is")
 
@@ -283,7 +308,7 @@ def main():
     check('spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]' in script and "if gives[h] != g.item and g.flow and h not in lessons:" in script,
           "the shelves are not spots among the chests', or a shelf is taken for a scene's gift")
     check('shop_files["Pack/Actor/%s.pack.zs" % actor] = new' in script and 'shop_files["RSDB/" + n] = table' in script and
-          "parts[name] = shop_goods(parts[name], sells)" in script and "new, count = shelf_actors(data, on_shelf, lifts)" in script and
+          "parts[name] = shop_goods(parts[name], sells)" in script and "new, count = shelf_actors(data, on_shelf, lifts, scales, turns)" in script and
           "text = shop_caption(text, name) or text" in script and "list(shop_files.items())" in script and
           'new_tables["System/Resource/" + n] = shop_table(' in script,
           "a shelf actor's pack, its rows, the goods lists, the map's shelves or the words are not written with the seed, or the size table does not know them")

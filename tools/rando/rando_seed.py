@@ -346,15 +346,25 @@ SHOP_PRICE_MAX = 1000
 WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,))))
 
 
-# An item whose model is not made to stand on a shelf: the Golden Gauntlets lay half under their shelf's board, one
-# of the pair above it and one below (seen in play). Such a shelf's actor is put this much higher in the map file.
-# The other gauntlets are taken to be made as they are; not seen.
-# Higher, the Silver Gauntlets stood on their shelf (seen in play); a Gold Skulltula's token was half in its board.
-# The others by their model's box (the list of actors has it, ModelAabbMin): a model that reaches under its own
-# origin is put that much higher (shelf_lift): the token's reaches 0.19 under (0.15 was seen to stand well), the Megaton
-# Hammer's 0.28. The gauntlets' box is where they are worn, a metre up, and says nothing of the shelf: theirs is the
-# number here.
-SHELF_LIFT = {"Item_Gauntlet_Gold": 0.22, "Item_Gauntlet_Silver": 0.22, "Item_Gauntlet_Goron": 0.22}
+# How an item stands on its shelf (SHELF_POSE, for the name: there is no such table). A shelf's actor had the item's
+# own pose and animation (ASInfoRef, ASRef, AnimationRef), which are those of the scene where Link gets it: they
+# lift it, turn it and, for some, draw it twice. Seen in play with them: the Iron Boots twice, one pair under the
+# other; the compass tilted and half behind its price board; the Light Arrows and the Deku Stick bundle well over
+# their shelf. So a shelf's actor has none of the three (shop_pack), and the item is as its model is made: seen
+# without them, the boots once, the compass flat on its board, the hammer, bow, key and Longshot lying on theirs.
+# Then the model's box tells where it is (the list of actors has it, ModelAabbMin and ModelAabbMax):
+# - one that reaches under its own origin is put that much higher (shelf_lift): a Gold Skulltula's token reaches
+#   0.19 under and was half in its board; the Megaton Hammer's 0.28;
+# - one made where it is worn is put that much lower (SHELF_WORN): the gauntlets' box is 1.17 m up, and without the
+#   pose they were at the top of the picture; lowered by it, on their shelf (seen in play);
+# - and an item's own number where its box is not how it shows (SHELF_LIFT): the three magic arrows' boxes take in
+#   their glow, and they hung a hand over the shelf; the Deku Stick bundle stands where its origin is.
+# The Lens of Truth is its own case. Its box says 0.92 m up, and it is not there: at no height, with the pose or
+# without, was it seen on a shelf, in three shops. It lies flat and is a thin dark frame round clear glass. Turned
+# to stand (SHELF_TURN, added to its shelf's angles), twice its size and a little higher, its frame shows in the
+# Bazaar's light; in the Kokiri and the Goron shops it was still not made out. Its name and words are right when its
+# shelf is looked at. Not solved.
+SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": 0.15}
 
 
 def shelf_lift(item, floor):
@@ -373,6 +383,62 @@ def model_floor(data, item):
             low = row[1].get("ModelAabbMin", ("dict", {}))[1].get("Y")
             return struct.unpack("<f", low[1])[0] if low and low[0] == 0xD2 else None
     return None
+
+
+def model_box(data, item):
+    """an item's model's box in the game's list of actors (ActorInfo: ModelAabbMin, ModelAabbMax): ((x, y, z) the
+    lowest, (x, y, z) the highest), or None"""
+    tree, _ = byml_parse(data)
+    for row in tree[1]:
+        if row[1].get("__RowId", ("", ""))[1] == item:
+            ends = []
+            for key in ("ModelAabbMin", "ModelAabbMax"):
+                at = row[1].get(key, ("dict", {}))[1]
+                if not all(axis in at and at[axis][0] == 0xD2 for axis in "XYZ"):
+                    return None
+                ends.append(tuple(struct.unpack("<f", at[axis][1])[0] for axis in "XYZ"))
+            return tuple(ends)
+    return None
+
+
+# How large an item is on its shelf. A shelf's own goods are up to 1.1 m long (the Deku Stick); the Megaton Hammer
+# (1.78 m) and the Fairy Bow (1.36 m) filled the shop's wall (seen in play). An item longer than SHELF_LONG is made
+# SHELF_LONG long, and one smaller than SHELF_SMALL (the compass, 16 cm and flat: half hidden by its shelf's price
+# board; the Stone of Agony, 8 cm) is made SHELF_SMALL, at most three times its size. The size is the shelf actor's
+# Scale in the map file. An item's own number, where its box does not say it: the Small Key, tall and thin, stood
+# over its shelf's whole height.
+SHELF_LONG = 0.9
+SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_GlassTruth": 2.0,
+               "Item_Gauntlet_Gold": 1.0, "Item_Gauntlet_Silver": 1.0, "Item_Gauntlet_Goron": 1.0}
+SHELF_TURN = {"Item_GlassTruth": (-1.57, 0.0, 0.0)}
+# An item whose model is made where it is worn, not at its own origin (the gauntlets: 1.17 m up): its shelf's actor is
+# put that much lower (shelf_fit). The gauntlets keep their size: their box is the pair's, 1.6 m from one to the other.
+SHELF_WORN = 0.5
+
+
+def shelf_fit(item, box):
+    """(how much higher an item's shelf actor is put, how large it is made: 1.0 its own size), by its model's box
+    (model_box, or None) and its own numbers"""
+    scale = SHELF_SCALE.get(item, 1.0)
+    floor = None
+    if box:
+        size = max(high - low for low, high in zip(*box))
+        if item not in SHELF_SCALE and size > 0:
+            if size > SHELF_LONG * 1.3:
+                scale = round(SHELF_LONG / size, 2)
+        floor = box[0][1]
+    if item in SHELF_LIFT:
+        return SHELF_LIFT[item], scale
+    if floor is not None and floor > SHELF_WORN:
+        return round(-floor * scale, 2), scale
+    return round(shelf_lift(item, floor) * scale, 2), scale
+
+
+# A shelf of bundles has a board beside it with how many are in one ("x 10": Shop_Board_Bundle_05, _10, _20, ...),
+# an actor of its own in the map file. With another item on the shelf it stayed, and said x 10 under a Kokiri Sword
+# (seen in play). The board next to a shelf that sells a shuffled item (within SHELF_BOARD_NEAR of it) is put far
+# under the map: not taken out of the file, so nothing that names it is left without it.
+SHELF_BOARD, SHELF_BOARD_NEAR, SHELF_BOARD_AWAY = "Shop_Board_Bundle_", 0.5, 2000.0
 
 
 # ---- Progressive items: what the rules ask for when an upgrade found gives the next one Link has not ----
@@ -456,7 +522,8 @@ def shop_pack(item, item_pack, base_pack, sample_pack, price, pouch=None, name=N
     if ACTOR_FILE % SHOP_BASE not in base or not {sample_actor, sample_table, sample_price} <= set(sample):
         raise ValueError("the shelf base's pack or the sample shelf's is not what it was")
     _, version = byml_parse(sample[sample_actor])
-    comps = collections.OrderedDict((key, part(key)) for key in ("ASInfoRef", "ASRef", "ActorNameRef", "AnimationRef", "ModelInfoRef", "PouchContentRef") if part(key))
+    # (not the item's pose and animation, ASInfoRef, ASRef and AnimationRef: they are its "item got" scene's: SHELF_POSE, above SHELF_LIFT)
+    comps = collections.OrderedDict((key, part(key)) for key in ("ActorNameRef", "ModelInfoRef", "PouchContentRef") if part(key))
     comps["GameParameterTableRef"] = ("string", "?" + table_name)
     files[actor_name] = byml_build(("dict", collections.OrderedDict((("$parent", ("string", ACTOR_REF % SHOP_BASE)),
                                                                      ("Components", ("dict", collections.OrderedDict(sorted(comps.items()))))))), version)
@@ -524,13 +591,32 @@ def shop_goods(data, sells):
     return byml_build(tree, version)
 
 
-def shelf_actors(data, sells, lifts=None):
+def shelf_actors(data, sells, lifts=None, scales=None, turns=None):
     """A map file with its shelves of `sells` ({(the game's own shelf actor, its place in the row): the new one})
     made the new actor: (the file written anew, or None when it has none of them; how many). lifts: {a new actor:
-    how much higher its shelf's actor is put}."""
+    how much higher its shelf's actor is put}; scales: {a new actor: how large it is made}, where not its own size.
+    The board of how many a bundle holds beside such a shelf is put out of sight (SHELF_BOARD)."""
     tree, version = byml_parse(data)
     actors = tree[1].get("Actors")
     n = 0
+    number = lambda node: struct.unpack("<f", node[1])[0] if isinstance(node[1], bytes) and len(node[1]) == 4 else None
+    place = lambda actor: ([number(x) for x in actor[1]["Translate"][1]]
+                           if actor[1].get("Translate", ("", ()))[0] == "array" and len(actor[1]["Translate"][1]) == 3 else None)
+    changed = []   # (where the shelves that sell a shuffled item were, before any lift)
+    for actor in actors[1] if actors and actors[0] == "array" else ():
+        gyaml = actor[1].get("Gyaml", ("", ""))[1]
+        index = actor[1].get("Dynamic", ("dict", {}))[1].get("ShopItemIndex")
+        if sells.get((gyaml, struct.unpack("<I", index[1])[0] if index and isinstance(index[1], bytes) and len(index[1]) == 4 else 0)):
+            at = place(actor)
+            if at and None not in at:
+                changed.append(at)
+    for actor in actors[1] if actors and actors[0] == "array" else ():
+        gyaml = actor[1].get("Gyaml", ("", ""))
+        at = place(actor)
+        if (gyaml[0] == "string" and gyaml[1].startswith(SHELF_BOARD) and at and None not in at and
+                any(abs(at[0] - x) <= SHELF_BOARD_NEAR and abs(at[2] - z) <= SHELF_BOARD_NEAR and abs(at[1] - y) <= SHELF_BOARD_NEAR for x, y, z in changed)):
+            node = actor[1]["Translate"][1]
+            node[1] = (node[1][0], struct.pack("<f", at[1] - SHELF_BOARD_AWAY))
     for actor in actors[1] if actors and actors[0] == "array" else ():
         gyaml = actor[1].get("Gyaml", ("", ""))[1]
         index = actor[1].get("Dynamic", ("dict", {}))[1].get("ShopItemIndex")
@@ -540,6 +626,14 @@ def shelf_actors(data, sells, lifts=None):
             at = actor[1].get("Translate")
             if (lifts or {}).get(new) and at and at[0] == "array" and len(at[1]) == 3 and isinstance(at[1][1][1], bytes) and len(at[1][1][1]) == 4:
                 at[1][1] = (at[1][1][0], struct.pack("<f", struct.unpack("<f", at[1][1][1])[0] + lifts[new]))
+            size = (scales or {}).get(new)
+            if size and size != 1.0:
+                actor[1]["Scale"] = ("array", [(0xD2, struct.pack("<f", size))] * 3)
+            turn = (turns or {}).get(new)
+            if turn:   # (turned on its shelf: added to the shelf's own angles, x, y, z in radians)
+                was = actor[1].get("Rotate")
+                angles = [number(x) or 0.0 for x in was[1]] if was and was[0] == "array" and len(was[1]) == 3 else [0.0, 0.0, 0.0]
+                actor[1]["Rotate"] = ("array", [(0xD2, struct.pack("<f", a + b)) for a, b in zip(angles, turn)])
             n += 1
     return (byml_build(tree, version) if n else None), n
 
@@ -3164,15 +3258,28 @@ def main():
                 shop_packs["Pack/Actor/%s.pack" % actor] = len(new)
                 shop_new.update(parts)
             folder = os.path.join(romfs, "RSDB")
-            lifts = {}
+            lifts, scales, turns = {}, {}, {}
             for kind in SHOP_TABLES:   # (the game's three lists of actors: a row for each shelf actor)
                 n = next((n for n in sorted(os.listdir(folder)) if n.startswith(kind + ".") and ".byml" in n.lower()), None)
                 if n is None:
                     raise ValueError("the game has no list %s" % kind)
                 table = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
                 if kind == "ActorInfo":   # (how high each shelf's actor stands: by its item's model)
-                    lifts = {actor: shelf_lift(item, model_floor(table, item)) for actor, (item, _) in on_sale.items()}
-                    lifts = {actor: lift for actor, lift in lifts.items() if lift}
+                    fits = {actor: shelf_fit(item, model_box(table, item)) for actor, (item, _) in on_sale.items()}
+                    lifts = {actor: lift for actor, (lift, _) in fits.items() if lift}
+                    scales = {actor: scale for actor, (_, scale) in fits.items() if scale != 1.0}
+                    turns = {actor: SHELF_TURN[item] for actor, (item, _) in on_sale.items() if item in SHELF_TURN}
+                    # (a test: RANDO_TEST_LIFTS="<metres> ..." puts the shelves, in RANDO_TEST_SHOPS' order, that much
+                    #  higher in place of what their items ask for; "-" leaves one as it is)
+                    for (shop, index, _), turn in zip(shelves.values(), os.environ.get("RANDO_TEST_TURNS", "").split()):
+                        if turn != "-":   # (a test: "<x>,<y>,<z>" in radians for each shelf, "-" for none)
+                            turns[shop_actor("%s_%d" % (shop.key, index))] = tuple(float(v) for v in turn.split(","))
+                    for (shop, index, _), size in zip(shelves.values(), os.environ.get("RANDO_TEST_SCALES", "").split()):
+                        if size != "-":
+                            scales[shop_actor("%s_%d" % (shop.key, index))] = float(size)
+                    for (shop, index, _), lift in zip(shelves.values(), os.environ.get("RANDO_TEST_LIFTS", "").split()):
+                        if lift != "-":
+                            lifts[shop_actor("%s_%d" % (shop.key, index))] = float(lift)
                 for actor, (item, price) in on_sale.items():
                     table = shop_rows(table, kind, item, price, actor)
                 shop_files["RSDB/" + n] = table
@@ -3204,7 +3311,7 @@ def main():
                         data = changed[rel] if rel in changed else unpack(open(os.path.join(folder_map, n), "rb").read(), zs, dicts)
                         if not any(actor.encode() in data for actor, _ in on_shelf):
                             continue
-                        new, count = shelf_actors(data, on_shelf, lifts)
+                        new, count = shelf_actors(data, on_shelf, lifts, scales, turns)
                         if new is not None:
                             changed[rel] = new
                             sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)

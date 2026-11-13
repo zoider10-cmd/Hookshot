@@ -666,6 +666,24 @@ Not the Happy Mask Shop, and not the shelves a game buys from again and again or
 tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
 the same goods list, and both sell the shuffled items.
 
+**How an item stands on its shelf.** A shelf's actor does not take the item's pose and animation: they are those of
+the scene where Link gets the item, and lifted it, tilted it or drew it twice (the Iron Boots, one pair under the
+other). Without them the item is as its model is made, and its model's box (the list of actors) says where: one that
+reaches under its origin is put that much higher, one made where it is worn (the gauntlets, 1.17 m up) that much
+lower, and one longer than 1.2 m is made 0.9 m long (the Megaton Hammer and the Fairy Bow filled the shop's wall).
+The Small Key is 0.6 of its size and the compass 1.5; the magic arrows and the Deku Stick bundle have heights of
+their own. The size and the turn are the shelf actor's `Scale` and `Rotate` in the map file. The board that says how
+many a bundle holds ("x 10": `Shop_Board_Bundle_*`, an actor of its own) is put out of sight beside a shelf that
+sells a shuffled item. Seen in runs without a window in the Kokiri shop, the Bazaar and the Goron shop, 30 items;
+the Potion Shop, the Bombchu Shop and the Zora shop were not opened in those runs. **Not solved: the Lens of
+Truth.** It lies flat and is a thin dark frame round clear glass; stood up and twice its size its frame shows in the
+Bazaar and was not made out in the other two shops. Its name and words are right when its shelf is looked at. A
+bottle lies low behind its price board. A seed made before this keeps its shelves as they were.
+
+Three test switches for this, read when a seed is made, in `RANDO_TEST_SHOPS`' order of shelves:
+`RANDO_TEST_LIFTS` (metres higher), `RANDO_TEST_SCALES` and `RANDO_TEST_TURNS` (`x,y,z` in radians), `-` for a shelf
+left as its item asks.
+
 **The Bombchu Shop opens late, as in the game.** It is young Link's alone (the adult's Market has its ruin), and its
 door says "Closed due to bomb shortage" until it is night and the Goron's Ruby's quest is at its last step: the
 Market's logic for the door (`Logic/Market_Child_Prefab_0c76`) asks for `Get_StoneOfFire_IsCompleted_Exp` and the
