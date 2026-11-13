@@ -67,8 +67,15 @@ def sources(rows):
     #  file's value, and the New seed window)
     not_yet = re.search(r"RandoNotYet = new Dictionary<string, int> \{\s*([^;]*?) \};", launcher)
     limits = dict((k, int(n)) for k, n in re.findall(r'\{ "(\w+)", (\d+) \}', not_yet.group(1))) if not_yet else {}
-    check(limits == {"rando_dungeon_rewards": 1, "rando_frogs": 1, "rando_songs": 2, "rando_keys": 2},
-          "the launcher's list of settings not available yet is not the four known (%r)" % limits)
+    check(limits == {"rando_dungeon_rewards": 1, "rando_songs": 2, "rando_keys": 2},
+          "the launcher's list of settings not available yet is not the three known (%r)" % limits)
+    # (the frogs are no longer a choice: the row is kept for a seed's ID and shown nowhere, and Quest rewards says so)
+    check('RandoHidden = new HashSet<string> { "rando_frogs" };' in launcher and "Page = hidden ? NoPage : page" in launcher and
+          "if (!hidden) place++;" in launcher and "if (LauncherForm.RandoHidden.Contains(key)) continue;" in launcher and
+          "the frogs of Zora's River among them" in launcher,
+          "the Frogs row is still shown on the page or in the New seed window, or Quest rewards does not name the frogs")
+    check("Most of the logic (what each place asks for) is taken from the original game's" in launcher,
+          "the Randomizer switch no longer says where the logic is from")
     check(all(key in {f[0] for f in found} for key in limits), "a setting listed as not available yet is not a row of the page")
     check("if (RandoNotYet.ContainsKey(s.Key)) s.Limit = RandoNotYet[s.Key];" in launcher and "i = Math.Max(0, Math.Min(Last, i));" in launcher and
           "for (int i = 0; i <= s.Last; i++) {" in launcher and "best = Math.Min(best, s.Last);" in launcher and

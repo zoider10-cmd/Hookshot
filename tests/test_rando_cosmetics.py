@@ -309,7 +309,7 @@ def shields():
     check(re.findall(r'new object\[\] \{ "(\w+)", "[^"]*", ShieldLooks, ShieldValues,', rows) == [key for _, key, _, _ in t.SHIELDS],
           "the launcher's shield rows and the script's shields differ")
     check("AddSelectors(ShieldRows, 4, cx, colW, cosmetics, 70, 62, false, 6);" in launcher and
-          "int col = (i + first) % 2, line = (i + first) / 2;" in launcher,
+          "int place = first;" in launcher and "int col = place % 2, line = place / 2;" in launcher,
           "the launcher does not show the shields' looks on its Cosmetics page, clear of Randomize all")
 
 

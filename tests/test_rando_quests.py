@@ -134,7 +134,8 @@ def main():
     check(all('"%s": 0' % key in script for key in ("rando_quests", "rando_frogs", "rando_light_arrows")), "the script does not read the three settings")
     check('(" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "")' in script,
           "the seed's stamp does not name Quest rewards and its two settings (a seed made without them would not be made again)")
-    check("a.frogs = a.quests and" in script and "a.light_arrows = a.quests and" in script, "the frogs or the Light Arrows take part without Quest rewards")
+    check("a.frogs = a.quests   #" in script and "a.light_arrows = a.quests and" in script,
+          "the frogs do not take part whenever Quest rewards is on, or the Light Arrows take part without it")
     check("gift_items(unpack(" in script and "gift_sizes, FLOW_EXTRA)" in script and "list(gift_files.items())" in script,
           "a changed flow is not written with the seed, or its size table entry is not raised")
     check("if set(change) - found:" in script, "a gift whose item its flow no longer names is passed over in silence")

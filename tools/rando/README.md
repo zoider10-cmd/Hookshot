@@ -7,13 +7,19 @@ which Mako loads in place of the game's own files ([host/mods.c](../../host/mods
 changed, and no game file belongs in this repository: the scripts' reports name the game's files and items, so
 `rando_inventory.txt` and `rando_locations.txt` are in `.gitignore`.
 
+**Where the logic is from.** Most of what each place asks for (which items Link needs to reach a chest, a Gold
+Skulltula, a gift) is taken from the original game's randomizer logic, matched to this game's places by hand. The
+remake is not the same game everywhere, so a few rules may be wrong: a place asked for too early, or one that needs
+more than the rule says. A seed that cannot be finished, or a place that could not be reached when the tracker said
+it could, is worth reporting with the seed's ID.
+
 All need Python 3 with `zstandard` (the build's own requirement). Run them with `python -I` from the repository root.
 
 ## Playing a seed
 
 1. In the launcher's **Randomizer** page: turn Randomizer on,
-   set **Chests**, and **Major items**, **Dungeon keys**, **Gold Skulltulas** and **Quest rewards** (with **Frogs**
-   and **Light Arrows**) as wanted.
+   set **Chests**, and **Major items**, **Dungeon keys**, **Gold Skulltulas** and **Quest rewards** (with
+   **Light Arrows**) as wanted. The frogs of Zora's River take part whenever Quest rewards is on.
 2. Press **Play** in the launcher. It runs `<game folder>\rando\rando_seed.py` (a copy the build puts there) with
    `--if-changed`, then starts the game. `mods\rando-seed\spoiler.txt` says what every chest held and holds now;
    `rando\last_run.txt` is what the script said.

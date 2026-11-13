@@ -48,7 +48,7 @@
       "Which Gold Skulltulas take part: their tokens change places with the chests' supplies (all but rupees). Needs Chests.", \
       "Off", "Dungeons", "Overworld", "All") \
     X(QUESTS, "Quest rewards", "rando_quests", \
-      "What some characters give takes part with the chests: Darunia, mini-games, side quests and the Gold Skulltula family. Needs Chests.", \
+      "What some characters give takes part with the chests: Darunia, mini-games (the frogs of Zora's River among them), side quests and the Gold Skulltula family. Needs Chests.", \
       "Off", "On") \
     X(SONGS, "Songs", "rando_songs", \
       "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere is not made yet: the same as Song spots.", \
@@ -80,6 +80,8 @@
     X(SKIP_INTRO, "Skip opening", "rando_skip_intro", \
       "A new game starts in Link's house, without the narration and Navi's flight.", \
       "Off", "On") \
+    /* (no longer a choice: the frogs take part whenever Quest rewards is on, tools/rando/rando_seed.py. The row keeps \
+       its place here, which is its place in a seed's ID; the launcher does not show it) */ \
     X(FROGS, "Frogs", "rando_frogs", \
       "With Quest rewards: the frogs of Zora's River take part too.", \
       "Off", "On") \

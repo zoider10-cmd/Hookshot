@@ -2591,7 +2591,7 @@ def main():
     p.add_argument("--skulltulas", type=int, choices=(0, 1, 2, 3), help="in place of rando_skulltulas: the Gold Skulltulas whose tokens change places "
                                                                         "with the chests' rupees and supplies. 1 dungeons, 2 overworld, 3 all")
     p.add_argument("--quests", action="store_true", help="as rando_quests=1: what characters give takes part with the chests (GIFTS)")
-    p.add_argument("--frogs", action="store_true", help="as rando_frogs=1: with Quest rewards, the frogs of Zora's River take part too")
+    p.add_argument("--frogs", action="store_true", help="not used any more: with Quest rewards the frogs of Zora's River always take part")
     p.add_argument("--light-arrows", action="store_true", help="as rando_light_arrows=1: with Quest rewards, Zelda's Light Arrows take part too")
     p.add_argument("--scrubs", action="store_true", help="as rando_scrubs=1: the Business Scrubs' four one-time sales take part with the chests (SCRUBS)")
     p.add_argument("--shops", type=int, choices=(0, 1, 2), help="in place of rando_shops: four shelves of each shop sell a shuffled item, once (SHOPS). "
@@ -2644,7 +2644,7 @@ def main():
     a.skulltulas = a.skulltulas if a.skulltulas is not None else ini["rando_skulltulas"]
     a.skulltulas = a.skulltulas if 0 <= a.skulltulas <= 3 else 0
     a.quests = a.quests or ini["rando_quests"] != 0
-    a.frogs = a.quests and (a.frogs or ini["rando_frogs"] != 0)
+    a.frogs = a.quests   # (no longer a choice of its own: the frogs take part whenever Quest rewards is on; rando_frogs and --frogs are read and not used)
     a.light_arrows = a.quests and (a.light_arrows or ini["rando_light_arrows"] != 0)
     # A test: <game folder>\rando\test_drops.txt, lines of "<an actor's hash> <an item>": that actor (a Gold Skulltula,
     # say) drops the item. For finding how the other kinds of check hold what they give; not a setting.

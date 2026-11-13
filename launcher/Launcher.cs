@@ -744,6 +744,7 @@ class RandoSeedForm : Form {
         for (int i = 1; i < LauncherForm.RandoRows.Length; i++) {   // (not the first: the switch is the game chosen)
             object[] row = LauncherForm.RandoRows[i];
             string key = (string)row[0];
+            if (LauncherForm.RandoHidden.Contains(key)) continue;   // (no longer a choice)
             var values = (int[])row[3];
             var label = new Label { Text = (string)row[1], AutoSize = false, Location = new Point(10, y + 3), Size = new Size(200, 24) };
             var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat, Location = new Point(216, y), Size = new Size(240, 26),
@@ -1888,20 +1889,24 @@ class LauncherForm : Form {
     // has no Randomizer tab since Mako 3.3 (its menu was written anew): this page is where they are set, and where a
     // seed's ID is copied and pasted)
     // (the settings a seed does nothing with yet, and the first of each one's choices that is so: the row offers the
-    // choices before it, and with only Off left says "Not available yet". Dungeon rewards and the frogs are not made;
+    // choices before it, and with only Off left says "Not available yet". Dungeon rewards are not made;
     // Songs' and Dungeon keys' Anywhere are made as the choice before. tools/rando/rando_seed.py is what places a seed)
     internal static readonly Dictionary<string, int> RandoNotYet = new Dictionary<string, int> {
-        { "rando_dungeon_rewards", 1 }, { "rando_frogs", 1 }, { "rando_songs", 2 }, { "rando_keys", 2 } };
+        { "rando_dungeon_rewards", 1 }, { "rando_songs", 2 }, { "rando_keys", 2 } };
+    // (rows that are no longer a choice and are not shown: the frogs of Zora's River take part whenever Quest rewards is
+    // on. The row stays in RandoRows, its place being its place in a seed's ID, gpu/vk/oot_rando.h)
+    internal static readonly HashSet<string> RandoHidden = new HashSet<string> { "rando_frogs" };
     internal static int RandoChoices(string key, int count) { int n; return RandoNotYet.TryGetValue(key, out n) ? Math.Min(n, count) : count; }
+    const int NoPage = 1000;   // (a widget's page that no tab shows)
     internal static readonly object[][] RandoRows = {
         new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
-            "Turns the seed on. Chests, Gold Skulltulas, Quest rewards (with Frogs and Light Arrows), Deku Scrubs, Starting rupees, Dungeon keys, Major items, the forest's two ways and the opening are made when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
+            "Turns the seed on. Most of the logic (what each place asks for) is taken from the original game's, so a few rules may be wrong for this one. Chests, Gold Skulltulas, Quest rewards (with Light Arrows), Deku Scrubs, Starting rupees, Dungeon keys, Major items, the forest's two ways and the opening are made when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
         new object[] { "rando_chests", "Chests", new[] { "Off", "Overworld", "Dungeons", "All" }, new[] { 0, 1, 2, 3 },
             "Which treasure chests hold a shuffled item. All is every chest in the game." },
         new object[] { "rando_skulltulas", "Gold Skulltulas", new[] { "Off", "Dungeons", "Overworld", "All" }, new[] { 0, 1, 2, 3 },
             "Which Gold Skulltulas take part: their tokens change places with the chests' supplies (all but rupees). Needs Chests." },
         new object[] { "rando_quests", "Quest rewards", new[] { "Off", "On" }, new[] { 0, 1 },
-            "What some characters give takes part with the chests: Darunia, mini-games, side quests and the Gold Skulltula family. Needs Chests." },
+            "What some characters give takes part with the chests: Darunia, mini-games (the frogs of Zora's River among them), side quests and the Gold Skulltula family. Needs Chests." },
         new object[] { "rando_songs", "Songs", new[] { "Off", "Song spots", "Anywhere" }, new[] { 0, 1, 2 },
             "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere is not made yet: the same as Song spots." },
         new object[] { "rando_heart_pieces", "Heart Pieces", new[] { "Off", "On" }, new[] { 0, 1 },
@@ -2075,7 +2080,7 @@ class LauncherForm : Form {
         AddSelectors(GameRows, 2, cx, colW);
         // (more of them than fit over the seed's buttons: closer lines, and the list scrolls by the wheel inside RandoView)
         AddSelectors(RandoRows, 3, cx, colW, null, 47, 45, true);
-        randoHeight = 112 + (RandoRows.Length + 1) / 2 * 47 - 2 - RandoView.Y;
+        randoHeight = 112 + (RandoRows.Length - RandoHidden.Count + 1) / 2 * 47 - 2 - RandoView.Y;
         AddSelectors(CosmeticRows, 4, cx, colW, cosmetics);
         // (the shields' looks, from the fourth line on: the third line's right half is Randomize all's)
         AddSelectors(ShieldRows, 4, cx, colW, cosmetics, 70, 62, false, 6);
@@ -2176,11 +2181,14 @@ class LauncherForm : Form {
     }
 
     void AddSelectors(object[][] rows, int page, float x0, float colW, Dictionary<string, Selector> into = null, int pitch = 70, int height = 62, bool scrolls = false, int first = 0) {
+        int place = first;   // (first: the place of the rows' first, counted from the page's first)
         for (int i = 0; i < rows.Length; i++) {
             var row = rows[i];
-            int col = (i + first) % 2, line = (i + first) / 2;   // (first: the place of the rows' first, counted from the page's first)
+            bool hidden = RandoHidden.Contains((string)row[0]);   // (kept, for a seed's ID, and on no page)
+            int col = place % 2, line = place / 2;
+            if (!hidden) place++;
             var s = new Selector { Key = (string)row[0], Label = (string)row[1], Items = (string[])row[2], Values = (int[])row[3], HelpText = (string)row[4],
-                                   Page = page, R = new RectangleF(x0 + col * (colW + 14), 112 + line * pitch, colW, height),
+                                   Page = hidden ? NoPage : page, R = new RectangleF(x0 + col * (colW + 14), 112 + line * pitch, colW, height),
                                    Scrolls = scrolls, HomeY = 112 + line * pitch };
             if (RandoNotYet.ContainsKey(s.Key)) s.Limit = RandoNotYet[s.Key];
             if (into == null) { s.Changed = OnSetting; settings[s.Key] = s; }
