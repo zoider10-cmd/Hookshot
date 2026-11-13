@@ -113,7 +113,9 @@ static class RandoId {
 // The randomizer's record of the checks collected (rando\collected.txt) goes with its save, and so does its seed: the
 // randomizer's settings (the options file's rando_ lines but the switch) and the seed's files (mods\rando-seed) are
 // kept for each of the randomizer's saves in <game folder>\user\save_slots\seeds, so that two saves made on two
-// seeds are each played on its own. A save without one yet takes the seed there is. tests/test_save_slots.py
+// seeds are each played on its own. A save's seed is the one it was last played on: it is kept when Play is pressed,
+// not when another save is chosen (a new seed made for the next save, while this one was still the one in the game,
+// became this one's: seen in play). A save without one yet takes the seed there is. tests/test_save_slots.py
 public static class SaveSlots {
     public const string Folder = "save_slots";
     public const string First = "Save 1";
@@ -167,19 +169,39 @@ public static class SaveSlots {
     static string SeedMod(string dir) { return Path.Combine(dir, "mods", "rando-seed"); }
     static bool SeedLine(string line) { return line.StartsWith("rando_") && !line.StartsWith("rando_on="); }
 
-    // (the seed there is now, kept under that save's name)
-    static void SeedOut(string dir, string name) {
-        string root = SeedRoot(dir), kept = Path.Combine(root, name);
-        Directory.CreateDirectory(root);
+    static List<string> SeedLines(string dir) {
         var lines = new List<string>();
-        if (File.Exists(OptionsFile(dir))) foreach (string l in File.ReadAllLines(OptionsFile(dir))) if (SeedLine(l)) lines.Add(l);
-        File.WriteAllLines(kept + ".txt", lines.ToArray());
-        if (Directory.Exists(kept)) Directory.Delete(kept, true);
-        if (Directory.Exists(SeedMod(dir))) SaveCopies.CopyTree(SeedMod(dir), kept);
+        try { foreach (string l in File.ReadAllLines(OptionsFile(dir))) if (SeedLine(l)) lines.Add(l.Trim()); } catch { }
+        return lines;
     }
 
-    // (that save's seed made the one there is; a save that has none yet: nothing, it takes the one there is)
-    static void SeedIn(string dir, string name) {
+    // The seed there is now kept as that save's: Play was pressed on it (the launcher), so it is the seed it is played on.
+    public static void SeedKeep(string dir, string name) {
+        try {
+            string root = SeedRoot(dir), kept = Path.Combine(root, name);
+            Directory.CreateDirectory(root);
+            File.WriteAllLines(kept + ".txt", SeedLines(dir).ToArray());
+            if (Directory.Exists(kept)) Directory.Delete(kept, true);
+            if (Directory.Exists(SeedMod(dir))) SaveCopies.CopyTree(SeedMod(dir), kept);
+        } catch { }
+    }
+    public static bool SeedKept(string dir, string name) { return File.Exists(Path.Combine(SeedRoot(dir), name) + ".txt"); }
+
+    // (the seed there is now is not the one that save was last played on)
+    public static bool SeedDiffers(string dir, string name) {
+        try {
+            if (!SeedKept(dir, name)) return false;
+            var was = new List<string>();
+            foreach (string l in File.ReadAllLines(Path.Combine(SeedRoot(dir), name) + ".txt")) if (l.Trim().Length > 0) was.Add(l.Trim());
+            var now = SeedLines(dir);
+            was.Sort(StringComparer.Ordinal); now.Sort(StringComparer.Ordinal);
+            return string.Join("\n", was.ToArray()) != string.Join("\n", now.ToArray());
+        } catch { return false; }
+    }
+
+    // That save's seed made the one there is: its settings in the options file, its files in mods\rando-seed. It stays
+    // kept. A save that has none yet: nothing, it takes the one there is.
+    public static void SeedIn(string dir, string name) {
         string kept = Path.Combine(SeedRoot(dir), name);
         if (!File.Exists(kept + ".txt")) return;
         var lines = File.Exists(OptionsFile(dir)) ? new List<string>(File.ReadAllLines(OptionsFile(dir))) : new List<string>();
@@ -190,8 +212,27 @@ public static class SaveSlots {
         lines.InsertRange(at, File.ReadAllLines(kept + ".txt"));
         File.WriteAllLines(OptionsFile(dir), lines.ToArray(), new UTF8Encoding(false));
         if (Directory.Exists(SeedMod(dir))) Directory.Delete(SeedMod(dir), true);
-        if (Directory.Exists(kept)) { Directory.CreateDirectory(Path.Combine(dir, "mods")); Directory.Move(kept, SeedMod(dir)); }
-        File.Delete(kept + ".txt");
+        if (Directory.Exists(kept)) SaveCopies.CopyTree(kept, SeedMod(dir));
+    }
+
+    // A few words that tell one seed from another at a glance, for the lists (not the seed itself): three of the game's
+    // things, by the seed and its settings. "" for a save with no seed of its own that is not the one in the game.
+    static readonly string[] TagWords = { "Bow", "Bomb", "Hook", "Hammer", "Lens", "Boots", "Sword", "Shield", "Ocarina", "Bottle", "Mask", "Fairy",
+        "Deku", "Goron", "Zora", "Rupee", "Heart", "Key", "Song", "Skull", "Egg", "Arrow", "Nut", "Stick", "Cucco", "Epona", "Navi", "Owl", "Gem", "Wallet", "Bean", "Frog" };
+    public static string SeedTag(string dir, string name) {
+        try {
+            List<string> lines;
+            string kept = Path.Combine(SeedRoot(dir), name) + ".txt";
+            if (File.Exists(kept)) { lines = new List<string>(); foreach (string l in File.ReadAllLines(kept)) if (l.Trim().Length > 0) lines.Add(l.Trim()); }
+            else if (Same(Current(dir, Rando), name)) lines = SeedLines(dir);
+            else return "";
+            if (!lines.Exists(l => l.StartsWith("rando_seed=") && l != "rando_seed=0")) return "";
+            lines.Sort(StringComparer.Ordinal);
+            uint h = 0x811c9dc5u;
+            unchecked { foreach (char c in string.Join("\n", lines.ToArray())) h = (h ^ c) * 0x01000193u; }
+            int n = TagWords.Length;
+            return TagWords[h % n] + " · " + TagWords[(h / (uint)n) % n] + " · " + TagWords[(h / (uint)(n * n)) % n];
+        } catch { return ""; }
     }
 
     // Which of the ten slots there are to begin with each save is: name -> 1..10. A save made beyond them, or a copy, is
@@ -325,7 +366,7 @@ public static class SaveSlots {
             if (saveFolder == Rando) {   // (and its seed: the copy is played on the seed its save was)
                 try {
                     string seed = Path.Combine(SeedRoot(dir), names[at]), to2 = Path.Combine(SeedRoot(dir), clean);
-                    if (played) SeedOut(dir, clean);
+                    if (played && !File.Exists(seed + ".txt")) SeedKeep(dir, clean);
                     else if (File.Exists(seed + ".txt")) {
                         File.Copy(seed + ".txt", to2 + ".txt", true);
                         if (Directory.Exists(seed)) SaveCopies.CopyTree(seed, to2);
@@ -405,7 +446,9 @@ public static class SaveSlots {
                     if (File.Exists(from + ".collected.txt")) File.Move(from + ".collected.txt", record);
                 } catch { }
             }
-            if (saveFolder == Rando) { try { SeedOut(dir, current); SeedIn(dir, names[at]); } catch { } }
+            // (the save that goes out keeps the seed it was last played on, kept at its Play; one never played from here, the
+            //  seed there is now)
+            if (saveFolder == Rando) { try { if (!SeedKept(dir, current)) SeedKeep(dir, current); SeedIn(dir, names[at]); } catch { } }
             Write(dir, saveFolder, names[at], names);
             return null;
         } catch (Exception ex) { return ex.Message; }
@@ -501,7 +544,8 @@ class SaveSlotsForm : Form {
         list.SetBounds(16, 40, 488, 212); list.IntegralHeight = false;
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
-        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (playing)", n => SaveSlots.Shown(n, empty.Contains(n)));
+        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (playing)", n => SaveSlots.Shown(n, empty.Contains(n)),
+                                                           n => saveFolder == "save_rando" && !empty.Contains(n) ? SaveSlots.SeedTag(dir, n) : "");
         Style(play, "Play this save", 16, 264, 150); Style(delete, "Delete", 176, 264, 100); Style(copy, "Copy", 284, 264, 100);
         Style(close, "Close", 394, 264, 110);
         var mid = new Label { Text = "A name (or none), for a new save or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 312) };
@@ -634,7 +678,8 @@ class PlayChoiceForm : Form {
         list.SetBounds(16, 118, 488, 230); list.IntegralHeight = false;
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
-        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (last played)", n => SaveSlots.Shown(n, empty.Contains(n)));
+        list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (last played)", n => SaveSlots.Shown(n, empty.Contains(n)),
+                                                           n => Mode == 1 && !empty.Contains(n) ? SaveSlots.SeedTag(dir, n) : "");
         var low = new Label { Text = "A name (or none), for one more save or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 360) };
         name.SetBounds(16, 386, 170, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
@@ -896,7 +941,7 @@ class SaveCopiesForm : Form {
 
     // (a list of copies drawn with the current one in gold and named so)
     public static void DrawCopy(ListBox list, DrawItemEventArgs e, string current, int from = 0, string mark = "   (current)",
-                                Func<string, string> shown = null) {
+                                Func<string, string> shown = null, Func<string, string> tag = null) {
         if (e.Index < 0) return;
         string n = (string)list.Items[e.Index];
         string text = shown != null ? shown(n) : n;   // (what is said for it: an empty slot's, dim)
@@ -904,6 +949,10 @@ class SaveCopiesForm : Form {
         using (var b = new SolidBrush(chosen ? Theme.Blue : list.BackColor)) e.Graphics.FillRectangle(b, e.Bounds);
         TextRenderer.DrawText(e.Graphics, cur ? text + mark : text, list.Font, e.Bounds, chosen ? Color.White : cur ? Gold : text != n ? Theme.Dim : Theme.Text,
                               TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+        string seed = tag != null ? tag(n) : "";   // (a randomizer's save: its seed's few words, at the right)
+        if (seed.Length > 0)
+            TextRenderer.DrawText(e.Graphics, seed, list.Font, new Rectangle(e.Bounds.X, e.Bounds.Y, e.Bounds.Width - 6, e.Bounds.Height),
+                                  chosen ? Color.White : Theme.Cyan, TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
     }
 
     public SaveCopiesForm(string dir, string saveFolder) {
@@ -1739,6 +1788,12 @@ class LauncherForm : Form {
         widgets.Add(playButton);
         widgets.Add(new ChoiceBtn { Text = "CHOOSE GAME AND SAVE", R = new RectangleF(32, 576, 336, 64), Click = OnChoose,
                                     Now = () => PlayChoiceForm.Modes[PlayMode()] + "  ·  " + SaveSlots.Current(dir, SaveFolder()) });
+        // (the randomizer's save in the game keeps the seed there is as its own from the start, when it has none kept yet: a
+        //  new seed made before its next Play is then not taken for its own)
+        try {
+            string had = SaveSlots.Current(dir, "save_rando");
+            if (!SaveSlots.SeedKept(dir, had) && !SaveSlots.IsEmpty(dir, "save_rando", had)) SaveSlots.SeedKeep(dir, had);
+        } catch { }
         // (Mako) Master Quest's own Play, under it: its logo on the button (prompts/mq/logo.png, made by the build from the player's files)
         try {
             string mqPath = Path.Combine(dir, "prompts", "mq", "logo.png");
@@ -3050,7 +3105,20 @@ class LauncherForm : Form {
             return;
         }
         if (GameRunning()) { MessageBox.Show(this, "The game is already running.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        bool rando = !masterQuest && settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0;
+        string played = rando ? SaveSlots.Current(dir, "save_rando") : null;
+        // (a randomizer's save with progress, and a seed now that is not the one it was last played on: its chests would not be
+        //  the ones it was played with. Asked, with its own seed the answer offered)
+        if (rando && !SaveSlots.IsEmpty(dir, "save_rando", played) && SaveSlots.SeedDiffers(dir, played)) {
+            var answer = MessageBox.Show(this, "\"" + played + "\" was last played on another seed (or other randomizer settings) than the ones set now.\n\n" +
+                                         "Yes: play it on its own seed, as it was (the Randomizer page goes back to that seed).\n" +
+                                         "No: play it on the seed set now. Its chests will not be the ones it was played with.",
+                                         Fork.Name, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+            if (answer == DialogResult.Cancel) return;
+            if (answer == DialogResult.Yes) { try { SaveSlots.SeedIn(dir, played); } catch { } LoadAll(); Invalidate(); }
+        }
         if (!RunRandomizer()) return;
+        if (rando) SaveSlots.SeedKeep(dir, played);   // (the seed this save is played on, from now: SaveSlots)
         if (!RunCosmetics()) return;
         try {
             var psi = new ProcessStartInfo(exe) { WorkingDirectory = dir, UseShellExecute = false };

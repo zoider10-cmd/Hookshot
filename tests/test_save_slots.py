@@ -133,10 +133,18 @@ function Seed($n, $text) {
 }
 function SeedNow() { ((Get-Content (Join-Path $dir "hookshot_options.ini")) -join ";") + "|" + (Get-Content -Raw (Join-Path $dir "mods\rando-seed\romfs\map.txt")) }
 Seed 111 "first seed"
+[SaveSlots]::SeedKeep($dir, "Main")
+Say "tagmain" (([SaveSlots]::SeedTag($dir, "Main")).Replace([string][char]0xB7, "+"))
+# (seen in play: a new seed made for the next save while this one is still the one in the game is not this one's)
+Seed 222 "second seed"
+Say "seeddiffers" ([SaveSlots]::SeedDiffers($dir, "Main"))
 Say "seedto" ([SaveSlots]::Select($dir, "save_rando", "Save 5"))
 Say "seedtaken" (SeedNow)
-Seed 222 "second seed"
+[SaveSlots]::SeedKeep($dir, "Save 5")
+Say "tagfive" (([SaveSlots]::SeedTag($dir, "Save 5")).Replace([string][char]0xB7, "+"))
+Say "tagnone" ([SaveSlots]::SeedTag($dir, "Save 6"))
 Say "seedback" ([SaveSlots]::Select($dir, "save_rando", "Main"))
+Say "seedsame" ([SaveSlots]::SeedDiffers($dir, "Main"))
 Say "seedfirst" (SeedNow)
 Say "seedcopy" ([SaveSlots]::Copy($dir, "save_rando", "Main", "Main on its seed"))
 Say "seedagain" ([SaveSlots]::Select($dir, "save_rando", "Save 5"))
@@ -229,7 +237,13 @@ def main():
     check("delete.Click += (o, e) => OnDelete();" in src and 'MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;\n        string error = SaveSlots.Delete(dir, folder, n);' in src.replace("\r\n", "\n"),
           "the window to choose has no Delete button, or it does not ask first")
     first, second = "vsync=1;rando_on=1;rando_seed=111;rando_chests=3;options_version=2|first seed", "vsync=1;rando_on=1;rando_seed=222;rando_chests=3;options_version=2|second seed"
-    check(got["seedto"] == "" and got["seedtaken"] == first, "a save without a seed of its own does not take the seed there is: %r" % got["seedtaken"])
+    check(got["seedto"] == "" and got["seedtaken"] == second and got["seeddiffers"] == "True" and got["seedsame"] == "False",
+          "a save without a seed of its own does not take the seed there is, or a seed changed since a save's Play is not told: %r" % got["seedtaken"])
+    check(got["tagmain"] != "" and got["tagfive"] != "" and got["tagmain"] != got["tagfive"] and got["tagmain"].count(" + ") == 2 and got["tagnone"] == "",
+          "two seeds do not have two tags of three words, or a save without a seed has one: %r %r" % (got["tagmain"], got["tagfive"]))
+    check("if (rando) SaveSlots.SeedKeep(dir, played);" in src and "SaveSlots.SeedDiffers(dir, played)" in src and
+          "if (!SeedKept(dir, current)) SeedKeep(dir, current); SeedIn(dir, names[at]);" in src,
+          "a save's seed is not kept at its Play, or the seed there is when another save is chosen is taken for its own")
     check(got["seedback"] == "" and got["seedfirst"] == first and got["seedagain"] == "" and got["seedsecond"] == second,
           "two of the randomizer's saves made on two seeds are not each played on its own: %r %r" % (got["seedfirst"], got["seedsecond"]))
     check(got["seedcopy"] == "" and got["seedcopied"] == "" and got["seedofcopy"] == first and got["seedhome"] == "" and got["seednormal"] == "True",
