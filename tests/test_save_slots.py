@@ -163,6 +163,8 @@ Say "seedsetnow" ([SaveSlots]::SeedSet($dir, "Main", $new))
 Say "seedsetini" ((Get-Content (Join-Path $dir "hookshot_options.ini")) -join ";")
 Say "seedsetmod" ((Test-Path (Join-Path $dir "mods\rando-seed")) -eq $false)
 Say "seedof" (([SaveSlots]::SeedOf($dir, "Save 7")) -join ";")
+# (a save for a new game: the first that holds nothing and has no seed of its own)
+Say "free" ([SaveSlots]::Free($dir, "save_rando"))
 # (a save moved in its list)
 Say "moveup" ([SaveSlots]::Move($dir, "save_rando", "Save 3", -1))
 Say "movednames" (Names "save_rando")
@@ -271,6 +273,9 @@ def main():
           "a new seed for a save that waits is not kept for its Play (its settings and number, nothing else), or is set at once: %r" % got)
     check(got["seedsetnow"] == "" and "vsync=1;rando_on=1;rando_chests=1;rando_seed=777;options_version=2" == got["seedsetini"] and got["seedsetmod"] == "True",
           "a new seed for the save in the game is not set at once, the switch or another setting is touched, or the old seed's files stay: %r" % got["seedsetini"])
+    check(got["free"] == "Save 2" and 'string made = SaveSlots.Free(dir, SaveCopies.Folders[Mode]);' in src and
+          '"Create a new save", "Use this save")' in src and '" is empty. A name for the new game:", name, "Start")) {' in src,
+          "a new seed on a save with progress does not offer a new save (the first empty one without a seed), or an empty slot's name is not offered as its own: %r" % got["free"])
     check(got["moveup"] == "" and ",Save 3,Save 2," in got["movednames"] and got["movedown"] == "" and got["movetop"] == "" and got["movegone"] != "",
           "a save is not moved in its list: %r" % got["movednames"])
     check("seed.Click += (o, e) => OnSeed();" in src and "up.Click += (o, e) => OnMove(-1);" in src and

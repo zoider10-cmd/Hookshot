@@ -240,6 +240,16 @@ public static class SaveSlots {
         } catch (Exception ex) { return ex.Message; }
     }
 
+    // A save for a new game: the first that holds nothing and has no seed of its own, else one more (NewName). null: it
+    // could not be made.
+    public static string Free(string dir, string saveFolder) {
+        string current;
+        foreach (string n in Names(dir, saveFolder, out current))
+            if (!Same(n, current) && IsEmpty(dir, saveFolder, n) && !(saveFolder == Rando && SeedKept(dir, n))) return n;
+        string made = NewName(dir, saveFolder);
+        return Add(dir, saveFolder, made) == null ? made : null;
+    }
+
     // A save moved up (by < 0) or down in its list.
     public static string Move(string dir, string saveFolder, string name, int by) {
         string current;
@@ -545,7 +555,7 @@ class SaveNameForm : Form {
         if (!SaveSlots.Unnamed(name) || !SaveSlots.IsEmpty(dir, saveFolder, name)) return true;
         while (true) {
             using (var f = new SaveNameForm("Name the new save", SaveSlots.Shown(name, true).Replace(":  empty", "") +
-                                            " is empty. A name for the new game (or none):", "", "Start")) {
+                                            " is empty. A name for the new game:", name, "Start")) {
                 if (f.ShowDialog(owner) != DialogResult.OK) return false;
                 if (f.Value.Length == 0) return true;   // (no name given: the slot keeps the one it has, "Save 3")
                 string error = SaveSlots.Rename(dir, saveFolder, name, f.Value);
@@ -684,6 +694,29 @@ class SaveSlotsForm : Form {
     }
 }
 
+// (a question with its answers on the buttons themselves: 0 the first, 1 the second, -1 turned back)
+class AskForm : Form {
+    public int Answer = -1;
+    public AskForm(string title, string text, string first, string second) {
+        Text = title;
+        FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(470, 170);
+        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        var says = new Label { Text = text, AutoSize = false, Location = new Point(16, 14), Size = new Size(438, 96) };
+        var a = new Button { Text = first }; var b = new Button { Text = second }; var c = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
+        foreach (var x in new[] { a, b, c }) {
+            x.FlatStyle = FlatStyle.Flat; x.BackColor = Color.FromArgb(30, 46, 78); x.ForeColor = Color.White;
+            x.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+        }
+        a.SetBounds(16, 122, 170, 32); b.SetBounds(194, 122, 160, 32); c.SetBounds(362, 122, 92, 32); a.BackColor = Theme.Blue;
+        Controls.AddRange(new Control[] { says, a, b, c });
+        AcceptButton = a; CancelButton = c;
+        a.Click += (o, e) => { Answer = 0; DialogResult = DialogResult.OK; Close(); };
+        b.Click += (o, e) => { Answer = 1; DialogResult = DialogResult.OK; Close(); };
+    }
+}
+
 // (the window of the New seed button: the randomizer's settings chosen for one save, and a new seed made of them. The
 // seed's files are made when the save is played, as every seed's are)
 class RandoSeedForm : Form {
@@ -730,8 +763,8 @@ class RandoSeedForm : Form {
             b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
         }
         ok.SetBounds(258, 472, 130, 30); cancel.SetBounds(394, 472, 110, 30); ok.BackColor = Theme.Blue;
-        var foot = new Label { Text = "Hold the mouse over a setting for what it does.", AutoSize = true, ForeColor = Theme.Dim,
-                               Location = new Point(16, 478), Font = new Font("Segoe UI", 8.5f) };
+        var foot = new Label { Text = "Hold the mouse over a setting\nfor what it does.", AutoSize = false, ForeColor = Theme.Dim,
+                               Location = new Point(16, 470), Size = new Size(230, 36), Font = new Font("Segoe UI", 8.5f) };
         Controls.AddRange(new Control[] { top, panel, foot, ok, cancel });
         AcceptButton = ok; CancelButton = cancel;
         ok.Click += (o, e) => {
@@ -874,10 +907,23 @@ class PlayChoiceForm : Form {
         if (LauncherForm.GameRunning()) {
             MessageBox.Show(this, "Close the game first.", "Saves", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
         }
-        // (a save with progress: its chests would not be the ones it was played with)
-        if (!empty.Contains(n) && MessageBox.Show(this, "\"" + n + "\" has progress. On a new seed its chests will not be the ones it was played with.\n\n" +
-                "Make a new seed for it all the same? (For a new game, choose an empty slot.)", "Saves",
-                MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
+        // (a save with progress: its chests would not be the ones it was played with. A new save for the new seed is offered,
+        //  and is the answer under Enter)
+        if (!empty.Contains(n)) {
+            int answer;
+            using (var ask = new AskForm("New seed", "\"" + n + "\" has progress. On a new seed its chests will not be the ones it was played with.\n\n" +
+                                         "Make the new seed for a new save, and leave this one as it is?", "Create a new save", "Use this save")) {
+                ask.ShowDialog(this);
+                answer = ask.Answer;
+            }
+            if (answer < 0) return;
+            if (answer == 0) {
+                string made = SaveSlots.Free(dir, SaveCopies.Folders[Mode]);
+                if (made == null) { MessageBox.Show(this, "A new save could not be made.", "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                Fill(made);
+                n = made;
+            }
+        }
         using (var f = new RandoSeedForm(dir, n, SaveSlots.Shown(n, empty.Contains(n)).Replace(":  empty", ""))) f.ShowDialog(this);
         Fill(n);
     }
