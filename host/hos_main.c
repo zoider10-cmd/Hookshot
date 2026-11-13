@@ -1318,6 +1318,7 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
     if (now < next) return;
     next = now + 1000000000LL;
     if (!hos_rando_on()) return;
+    rx_option_set(OOT_TRACKER_ON, 1);   /* (the Tracker tab reads the seed only then: vk_menu.cpp tracker_load) */
     char map[80];
     oot_gamedata_string(c, 0x1d6189dau, map, sizeof map);   /* Sequence_CurrentBanc */
     AcquireSRWLockExclusive(&oot_checks_lock);
@@ -1576,11 +1577,13 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     } else if (action >= 200) {
         oot_edit_pouch(c, action);
     } else if (action == 6) {   /* (the Tracker tab's first row: forget what is collected) */
-        oot_tracker_forget();
+        if (hos_rando_on()) oot_tracker_forget();
     } else if (action >= 100 && action < 124) {
         oot_set_time(c, action - 100);
     }
-    if (action == 5) {
+    /* (the randomizer's tools are the randomizer's: the Tracker tab's Go there and the place in rando\goto.txt do nothing
+       in the normal game or in Master Quest) */
+    if (action == 5 && hos_rando_on()) {
         char path[MAX_PATH + 32], current[80];
         FILE *f = oot_place_file(path, sizeof path, "goto_check.txt") ? fopen(path, "r") : NULL;
         const int read = f ? fscanf(f, "%f %f %f %39s %7s", &check.place[0], &check.place[1], &check.place[2], check.folder, check.ages) : 0;
@@ -1655,7 +1658,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
            Business Scrub, a chest) is reached by its coordinates. A place marked after that is the mark again. */
         static char taken[96];
         char path[MAX_PATH + 32], line[96] = "";
-        FILE *f = oot_place_file(path, sizeof path, "goto.txt") ? fopen(path, "r") : NULL;
+        FILE *f = hos_rando_on() && oot_place_file(path, sizeof path, "goto.txt") ? fopen(path, "r") : NULL;
         if (f) {
             float place[3], hold = 3;
             if (fgets(line, sizeof line, f) && strcmp(line, taken) && sscanf(line, "%f %f %f %f", &place[0], &place[1], &place[2], &hold) >= 3) {

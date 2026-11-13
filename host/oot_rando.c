@@ -80,6 +80,14 @@ void hos_rando_init(void) {
     OotRando r;
     rando_read(&r, 1);
     if (!r.on) return;
+    /* (Master Quest is a game of its own: its saves are its own, the seed is left out (mods.c), and nothing of the
+       randomizer is on in it, whatever the switch says. The launcher's Master Quest leaves the switch as it was, so
+       it was on there: Progressive items, Skip cutscenes, the Bomb Bag kept back and the Tracker's record) */
+    int hos_master_quest(void);
+    if (hos_master_quest()) {
+        hos_log("rando: off in Master Quest (the randomizer's switch is on: it is for the normal game's dungeons)");
+        return;
+    }
     rando = r;
     rando_active = 1;
     char id[OOT_RANDO_ID_TEXT];

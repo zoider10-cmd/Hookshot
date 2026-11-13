@@ -217,7 +217,7 @@ def main():
           "confirm does not send the check shown to the game, or does so with the debug tools off")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     m = re.search(r"constexpr int kTrackerGoAction = (\d+);", menu)
-    check(m and "if (action == %s) {" % m.group(1) in host and '"goto_check.txt"' in host and
+    check(m and "if (action == %s && hos_rando_on()) {" % m.group(1) in host and '"goto_check.txt"' in host and
           'fscanf(f, "%f %f %f %39s %7s"' in host, "the game does not take the menu's action, or reads the check otherwise than it is written")
     check("else if (oot_teleport(c, actor, index)) check.waiting = 1" in host and "} else if (oot_banc_in_folder(current, check.folder)) {" in host and
           "!strchr(check.ages, child ? 'C' : 'A')" in host and

@@ -122,6 +122,19 @@ def main():
     check('if (!_stricmp(mods[i].name, "rando-seed") && strcmp(hos_save_folder(), "save_rando")) {' in mods and
           "if (!on || mqMode) return true;" in launcher,
           "the game loads a seed with the randomizer off, or the launcher takes the seed away for a normal game")
+    # (nothing of the randomizer in the normal game or in Master Quest: the switch on is not enough in Master Quest, the
+    #  Tracker tab reads a seed only when the game side says the randomizer's game is played, and its tools do nothing)
+    rando_side, menu, items, host_main = read("host", "oot_rando.c"), read("gpu", "vk", "vk_menu.cpp"), read("gpu", "vk", "oot_cheat_items.h"), read("host", "hos_main.c")
+    check('hos_log("rando: off in Master Quest' in rando_side and
+          rando_side.index('hos_log("rando: off in Master Quest') < rando_side.index("rando_active = 1;"),
+          "the randomizer is on in Master Quest when its switch is")
+    check("#define OOT_TRACKER_ON 8191" in items and "rx_option_set(OOT_TRACKER_ON, 1);" in host_main and
+          host_main.index("if (!hos_rando_on()) return;", host_main.index("static void oot_tracker_refresh(")) < host_main.index("rx_option_set(OOT_TRACKER_ON, 1);") and
+          menu.count('if (FILE* f = on ? fopen(path.c_str(), "r") : nullptr) {') == 2 and "if (id == OOT_TRACKER_ON) {" in menu,
+          "the Tracker tab reads a seed's files when the randomizer's game is not the one played")
+    check("if (action == 5 && hos_rando_on()) {" in host_main and "if (hos_rando_on()) oot_tracker_forget();" in host_main and
+          'FILE *f = hos_rando_on() && oot_place_file(path, sizeof path, "goto.txt") ? fopen(path, "r") : NULL;' in host_main,
+          "the randomizer's go-to tools work in the normal game or in Master Quest")
     print("PASS: the randomizer's saves")
 
 

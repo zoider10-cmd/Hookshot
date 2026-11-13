@@ -98,6 +98,7 @@ constexpr int kTrackerRows = 48;
 char tracker_name[kTrackerRows][48];
 char tracker_value[kTrackerRows][72];
 int tracker_count = 0;
+std::atomic<int> tracker_on{0};   // (the game side said the randomizer's game is the one played: OOT_TRACKER_ON)
 void tracker_load();
 const char kTrackerHelp[] =
     "The checks of this area that take part in the randomizer's seed: treasure chests, Gold Skulltulas, gifts and shop shelves. It is what the seed "
@@ -1409,7 +1410,10 @@ void tracker_load() {
     std::string path = ini_path();
     path = path.substr(0, path.find_last_of("\\/") + 1) + "mods\\rando-seed\\tracker.txt";
     int n = 0;
-    if (FILE* f = fopen(path.c_str(), "r")) {
+    // (a seed's files stay in the folder for the next game with the randomizer on: in the normal game and in Master Quest
+    //  they are not read, and the tab says the randomizer is off)
+    const bool on = tracker_on.load(std::memory_order_relaxed) != 0;
+    if (FILE* f = on ? fopen(path.c_str(), "r") : nullptr) {
         char line[256];
         while (n < kTrackerRows && fgets(line, sizeof line, f)) {
             char* bar = strchr(line, '|');
@@ -1430,7 +1434,7 @@ void tracker_load() {
     tracker_count = n;
     int checks = 0;
     path = path.substr(0, path.find_last_of("\\/") + 1) + "checks.txt";
-    if (FILE* f = fopen(path.c_str(), "r")) {
+    if (FILE* f = on ? fopen(path.c_str(), "r") : nullptr) {
         char line[256];
         while (checks < kTrackerChecks && fgets(line, sizeof line, f)) {
             TrackerCheck& k = tracker_checks[checks];
@@ -3419,6 +3423,10 @@ bool fps_take(int64_t now, int64_t shown, int64_t game, int64_t* next, int64_t* 
 void menu_option_set(int id, int value) {
     if (id == OOT_CHEAT_AGE_ID) {   // (Link's age: the Switch age row shows it)
         if (link_age.exchange(value, std::memory_order_relaxed) != value && page == 0 && cur_tab == TAB_DEBUG) menu_refresh = true;
+        return;
+    }
+    if (id == OOT_TRACKER_ON) {   // (the randomizer's game is the one played)
+        if (tracker_on.exchange(value != 0, std::memory_order_relaxed) != (value != 0) && page == 0 && cur_tab == TAB_TRACKER) menu_refresh = true;
         return;
     }
     if (id >= OOT_TRACKER_BASE && id < OOT_TRACKER_BASE + kTrackerChecks) {   // (the game side's word on a check: collected or not)
