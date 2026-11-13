@@ -290,8 +290,14 @@ the game's own colour the mod is removed. It has nothing to do with the seed: no
   Deku Shield as the Mirror Shield and as Dark Link's (on his back and held up) and with the Hylian Shield as the Deku
   and the Mirror Shield (on his back and crouched under); adult Link with the Mirror Shield as the Deku Shield and the
   Hylian Shield as the Mirror Shield. Not tried: the Mirror Shield's reflected light with another look, and a Deku
-  Shield burning with another look (its burnt pieces are the Deku Shield's own model). The shields on shop shelves, in
-  chests and in the equipment menu's pictures are other files and keep their looks.
+  Shield burning with another look (its burnt pieces are the Deku Shield's own model). **Every copy is changed.** The
+  file that names a shield's model is in other actors' packs too (the Deku Shield's in four: Link's, the one lying
+  in the world, the shop's and the chest's), and the game keeps the first copy of a name it loads: reported from
+  play, the Deku Shield as the Mirror Shield was a Deku Shield in Kokiri Forest. The tool writes every pack that has
+  a copy (`SHIELD_PACKS`), all with the same file; seen after that in Kokiri Forest, the Deku Shield as the Mirror
+  Shield on Link's back and held up. So the shop's, the chest's and the world's shields have the look too; the
+  equipment menu's pictures are other files and keep theirs. Not covered: a pack the randomizer's seed writes itself
+  with a copy in it (a shield made a pick-up, or put on a shelf).
 
 By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron purple --shield-deku mirror --master_hilt red`.
 

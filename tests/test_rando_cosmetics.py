@@ -258,6 +258,7 @@ def mod_and_sources():
 def shields():
     """a shield's look: its pack names another model, nothing else of the pack changes, and the pack does not grow"""
     seed = t.seed
+    source_text = (ROOT / "tools" / "rando" / "rando_cosmetics.py").read_text(encoding="utf-8")
     info = lambda model, scale=True: seed.byml_build(("dict", collections.OrderedDict(
         ([("DebugModelScale", ("dict", collections.OrderedDict((axis, (210, struct.pack("<f", 1.0))) for axis in "XYZ")))] if scale else []) +
         [("FmdbName", ("string", model)), ("ModelProjectName", ("string", model))])), 7)
@@ -288,6 +289,27 @@ def shields():
             # (no model is made larger or smaller: the scale is 1 or left out, never another)
             scale = rows.get("DebugModelScale")
             check(scale is None or all(struct.unpack("<f", v[1])[0] == 1.0 for v in scale[1].values()), "%s as %s: the model is resized" % (actor, model))
+    # ---- every copy: the file that names a shield's model is in other actors' packs too, and the game keeps the first
+    #      copy it loads (seen in play: the Deku Shield as the Mirror Shield was a Deku Shield in Kokiri Forest, where
+    #      the shop's copy is loaded first) ----
+    check(set(t.SHIELD_PACKS) == {actor for _, _, _, actor in t.SHIELDS} and all(packs[0] == actor for actor, packs in t.SHIELD_PACKS.items()) and
+          "Shop_Weapon_Shield_Deku" in t.SHIELD_PACKS["Weapon_Shield_Deku"] and len(t.SHIELD_PACKS["Weapon_Shield_Deku"]) == 4,
+          "the packs that have a copy of a shield's model file are not listed for each shield, its own first, the Deku Shield's four")
+    deku = "Weapon_Shield_Deku"
+    name = t.SHIELD_FILE % deku
+    many = {pack: seed.sarc_write({name: info(deku), "Actor/%s.bgyml" % pack: b"x" * (40 + 8 * k)}) for k, pack in enumerate(t.SHIELD_PACKS[deku])}
+    done = t.shield_packs(many, deku, "Weapon_Shield_Mirror")
+    copies = {seed.sarc_read(data)[name] for data in done.values()}
+    check(set(done) == set(many) and len(copies) == 1 and seed.byml_parse(copies.pop())[0][1]["FmdbName"] == ("string", "Weapon_Shield_Mirror") and
+          all(len(done[pack]) <= len(many[pack]) for pack in many), "every pack's copy is not changed, to the same bytes, or a pack grew")
+    check(t.shield_packs(many, deku, deku) == {}, "a shield as itself changes its packs")
+    try:
+        t.shield_packs(dict(many, Other=seed.sarc_write({"Actor/x.bgyml": b"x"})), deku, "Weapon_Shield_Mirror")
+        check(False, "a pack without the file is passed over in silence: the list of packs is not the game's")
+    except ValueError:
+        pass
+    check("loaded = collections.OrderedDict((pack, load(\"Pack/Actor/%s.pack.zs\" % pack)) for pack in SHIELD_PACKS[actor])" in source_text and t.VERSION >= 8,
+          "the tool does not write every pack that has a copy, or the mods made before are not made again")
     # (a pack that is not as the game's: not changed)
     for bad in (seed.sarc_write({"Actor/x.bgyml": b"x"}),
                 seed.sarc_write({"Component/ModelInfo/a.bgyml": info("Weapon_Shield_Other")})):

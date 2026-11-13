@@ -55,8 +55,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rando_seed as seed   # (the game's zstd dictionaries)
 
 MOD = "cosmetics"
-VERSION = 7   # (raised when the same settings would write other textures: the launcher's run at Play then writes them again.
-# 2: the Kokiri Tunic's cloth, and a pinker Pink; 3: its stitching and fringe; 4: the hearts and the magic meter; 5: young Link's vest and stitching; 6: the shields' looks; 7: the shields' and the swords' colours)
+VERSION = 8   # (raised when the same settings would write other textures: the launcher's run at Play then writes them again.
+# 2: the Kokiri Tunic's cloth, and a pinker Pink; 3: its stitching and fringe; 4: the hearts and the magic meter; 5: young Link's vest and stitching; 6: the shields' looks; 7: the shields' and the swords' colours; 8: a shield's look in every pack that has its model's file)
 TRIT_AT, TRIT_N = (0, 2, 4, 5, 7), (2, 2, 1, 2, 1)   # (where a trit block's T bits lie between its values' bits)
 QUINT_AT, QUINT_N = (0, 3, 5), (3, 2, 2)
 
@@ -526,35 +526,87 @@ def shield_look_of(text):
     return None
 
 
-def shield_pack(data, actor, model):
-    """A shield actor's pack (a SARC archive) with `model` named as its model: the new bytes, or None when the pack
-    names that model already. The pack must not grow: the game's size table holds each pack's size, and this mod
-    carries no table (the randomizer's seed has its own). A longer name can add a few bytes to the file; then the
-    file's DebugModelScale, 1.0 in every shield and not needed for it, is left out, which gives more back."""
-    files = seed.sarc_read(data)
-    names = [name for name in files if name.startswith(SHIELD_MODEL_FILE)]
-    if len(names) != 1:
-        raise ValueError("%s's pack has %d files that name a model, not one" % (actor, len(names)))
-    tree, version = seed.byml_parse(files[names[0]])
+# The file that names a shield's model is in more packs than the shield's own: the game puts a parameter file in the
+# pack of every actor that uses it, and keeps the first copy of a name that it loads. The Deku Shield's is in four
+# (the one Link carries, the one lying in the world, the shop's, and the chest's; the Hylian Shield's chest names it
+# and has no copy): in Kokiri Forest
+# the shop's was loaded first, with the shield's own model, and the Deku Shield shown as the Mirror Shield was a
+# Deku Shield (its owner's report, 2026-11-13; the Hylian Shield as another showed, no copy of its file being in a
+# pack loaded there before Link's). So every copy is changed, in every pack that has one (SHIELD_PACKS, found by
+# going through all the packs): the shop's, the chests' and the world's shields then have the look too.
+# Not covered: a pack the randomizer's seed writes itself with a copy in it (a shield made a pick-up or put on a
+# shelf): its copy is the game's own, and where it is loaded first the look is not shown.
+SHIELD_PACKS = {
+    "Weapon_Shield_Deku": ("Weapon_Shield_Deku", "Obj_Shield_Deku", "Shop_Weapon_Shield_Deku", "TBox_Shield_Deku"),
+    "Weapon_Shield_Hylian": ("Weapon_Shield_Hylian", "Shop_Weapon_Shield_Hylian"),   # (Dark Link's names the file and has no copy)
+    "Weapon_Shield_Mirror": ("Weapon_Shield_Mirror", "Item_Shield_Mirror"),
+}
+SHIELD_FILE = SHIELD_MODEL_FILE + "%s.engine__component__ModelInfo.bgyml"
+
+
+def shield_file(data, actor, model, scale=True):
+    """The file that names a shield's model (a BYML) naming `model`: the new bytes. scale False: without its
+    DebugModelScale, which is 1.0 in every shield and not needed (a ValueError when it is not 1)."""
+    tree, version = seed.byml_parse(data)
     kind, rows = tree
     if kind != "dict" or rows.get("FmdbName") != ("string", actor) or rows.get("ModelProjectName") != ("string", actor):
         raise ValueError("%s's pack does not name its own model as this was written for" % actor)
-    if model == actor:
-        return None
     rows["FmdbName"] = rows["ModelProjectName"] = ("string", model)
-    files[names[0]] = seed.byml_build(tree, version)
-    new = seed.sarc_write(files)
-    if len(new) > len(data):
-        scale = rows.get("DebugModelScale")
-        one = ("dict", {axis: (210, struct.pack("<f", 1.0)) for axis in "XYZ"})
-        if scale is None or scale[0] != "dict" or dict(scale[1]) != one[1]:
+    if not scale and "DebugModelScale" in rows:
+        was = rows["DebugModelScale"]
+        if was[0] != "dict" or any(dict(was[1]).get(axis) != (210, struct.pack("<f", 1.0)) for axis in "XYZ") or len(was[1]) != 3:
             raise ValueError("%s's pack would grow, and its model's scale is not 1" % actor)
         del rows["DebugModelScale"]
-        files[names[0]] = seed.byml_build(tree, version)
-        new = seed.sarc_write(files)
-    if len(new) > len(data):
-        raise ValueError("%s's pack would grow (%d bytes, from %d)" % (actor, len(new), len(data)))
-    return new
+    return seed.byml_build(tree, version)
+
+
+def shield_packs(packs, actor, model):
+    """The packs that have a copy of a shield's model file ({a pack's name: its bytes}, SARC archives) with `model`
+    named in every copy: {name: the new bytes}, or {} when model is the shield's own. Every copy is the same bytes,
+    as the game's are. No pack may grow: the game's size table holds each pack's size, and this mod carries no table
+    (the randomizer's seed has its own). A longer name can add a few bytes to a pack; then the file's DebugModelScale
+    is left out of every copy, which gives more back."""
+    name = SHIELD_FILE % actor
+    read = {}
+    for pack, data in packs.items():
+        files = seed.sarc_read(data)
+        if name not in files:
+            raise ValueError("%s's pack has no %s" % (pack, name))
+        read[pack] = files
+    if model == actor:
+        for files in read.values():
+            shield_file(files[name], actor, model)   # (still checked: a pack that is not the game's is an error)
+        return {}
+    for scale in (True, False):
+        out = {}
+        for pack, files in read.items():
+            changed = dict(files)
+            changed[name] = shield_file(files[name], actor, model, scale)
+            out[pack] = seed.sarc_write(changed)
+        if all(len(out[pack]) <= len(packs[pack]) for pack in packs):
+            return out
+    grown = next(pack for pack in packs if len(out[pack]) > len(packs[pack]))
+    raise ValueError("%s's pack would grow (%d bytes, from %d)" % (grown, len(out[grown]), len(packs[grown])))
+
+
+def shield_pack(data, actor, model):
+    """One pack of a shield (shield_packs of it alone): the new bytes, or None when it names that model already."""
+    files = seed.sarc_read(data)
+    names = [n for n in files if n.startswith(SHIELD_MODEL_FILE)]
+    if len(names) != 1:
+        raise ValueError("%s's pack has %d files that name a model, not one" % (actor, len(names)))
+    if names[0] != SHIELD_FILE % actor:   # (a made-up pack's file of another name: taken as the shield's)
+        files[SHIELD_FILE % actor] = files.pop(names[0])
+        out = shield_packs({actor: seed.sarc_write(files)}, actor, model)
+        if not out:
+            return None
+        back = seed.sarc_read(out[actor])
+        back[names[0]] = back.pop(SHIELD_FILE % actor)
+        new = seed.sarc_write(back)
+        if len(new) > len(data):
+            raise ValueError("%s's pack would grow (%d bytes, from %d)" % (actor, len(new), len(data)))
+        return new
+    return shield_packs({actor: data}, actor, model).get(actor)
 
 
 SOFT = 12.0   # (degrees past a tunic's hues over which the change fades out)
@@ -854,16 +906,17 @@ def main():
         if not chosen[name]:
             continue
         look, model = SHIELD_MODELS[chosen[name]]
-        rel, data = load("Pack/Actor/%s.pack.zs" % actor)
         if not os.path.isfile(os.path.join(romfs, "Model", "%s.%s.bfres.zs" % (model, model))):
             sys.exit("Model/%s.%s.bfres.zs is not among the game's files. Nothing written." % (model, model))
-        try:
-            new = shield_pack(data, actor, model)
+        loaded = collections.OrderedDict((pack, load("Pack/Actor/%s.pack.zs" % pack)) for pack in SHIELD_PACKS[actor])
+        try:   # (every pack that has a copy of the file that names its model: the game keeps the first it loads)
+            new = shield_packs(collections.OrderedDict((pack, data) for pack, (_, data) in loaded.items()), actor, model)
         except (ValueError, KeyError, IndexError, struct.error) as e:
-            sys.exit("%s: %s. Nothing written." % (rel, e))
-        if new is not None:
-            made[rel] = new
-            print("  %s: the look of %s (%s)" % (label, look, model))
+            sys.exit("%s's packs: %s. Nothing written." % (actor, e))
+        for pack, data in new.items():
+            made[loaded[pack][0]] = data
+        if new:
+            print("  %s: the look of %s (%s), in %d packs" % (label, look, model, len(new)))
     if a.dry_run:
         print("(dry run: nothing written)")
         return
