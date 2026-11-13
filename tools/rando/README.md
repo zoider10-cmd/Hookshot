@@ -72,7 +72,9 @@ its save, and so does its seed: the randomizer's settings and the seed's files a
 (`user/save_slots/seeds`), so two saves made on two seeds are each played on its own; a save without one yet takes
 the seed there is. A save's seed is the one it was last played on (kept at Play, not when another save is chosen:
 a new seed made for the next save had become the old one's, seen in play); Play on a save with progress and another
-seed set asks which to use. The lists show a few words for each save's seed ("Bow · Key · Zora"), to tell them apart
+seed set asks which to use. The lists show a few words for each save's seed ("Bow · Key · Zora"), to tell them apart.
+The window to choose has **New seed...** for a randomizer's save: a window with the randomizer's settings, and a new
+seed made of them for that save (its files are made at Play); and arrows to move a save up or down in its list
 (`SaveSlots`, launcher/Launcher.cs; `tests/test_save_slots.py`).
 
 **More saves than the game's one.** The game keeps one save of the player's own (`slot_00`) and five it makes itself;

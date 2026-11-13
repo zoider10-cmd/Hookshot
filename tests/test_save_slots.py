@@ -153,6 +153,22 @@ Say "seedcopied" ([SaveSlots]::Select($dir, "save_rando", "Main on its seed"))
 Say "seedofcopy" (SeedNow)
 Say "seedhome" ([SaveSlots]::Select($dir, "save_rando", "Main"))
 Say "seednormal" ((Test-Path (Join-Path $dir "user\save_slots\seeds\Save 1.txt")) -eq $false)
+# (a new seed set for a save: one that waits has it kept for its Play; the one in the game has it set at once)
+$new = New-Object 'System.Collections.Generic.List[string]'
+$new.Add("rando_chests=1"); $new.Add("rando_seed=777"); $new.Add("rando_on=0"); $new.Add("vsync=9")
+Say "seedsetwaiting" ([SaveSlots]::SeedSet($dir, "Save 7", $new))
+Say "seedsetkept" ((Get-Content (Join-Path $dir "user\save_slots\seeds\Save 7.txt")) -join ";")
+Say "seedsetlive" ((Get-Content (Join-Path $dir "hookshot_options.ini")) -join ";")
+Say "seedsetnow" ([SaveSlots]::SeedSet($dir, "Main", $new))
+Say "seedsetini" ((Get-Content (Join-Path $dir "hookshot_options.ini")) -join ";")
+Say "seedsetmod" ((Test-Path (Join-Path $dir "mods\rando-seed")) -eq $false)
+Say "seedof" (([SaveSlots]::SeedOf($dir, "Save 7")) -join ";")
+# (a save moved in its list)
+Say "moveup" ([SaveSlots]::Move($dir, "save_rando", "Save 3", -1))
+Say "movednames" (Names "save_rando")
+Say "movedown" ([SaveSlots]::Move($dir, "save_rando", "Save 3", 1))
+Say "movetop" ([SaveSlots]::Move($dir, "save_rando", "Main", -5))
+Say "movegone" ([SaveSlots]::Move($dir, "save_rando", "nothing", 1))
 Say "copyleft" ((Test-Path (Join-Path $dir "user\save_slots\save_rando\Third.part")) -or (Test-Path (Join-Path $dir "user\save_slots\save_rando\Main copy.part")))
 '''
 
@@ -250,6 +266,16 @@ def main():
           "a copy is not played on its save's seed: %r" % got["seedofcopy"])
     check("LoadAll();   // (a randomizer's save chosen brings its own seed and settings: SaveSlots.Select)" in src,
           "the launcher does not read the settings again after a save is chosen")
+    check(got["seedsetwaiting"] == "" and got["seedsetkept"] == "rando_chests=1;rando_seed=777" and "rando_seed=777" not in got["seedsetlive"] and
+          got["seedof"] == "rando_chests=1;rando_seed=777",
+          "a new seed for a save that waits is not kept for its Play (its settings and number, nothing else), or is set at once: %r" % got)
+    check(got["seedsetnow"] == "" and "vsync=1;rando_on=1;rando_chests=1;rando_seed=777;options_version=2" == got["seedsetini"] and got["seedsetmod"] == "True",
+          "a new seed for the save in the game is not set at once, the switch or another setting is touched, or the old seed's files stay: %r" % got["seedsetini"])
+    check(got["moveup"] == "" and ",Save 3,Save 2," in got["movednames"] and got["movedown"] == "" and got["movetop"] == "" and got["movegone"] != "",
+          "a save is not moved in its list: %r" % got["movednames"])
+    check("seed.Click += (o, e) => OnSeed();" in src and "up.Click += (o, e) => OnMove(-1);" in src and
+          'lines.Add("rando_seed=" + LauncherForm.NewSeed());' in src and "LoadAll(); Invalidate();   // (a new seed made in the window" in src,
+          "the window to choose has no New seed button or no way to move a save, or the launcher does not read the settings after it")
     check(got["copywaiting"] == "" and got["copiedwaiting"] == "one" and got["copyleft"] == "False",
           "a copy of a save that waits is not made, or a half-made folder is left: %r" % got)
     check("copy.Click += (o, e) => OnCopy();" in src and "SaveSlots.Copy(dir, SaveCopies.Folders[Mode], (string)list.SelectedItem, to);" in src and

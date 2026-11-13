@@ -215,6 +215,47 @@ public static class SaveSlots {
         if (Directory.Exists(kept)) SaveCopies.CopyTree(kept, SeedMod(dir));
     }
 
+    // (the randomizer's lines a save has: its own seed's, else the ones set now)
+    public static List<string> SeedOf(string dir, string name) {
+        var lines = new List<string>();
+        try {
+            string kept = Path.Combine(SeedRoot(dir), name) + ".txt";
+            if (!File.Exists(kept)) return SeedLines(dir);
+            foreach (string l in File.ReadAllLines(kept)) if (l.Trim().Length > 0) lines.Add(l.Trim());
+        } catch { }
+        return lines;
+    }
+
+    // That save's seed made these lines (the New seed button: the settings chosen and a new seed's number). The seed's
+    // files are not made here: Play makes them. The save in the game has them set in the options file at once.
+    public static string SeedSet(string dir, string name, List<string> lines) {
+        try {
+            var keep = lines.FindAll(SeedLine);
+            string root = SeedRoot(dir), kept = Path.Combine(root, name);
+            Directory.CreateDirectory(root);
+            File.WriteAllLines(kept + ".txt", keep.ToArray());
+            if (Directory.Exists(kept)) Directory.Delete(kept, true);
+            if (Same(Current(dir, Rando), name)) SeedIn(dir, name);   // (its files are gone with the kept ones: made at Play)
+            return null;
+        } catch (Exception ex) { return ex.Message; }
+    }
+
+    // A save moved up (by < 0) or down in its list.
+    public static string Move(string dir, string saveFolder, string name, int by) {
+        string current;
+        var names = Names(dir, saveFolder, out current);
+        int at = names.FindIndex(n => Same(n, name));
+        if (at < 0) return "That save is not there any more.";
+        int to = Math.Max(0, Math.Min(names.Count - 1, at + by));
+        if (to == at) return null;
+        try {
+            string moved = names[at];
+            names.RemoveAt(at); names.Insert(to, moved);
+            Write(dir, saveFolder, current, names);
+            return null;
+        } catch (Exception ex) { return ex.Message; }
+    }
+
     // A few words that tell one seed from another at a glance, for the lists (not the seed itself): three of the game's
     // things, by the seed and its settings. "" for a save with no seed of its own that is not the one in the game.
     static readonly string[] TagWords = { "Bow", "Bomb", "Hook", "Hammer", "Lens", "Boots", "Sword", "Shield", "Ocarina", "Bottle", "Mask", "Fairy",
@@ -643,6 +684,67 @@ class SaveSlotsForm : Form {
     }
 }
 
+// (the window of the New seed button: the randomizer's settings chosen for one save, and a new seed made of them. The
+// seed's files are made when the save is played, as every seed's are)
+class RandoSeedForm : Form {
+    readonly string dir, save;
+    readonly List<ComboBox> boxes = new List<ComboBox>();
+    readonly List<object[]> rows = new List<object[]>();
+
+    public RandoSeedForm(string dir, string save, string shown) {
+        this.dir = dir; this.save = save;
+        Text = "New seed: " + shown;
+        FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(520, 520);
+        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        var top = new Label { Text = "The randomizer's settings for this save. A new seed is made of them:", AutoSize = true, Location = new Point(16, 14) };
+        var panel = new Panel { Location = new Point(16, 42), Size = new Size(488, 412), AutoScroll = true, BackColor = Color.FromArgb(20, 30, 50) };
+        var tips = new ToolTip { AutoPopDelay = 20000, InitialDelay = 300 };
+        // (what the save has now: its own seed's settings, else the ones set)
+        var has = new Dictionary<string, int>();
+        foreach (string line in SaveSlots.SeedOf(dir, save)) {
+            int eq = line.IndexOf('='), v;
+            if (eq > 0 && int.TryParse(line.Substring(eq + 1).Trim(), out v)) has[line.Substring(0, eq).Trim()] = v;
+        }
+        int y = 8;
+        for (int i = 1; i < LauncherForm.RandoRows.Length; i++) {   // (not the first: the switch is the game chosen)
+            object[] row = LauncherForm.RandoRows[i];
+            string key = (string)row[0];
+            var values = (int[])row[3];
+            var label = new Label { Text = (string)row[1], AutoSize = false, Location = new Point(10, y + 3), Size = new Size(200, 24) };
+            var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat, Location = new Point(216, y), Size = new Size(240, 26),
+                                     BackColor = Color.FromArgb(24, 36, 60), ForeColor = Theme.Text };
+            box.Items.AddRange((string[])row[2]);
+            int at = has.ContainsKey(key) ? Array.IndexOf(values, has[key]) : 0;
+            box.SelectedIndex = Math.Max(0, at);
+            if (row.Length > 4 && row[4] is string) { tips.SetToolTip(label, (string)row[4]); tips.SetToolTip(box, (string)row[4]); }
+            panel.Controls.Add(label); panel.Controls.Add(box);
+            boxes.Add(box); rows.Add(row);
+            y += 32;
+        }
+        var ok = new Button { Text = "Create seed" };
+        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
+        foreach (var b in new[] { ok, cancel }) {
+            b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White;
+            b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+        }
+        ok.SetBounds(258, 472, 130, 30); cancel.SetBounds(394, 472, 110, 30); ok.BackColor = Theme.Blue;
+        var foot = new Label { Text = "Hold the mouse over a setting for what it does.", AutoSize = true, ForeColor = Theme.Dim,
+                               Location = new Point(16, 478), Font = new Font("Segoe UI", 8.5f) };
+        Controls.AddRange(new Control[] { top, panel, foot, ok, cancel });
+        AcceptButton = ok; CancelButton = cancel;
+        ok.Click += (o, e) => {
+            var lines = new List<string>();
+            for (int i = 0; i < rows.Count; i++) lines.Add((string)rows[i][0] + "=" + ((int[])rows[i][3])[boxes[i].SelectedIndex]);
+            lines.Add("rando_seed=" + LauncherForm.NewSeed());
+            string error = SaveSlots.SeedSet(dir, save, lines);
+            if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            DialogResult = DialogResult.OK; Close();
+        };
+    }
+}
+
 // (the window of the second button of the left panel: the game to play and its save, chosen, then played. Continue
 // plays the last ones without asking)
 class PlayChoiceForm : Form {
@@ -654,7 +756,7 @@ class PlayChoiceForm : Form {
     readonly ListBox list = new ListBox();
     readonly TextBox name = new TextBox();
     readonly Button add = new Button(), play = new Button(), cancel = new Button(), copy = new Button(), rename = new Button();
-    readonly Button delete = new Button();
+    readonly Button delete = new Button(), seed = new Button(), up = new Button(), down = new Button();
     readonly HashSet<string> empty = new HashSet<string>();   // (the saves that hold nothing)
     string current;
 
@@ -675,19 +777,24 @@ class PlayChoiceForm : Form {
             Controls.Add(modes[i]);
         }
         var mid = new Label { Text = "Its save. Each keeps its own progress:", AutoSize = true, Location = new Point(16, 92) };
-        list.SetBounds(16, 118, 488, 230); list.IntegralHeight = false;
+        list.SetBounds(16, 118, 450, 230); list.IntegralHeight = false;
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
         list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (last played)", n => SaveSlots.Shown(n, empty.Contains(n)),
-                                                           n => Mode == 1 && !empty.Contains(n) ? SaveSlots.SeedTag(dir, n) : "");
+                                                           n => Mode == 1 ? SaveSlots.SeedTag(dir, n) : "");
         var low = new Label { Text = "A name (or none), for one more save or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 360) };
         name.SetBounds(16, 386, 170, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         Style(add, "New save", 196, 384, 100); Style(copy, "Copy save", 302, 384, 100); Style(rename, "Rename", 408, 384, 96);
         Style(play, "Play", 278, 444, 110); Style(cancel, "Cancel", 394, 444, 110); Style(delete, "Delete", 16, 444, 100);
+        Style(seed, "New seed...", 126, 444, 130);   // (the randomizer's saves: the settings chosen and a seed made, RandoSeedForm)
+        Style(up, "\u25B2", 472, 118, 32); Style(down, "\u25BC", 472, 152, 32);   // (the chosen save moved up or down in the list)
         play.BackColor = Theme.Blue;
-        Controls.AddRange(new Control[] { mid, list, low, name, add, copy, rename, play, cancel, delete });
+        Controls.AddRange(new Control[] { mid, list, low, name, add, copy, rename, play, cancel, delete, seed, up, down });
         delete.Click += (o, e) => OnDelete();
+        seed.Click += (o, e) => OnSeed();
+        up.Click += (o, e) => OnMove(-1);
+        down.Click += (o, e) => OnMove(1);
         copy.Click += (o, e) => OnCopy();
         rename.Click += (o, e) => OnRename();
         list.SelectedIndexChanged += (o, e) => {
@@ -715,6 +822,7 @@ class PlayChoiceForm : Form {
             modes[i].BackColor = on ? (i == 2 ? Color.FromArgb(150, 110, 46) : Theme.Blue) : Color.FromArgb(30, 46, 78);
             modes[i].FlatAppearance.BorderColor = on ? Color.White : Color.FromArgb(60, 90, 150);
         }
+        seed.Visible = Mode == 1;
         list.Items.Clear(); empty.Clear();
         foreach (string n in SaveSlots.Names(dir, SaveCopies.Folders[Mode], out current)) {
             list.Items.Add(n);
@@ -750,6 +858,28 @@ class PlayChoiceForm : Form {
         }
         if (!SaveRename.Ask(this, dir, SaveCopies.Folders[Mode], from, out to)) return;   // (the new name is asked in a window of its own)
         Fill(to);
+    }
+
+    void OnMove(int by) {
+        if (list.SelectedIndex < 0) return;
+        string n = (string)list.SelectedItem;
+        string error = SaveSlots.Move(dir, SaveCopies.Folders[Mode], n, by);
+        if (error != null) MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        Fill(n);
+    }
+
+    void OnSeed() {
+        if (list.SelectedIndex < 0 || Mode != 1) return;
+        string n = (string)list.SelectedItem;
+        if (LauncherForm.GameRunning()) {
+            MessageBox.Show(this, "Close the game first.", "Saves", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
+        }
+        // (a save with progress: its chests would not be the ones it was played with)
+        if (!empty.Contains(n) && MessageBox.Show(this, "\"" + n + "\" has progress. On a new seed its chests will not be the ones it was played with.\n\n" +
+                "Make a new seed for it all the same? (For a new game, choose an empty slot.)", "Saves",
+                MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
+        using (var f = new RandoSeedForm(dir, n, SaveSlots.Shown(n, empty.Contains(n)).Replace(":  empty", ""))) f.ShowDialog(this);
+        Fill(n);
     }
 
     void OnDelete() {
@@ -1659,7 +1789,7 @@ class LauncherForm : Form {
     // checks them against that file. The seed's random part, rando_seed, is the New seed button's. The game's Insert menu
     // has no Randomizer tab since Mako 3.3 (its menu was written anew): this page is where they are set, and where a
     // seed's ID is copied and pasted)
-    static readonly object[][] RandoRows = {
+    internal static readonly object[][] RandoRows = {
         new object[] { "rando_on", "Randomizer", new[] { "Off", "On" }, new[] { 0, 1 },
             "Turns the seed on. Chests, Gold Skulltulas, Quest rewards (with Frogs and Light Arrows), Deku Scrubs, Starting rupees, Dungeon keys, Major items, the forest's two ways and the opening are made when Play is pressed; the other settings are not placed yet. Saves made with it on are kept apart from the normal game's." },
         new object[] { "rando_chests", "Chests", new[] { "Off", "Overworld", "Dungeons", "All" }, new[] { 0, 1, 2, 3 },
@@ -2357,7 +2487,7 @@ class LauncherForm : Form {
     }
 
     // (a seed's random part, 1 to 2^31 - 2: 0 is "none yet", as in the Insert menu)
-    static int NewSeed() { return new Random(Environment.TickCount ^ Guid.NewGuid().GetHashCode()).Next(1, int.MaxValue); }
+    internal static int NewSeed() { return new Random(Environment.TickCount ^ Guid.NewGuid().GetHashCode()).Next(1, int.MaxValue); }
 
     // (the game keeps a seed's saves apart from its own: host/oot_rando.c hos_save_folder. The Saves button opens the ones
     // the next Play uses)
@@ -2380,7 +2510,9 @@ class LauncherForm : Form {
     // (the second button: the game and the save are chosen in a window, made the ones Continue plays, and played)
     void OnChoose() {
         using (var f = new PlayChoiceForm(dir, PlayMode())) {
-            if (f.ShowDialog(this) != DialogResult.OK) return;
+            var chosen = f.ShowDialog(this);
+            LoadAll(); Invalidate();   // (a new seed made in the window for the save in the game is the one set now)
+            if (chosen != DialogResult.OK) return;
             if (GameRunning()) { MessageBox.Show(this, "The game is already running.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
             SetPlayMode(f.Mode);
             string error = SaveSlots.Select(dir, SaveFolder(), f.Save);
