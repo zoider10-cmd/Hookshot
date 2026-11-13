@@ -694,10 +694,12 @@ The Small Key is 0.6 of its size and the compass 1.5; the magic arrows and the D
 their own. The size and the turn are the shelf actor's `Scale` and `Rotate` in the map file. The board that says how
 many a bundle holds ("x 10": `Shop_Board_Bundle_*`, an actor of its own) is put out of sight beside a shelf that
 sells a shuffled item. Seen in runs without a window in the Kokiri shop, the Bazaar and the Goron shop, 30 items;
-the Potion Shop, the Bombchu Shop and the Zora shop were not opened in those runs. **Not solved: the Lens of
-Truth.** It lies flat and is a thin dark frame round clear glass; stood up and twice its size its frame shows in the
-Bazaar and was not made out in the other two shops. Its name and words are right when its shelf is looked at. A
-bottle lies low behind its price board. A seed made before this keeps its shelves as they were.
+the Potion Shop, the Bombchu Shop and the Zora shop were not opened in those runs. **The Lens of Truth** is made
+where it is worn, 0.92 m over its origin, and is 11 cm tall: lowered to its shelf at its own size it stood behind the
+price board and was taken for a model that does not show. At 1.5 times its size and 1.4 m lower its two lenses stand
+over the board, facing the shop (seen in the three shops). **The Fairy Bow** is long front to back and lay pointing at
+the viewer: it has a quarter turn about the upright and one about Z, and shows its curve and string in the Bazaar and
+the Goron shop; on the Kokiri shop's shelf it stands on end. A bottle lies low behind its price board. A seed made before this keeps its shelves as they were.
 
 Three test switches for this, read when a seed is made, in `RANDO_TEST_SHOPS`' order of shelves:
 `RANDO_TEST_LIFTS` (metres higher), `RANDO_TEST_SCALES` and `RANDO_TEST_TURNS` (`x,y,z` in radians), `-` for a shelf

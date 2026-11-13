@@ -400,12 +400,13 @@ WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,
 #   pose they were at the top of the picture; lowered by it, on their shelf (seen in play);
 # - and an item's own number where its box is not how it shows (SHELF_LIFT): the three magic arrows' boxes take in
 #   their glow, and they hung a hand over the shelf; the Deku Stick bundle stands where its origin is.
-# The Lens of Truth is its own case. Its box says 0.92 m up, and it is not there: at no height, with the pose or
-# without, was it seen on a shelf, in three shops. It lies flat and is a thin dark frame round clear glass. Turned
-# to stand (SHELF_TURN, added to its shelf's angles), twice its size and a little higher, its frame shows in the
-# Bazaar's light; in the Kokiri and the Goron shops it was still not made out. Its name and words are right when its
-# shelf is looked at. Not solved.
-SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": 0.15, "Item_Range_Bow": 0.15}
+# The Lens of Truth took the longest. Its model is made where it is worn, before young Link's eyes: its box is 0.92
+# to 1.04 m up, 22 cm wide, and faces forward. It is 11 cm tall: put down by its box at its own size it stood behind
+# its shelf's price board, which is as tall, and was not seen (the tries before this took that for a model that does
+# not show, and turned it, which swung it off its shelf). At 1.5 times its size its middle is 1.06 m a unit of size
+# over its origin (measured on the pictures of two sizes), so its shelf's actor is 1.4 m lower (SHELF_LIFT): the two
+# lenses stand over the board, facing the shop. Seen so in the Kokiri shop, the Bazaar and the Goron shop.
+SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": -1.4, "Item_Range_Bow": 0.15}
 
 
 def shelf_lift(item, floor):
@@ -449,7 +450,7 @@ def model_box(data, item):
 # Scale in the map file. An item's own number, where its box does not say it: the Small Key, tall and thin, stood
 # over its shelf's whole height.
 SHELF_LONG = 0.9
-SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_GlassTruth": 2.0,
+SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_GlassTruth": 1.5,
                "Item_Gauntlet_Gold": 1.0, "Item_Gauntlet_Silver": 1.0, "Item_Gauntlet_Goron": 1.0}
 # (the Fairy Bow's model is long front to back, 1.36 m along its own Z: on the Kokiri shop's shelf it lay pointing at
 # the viewer, its end alone to be seen behind the price board (its owner's picture, 2026-11-13). A quarter turn about
@@ -457,7 +458,7 @@ SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_
 # string to the viewer: seen so on a shelf of the Bazaar and one of the Goron shop, whose own angles differ (of four
 # turns tried on each, the one that showed it the same in both). The hammer, the sword and the stick bundle are long
 # the same way and lie as they did: seen, and left.)
-SHELF_TURN = {"Item_GlassTruth": (-1.57, 0.0, 0.0), "Item_Range_Bow": (0.0, 1.57, 1.57)}
+SHELF_TURN = {"Item_Range_Bow": (0.0, 1.57, 1.57)}
 # An item whose model is made where it is worn, not at its own origin (the gauntlets: 1.17 m up): its shelf's actor is
 # put that much lower (shelf_fit). The gauntlets keep their size: their box is the pair's, 1.6 m from one to the other.
 SHELF_WORN = 0.5

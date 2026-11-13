@@ -245,7 +245,7 @@ def main():
     high = {"Actors": [{"Gyaml": "Shop_Heart", "Translate": [1.0, 2.0, 3.0]}, {"Gyaml": "Shop_DekuStick", "Translate": [4.0, 5.0, 6.0], "Dynamic": {"ShopItemIndex": 7}}]}
     lifted = read(seed.shelf_actors(byml(high), {("Shop_Heart", 0): name, ("Shop_DekuStick", 7): "Shop_Rando_Other"}, {name: 0.25})[0])["Actors"]
     check(lifted[0]["Translate"] == [1.0, 2.25, 3.0] and lifted[1]["Translate"] == [4.0, 5.0, 6.0], "a shelf whose item asks for it is not put higher, or another is")
-    check("Item_Gauntlet_Gold" not in seed.SHELF_LIFT and seed.SHELF_SCALE["Item_Gauntlet_Gold"] == 1.0 and set(seed.SHELF_TURN) == {"Item_GlassTruth", "Item_Range_Bow"},
+    check("Item_Gauntlet_Gold" not in seed.SHELF_LIFT and seed.SHELF_SCALE["Item_Gauntlet_Gold"] == 1.0 and set(seed.SHELF_TURN) == {"Item_Range_Bow"},
           "the gauntlets have a height of their own again (their box is right without the pose), or are made smaller, or another item is turned")
     info = byml([{"ModelAabbMin": {"X": -0.2, "Y": -0.193, "Z": 0.0}, "__RowId": "Item_Token_Gold"}, {"ModelAabbMin": {"X": 0.0, "Y": 1.171, "Z": 0.0}, "__RowId": "Item_Gauntlet_Gold"},
                  {"__RowId": "Item_Bare"}])
@@ -257,7 +257,7 @@ def main():
           seed.shelf_fit("Item_Gauntlet_Gold", ((-0.8, 1.171, -0.11), (0.8, 1.33, 0.05))) == (-1.17, 1.0) and
           seed.shelf_fit("Item_Hammer", ((-0.45, -0.28, -0.33), (0.22, 0.28, 1.45))) == (0.14, 0.51) and
           seed.shelf_fit("Item_Dungeon_SmallKey", box(0.0, 0.56)) == (0.0, 0.6) and seed.shelf_fit("Item_Arrow_Light", box(-0.38, 0.3)) == (0.1, 1.0) and
-          seed.shelf_fit("Item_GlassTruth", box(0.92, 1.04)) == (0.15, 2.0) and seed.shelf_fit("Item_Thing", box(0.0, 1.0))[1] == 1.0,
+          seed.shelf_fit("Item_GlassTruth", box(0.92, 1.04)) == (-1.4, 1.5) and seed.shelf_fit("Item_Thing", box(0.0, 1.0))[1] == 1.0,
           "an item is not put and sized on its shelf by its box and its own numbers: %r" % (seed.shelf_fit("Item_Hammer", ((-0.45, -0.28, -0.33), (0.22, 0.28, 1.45))),))
     full = byml([{"ModelAabbMin": {"X": -0.2, "Y": -0.19, "Z": 0.0}, "ModelAabbMax": {"X": 0.2, "Y": 0.2, "Z": 0.1}, "__RowId": "Item_Token_Gold"}, {"__RowId": "Item_Bare"}])
     got = seed.model_box(full, "Item_Token_Gold")
