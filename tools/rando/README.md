@@ -263,7 +263,22 @@ the game's own colour the mod is removed. It has nothing to do with the seed: no
 - Not changed: the tunics' pictures in the equipment menu (files of their own), and the Insert menu has no Cosmetics
   tab (the colours are written before the game starts).
 
-By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron purple`.
+- **The shields' looks.** Three more lines, `cosmetic_shield_deku`, `cosmetic_shield_hylian` and
+  `cosmetic_shield_mirror`: each of the shields Link carries can be shown as another's model, or as Dark Link's shield
+  (a dark Hylian Shield). A carried shield is an actor whose pack names its model in one small file
+  (`Component/ModelInfo`); the game's own Dark Link carries a Hylian Shield whose pack differs in that name alone, and
+  the mod does the same. Nothing else of the shield changes: it guards, burns, reflects and is held as the shield it
+  is at Link's age, so young Link holds a Deku Shield up whatever it looks like and crouches under a Hylian one. No
+  model is resized: the Mirror Shield is its full size on young Link, the Deku Shield its small one on adult Link.
+  The pack must not grow (the mod has no size table): where a longer name would add 8 bytes, the file's
+  `DebugModelScale` (1.0 in every shield) is left out. Seen in game, in runs without a window: young Link with the
+  Deku Shield as the Mirror Shield and as Dark Link's (on his back and held up) and with the Hylian Shield as the Deku
+  and the Mirror Shield (on his back and crouched under); adult Link with the Mirror Shield as the Deku Shield and the
+  Hylian Shield as the Mirror Shield. Not tried: the Mirror Shield's reflected light with another look, and a Deku
+  Shield burning with another look (its burnt pieces are the Deku Shield's own model). The shields on shop shelves, in
+  chests and in the equipment menu's pictures are other files and keep their looks.
+
+By hand: `python -I tools/rando/rando_cosmetics.py "<game folder>\romfs" --goron purple --shield-deku mirror`.
 
 **Navi's colour: looked for, not done.** Her textures (`Tex/Npc_Navi_*`, in two states, `.00` and `.01`) hold almost
 no colour, so there is nothing for the textures' way to change. Her model's material animation
@@ -560,9 +575,9 @@ and the seed was not finished.
 | `rando_poc.py` | The first test: one chest's item swapped in place. |
 | `rando_poc2.py` | The second test: one chest given any item (its own block, a new name, the size table). Its mod, `rando-zz-test2`, must be deleted before a seed is played: it carries a size table of its own. |
 
-| `rando_cosmetics.py` | Cosmetics: writes the colours of the tunics, the hearts and the magic meter as a mod of its own, `cosmetics`, from the launcher's Cosmetics page. |
+| `rando_cosmetics.py` | Cosmetics: writes the colours of the tunics, the hearts and the magic meter, and the shields' looks, as a mod of its own, `cosmetics`, from the launcher's Cosmetics page. |
 
-`tests/test_rando_cosmetics.py` checks its block reading and writing on made-up blocks, its colours, and that the
+`tests/test_rando_cosmetics.py` checks its block reading and writing on made-up blocks, its colours, a shield's look on made-up packs, and that the
 launcher's page and the build match it.
 `tests/test_rando_newgame.py` checks the open ways' flags and the opening's change on made-up files.
 `tests/test_rando_seed.py` checks `rando_seed.py`'s file changes and its shuffle on made-up map files;

@@ -1934,6 +1934,19 @@ class LauncherForm : Form {
         new object[] { "cosmetic_magic", "Magic meter", TunicColours, TunicValues,
             "The colour of the magic meter under the hearts." },
     };
+    // (the shields' looks: a shield Link carries shown as another's model, and nothing else of it changed. The same
+    // looks in the same order as tools/rando/rando_cosmetics.py SHIELD_MODELS; the lines are in hookshot_cosmetics.ini too)
+    static readonly string[] ShieldLooks = { "Its own", "Deku Shield", "Hylian Shield", "Mirror Shield", "Dark Link's shield" };
+    static readonly int[] ShieldValues = { 0, 1, 2, 3, 4 };
+    const string ShieldHelp = " Only its look changes: it guards, burns and reflects as the shield it is, and is held as that shield is at Link's age. No model is resized.";
+    static readonly object[][] ShieldRows = {
+        new object[] { "cosmetic_shield_deku", "Deku Shield looks like", ShieldLooks, ShieldValues,
+            "The model shown for the Deku Shield, on Link's back and held up." + ShieldHelp },
+        new object[] { "cosmetic_shield_hylian", "Hylian Shield looks like", ShieldLooks, ShieldValues,
+            "The model shown for the Hylian Shield." + ShieldHelp },
+        new object[] { "cosmetic_shield_mirror", "Mirror Shield looks like", ShieldLooks, ShieldValues,
+            "The model shown for the Mirror Shield." + ShieldHelp },
+    };
     // (Mako) the Master Quest page (host/master_quest.c): started by its own Play button (HOS_MASTER_QUEST=1), its saves apart
     // (user\save_mq), its title logo made at build time from the player's files (prompts/mq, nx2/mq_logo.py)
     static readonly object[][] MqRows = {
@@ -2048,6 +2061,8 @@ class LauncherForm : Form {
         AddSelectors(RandoRows, 3, cx, colW, null, 47, 45, true);
         randoHeight = 112 + (RandoRows.Length + 1) / 2 * 47 - 2 - RandoView.Y;
         AddSelectors(CosmeticRows, 4, cx, colW, cosmetics);
+        // (the shields' looks, from the fourth line on: the third line's right half is Randomize all's)
+        AddSelectors(ShieldRows, 4, cx, colW, cosmetics, 70, 62, false, 6);
         // (beside the fifth selector, in the third line's right half)
         widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx + colW + 14, 112 + 2 * 70 + 11, 160, 40), Page = 4, Click = OnRandomCosmetics });
         // (under the selectors: the seed's three buttons, and its ID beside them)
@@ -2144,10 +2159,10 @@ class LauncherForm : Form {
         foreach (var w in widgets) if (w.Scrolls) w.R.Y = w.HomeY - randoScroll;
     }
 
-    void AddSelectors(object[][] rows, int page, float x0, float colW, Dictionary<string, Selector> into = null, int pitch = 70, int height = 62, bool scrolls = false) {
+    void AddSelectors(object[][] rows, int page, float x0, float colW, Dictionary<string, Selector> into = null, int pitch = 70, int height = 62, bool scrolls = false, int first = 0) {
         for (int i = 0; i < rows.Length; i++) {
             var row = rows[i];
-            int col = i % 2, line = i / 2;
+            int col = (i + first) % 2, line = (i + first) / 2;   // (first: the place of the rows' first, counted from the page's first)
             var s = new Selector { Key = (string)row[0], Label = (string)row[1], Items = (string[])row[2], Values = (int[])row[3], HelpText = (string)row[4],
                                    Page = page, R = new RectangleF(x0 + col * (colW + 14), 112 + line * pitch, colW, height),
                                    Scrolls = scrolls, HomeY = 112 + line * pitch };
@@ -2370,8 +2385,8 @@ class LauncherForm : Form {
         }
         if (PageNow == 4)
             Theme.Text_(g, "Written when Play is pressed: about half a minute after a colour is changed, nothing after that. " +
-                        "The equipment menu's pictures of the tunics keep the game's colours.",
-                        Theme.Small, Theme.Faint, new RectangleF(x, 112 + 3 * 70 + 6, W - LeftW - 72, 40), StringAlignment.Near, StringAlignment.Near);
+                        "The equipment menu's pictures of the tunics and shields keep the game's own.",
+                        Theme.Small, Theme.Faint, new RectangleF(x, 112 + 5 * 70 + 6, W - LeftW - 72, 40), StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 5)
             Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + Fixes.Length * FixPitch, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);

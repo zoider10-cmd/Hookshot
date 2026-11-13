@@ -92,7 +92,7 @@ The **Mako** shortcut opens the launcher:
   and Quest rewards work**: **Play** shuffles them as a mod, and with **Major items** on the big items too, placed so
   the game can be finished by rules written from the original game and not yet checked against the remake
   ([tools/rando](tools/rando/README.md)). It needs Python 3 with `zstandard`, and a game built from this source. The
-  other settings are not placed yet. **Cosmetics**: the colours of the tunics, the hearts and the magic meter.
+  other settings are not placed yet. **Cosmetics**: the colours of the tunics, the hearts and the magic meter, and each shield shown as another's model.
 - **Fixes**: blue light flashes, Basic controller mode (tip by Ducky), Quick first start, AMD FSR Redstone frame generation.
 - **FSR**: checks your card and downloads AMD's FSR files in one click.
 - **Saves**, **Import saves** (from Eden, Lichii, Ryujinx, a Switch or another Hookshot) and **Game folder**.

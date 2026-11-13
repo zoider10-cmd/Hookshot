@@ -1,4 +1,4 @@
-"""Cosmetics: the colours of Link's three tunics, the hearts and the magic meter, as a mod.
+"""Cosmetics: the colours of Link's three tunics, the hearts and the magic meter, and the look of his shields, as a mod.
 
 Reads the launcher's Cosmetics page (<game folder>\\hookshot_cosmetics.ini: cosmetic_tunic_kokiri, cosmetic_tunic_goron,
 cosmetic_tunic_zora, cosmetic_hearts, cosmetic_magic, each a colour of COLOURS below, 0 the game's own) and writes
@@ -32,6 +32,15 @@ Mido keeps his own green vest over the changed cloth. The Goron and Zora Tunics'
 What a block can hold limits it: the two colours of a part are stored with few steps (as few as 6 a channel), so a
 changed colour lands on the nearest step, as the game's own did.
 
+The shields (cosmetic_shield_deku, cosmetic_shield_hylian, cosmetic_shield_mirror: 0 its own look, else a place in
+SHIELD_MODELS): a shield Link carries is an actor (Pack/Actor/Weapon_Shield_Deku, _Hylian, _Mirror) whose pack names
+its model in one small file, Component/ModelInfo. The game's own Dark Link carries a Hylian Shield whose pack differs
+in that name alone (Weapon_Shield_DarkLinkShield: the model Weapon_Shield_Hylian_Dark). So a shield is given another's
+look by that name, and nothing else of it: it is still the shield it was, with its own guard, weight, burning and
+mirror, held as Link's age and that shield are held (young Link holds a Deku Shield up, and crouches under a Hylian
+one). No model is made larger or smaller: the Mirror Shield's is its full size on young Link, the Deku Shield's its
+small one on adult Link. Shown to work in game with the Deku Shield as the Mirror Shield, on young Link's back and held up.
+
 Needs the zstandard package. The ASTC layout is as gpu/third_party/suyu/video_core/textures/astc.cpp reads it.
 """
 import argparse
@@ -46,8 +55,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rando_seed as seed   # (the game's zstd dictionaries)
 
 MOD = "cosmetics"
-VERSION = 5   # (raised when the same settings would write other textures: the launcher's run at Play then writes them again.
-# 2: the Kokiri Tunic's cloth, and a pinker Pink; 3: its stitching and fringe; 4: the hearts and the magic meter; 5: young Link's vest and stitching)
+VERSION = 6   # (raised when the same settings would write other textures: the launcher's run at Play then writes them again.
+# 2: the Kokiri Tunic's cloth, and a pinker Pink; 3: its stitching and fringe; 4: the hearts and the magic meter; 5: young Link's vest and stitching; 6: the shields' looks)
 TRIT_AT, TRIT_N = (0, 2, 4, 5, 7), (2, 2, 1, 2, 1)   # (where a trit block's T bits lie between its values' bits)
 QUINT_AT, QUINT_N = (0, 3, 5), (3, 2, 2)
 
@@ -471,6 +480,64 @@ COSMETICS = (
      ((HUD, ("MpGaugeCenter_00", "MpGaugeFlash_00", "MpGaugeFlash_01", "MpGaugeGlow_00", "MpGaugeGlow_01",
              "MpKiraKira_00", "MpKiraKira_01", "MpKiraKira_02")),)),
 )
+# The shields Link carries: its name here, its line in hookshot_cosmetics.ini, its label, its actor (whose pack is
+# changed). And the looks one can be given: a label and the model's name (its project and its model are named alike:
+# Model/<name>.<name>.bfres.zs); the first, 0, is the shield's own. The launcher's list is in the same order.
+SHIELDS = (
+    ("shield_deku", "cosmetic_shield_deku", "Deku Shield", "Weapon_Shield_Deku"),
+    ("shield_hylian", "cosmetic_shield_hylian", "Hylian Shield", "Weapon_Shield_Hylian"),
+    ("shield_mirror", "cosmetic_shield_mirror", "Mirror Shield", "Weapon_Shield_Mirror"),
+)
+SHIELD_MODELS = (
+    ("Its own", None),
+    ("Deku Shield", "Weapon_Shield_Deku"),
+    ("Hylian Shield", "Weapon_Shield_Hylian"),
+    ("Mirror Shield", "Weapon_Shield_Mirror"),
+    ("Dark Link's shield", "Weapon_Shield_Hylian_Dark"),
+)
+SHIELD_MODEL_FILE = "Component/ModelInfo/"   # (the one file of a shield's pack that names its model)
+
+
+def shield_look_of(text):
+    """a look's place in SHIELD_MODELS, from its number, its label or its model's name; None when it is none of them"""
+    text = str(text).strip().lower()
+    for i, (label, model) in enumerate(SHIELD_MODELS):
+        if text in (str(i), label.lower(), (model or "own").lower(), label.lower().split()[0]):
+            return i
+    return None
+
+
+def shield_pack(data, actor, model):
+    """A shield actor's pack (a SARC archive) with `model` named as its model: the new bytes, or None when the pack
+    names that model already. The pack must not grow: the game's size table holds each pack's size, and this mod
+    carries no table (the randomizer's seed has its own). A longer name can add a few bytes to the file; then the
+    file's DebugModelScale, 1.0 in every shield and not needed for it, is left out, which gives more back."""
+    files = seed.sarc_read(data)
+    names = [name for name in files if name.startswith(SHIELD_MODEL_FILE)]
+    if len(names) != 1:
+        raise ValueError("%s's pack has %d files that name a model, not one" % (actor, len(names)))
+    tree, version = seed.byml_parse(files[names[0]])
+    kind, rows = tree
+    if kind != "dict" or rows.get("FmdbName") != ("string", actor) or rows.get("ModelProjectName") != ("string", actor):
+        raise ValueError("%s's pack does not name its own model as this was written for" % actor)
+    if model == actor:
+        return None
+    rows["FmdbName"] = rows["ModelProjectName"] = ("string", model)
+    files[names[0]] = seed.byml_build(tree, version)
+    new = seed.sarc_write(files)
+    if len(new) > len(data):
+        scale = rows.get("DebugModelScale")
+        one = ("dict", {axis: (210, struct.pack("<f", 1.0)) for axis in "XYZ"})
+        if scale is None or scale[0] != "dict" or dict(scale[1]) != one[1]:
+            raise ValueError("%s's pack would grow, and its model's scale is not 1" % actor)
+        del rows["DebugModelScale"]
+        files[names[0]] = seed.byml_build(tree, version)
+        new = seed.sarc_write(files)
+    if len(new) > len(data):
+        raise ValueError("%s's pack would grow (%d bytes, from %d)" % (actor, len(new), len(data)))
+    return new
+
+
 SOFT = 12.0   # (degrees past a tunic's hues over which the change fades out)
 
 
@@ -627,6 +694,9 @@ def settings(game):
     """the tunics' lines of hookshot_cosmetics.ini: {a tunic's name: its colour's place in COLOURS} (0 where it does not say)"""
     got = {name: 0 for name, _, _, _, _, _ in COSMETICS}
     keys = {key: name for name, key, _, _, _, _ in COSMETICS}
+    got.update({name: 0 for name, _, _, _ in SHIELDS})   # (the shields' looks: places in SHIELD_MODELS)
+    keys.update({key: name for name, key, _, _ in SHIELDS})
+    most = dict({name: len(COLOURS) for name in got}, **{name: len(SHIELD_MODELS) for name, _, _, _ in SHIELDS})
     try:
         with open(os.path.join(game, "hookshot_cosmetics.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -636,7 +706,7 @@ def settings(game):
                         v = int(value.strip())
                     except ValueError:
                         continue
-                    got[keys[key.strip()]] = v if 0 <= v < len(COLOURS) else 0
+                    got[keys[key.strip()]] = v if 0 <= v < most[keys[key.strip()]] else 0
     except OSError:
         pass
     return got
@@ -671,6 +741,8 @@ def main():
     p.add_argument("--game", help="the game folder (default: the folder the romfs is in)")
     for name, _, label, _, _, _ in COSMETICS:
         p.add_argument("--" + name, help="in place of the %s's line: a colour's name or number (%s)" % (label, ", ".join(c[0] for c in COLOURS)))
+    for name, _, label, _ in SHIELDS:
+        p.add_argument("--" + name.replace("_", "-"), help="in place of the %s's line: a look's name or number (%s)" % (label, ", ".join(m[0] for m in SHIELD_MODELS)))
     p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already these colours' (the launcher, at Play)")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
     p.add_argument("--stats", nargs="+", metavar="TEXTURE", help="say what colours these textures hold (names in Tex, without .bntx.zs), write nothing")
@@ -685,10 +757,19 @@ def main():
             if colour_of(given) is None:
                 sys.exit("--%s %s: not a colour (%s)" % (name, given, ", ".join(c[0] for c in COLOURS)))
             chosen[name] = colour_of(given)
-    stamp = "cosmetics %d %s\n" % (VERSION, " ".join("%s=%d" % (name, chosen[name]) for name, _, _, _, _, _ in COSMETICS))
+    for name, _, label, actor in SHIELDS:
+        given = getattr(a, name)
+        if given is not None:
+            if shield_look_of(given) is None:
+                sys.exit("--%s %s: not a look (%s)" % (name.replace("_", "-"), given, ", ".join(m[0] for m in SHIELD_MODELS)))
+            chosen[name] = shield_look_of(given)
+        if SHIELD_MODELS[chosen[name]][1] == actor:   # (its own look, chosen by name: nothing to change)
+            chosen[name] = 0
+    stamp = "cosmetics %d %s\n" % (VERSION, " ".join("%s=%d" % (name, chosen[name]) for name in [row[0] for row in COSMETICS] + [row[0] for row in SHIELDS]))
     stamp_path = os.path.join(mod, "cosmetics_stamp.txt")
     if not a.stats:
-        print("cosmetics: " + ", ".join("%s %s" % (label, COLOURS[chosen[name]][0]) for name, _, label, _, _, _ in COSMETICS))
+        print("cosmetics: " + ", ".join(["%s %s" % (label, COLOURS[chosen[name]][0]) for name, _, label, _, _, _ in COSMETICS] +
+                                        ["%s as %s" % (label, SHIELD_MODELS[chosen[name]][0].lower()) for name, _, label, _ in SHIELDS]))
         if not any(chosen.values()):
             n = 0 if a.dry_run else remove_old(mod)
             print("everything has the game's own colour: nothing to write%s" % (": %d files of the last colours removed" % n if n else ""))
@@ -750,6 +831,20 @@ def main():
             made[rel] = new
             print("  %s, %s: %d blocks changed of %d" % (label, "%d pictures of %s" % (len(only), rel.split("/")[-1]) if only else texture,
                                                          counts["turned"] + counts["one colour"], sum(counts.values())))
+    for name, _, label, actor in SHIELDS:
+        if not chosen[name]:
+            continue
+        look, model = SHIELD_MODELS[chosen[name]]
+        rel, data = load("Pack/Actor/%s.pack.zs" % actor)
+        if not os.path.isfile(os.path.join(romfs, "Model", "%s.%s.bfres.zs" % (model, model))):
+            sys.exit("Model/%s.%s.bfres.zs is not among the game's files. Nothing written." % (model, model))
+        try:
+            new = shield_pack(data, actor, model)
+        except (ValueError, KeyError, IndexError, struct.error) as e:
+            sys.exit("%s: %s. Nothing written." % (rel, e))
+        if new is not None:
+            made[rel] = new
+            print("  %s: the look of %s (%s)" % (label, look, model))
     if a.dry_run:
         print("(dry run: nothing written)")
         return
@@ -766,7 +861,7 @@ def main():
         f.write("\n".join(sorted(written)) + "\n")
     with open(stamp_path, "w", encoding="utf-8") as f:   # (last: a run that stopped half way is made again)
         f.write(stamp)
-    print("wrote %s: %d textures%s" % (mod, len(made), " (%d files of the last colours replaced)" % removed if removed else ""))
+    print("wrote %s: %d files%s" % (mod, len(made), " (%d files of the last colours replaced)" % removed if removed else ""))
 
 
 if __name__ == "__main__":

@@ -212,10 +212,13 @@ def colours(block):
 def mod_and_sources():
     with tempfile.TemporaryDirectory(prefix="rando-cosmetics-") as tmp:
         game = Path(tmp)
-        none = {"kokiri": 0, "goron": 0, "zora": 0, "hearts": 0, "magic": 0}
+        none = {"kokiri": 0, "goron": 0, "zora": 0, "hearts": 0, "magic": 0, "shield_deku": 0, "shield_hylian": 0, "shield_mirror": 0}
         check(t.settings(str(game)) == none, "no file: everything the game's own")
         (game / "hookshot_cosmetics.ini").write_text("cosmetic_tunic_goron=4\ncosmetic_tunic_zora=99\nother=1\ncosmetic_tunic_kokiri=x\ncosmetic_magic=5\n", encoding="utf-8")
         check(t.settings(str(game)) == dict(none, goron=4, magic=5), "the file's lines are read, a colour that is not one is the game's own")
+        # (the shields' looks: places in SHIELD_MODELS, which has fewer than there are colours)
+        (game / "hookshot_cosmetics.ini").write_text("cosmetic_shield_deku=3\ncosmetic_shield_hylian=5\ncosmetic_shield_mirror=4\ncosmetic_hearts=10\n", encoding="utf-8")
+        check(t.settings(str(game)) == dict(none, shield_deku=3, shield_mirror=4, hearts=10), "a shield's look is read, one that is not a look is its own")
         # the files of the last colours are removed, and nothing else in the mod's folder
         mod = game / "mods" / t.MOD
         (mod / "romfs" / "Tex").mkdir(parents=True)
@@ -250,11 +253,72 @@ def mod_and_sources():
           "the build does not put the cosmetics script beside the game, where the launcher runs it")
 
 
+def shields():
+    """a shield's look: its pack names another model, nothing else of the pack changes, and the pack does not grow"""
+    seed = t.seed
+    info = lambda model, scale=True: seed.byml_build(("dict", collections.OrderedDict(
+        ([("DebugModelScale", ("dict", collections.OrderedDict((axis, (210, struct.pack("<f", 1.0))) for axis in "XYZ")))] if scale else []) +
+        [("FmdbName", ("string", model)), ("ModelProjectName", ("string", model))])), 7)
+
+    def pack(actor):
+        return seed.sarc_write({"Component/ModelInfo/%s.engine__component__ModelInfo.bgyml" % actor: info(actor),
+                                "Component/ShieldParam/%s.game__component__ShieldParam.bgyml" % actor: b"guard" * 9,
+                                "Actor/%s.engine__actor__ActorParam.bgyml" % actor: b"actor" * 31})
+
+    check([m for _, m in t.SHIELD_MODELS] == [None, "Weapon_Shield_Deku", "Weapon_Shield_Hylian", "Weapon_Shield_Mirror", "Weapon_Shield_Hylian_Dark"] and
+          [(key, actor) for _, key, _, actor in t.SHIELDS] == [("cosmetic_shield_deku", "Weapon_Shield_Deku"), ("cosmetic_shield_hylian", "Weapon_Shield_Hylian"),
+                                                               ("cosmetic_shield_mirror", "Weapon_Shield_Mirror")],
+          "the shields or their looks are not the three Link carries and the four models")
+    for _, _, _, actor in t.SHIELDS:
+        data = pack(actor)
+        check(t.shield_pack(data, actor, actor) is None, "%s as itself is a change" % actor)
+        for _, model in t.SHIELD_MODELS[1:]:
+            if model == actor:
+                continue
+            new = t.shield_pack(data, actor, model)
+            was, now = seed.sarc_read(data), seed.sarc_read(new)
+            name = "Component/ModelInfo/%s.engine__component__ModelInfo.bgyml" % actor
+            rows = seed.byml_parse(now[name])[0][1]
+            check(sorted(was) == sorted(now) and all(now[f] == was[f] for f in was if f != name),
+                  "%s as %s: a file other than the one that names the model changed" % (actor, model))
+            check(rows["FmdbName"] == ("string", model) and rows["ModelProjectName"] == ("string", model), "%s as %s: the model is not named" % (actor, model))
+            check(len(new) <= len(data), "%s as %s: the pack grew (%d from %d), and the mod has no size table" % (actor, model, len(new), len(data)))
+            # (no model is made larger or smaller: the scale is 1 or left out, never another)
+            scale = rows.get("DebugModelScale")
+            check(scale is None or all(struct.unpack("<f", v[1])[0] == 1.0 for v in scale[1].values()), "%s as %s: the model is resized" % (actor, model))
+    # (a pack that is not as the game's: not changed)
+    for bad in (seed.sarc_write({"Actor/x.bgyml": b"x"}),
+                seed.sarc_write({"Component/ModelInfo/a.bgyml": info("Weapon_Shield_Other")})):
+        try:
+            t.shield_pack(bad, "Weapon_Shield_Deku", "Weapon_Shield_Mirror")
+            check(False, "a pack that does not name the shield's own model is changed all the same")
+        except ValueError:
+            pass
+    check(t.shield_look_of("mirror") == 3 and t.shield_look_of("Dark Link's shield") == 4 and t.shield_look_of("0") == 0 and
+          t.shield_look_of("Weapon_Shield_Hylian") == 2 and t.shield_look_of("sword") is None, "a look is not read from its name or number")
+    source = (ROOT / "tools" / "rando" / "rando_cosmetics.py").read_text(encoding="utf-8")
+    check('for name in [row[0] for row in COSMETICS] + [row[0] for row in SHIELDS]))' in source and t.VERSION >= 6,
+          "the shields' looks are not in the mod's stamp: a changed look would not be written at Play")
+    # ---- the launcher's rows: the same lines and looks, in the same order ----
+    launcher = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
+    looks = re.search(r"static readonly string\[\] ShieldLooks = \{ ([^}]*) \};", launcher)
+    check(looks and re.findall(r'"([^"]*)"', looks.group(1)) == [m[0] for m in t.SHIELD_MODELS] and
+          "static readonly int[] ShieldValues = { 0, 1, 2, 3, 4 };" in launcher, "the launcher's looks are not the script's, in its order")
+    rows = launcher[launcher.index("static readonly object[][] ShieldRows = {"):]
+    rows = rows[:rows.index("\n    };")]
+    check(re.findall(r'new object\[\] \{ "(\w+)", "[^"]*", ShieldLooks, ShieldValues,', rows) == [key for _, key, _, _ in t.SHIELDS],
+          "the launcher's shield rows and the script's shields differ")
+    check("AddSelectors(ShieldRows, 4, cx, colW, cosmetics, 70, 62, false, 6);" in launcher and
+          "int col = (i + first) % 2, line = (i + first) / 2;" in launcher,
+          "the launcher does not show the shields' looks on its Cosmetics page, clear of Randomize all")
+
+
 def main():
     block = blocks()
     colours(block)
     files(block)
     mod_and_sources()
+    shields()
     print("ok: cosmetics")
 
 
