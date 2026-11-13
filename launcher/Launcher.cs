@@ -2082,10 +2082,10 @@ class LauncherForm : Form {
         AddSelectors(RandoRows, 3, cx, colW, null, 47, 45, true);
         randoHeight = 112 + (RandoRows.Length - RandoHidden.Count + 1) / 2 * 47 - 2 - RandoView.Y;
         AddSelectors(CosmeticRows, 4, cx, colW, cosmetics);
-        // (the shields' looks, from the fourth line on: the third line's right half is Randomize all's)
-        AddSelectors(ShieldRows, 4, cx, colW, cosmetics, 70, 62, false, 6);
-        // (beside the fifth selector, in the third line's right half)
-        widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx + colW + 14, 112 + 2 * 70 + 11, 160, 40), Page = 4, Click = OnRandomCosmetics });
+        // (the shields' looks follow the colours: from the third line's right half on)
+        AddSelectors(ShieldRows, 4, cx, colW, cosmetics, 70, 62, false, 5);
+        // (under the selectors, over the page's note)
+        widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx, 112 + 4 * 70 + 4, 160, 40), Page = 4, Click = OnRandomCosmetics });
         // (under the selectors: the seed's three buttons, and its ID beside them)
         widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx, 542, 116, 36), Page = 3, Click = OnNewSeed });
         widgets.Add(new Btn { Text = "Copy seed ID", R = new RectangleF(cx + 126, 542, 136, 36), Page = 3, Click = OnCopySeedId });
@@ -2411,7 +2411,7 @@ class LauncherForm : Form {
         if (PageNow == 4)
             Theme.Text_(g, "Written when Play is pressed: about half a minute after a colour is changed, nothing after that. " +
                         "The equipment menu's pictures of the tunics and shields keep the game's own.",
-                        Theme.Small, Theme.Faint, new RectangleF(x, 112 + 5 * 70 + 6, W - LeftW - 72, 40), StringAlignment.Near, StringAlignment.Near);
+                        Theme.Small, Theme.Faint, new RectangleF(x, 112 + 4 * 70 + 54, W - LeftW - 72, 40), StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 5)
             Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + Fixes.Length * FixPitch, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
