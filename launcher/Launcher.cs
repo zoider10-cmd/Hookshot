@@ -1049,7 +1049,7 @@ class SlotBtn : Btn {
     public override void Paint(Graphics g, LauncherForm ui) {
         string folder = Saves();
         if (shown == null || of != folder || ui.SlotsChanged) { of = folder; shown = SaveSlots.Current(Dir, folder); }
-        Text = "Save: " + (shown.Length > 13 && Style != Kind.Link ? shown.Substring(0, 12) + "…" : shown);
+        Text = "Save: " + (shown.Length > 9 && Style != Kind.Link ? shown.Substring(0, 8) + "…" : shown);
         base.Paint(g, ui);
     }
 }
@@ -1409,21 +1409,22 @@ class LauncherForm : Form {
                               Click = () => { Directory.CreateDirectory(Path.Combine(dir, "user", "save_mq")); OpenFolder(Path.Combine(dir, "user", "save_mq")); } });
 
         // (bottom row: folders)
-        widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 104, 42), HideOn = 8, Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
-        widgets.Add(new Btn { Text = "Import saves", R = new RectangleF(cx + 112, 612, 128, 42), HideOn = 8, Click = OnImport });
-        widgets.Add(new Btn { Text = "Game folder", R = new RectangleF(cx + 248, 612, 124, 42), HideOn = 8, Click = () => OpenFolder(dir) });
+        widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 80, 42), HideOn = 8, Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
+        widgets.Add(new Btn { Text = "Import saves", R = new RectangleF(cx + 86, 612, 110, 42), HideOn = 8, Click = OnImport });
+        widgets.Add(new Btn { Text = "Game folder", R = new RectangleF(cx + 202, 612, 106, 42), HideOn = 8, Click = () => OpenFolder(dir) });
         // (kept copies of the saves: more than the game's one save of the player's own. The window opens on the folder the
         // Randomizer setting names, and its list chooses the normal game's, the randomizer's or Master Quest's)
-        widgets.Add(new Btn { Text = "Save copies", R = new RectangleF(cx + 380, 612, 122, 42), HideOn = 8,
+        widgets.Add(new Btn { Text = "Save copies", R = new RectangleF(cx + 314, 612, 106, 42), HideOn = 8,
                               Click = () => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } });
 
-        // (the save the next Play plays, of the game the Randomizer setting names: SaveSlots)
-        widgets.Add(new SlotBtn { R = new RectangleF(cx + 510, 612, cw - 510, 42), HideOn = 8, Dir = dir, Saves = SaveFolder,
+        // (the save the next Play plays, of the game the Randomizer setting names: SaveSlots. The row leaves its right end to
+        // the Recommended tab's Apply button: the two were in one place, and a press on this one applied the settings)
+        widgets.Add(new SlotBtn { R = new RectangleF(cx + 426, 612, 116, 42), HideOn = 8, Dir = dir, Saves = SaveFolder,
                                   Click = () => OpenSlots(SaveFolder()) });
 
         // (Mako) the Recommended tab: this PC read once, and its Apply button
         BuildRecommendations();
-        widgets.Add(new Btn { Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 510, 612, cw - 510, 42), Page = 0, Click = OnApplyRecommended });
+        widgets.Add(new Btn { Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 548, 612, cw - 548, 42), Page = 0, Click = OnApplyRecommended });
 
         LoadAll();
         int first;

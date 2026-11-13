@@ -101,6 +101,10 @@ def main():
     check('if (list.SelectedIndex < 0 || (string)list.SelectedItem == current || Running()) return;' in src and
           'if (Same(current, names[at])) return "That is the save being played. Choose another first.";' in src,
           "another save is chosen while the game runs, or the save played can be deleted")
+    # (seen in play: the Save button lay where the Recommended tab's Apply button is, and a press on it applied the settings)
+    check("new SlotBtn { R = new RectangleF(cx + 426, 612, 116, 42), HideOn = 8," in src and
+          'Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 548, 612, cw - 548, 42), Page = 0,' in src,
+          "the Save button and the Recommended tab's Apply button are in one place again")
     check("AskAtPlay" not in src and "PlaySaveForm" not in src, "the question at Play, tried and left, is still there")
     csc = Path(os.environ.get("WINDIR", "")) / "Microsoft.NET" / "Framework64" / "v4.0.30319" / "csc.exe"
     if os.name != "nt" or not csc.is_file():
