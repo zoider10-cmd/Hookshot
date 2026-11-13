@@ -47,6 +47,7 @@ Start-Sleep -Milliseconds 1100
 Say "keep2" ([SaveCopies]::Keep($dir, "save_rando", "second"))
 Say "list" (([SaveCopies]::List($dir, "save_rando")) -join ",")
 Say "listnormal" (([SaveCopies]::List($dir, "save")) -join ",")
+Say "listmq" (([SaveCopies]::List($dir, "save_mq")) -join ",")
 Slot "save_rando" "three"
 Start-Sleep -Milliseconds 1100
 $now = [DateTime]::new(2026, 11, 11, 9, 8, 7)
@@ -87,6 +88,15 @@ def main():
     src = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
     check('Text = "Save copies"' in src and "new SaveCopiesForm(dir, SaveFolder())" in src,
           "the launcher has no Save copies button for the save folder the Randomizer setting names")
+    # (the three games' saves: the window's list chooses whose copies are shown, and Master Quest's page opens its own)
+    check('public static readonly string[] Folders = { "save", "save_rando", "save_mq" };' in src and
+          "which.SelectedIndex = Math.Max(0, Array.IndexOf(SaveCopies.Folders, saveFolder));" in src and
+          "this.saveFolder = SaveCopies.Folders[which.SelectedIndex]; Fill(null);" in src and
+          'new SaveCopiesForm(dir, "save_mq")' in src,
+          "the window does not choose among the normal game's, the randomizer's and Master Quest's saves")
+    host = (ROOT / "host" / "oot_rando.c").read_text(encoding="utf-8")
+    check('if (hos_master_quest()) return "save_mq";' in host and 'return on ? "save_rando" : "save";' in host,
+          "the game's save folders are not the three the window lists")
     check('return Path.Combine(dir, "user", Folder, saveFolder);' in src and 'public const string Folder = "save_copies";' in src,
           "the copies are not kept under the game folder's user folder, apart for each save folder")
     check('keepFirst.Checked = SaveCopies.KeepBefore(dir);' in src and "SaveCopies.Restore(dir, saveFolder, n, DateTime.Now, first);" in src and
@@ -114,7 +124,7 @@ def main():
     check(got["keep1"] == "" and got["copy1"] == "one", "a copy is not the saves, whole, under its name")
     check(got["again"] != "", "a copy of the same name was replaced")
     check(got["keep2"] == "" and got["list"] == "second,first", "the copies are not listed the newest first: %r" % got["list"])
-    check(got["listnormal"] == "", "the normal game's copies show the randomizer's")
+    check(got["listnormal"] == "" and got["listmq"] == "", "the normal game's copies, or Master Quest's, show the randomizer's")
     check(got["restore"] == "" and got["now"] == "one", "a restore does not put the copy in the save folder's place")
     check(got["before"] == "three" and got["list2"] == "Before restore 2026-11-11 09.08.07,second,first",
           "a restore does not keep the saves that were there first: %r" % got["list2"])

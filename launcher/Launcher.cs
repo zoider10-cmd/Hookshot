@@ -102,10 +102,14 @@ static class RandoId {
 // ---- kept copies of the saves ----
 // The game has one save of the player's own and five it makes itself (slot_00, and slot_01 to slot_05), and its load menu
 // lists no more. A kept copy is the whole save folder under a name, in <game folder>\user\save_copies\<save folder>\<name>:
-// the randomizer's saves (save_rando) and the normal game's (save) have their own. Restoring one puts it in the save
-// folder's place, after keeping what was there as a copy of its own, so that nothing is lost. tests/test_save_copies.py
+// the normal game's saves (save), the randomizer's (save_rando) and Master Quest's (save_mq) have their own, and the
+// window's list at its top chooses whose are shown. Restoring one puts it in the save folder's place, after keeping
+// what was there as a copy of its own, so that nothing is lost. tests/test_save_copies.py
 public static class SaveCopies {
     public const string Folder = "save_copies";
+    // (the three games' save folders, host/oot_rando.c hos_save_folder, and what the window calls them)
+    public static readonly string[] Folders = { "save", "save_rando", "save_mq" };
+    public static readonly string[] Names = { "The normal game", "The randomizer", "Master Quest" };
     public const string BeforeRestore = "Before restore ";
 
     public static string Root(string dir, string saveFolder) { return Path.Combine(dir, "user", Folder, saveFolder); }
@@ -231,7 +235,9 @@ public static class SaveCopies {
 
 // (the window of the Save copies button: a name to keep the saves under, and the copies kept, to restore or delete)
 class SaveCopiesForm : Form {
-    readonly string dir, saveFolder;
+    readonly string dir;
+    string saveFolder;   // (whose saves the window shows: the list at its top)
+    readonly ComboBox which = new ComboBox();
     readonly TextBox name = new TextBox();
     readonly ListBox list = new ListBox();
     readonly Button keep = new Button(), restore = new Button(), update = new Button(), delete = new Button(), close = new Button();
@@ -239,28 +245,34 @@ class SaveCopiesForm : Form {
 
     public SaveCopiesForm(string dir, string saveFolder) {
         this.dir = dir; this.saveFolder = saveFolder;
-        bool rando = saveFolder == "save_rando";
-        Text = "Save copies: " + (rando ? "the randomizer's saves" : "the normal game's saves");
+        Text = "Save copies";
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(520, 458);
+        ClientSize = new Size(520, 498);
         BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
-        var top = new Label { Text = "Keep the saves you have now under a name:", AutoSize = true, Location = new Point(16, 14) };
-        name.SetBounds(16, 40, 368, 26); name.MaxLength = 80;
+        // (whose saves: the game the launcher is set to play is chosen first, and any of the three can be)
+        var whose = new Label { Text = "Saves of:", AutoSize = true, Location = new Point(16, 17) };
+        which.SetBounds(90, 13, 294, 26); which.DropDownStyle = ComboBoxStyle.DropDownList; which.FlatStyle = FlatStyle.Flat;
+        which.BackColor = Color.FromArgb(24, 36, 60); which.ForeColor = Theme.Text;
+        which.Items.AddRange(SaveCopies.Names);
+        which.SelectedIndex = Math.Max(0, Array.IndexOf(SaveCopies.Folders, saveFolder));
+        which.SelectedIndexChanged += (o, e) => { this.saveFolder = SaveCopies.Folders[which.SelectedIndex]; Fill(null); };
+        var top = new Label { Text = "Keep the saves you have now under a name:", AutoSize = true, Location = new Point(16, 54) };
+        name.SetBounds(16, 80, 368, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
-        Style(keep, "Keep a copy", 394, 38, 110);
-        var mid = new Label { Text = "Kept copies, the newest first:", AutoSize = true, Location = new Point(16, 84) };
-        list.SetBounds(16, 110, 488, 232); list.IntegralHeight = false;
+        Style(keep, "Keep a copy", 394, 78, 110);
+        var mid = new Label { Text = "Kept copies, the newest first:", AutoSize = true, Location = new Point(16, 124) };
+        list.SetBounds(16, 150, 488, 232); list.IntegralHeight = false;
         keepFirst.Text = "Before a restore, keep the saves I have now as a \"Before restore\" copy";
-        keepFirst.SetBounds(16, 394, 488, 24); keepFirst.ForeColor = Theme.Text; keepFirst.FlatStyle = FlatStyle.Flat;
+        keepFirst.SetBounds(16, 434, 488, 24); keepFirst.ForeColor = Theme.Text; keepFirst.FlatStyle = FlatStyle.Flat;
         keepFirst.Checked = SaveCopies.KeepBefore(dir);
         keepFirst.CheckedChanged += (o, e) => SaveCopies.SetKeepBefore(dir, keepFirst.Checked);
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
-        Style(restore, "Restore", 16, 354, 110); Style(update, "Update", 136, 354, 110); Style(delete, "Delete", 256, 354, 110);
-        Style(close, "Close", 394, 354, 110);
+        Style(restore, "Restore", 16, 394, 110); Style(update, "Update", 136, 394, 110); Style(delete, "Delete", 256, 394, 110);
+        Style(close, "Close", 394, 394, 110);
         var foot = new Label { Text = "Update: the copy becomes the saves you have now. Close the game before a restore.",
-                               AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 426), Size = new Size(488, 24), Font = new Font("Segoe UI", 8.5f) };
-        Controls.AddRange(new Control[] { top, name, keep, mid, list, restore, update, delete, close, keepFirst, foot });
+                               AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 466), Size = new Size(488, 24), Font = new Font("Segoe UI", 8.5f) };
+        Controls.AddRange(new Control[] { whose, which, top, name, keep, mid, list, restore, update, delete, close, keepFirst, foot });
         AcceptButton = keep; CancelButton = close;
         keep.Click += (o, e) => OnKeep();
         restore.Click += (o, e) => OnRestore();
@@ -1093,6 +1105,8 @@ class LauncherForm : Form {
                                          IsOn = () => settings["master_quest_damage"].Index == at,
                                          Click = () => settings["master_quest_damage"].Set(at, true) });
         }
+        widgets.Add(new Btn { Text = "Master Quest save copies", Style = Btn.Kind.Link, R = new RectangleF(cx, 622, 230, 26), Page = 8,
+                              Click = () => { using (var f = new SaveCopiesForm(dir, "save_mq")) f.ShowDialog(this); } });
         widgets.Add(new Btn { Text = "Open the Master Quest saves", Style = Btn.Kind.Link, R = new RectangleF(cx + cw - 230, 622, 230, 26), Page = 8,
                               Click = () => { Directory.CreateDirectory(Path.Combine(dir, "user", "save_mq")); OpenFolder(Path.Combine(dir, "user", "save_mq")); } });
 
@@ -1100,7 +1114,8 @@ class LauncherForm : Form {
         widgets.Add(new Btn { Text = "Saves", R = new RectangleF(cx, 612, 104, 42), HideOn = 8, Click = () => OpenFolder(Path.Combine(dir, "user", SaveFolder())) });
         widgets.Add(new Btn { Text = "Import saves", R = new RectangleF(cx + 112, 612, 128, 42), HideOn = 8, Click = OnImport });
         widgets.Add(new Btn { Text = "Game folder", R = new RectangleF(cx + 248, 612, 124, 42), HideOn = 8, Click = () => OpenFolder(dir) });
-        // (kept copies of the saves, of the folder the Randomizer setting names: more than the game's one save of the player's own)
+        // (kept copies of the saves: more than the game's one save of the player's own. The window opens on the folder the
+        // Randomizer setting names, and its list chooses the normal game's, the randomizer's or Master Quest's)
         widgets.Add(new Btn { Text = "Save copies", R = new RectangleF(cx + 380, 612, 122, 42), HideOn = 8,
                               Click = () => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } });
 

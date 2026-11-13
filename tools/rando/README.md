@@ -46,7 +46,8 @@ with the randomizer off. It is what the seed has in an area, not what is left: t
 opened. Seen without a window (`RX_VK_MENU_SCRIPT`, `RX_VK_SHOT_MENU=1`); `tests/test_rando_tracker.py`.
 
 **More saves than the game's one.** The game keeps one save of the player's own (`slot_00`) and five it makes itself;
-its load menu lists no more. The launcher's **Save copies** button keeps the whole save folder under a name
+its load menu lists no more. The launcher's **Save copies** button (its window's list chooses the normal game's saves, the randomizer's or
+Master Quest's; Master Quest's page has a link of its own) keeps the whole save folder under a name
 (`user/save_copies/<save folder>/<name>`) and puts a kept copy back, after keeping the saves that were there as
 "Before restore <date and time>". The randomizer's copies and the normal game's are apart, as their saves are. A
 restore is refused while the game runs (`SaveCopies`, launcher/Launcher.cs; `tests/test_save_copies.py`).
