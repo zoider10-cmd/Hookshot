@@ -319,7 +319,7 @@ class SaveNameForm : Form {
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(400, 150);
         BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
-        var top = new Label { Text = SaveSlots.Shown(slot, true).Replace(":  empty", "") + " is empty. Give the new game a name:", AutoSize = true, Location = new Point(16, 16) };
+        var top = new Label { Text = SaveSlots.Shown(slot, true).Replace(":  empty", "") + " is empty. A name for the new game (or none):", AutoSize = true, Location = new Point(16, 16) };
         name.SetBounds(16, 46, 368, 26); name.MaxLength = 40;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         var ok = new Button { Text = "Start", DialogResult = DialogResult.None };
@@ -331,16 +331,18 @@ class SaveNameForm : Form {
         ok.SetBounds(158, 100, 110, 30); cancel.SetBounds(274, 100, 110, 30); ok.BackColor = Theme.Blue;
         Controls.AddRange(new Control[] { top, name, ok, cancel });
         AcceptButton = ok; CancelButton = cancel;
-        ok.Click += (o, e) => { Value = SaveCopies.Clean(name.Text); if (Value.Length > 0) { DialogResult = DialogResult.OK; Close(); } };
+        ok.Click += (o, e) => { Value = SaveCopies.Clean(name.Text); DialogResult = DialogResult.OK; Close(); };
     }
 
-    // The save named `name` of that game, when it is empty and not named yet, is given the name the player types. false:
-    // the player gave none (nothing is played). ref name: the save's name from then on.
+    // The save named `name` of that game, when it is empty and not named yet, is given the name the player types; with
+    // none typed it keeps the one it has. false: the player turned back (nothing is played). ref name: the save's name
+    // from then on.
     public static bool Ask(IWin32Window owner, string dir, string saveFolder, ref string name) {
         if (!SaveSlots.Unnamed(name) || !SaveSlots.IsEmpty(dir, saveFolder, name)) return true;
         while (true) {
             using (var f = new SaveNameForm(name)) {
                 if (f.ShowDialog(owner) != DialogResult.OK) return false;
+                if (f.Value.Length == 0) return true;   // (no name given: the slot keeps the one it has, "Save 3")
                 string error = SaveSlots.Rename(dir, saveFolder, name, f.Value);
                 if (error == null) { name = f.Value; return true; }
                 MessageBox.Show(owner, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -480,7 +482,7 @@ class PlayChoiceForm : Form {
     readonly Button[] modes = new Button[3];
     readonly ListBox list = new ListBox();
     readonly TextBox name = new TextBox();
-    readonly Button add = new Button(), play = new Button(), cancel = new Button(), copy = new Button();
+    readonly Button add = new Button(), play = new Button(), cancel = new Button(), copy = new Button(), rename = new Button();
     readonly HashSet<string> empty = new HashSet<string>();   // (the saves that hold nothing)
     string current;
 
@@ -505,14 +507,15 @@ class PlayChoiceForm : Form {
         list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
         list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (last played)", n => SaveSlots.Shown(n, empty.Contains(n)));
-        var low = new Label { Text = "A name (or none), for one more save or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 360) };
-        name.SetBounds(16, 386, 252, 26); name.MaxLength = 80;
+        var low = new Label { Text = "A name: for one more save or a copy (or none), or to rename the chosen one:", AutoSize = true, Location = new Point(16, 360) };
+        name.SetBounds(16, 386, 170, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
-        Style(add, "New save", 278, 384, 110); Style(copy, "Copy save", 394, 384, 110);
+        Style(add, "New save", 196, 384, 100); Style(copy, "Copy save", 302, 384, 100); Style(rename, "Rename", 408, 384, 96);
         Style(play, "Play", 278, 444, 110); Style(cancel, "Cancel", 394, 444, 110);
         play.BackColor = Theme.Blue;
-        Controls.AddRange(new Control[] { mid, list, low, name, add, copy, play, cancel });
+        Controls.AddRange(new Control[] { mid, list, low, name, add, copy, rename, play, cancel });
         copy.Click += (o, e) => OnCopy();
+        rename.Click += (o, e) => OnRename();
         list.SelectedIndexChanged += (o, e) => copy.Enabled = list.SelectedIndex >= 0 && !empty.Contains((string)list.SelectedItem);
         AcceptButton = play; CancelButton = cancel;
         add.Click += (o, e) => OnNew();
@@ -555,6 +558,18 @@ class PlayChoiceForm : Form {
         string to = SaveCopies.Clean(name.Text);
         if (to.Length == 0) to = SaveSlots.CopyName(dir, SaveCopies.Folders[Mode], (string)list.SelectedItem);   // (no name: "<the save> copy")
         string error = SaveSlots.Copy(dir, SaveCopies.Folders[Mode], (string)list.SelectedItem, to);
+        if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        name.Text = "";
+        Fill(to);
+    }
+
+    void OnRename() {
+        if (list.SelectedIndex < 0) return;
+        string from = (string)list.SelectedItem, to = SaveCopies.Clean(name.Text);
+        if (from != current && LauncherForm.GameRunning()) {
+            MessageBox.Show(this, "Close the game first: it is using its saves.", "Saves", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
+        }
+        string error = SaveSlots.Rename(dir, SaveCopies.Folders[Mode], from, to);
         if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         name.Text = "";
         Fill(to);

@@ -190,6 +190,10 @@ def main():
           "a copy of a save that waits is not made, or a half-made folder is left: %r" % got)
     check("copy.Click += (o, e) => OnCopy();" in src and "SaveSlots.Copy(dir, SaveCopies.Folders[Mode], (string)list.SelectedItem, to);" in src and
           "SaveSlots.Copy(dir, saveFolder, from, to);" in src, "the windows have no button to copy a save")
+    # (seen in play: Start with no name typed did nothing. The slot keeps its name then; and the window to choose has Rename)
+    check("if (f.Value.Length == 0) return true;" in src and "rename.Click += (o, e) => OnRename();" in src and
+          "string error = SaveSlots.Rename(dir, SaveCopies.Folders[Mode], from, to);" in src,
+          "an empty slot is not played under the name it has when none is typed, or the window to choose cannot rename a save")
     print("PASS: the launcher's saves to play")
 
 
