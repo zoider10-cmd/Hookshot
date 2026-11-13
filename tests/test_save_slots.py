@@ -124,6 +124,27 @@ Say "slotnames" (Names "save_rando")
 Say "slotagain" ("" + [SaveSlots]::SlotOf($dir, "save_rando", "Save 4") + [SaveSlots]::IsEmpty($dir, "save_rando", "Save 4"))
 Say "customdelete" ([SaveSlots]::Delete($dir, "save_rando", "Third"))
 Say "customnames" (Names "save_rando")
+# (the randomizer's seed of a save: its settings and the seed's files go out with it and come back with it; a save
+#  without one takes the seed there is; a copy is played on its save's seed)
+function Seed($n, $text) {
+    Set-Content -Path (Join-Path $dir "hookshot_options.ini") -Value ("vsync=1`r`nrando_on=1`r`nrando_seed=" + $n + "`r`nrando_chests=3`r`noptions_version=2")
+    New-Item -ItemType Directory -Force (Join-Path $dir "mods\rando-seed\romfs") | Out-Null
+    Set-Content -Path (Join-Path $dir "mods\rando-seed\romfs\map.txt") -Value $text -NoNewline
+}
+function SeedNow() { ((Get-Content (Join-Path $dir "hookshot_options.ini")) -join ";") + "|" + (Get-Content -Raw (Join-Path $dir "mods\rando-seed\romfs\map.txt")) }
+Seed 111 "first seed"
+Say "seedto" ([SaveSlots]::Select($dir, "save_rando", "Save 5"))
+Say "seedtaken" (SeedNow)
+Seed 222 "second seed"
+Say "seedback" ([SaveSlots]::Select($dir, "save_rando", "Main"))
+Say "seedfirst" (SeedNow)
+Say "seedcopy" ([SaveSlots]::Copy($dir, "save_rando", "Main", "Main on its seed"))
+Say "seedagain" ([SaveSlots]::Select($dir, "save_rando", "Save 5"))
+Say "seedsecond" (SeedNow)
+Say "seedcopied" ([SaveSlots]::Select($dir, "save_rando", "Main on its seed"))
+Say "seedofcopy" (SeedNow)
+Say "seedhome" ([SaveSlots]::Select($dir, "save_rando", "Main"))
+Say "seednormal" ((Test-Path (Join-Path $dir "user\save_slots\seeds\Save 1.txt")) -eq $false)
 Say "copyleft" ((Test-Path (Join-Path $dir "user\save_slots\save_rando\Third.part")) -or (Test-Path (Join-Path $dir "user\save_slots\save_rando\Main copy.part")))
 '''
 
@@ -207,6 +228,14 @@ def main():
     check(got["customdelete"] == "" and "Third" not in got["customnames"], "a save made beyond the ten, deleted, is still in the list: %r" % got)
     check("delete.Click += (o, e) => OnDelete();" in src and 'MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;\n        string error = SaveSlots.Delete(dir, folder, n);' in src.replace("\r\n", "\n"),
           "the window to choose has no Delete button, or it does not ask first")
+    first, second = "vsync=1;rando_on=1;rando_seed=111;rando_chests=3;options_version=2|first seed", "vsync=1;rando_on=1;rando_seed=222;rando_chests=3;options_version=2|second seed"
+    check(got["seedto"] == "" and got["seedtaken"] == first, "a save without a seed of its own does not take the seed there is: %r" % got["seedtaken"])
+    check(got["seedback"] == "" and got["seedfirst"] == first and got["seedagain"] == "" and got["seedsecond"] == second,
+          "two of the randomizer's saves made on two seeds are not each played on its own: %r %r" % (got["seedfirst"], got["seedsecond"]))
+    check(got["seedcopy"] == "" and got["seedcopied"] == "" and got["seedofcopy"] == first and got["seedhome"] == "" and got["seednormal"] == "True",
+          "a copy is not played on its save's seed: %r" % got["seedofcopy"])
+    check("LoadAll();   // (a randomizer's save chosen brings its own seed and settings: SaveSlots.Select)" in src,
+          "the launcher does not read the settings again after a save is chosen")
     check(got["copywaiting"] == "" and got["copiedwaiting"] == "one" and got["copyleft"] == "False",
           "a copy of a save that waits is not made, or a half-made folder is left: %r" % got)
     check("copy.Click += (o, e) => OnCopy();" in src and "SaveSlots.Copy(dir, SaveCopies.Folders[Mode], (string)list.SelectedItem, to);" in src and

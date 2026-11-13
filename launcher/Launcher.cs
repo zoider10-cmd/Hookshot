@@ -110,7 +110,10 @@ static class RandoId {
 // <game folder>\user\save_slots\<save folder>.txt: the name being played, then every name in its order; one of the
 // ten slots there are to begin with has its number before its name ("3|Zelda"), so that deleting it makes it slot 3,
 // empty, again (a list written before that has no numbers: a slot still named "Save 3" is slot 3).
-// The randomizer's record of the checks collected (rando\collected.txt) goes with its save. tests/test_save_slots.py
+// The randomizer's record of the checks collected (rando\collected.txt) goes with its save, and so does its seed: the
+// randomizer's settings (the options file's rando_ lines but the switch) and the seed's files (mods\rando-seed) are
+// kept for each of the randomizer's saves in <game folder>\user\save_slots\seeds, so that two saves made on two
+// seeds are each played on its own. A save without one yet takes the seed there is. tests/test_save_slots.py
 public static class SaveSlots {
     public const string Folder = "save_slots";
     public const string First = "Save 1";
@@ -154,6 +157,42 @@ public static class SaveSlots {
     }
     public static string Current(string dir, string saveFolder) { string c; Names(dir, saveFolder, out c); return c; }
     public static List<string> Names(string dir, string saveFolder) { string c; return Names(dir, saveFolder, out c); }
+
+    // ---- the randomizer's seed of a save ----
+    // <game folder>\user\save_slots\seeds\<name>.txt: the options file's rando_ lines (not rando_on: the game played is
+    // the launcher's choice); <name>\: the seed's files, mods\rando-seed as it was.
+    const string Rando = "save_rando";
+    static string SeedRoot(string dir) { return Path.Combine(dir, "user", Folder, "seeds"); }
+    static string OptionsFile(string dir) { return Path.Combine(dir, "hookshot_options.ini"); }
+    static string SeedMod(string dir) { return Path.Combine(dir, "mods", "rando-seed"); }
+    static bool SeedLine(string line) { return line.StartsWith("rando_") && !line.StartsWith("rando_on="); }
+
+    // (the seed there is now, kept under that save's name)
+    static void SeedOut(string dir, string name) {
+        string root = SeedRoot(dir), kept = Path.Combine(root, name);
+        Directory.CreateDirectory(root);
+        var lines = new List<string>();
+        if (File.Exists(OptionsFile(dir))) foreach (string l in File.ReadAllLines(OptionsFile(dir))) if (SeedLine(l)) lines.Add(l);
+        File.WriteAllLines(kept + ".txt", lines.ToArray());
+        if (Directory.Exists(kept)) Directory.Delete(kept, true);
+        if (Directory.Exists(SeedMod(dir))) SaveCopies.CopyTree(SeedMod(dir), kept);
+    }
+
+    // (that save's seed made the one there is; a save that has none yet: nothing, it takes the one there is)
+    static void SeedIn(string dir, string name) {
+        string kept = Path.Combine(SeedRoot(dir), name);
+        if (!File.Exists(kept + ".txt")) return;
+        var lines = File.Exists(OptionsFile(dir)) ? new List<string>(File.ReadAllLines(OptionsFile(dir))) : new List<string>();
+        int at = lines.FindIndex(SeedLine);
+        lines.RemoveAll(SeedLine);
+        if (at < 0 || at > lines.Count) at = lines.FindIndex(l => l.StartsWith("options_version=") || l.StartsWith("pad_"));
+        if (at < 0) at = lines.Count;
+        lines.InsertRange(at, File.ReadAllLines(kept + ".txt"));
+        File.WriteAllLines(OptionsFile(dir), lines.ToArray(), new UTF8Encoding(false));
+        if (Directory.Exists(SeedMod(dir))) Directory.Delete(SeedMod(dir), true);
+        if (Directory.Exists(kept)) { Directory.CreateDirectory(Path.Combine(dir, "mods")); Directory.Move(kept, SeedMod(dir)); }
+        File.Delete(kept + ".txt");
+    }
 
     // Which of the ten slots there are to begin with each save is: name -> 1..10. A save made beyond them, or a copy, is
     // none. The list's lines say it ("3|Zelda"); a line without a number that is still "Save 3" is slot 3, when no other is.
@@ -245,6 +284,13 @@ public static class SaveSlots {
             string from = Path.Combine(Root(dir, saveFolder), names[at]), kept = from + ".collected.txt";
             if (Directory.Exists(from) && names[at] != clean) Directory.Move(from, Path.Combine(Root(dir, saveFolder), clean));
             if (File.Exists(kept) && names[at] != clean) File.Move(kept, Path.Combine(Root(dir, saveFolder), clean) + ".collected.txt");
+            if (saveFolder == Rando && names[at] != clean) {   // (its seed goes with it)
+                string seed = Path.Combine(SeedRoot(dir), names[at]), to2 = Path.Combine(SeedRoot(dir), clean);
+                try {
+                    if (File.Exists(seed + ".txt")) File.Move(seed + ".txt", to2 + ".txt");
+                    if (Directory.Exists(seed)) Directory.Move(seed, to2);
+                } catch { }
+            }
             if (Same(current, names[at])) current = clean;
             var slots = Slots(dir, saveFolder);   // (the slot it is goes with it to its new name)
             int slot;
@@ -276,6 +322,16 @@ public static class SaveSlots {
             // (the randomizer's record of the checks collected is copied with its save)
             string record = played ? (saveFolder == "save_rando" ? Path.Combine(dir, "rando", "collected.txt") : null) : from + ".collected.txt";
             try { if (record != null && File.Exists(record)) File.Copy(record, dest + ".collected.txt", true); } catch { }
+            if (saveFolder == Rando) {   // (and its seed: the copy is played on the seed its save was)
+                try {
+                    string seed = Path.Combine(SeedRoot(dir), names[at]), to2 = Path.Combine(SeedRoot(dir), clean);
+                    if (played) SeedOut(dir, clean);
+                    else if (File.Exists(seed + ".txt")) {
+                        File.Copy(seed + ".txt", to2 + ".txt", true);
+                        if (Directory.Exists(seed)) SaveCopies.CopyTree(seed, to2);
+                    }
+                } catch { }
+            }
             names.Insert(at + 1, clean);
             Write(dir, saveFolder, current, names);
             return null;
@@ -297,6 +353,10 @@ public static class SaveSlots {
             string path = Path.Combine(Root(dir, saveFolder), names[at]);
             if (Directory.Exists(path)) Directory.Delete(path, true);
             if (File.Exists(path + ".collected.txt")) File.Delete(path + ".collected.txt");
+            if (saveFolder == Rando) {
+                string seed = Path.Combine(SeedRoot(dir), names[at]);
+                try { if (File.Exists(seed + ".txt")) File.Delete(seed + ".txt"); if (Directory.Exists(seed)) Directory.Delete(seed, true); } catch { }
+            }
             var slots = Slots(dir, saveFolder);
             int slot;
             bool one = slots.TryGetValue(names[at], out slot);
@@ -345,6 +405,7 @@ public static class SaveSlots {
                     if (File.Exists(from + ".collected.txt")) File.Move(from + ".collected.txt", record);
                 } catch { }
             }
+            if (saveFolder == Rando) { try { SeedOut(dir, current); SeedIn(dir, names[at]); } catch { } }
             Write(dir, saveFolder, names[at], names);
             return null;
         } catch (Exception ex) { return ex.Message; }
@@ -2268,6 +2329,7 @@ class LauncherForm : Form {
             if (GameRunning()) { MessageBox.Show(this, "The game is already running.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
             SetPlayMode(f.Mode);
             string error = SaveSlots.Select(dir, SaveFolder(), f.Save);
+            LoadAll();   // (a randomizer's save chosen brings its own seed and settings: SaveSlots.Select)
             SlotsChanged = true; Refresh(); SlotsChanged = false;
             if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         }
@@ -2278,6 +2340,7 @@ class LauncherForm : Form {
     public bool SlotsChanged;
     void OpenSlots(string saveFolder) {
         using (var f = new SaveSlotsForm(dir, saveFolder)) f.ShowDialog(this);
+        LoadAll();   // (a randomizer's save chosen brings its own seed and settings: SaveSlots.Select)
         SlotsChanged = true; Refresh(); SlotsChanged = false;
         Invalidate();
     }
