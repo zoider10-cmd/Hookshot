@@ -779,6 +779,14 @@ uint64_t portable_variant(const Program& p) {
     return generated_stage(p) == SIZE_MAX ? p.variant : answers_hash_of(answers_portable(p));
 }
 namespace {
+/// What an unbound slot answers: the type its instruction declares (record_answers; program_find_plain looks for a variant whose
+/// slots all answer it)
+uint8_t declared_answer(const Program& p, size_t stage, size_t desc, bool image) {
+    const auto& info = p.stages[stage].info;
+    if (image) return (uint8_t)(info.image_descriptors[desc].is_integer ? 0x80 : 0);
+    const auto& d = info.texture_descriptors[desc];
+    return (uint8_t)((uint8_t)d.type | (d.is_integer ? 0x80 : 0));
+}
 // (an unbound slot answers what the instruction itself says: nothing to tell the variants apart by, and a program prepared before
 // the game, with nothing bound at all, comes out as the plain variant of each of its slots)
 void record_answers(Program& p, const NvnState& s) {
@@ -796,14 +804,13 @@ void record_answers(Program& p, const NvnState& s) {
         for (size_t i = 0; i < list.size(); i++)
             if (list[i].count == 1) {
                 const uint32_t h = descriptor_handle(s, p.stages[k], list[i]);
-                p.answers.push_back({(uint16_t)k, (uint16_t)i,
-                                     h ? texture_answer(h) : (uint8_t)((uint8_t)list[i].type | (list[i].is_integer ? 0x80 : 0))});
+                p.answers.push_back({(uint16_t)k, (uint16_t)i, h ? texture_answer(h) : declared_answer(p, k, i, false)});
             }
         const auto& images = p.stages[k].info.image_descriptors;
         for (size_t i = 0; i < images.size(); i++)
             if (images[i].count == 1) {
                 const uint32_t h = descriptor_handle(s, p.stages[k], images[i]);
-                p.answers.push_back({(uint16_t)k, (uint16_t)i, h ? answer_of(h, true) : (uint8_t)(images[i].is_integer ? 0x80 : 0), true});
+                p.answers.push_back({(uint16_t)k, (uint16_t)i, h ? answer_of(h, true) : declared_answer(p, k, i, true), true});
             }
     }
     for (Program::Answer& a : p.answers) a.type = canonical_answer(p, a, a.type);
@@ -2844,8 +2851,10 @@ std::unique_ptr<Program> seed_program_of(const uint64_t code[3], bool mesh, cons
     if (!by_stage[want[0]]) return nullptr;
     return seed_translate(by_stage, attributes, color_types, key_out);
 }
-const Program* seed_variant_of(const uint64_t code[3], bool mesh, const uint32_t attributes[16], const uint8_t color_types[8],
-                               const std::vector<uint8_t>& questions, const std::vector<Program::Answer>& answers) {
+/// (seed_variant_of, seed_plain_of) the variant translated with the questions and answers given, or with none: nothing bound, each
+/// slot answers what its instruction declares (as seed_translate's program), and the questions asked are noted
+static const Program* seed_variant_made(const uint64_t code[3], bool mesh, const uint32_t attributes[16], const uint8_t color_types[8],
+                                        const std::vector<uint8_t>* questions, const std::vector<Program::Answer>* answers) {
     const SeedStage* by_stage[8]{};
     const int want[3] = {mesh ? 7 : 0, 1, mesh ? 6 : -1};
     for (int k = 0; k < 3; k++) {
@@ -2874,7 +2883,7 @@ const Program* seed_variant_of(const uint64_t code[3], bool mesh, const uint32_t
     p->fallback = mesh && dev.uses_mesh_fallback(by_stage[6] != nullptr);
     p->mesh = mesh && !p->fallback;
     p->codes[0] = code[0], p->codes[1] = code[1], p->codes[2] = code[2];
-    questions_in = &questions, questions_at = 0, answers_in = &answers;
+    if (questions) questions_in = questions, questions_at = 0, answers_in = answers;
     struct Reset { ~Reset() { questions_in = nullptr, answers_in = nullptr; } } reset;
     if (mesh) translate_mesh_into(*p, *blank, by_stage[6] ? &code_of[6] : nullptr, code_of[7], nullptr, fs, color_types);
     else translate_into(*p, *blank, &code_of[0], fs, nullptr, color_types);
@@ -2891,6 +2900,13 @@ const Program* seed_variant_of(const uint64_t code[3], bool mesh, const uint32_t
     variants.push_back(std::move(p));
     return variants.back().get();
 }
+const Program* seed_variant_of(const uint64_t code[3], bool mesh, const uint32_t attributes[16], const uint8_t color_types[8],
+                               const std::vector<uint8_t>& questions, const std::vector<Program::Answer>& answers) {
+    return seed_variant_made(code, mesh, attributes, color_types, &questions, &answers);
+}
+const Program* seed_plain_of(const uint64_t code[3], bool mesh, const uint32_t attributes[16], const uint8_t color_types[8]) {
+    return seed_variant_made(code, mesh, attributes, color_types, nullptr, nullptr);
+}
 
 const Program* program_find_portable(uint64_t key, uint64_t variant) {
     std::lock_guard lk(shader_mu);
@@ -2898,6 +2914,28 @@ const Program* program_find_portable(uint64_t key, uint64_t variant) {
     if (it == programs.end()) return nullptr;
     for (auto& p : it->second)
         if (p->ready.load(std::memory_order_acquire) && !p->failed && portable_variant(*p) == variant) return p.get();
+    return nullptr;
+}
+const Program* program_find_plain(uint64_t key) {
+    std::lock_guard lk(shader_mu);
+    auto it = programs.find(key);
+    if (it == programs.end()) return nullptr;
+    for (auto& p : it->second) {
+        if (!p->ready.load(std::memory_order_acquire) || p->failed) continue;
+        // (an answer for each slot record_answers counts, each the type its instruction declares, as record_answers makes it with
+        // nothing bound: not a variant that asked nothing, which stands for any textures)
+        size_t slots = 0;
+        for (const Stage& st : p->stages) {
+            for (const auto& d : st.info.texture_descriptors) slots += d.count == 1;
+            for (const auto& d : st.info.image_descriptors) slots += d.count == 1;
+        }
+        bool plain = p->answers.size() == slots;
+        for (size_t i = 0; plain && i < p->answers.size(); i++) {
+            const Program::Answer& a = p->answers[i];
+            plain = answers_fit(*p, {a}) && a.type == canonical_answer(*p, a, declared_answer(*p, a.stage, a.desc, a.image));
+        }
+        if (plain) return p.get();
+    }
     return nullptr;
 }
 const Program* program_find(uint64_t key, uint64_t variant) {

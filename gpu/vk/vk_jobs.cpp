@@ -141,6 +141,23 @@ void jobs_notify() {
     std::lock_guard lk(mu);
     done_cv.notify_all();
 }
+/// (Mako §78) A job still queued for this flag runs here, now, ahead of the queue; true when it did. Not waited for when
+/// a worker has it already
+bool jobs_steal(const std::atomic<bool>& flag) {
+    std::unique_lock lk(mu);
+    if (flag.load(std::memory_order_acquire)) return false;
+    for (auto it = queue.begin(); it != queue.end(); ++it)
+        if (it->flag == &flag) {
+            std::function<void()> fn = std::move(it->fn);
+            queue.erase(it);
+            lk.unlock();
+            run_guarded(fn);
+            pending--;
+            jobs_notify();
+            return true;
+        }
+    return false;
+}
 void jobs_wait(const std::atomic<bool>& flag) {
     std::unique_lock lk(mu);
     // (still queued: run here, now. A draw that must wait for its pipeline waited for every job queued before it, and a new

@@ -2293,6 +2293,16 @@ void texture_begin_recording(VkCommandBuffer upload, uint64_t value) {
     memory_table_begin();
     memory_rb_recording_begun();   // (which readback pages its uploads may refresh: memory_rb_refresh)
 }
+/// (Mako §77) The game's memory changed within a submission: a queue stopped at a wait for an event the CPU signals went on,
+/// with a capture taken there (vk_replay resume_queue). Its parts after the wait keep the submission's value, so the
+/// textures checked before it were not looked at again ("a submission's parts check a texture's memory once"): OoT's terrain
+/// fills a tile's source textures in a small ring, signals, and the GPU bakes it; the next tile, written over the same
+/// textures after the next signal, was baked from the one before. The earth floor turned into another tile's material
+/// before the player's eyes (Dodongo's Cavern, Fire Temple). Every texture is checked again from here. RX_VK_EPOCH_AT_RESUME=0: as before
+void texture_memory_changed() {
+    static const bool on = !getenv("RX_VK_EPOCH_AT_RESUME") || atoi(getenv("RX_VK_EPOCH_AT_RESUME")) != 0;
+    if (on) epoch++;
+}
 VkCommandBuffer upload_command_buffer() {
     return upload_cmd();
 }

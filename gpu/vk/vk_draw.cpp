@@ -53,6 +53,9 @@
 #include "vk_gprof.h"
 #include "vk_jobs.h"
 #include "vk_shader.h"
+#include "vk_shipped_list.h"   // (Mako 3.6.1: the merged pipeline state list, shipped_list_install)
+extern "C" size_t ZSTD_decompress(void* dst, size_t dst_cap, const void* src, size_t src_size);   // (third_party/zstd, in this dll)
+extern "C" unsigned ZSTD_isError(size_t code);
 #include "vk_texture.h"
 #include "movie_upscale_policy.h"
 #include "skip_code.h"
@@ -983,6 +986,9 @@ struct PipeEntry {
     std::atomic<bool> ready{false};
     std::atomic<VkPipeline> pipeline{VK_NULL_HANDLE};   // (a fast-linked one first, the worker's full build over it)
     std::shared_ptr<JobClaim> claim;   // (hookshot: its build, which a draw that must wait runs itself if no worker took it yet)
+    std::atomic<bool> asked{false};    // (Mako §78: the caches asked for the full one, quick_pipeline)
+    std::atomic<bool> waited{false};   // (Mako §78: a draw waited for its quick one once, quick_pipeline)
+    std::atomic<bool> quick{false};    // (Mako §78: a quick one, without the driver's optimizer, being made or made: quick_pipeline)
 };
 std::unordered_map<uint64_t, std::unique_ptr<PipeEntry>> pipelines;   // (the replay thread's)
 int64_t st_draws, st_skipped, st_dispatches, st_passes, st_mesh, st_pending_skips, st_waits;
@@ -1117,6 +1123,7 @@ bool gpl_libs_cached() {
     static const bool on = !getenv("RX_VK_GPL_NO_CACHE");
     return on;
 }
+thread_local bool quick_build = false;   // (Mako §78: quick_pipeline's build, without the driver's optimizer, not into our cache)
 thread_local bool driver_cache_only = false;   // (predict_run's: pipelines for the driver's own cache, not into ours)
 /// (with the pipeline cache: from it, or in play into the play generation's, create_cached)
 VkResult cached_graphics(const VkGraphicsPipelineCreateInfo* ci, VkPipeline* pl) {
@@ -1335,7 +1342,9 @@ void compute_note(uint64_t key) {
 // mesh fallback's topology), and the program variant's answers with its stages numbered as every GPU numbers them (the mesh
 // fallback adds a vertex stage: answers_portable). The prepare maps each record through the rules the draw itself follows
 // (state_targets: attachment_format; pipeline_topology; color_types_of), so one list made on one PC prepares the pipelines another
-// GPU's draws will ask for, the mesh fallback's included. Version 1 lists (a play folder's own from an older build) are still read ----
+// GPU's draws will ask for, the mesh fallback's included. A record with variant 0 and no answers or questions stands for the variant
+// nothing bound makes (seed_plain_of: each texture as its instruction declares it), as lists converted from records that hold no
+// texture answers have them. Version 1 lists (a play folder's own from an older build) are still read ----
 constexpr char kStateMagic[8] = {'H', 'K', 'S', 'T', 'A', 'T', 'E', '1'};
 constexpr char kStateMagic2[8] = {'H', 'K', 'S', 'T', 'A', 'T', 'E', '2'};
 /// A version 1 record as the file has it, and in memory any record resolved for this device (state_list_read): the Vulkan formats
@@ -1537,10 +1546,53 @@ void state_record(const Program& p, const NvnState& s, const Targets& at, VkPrim
     if (!state_file) state_open_locked();
     if (state_file && state_seen.insert(h).second) fwrite(&r, sizeof r, 1, state_file), fflush(state_file);
 }
+/// (Mako 3.6.1) The merged list of assets/pipeline_states/ is built into this dll (vk_shipped_list.h, nx2/shipped_embed.py): the
+/// in-game update only downloads the dll, so a patch brings the lists too. Written as the game folder's
+/// hookshot_pipeline_states_shipped.bin when that one is missing, not a version 2 list, or smaller (a later build's make_game
+/// writes a larger one, which is kept). RX_VK_NO_SHIPPED_EMBED=1: left as it is
+/// (true: written by this call, its pipelines not imported yet)
+bool shipped_list_install() {
+    static std::once_flag once;
+    bool wrote = false;
+    std::call_once(once, [&wrote] {
+        if (getenv("RX_VK_NO_SHIPPED_EMBED")) return;
+        const std::string path = state_list_path("hookshot_pipeline_states_shipped.bin");
+        unsigned long long have = 0;
+        bool v2 = false;
+        if (FILE* f = fopen(path.c_str(), "rb")) {
+            char magic[8];
+            v2 = fread(magic, 8, 1, f) == 1 && !memcmp(magic, kStateMagic2, 8);
+            _fseeki64(f, 0, SEEK_END);
+            have = (unsigned long long)_ftelli64(f);
+            fclose(f);
+        }
+        if (v2 && have >= kShippedListSize) return;
+        std::vector<unsigned char> raw((size_t)kShippedListSize);
+        const size_t got = ZSTD_decompress(raw.data(), raw.size(), kShippedListZst, sizeof kShippedListZst);
+        if (ZSTD_isError(got) || got != raw.size() || memcmp(raw.data(), kStateMagic2, 8)) {
+            logf("vk: state list: the built-in list did not unpack: the folder's is kept");
+            return;
+        }
+        const std::string part = path + ".part";
+        FILE* f = fopen(part.c_str(), "wb");
+        const bool ok = f && fwrite(raw.data(), 1, raw.size(), f) == raw.size();
+        if (f) fclose(f);
+        if (ok && MoveFileExA(part.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+            logf("vk: state list: the built-in list of %u pipelines written as %s (it had %llu bytes)", kShippedListPipelines,
+                 path.c_str(), have);
+            wrote = true;
+        } else {
+            remove(part.c_str());
+            logf("vk: state list: the built-in list could not be written: the folder's is kept");
+        }
+    });
+    return wrote;
+}
 /// Every pipeline of the state lists (the player's own and the shipped one): its program translated
 /// when the program cache lacks it, then noted in hookshot_pipelines.bin for precompile_run to build. RX_VK_NO_STATE_LIST=1: off
 void state_list_prepare(void (*progress)(size_t done, size_t total), bool open_seed = false) {
     if (getenv("RX_VK_NO_STATE_LIST")) return;
+    shipped_list_install();
     const auto t0 = std::chrono::steady_clock::now();
     int shipped_version = 0;
     std::vector<StateRec> recs = state_list_read(state_list_path("hookshot_pipeline_states_shipped.bin"), &shipped_version);
@@ -1611,19 +1663,27 @@ void state_list_prepare(void (*progress)(size_t done, size_t total), bool open_s
     // (these keys only: the kept compute programs stay on disk for precompile_run, which builds their pipelines)
     program_cache_load_some(keys, [](Program& p) { ensure_layout(p); }, false);
     // the variants made by other textures (the seed's are for nothing bound): translated with the answers the game's gave
+    // (a record with variant 0 and no answers or questions stands for the variant nothing bound makes: a list converted from records
+    // that hold no texture answers has those; a program without textures has variant 0 already, and is found as it is)
+    const auto plain = [](const StateRec& r) { return !r.variant && !r.nanswers && !r.nquestions; };
     std::vector<size_t> variant_of;   // (a record of each variant the cache lacks)
+    size_t plain_wanted = 0;
     {
         std::unordered_set<uint64_t> seen;
         for (size_t i = 0; i < recs.size(); i++) {
             const StateRec& r = recs[i];
             const uint64_t key = want[rec_program[i]].key;
-            if (key && (r.nanswers || r.nquestions) && !program_find_portable(key, r.variant) && seen.insert(mix(key, r.variant)).second)
-                variant_of.push_back(i);
+            // (a plain record: the variant nothing bound makes has the hash of its answers, not 0, so it is looked up by them:
+            // loaded from the program cache already, it is not translated, and saved, again)
+            if (key && (r.nanswers || r.nquestions || plain(r)) && !program_find_portable(key, r.variant) &&
+                !(plain(r) && program_find_plain(key)) && seen.insert(mix(key, r.variant)).second)
+                variant_of.push_back(i), plain_wanted += plain(r);
         }
     }
     total = want.size() + variant_of.size();
     if (progress) progress(done, total);
     std::atomic<size_t> variants_made{0};
+    std::vector<const Program*> made_plain(variant_of.size());   // (each worker writes its own records' only)
     next = 0;
     const auto variant_worker = [&] {
         SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
@@ -1631,28 +1691,40 @@ void state_list_prepare(void (*progress)(size_t done, size_t total), bool open_s
             const size_t i = next++;
             if (i >= variant_of.size()) return;
             const StateRec& r = recs[variant_of[i]];
-            std::vector<uint8_t> questions(r.questions, r.questions + r.nquestions);
-            std::vector<Program::Answer> answers(r.nanswers);
-            for (uint32_t k = 0; k < r.nanswers; k++)
-                answers[k] = {(uint16_t)(r.answers[k] >> 28), (uint16_t)(r.answers[k] >> 12 & 0xFFFF), (uint8_t)(r.answers[k] & 0xFF),
-                              (r.answers[k] >> 8 & 1) != 0};
-            if (const Program* p = seed_variant_of(r.code, r.mesh != 0, r.vattr, r.color_types, questions, answers)) {
-                if (portable_variant(*p) == r.variant) variants_made++;
-                ensure_layout(const_cast<Program&>(*p));
+            const Program* p = nullptr;
+            if (plain(r)) {
+                p = made_plain[i] = seed_plain_of(r.code, r.mesh != 0, r.vattr, r.color_types);
+            } else {
+                std::vector<uint8_t> questions(r.questions, r.questions + r.nquestions);
+                std::vector<Program::Answer> answers(r.nanswers);
+                for (uint32_t k = 0; k < r.nanswers; k++)
+                    answers[k] = {(uint16_t)(r.answers[k] >> 28), (uint16_t)(r.answers[k] >> 12 & 0xFFFF), (uint8_t)(r.answers[k] & 0xFF),
+                                  (r.answers[k] >> 8 & 1) != 0};
+                p = seed_variant_of(r.code, r.mesh != 0, r.vattr, r.color_types, questions, answers);
+                if (p && portable_variant(*p) == r.variant) variants_made++;
             }
+            if (p) ensure_layout(const_cast<Program&>(*p));
             report_done();
         }
     };
     threads.clear();
     for (unsigned i = 0; i < std::clamp(cpus / 2, 1u, 32u); i++) threads.emplace_back(variant_worker);
     for (std::thread& t : threads) t.join();
-    size_t noted_n = 0, no_variant = 0, noted_mesh = 0, noted_fallback = 0;
+    std::unordered_map<uint64_t, const Program*> plain_of;   // (by program key: the variant nothing bound makes)
+    for (size_t i = 0; i < variant_of.size(); i++)
+        if (made_plain[i]) plain_of.emplace(want[rec_program[variant_of[i]]].key, made_plain[i]);
+    size_t noted_n = 0, no_variant = 0, noted_mesh = 0, noted_fallback = 0, noted_plain = 0;
     auto s = std::make_unique<NvnState>();
     for (size_t i = 0; i < recs.size(); i++) {
         const StateRec& r = recs[i];
         const uint64_t key = want[rec_program[i]].key;
         if (!key) continue;
         const Program* p = program_find_portable(key, r.variant);
+        if (!p && plain(r)) {   // (made now, or loaded from the program cache)
+            const auto it = plain_of.find(key);
+            p = it != plain_of.end() ? it->second : program_find_plain(key);
+            noted_plain += p != nullptr;
+        }
         if (!p) {
             no_variant++;
             continue;
@@ -1674,10 +1746,10 @@ void state_list_prepare(void (*progress)(size_t done, size_t total), bool open_s
         noted_mesh += p->mesh, noted_fallback += p->fallback;
     }
     logf("vk: state list: %zu pipelines (%zu shipped, version %d), %zu programs (%zu translated now, %zu with stages not in the seed), "
-         "%zu variants by their textures (%zu made), %zu noted (%zu native mesh, %zu mesh fallback), %zu whose program variant was not "
-         "made, in %.1f s", recs.size(), shipped, shipped_version, want.size(), made.load(), missing.load(), variant_of.size(),
-         variants_made.load(), noted_n, noted_mesh, noted_fallback, no_variant,
-         std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+         "%zu variants by their textures (%zu made), %zu by nothing bound (%zu made), %zu noted (%zu native mesh, %zu mesh fallback, "
+         "%zu by nothing bound), %zu whose program variant was not made, in %.1f s", recs.size(), shipped, shipped_version, want.size(),
+         made.load(), missing.load(), variant_of.size() - plain_wanted, variants_made.load(), plain_wanted, plain_of.size(), noted_n,
+         noted_mesh, noted_fallback, noted_plain, no_variant, std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
     if (open_seed && !getenv("RX_VK_SEED_CHECK")) seed_close();
 }
 
@@ -1905,6 +1977,9 @@ PipeEntry* graphics_pipeline(const Program& p, const NvnState& s, const Targets&
     auto job = std::make_shared<Job>();
     job->e = e, job->p = &p, job->s = s, job->at = at, job->topo = topo, job->cold[0] = cold[0], job->cold[1] = cold[1];
     jobs_push([job] {
+        // (Mako §78, a test: RX_VK_TEST_SLOW_MS=<ms> holds each full build that long, as AMD's optimizer on a cold cache)
+        static const int slow_ms = getenv("RX_VK_TEST_SLOW_MS") ? atoi(getenv("RX_VK_TEST_SLOW_MS")) : 0;
+        if (slow_ms > 0) std::this_thread::sleep_for(std::chrono::milliseconds(slow_ms));
         // (over a linked one, which is left alone: draws recorded with it may still be on their way)
         if (const VkPipeline full = build_graphics(*job->p, job->s, job->at, job->topo)) job->e->pipeline = full;
         job->e->ready.store(true, std::memory_order_release);
@@ -2108,7 +2183,7 @@ VkPipeline build_graphics(const Program& p, const NvnState& s, const Targets& at
     {   // (local) RX_VK_NOOPT=1: build every pipeline without the driver's optimizer. AMD's proprietary compiler crashes
         // (-13 here) or takes minutes on some Ocarina shaders it builds in seconds unoptimized (Lichii #200, #210).
         static const bool noopt = getenv("RX_VK_NOOPT") != nullptr;
-        if (noopt) ci.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
+        if (noopt || quick_build) ci.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
         // (from PR 430, YunaraDebugs: on AMD the task and mesh programs (OoT's foliage culling, following pointers through its
         // tables) hung the GPU when the driver's optimizer built them: a device lost one to four minutes into Kokiri, each time with
         // another of them first (RX 6600, issues 461 and 484); never in runs where they were built without it. They are built
@@ -2145,7 +2220,7 @@ VkPipeline build_graphics(const Program& p, const NvnState& s, const Targets& at
     // (measured: 21 of 21). gpl_libs_cached: RX_VK_GPL_NO_CACHE=1 keeps them out, as before. With our cache: through
     // graphics_with, so in play one compiled goes into the play generation, and an ask under the flag still goes to pcache)
     const bool lib_cached = (part == 1 || part == 2) && gpl_libs_cached();
-    const VkPipelineCache cache = lib_cached || (part < 0 && !driver_cache_only) ? pcache : VK_NULL_HANDLE;
+    const VkPipelineCache cache = !quick_build && (lib_cached || (part < 0 && !driver_cache_only)) ? pcache : VK_NULL_HANDLE;
     VkResult r = graphics_with(cache, &ci, &pl);
     // The AMD Windows compiler can reject ordinary graphics pipelines with its optimizer on.
     if (dev.props.vendorID == 0x1002 && dev.task_mesh_fallback && !p.mesh && part < 0 && r == VK_ERROR_UNKNOWN &&
@@ -2177,8 +2252,98 @@ VkPipeline build_graphics(const Program& p, const NvnState& s, const Targets& at
                            (fb_one.flags & VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT);
         pcache_built_since_save += !known;
     }
-    st_pipeline_us += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+    const int64_t built_us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+    st_pipeline_us += built_us;
+    if (built_us >= 300000) {   // (Mako §78: what the slow ones are: AMD's optimizer took 5-13 s each for Volvagia's intro)
+        static std::atomic<int> told{0};
+        if (told++ < 200)
+            logf("vk: graphics pipeline of %016llx: SLOW build, %lld ms%s%s", (unsigned long long)p.key, (long long)(built_us / 1000),
+                 (ci.flags & VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT) ? ", without the optimizer" : "", quick_build ? " (quick)" : "");
+    }
     return pl;
+}
+
+/// (Mako §78) For a draw whose pipeline's full build is not done: (1) the full one, if a cache holds it compiled (asked without
+/// compiling: a ms or two); (2) for a draw that may be left out, one made WITHOUT the driver's optimizer on a thread of its own,
+/// waited for at most RX_VK_QUICK_MS (30) a frame on each recording thread, then left out until it is there. The worker's full
+/// build replaces it when done. true: the entry has one to draw with. A draw that cannot be left out gets (1) only, then waits for
+/// the full build as before. (3.6 made the quick one on the recording thread, unbounded: on AMD some took 9-14 s even without the
+/// optimizer, and the screen stayed black with the sound going, then a movie froze. Never on the recording thread now.)
+/// RX_VK_QUICK_MS=0: neither, as before §78
+bool quick_pipeline(PipeEntry& e, const Program& p, const NvnState& s, const Targets& at, VkPrimitiveTopology topo, bool must) {
+    // (OFF by default since 3.6.1: on the user's RX card, quick builds took 7-10 s too, the same pipeline was built up to 5 times at
+    // once beside the workers, and the game froze for good after Volvagia (§81). RX_VK_QUICK_MS=30 turns it on)
+    static const double budget_ms = getenv("RX_VK_QUICK_MS") ? atof(getenv("RX_VK_QUICK_MS")) : 0.0;
+    if (budget_ms <= 0) return false;
+    if (e.pipeline.load(std::memory_order_acquire)) return true;
+    // (Mako §78b) the full one first, if a cache has it compiled (ours, the driver's). Once an entry
+    // (a test: RX_VK_TEST_NO_CACHE_ASK=1 skips it, as on a PC that never made these pipelines)
+    static const bool no_ask = getenv("RX_VK_TEST_NO_CACHE_ASK") != nullptr;
+    if (!no_ask && !e.asked.exchange(true, std::memory_order_acq_rel)) {
+        bool cold = false;
+        if (const VkPipeline full = build_graphics(p, s, at, topo, -1, &cold)) {
+            VkPipeline none = VK_NULL_HANDLE;
+            e.pipeline.compare_exchange_strong(none, full, std::memory_order_acq_rel);   // (one already there is kept: draws may hold it)
+            static std::atomic<int64_t> hits{0};
+            const int64_t h = ++hits;
+            if (h <= 5 || h % 200 == 0) logf("vk: pipeline from the caches for a draw ahead of its build (%lld so far)", (long long)h);
+            return true;
+        }
+    }
+    if (must) return false;
+    // (the quick one: on a thread of its own, two at a time at most; one not started now is started at a later draw)
+    static std::atomic<int> running{0};
+    if (!e.quick.load(std::memory_order_acquire) && running.load() < 2 && !e.quick.exchange(true, std::memory_order_acq_rel)) {
+        running++;
+        struct Q {
+            PipeEntry* e;
+            const Program* p;
+            NvnState s;
+            Targets at;
+            VkPrimitiveTopology topo;
+        };
+        auto q = std::make_shared<Q>(Q{&e, &p, s, at, topo});
+        std::thread([q] {
+            SetThreadDescription(GetCurrentThread(), L"mkw_vk quick pipeline");
+            ub_thread_off();
+            // (a test: RX_VK_TEST_QUICK_SLOW_MS=<ms> holds each quick build that long, as the 9-14 s ones AMD took)
+            static const int slow_ms = getenv("RX_VK_TEST_QUICK_SLOW_MS") ? atoi(getenv("RX_VK_TEST_QUICK_SLOW_MS")) : 0;
+            if (slow_ms > 0) std::this_thread::sleep_for(std::chrono::milliseconds(slow_ms));
+            const auto t0 = std::chrono::steady_clock::now();
+            VkPipeline built = VK_NULL_HANDLE;
+            try {
+                quick_build = true;
+                built = build_graphics(*q->p, q->s, q->at, q->topo);
+            } catch (...) {
+            }
+            quick_build = false;
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+            static std::atomic<int64_t> n{0};
+            const int64_t k = ++n;
+            if (k <= 20 || k % 50 == 0)
+                logf("vk: quick pipeline (no optimizer) for %016llx in %.1f ms, on its own thread (%lld so far)",
+                     (unsigned long long)q->p->key, ms, (long long)k);
+            if (built) {
+                VkPipeline none = VK_NULL_HANDLE;
+                q->e->pipeline.compare_exchange_strong(none, built, std::memory_order_acq_rel);   // (the full one first: kept)
+            }
+            running--;
+        }).detach();
+    }
+    // (waited for a little: most take 10-150 ms, so a boss is there within a few frames; the frame never waits longer)
+    static thread_local uint64_t frame = ~0ull;
+    static thread_local double used_ms = 0;
+    const uint64_t f = texture_frame_no();
+    if (f != frame) frame = f, used_ms = 0;
+    const auto t0 = std::chrono::steady_clock::now();
+    auto spent = [&] { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(); };
+    // (once an entry: one the quick thread takes long over (9-14 s seen on AMD) is left out at once on the frames after, not
+    // waited for again on each one: 30 ms a frame for 12 s was 25 fps through a cutscene in a test)
+    const double left = e.waited.exchange(true, std::memory_order_acq_rel) ? 0.0 : budget_ms - used_ms;
+    while (left > 0 && !e.pipeline.load(std::memory_order_acquire) && !e.ready.load(std::memory_order_acquire) && spent() < left)
+        std::this_thread::sleep_for(std::chrono::microseconds(500));
+    used_ms += spent();
+    return e.pipeline.load(std::memory_order_acquire) != VK_NULL_HANDLE;
 }
 
 // ---- samplers (by NVN sampler parameters) ----
@@ -6299,9 +6464,36 @@ void draw(VkCommandBuffer cmd, NvnState& s, const DrawArgs& d) {
         st_waits++;
         st_wait_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     };
+    // (Mako §78) before one is left out, its build run here at once, ahead of the queue (jobs_steal, a pipeline's claim), and
+    // waited for, while this frame's RX_VK_PIPE_WAIT_MS (100) on this recording thread last: a
+    // boss met for the first time (Volvagia, Ganondorf) had its colour draws left out through its whole intro while their
+    // programs and pipelines compiled, its depth and shadows drawn: a black silhouette. Most compile within a few ms; the
+    // frame is held about that long at most (one build started may finish past it), not the 0.2-3 s an area's first programs
+    // froze it when every draw waited. Clean first, then fast: the user's call. 0: left out at once, as before
+    const auto brief_wait = [&](const std::atomic<bool>& ready, const std::shared_ptr<JobClaim>* claim) {
+        static const double budget_ms = getenv("RX_VK_PIPE_WAIT_MS") ? atof(getenv("RX_VK_PIPE_WAIT_MS")) : 0.0;   // (off by default since 3.6.1, §81)
+        static thread_local uint64_t frame = ~0ull;
+        static thread_local double used_ms = 0;
+        if (budget_ms <= 0) return false;
+        const uint64_t f = texture_frame_no();
+        if (f != frame) frame = f, used_ms = 0;
+        if (used_ms >= budget_ms) return false;
+        const auto t0 = std::chrono::steady_clock::now();
+        if (claim) jobs_claim_run(*claim);
+        else jobs_steal(ready);
+        double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        while (!ready.load(std::memory_order_acquire) && ms < budget_ms - used_ms) {
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+            ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        }
+        used_ms += ms;
+        st_waits++;
+        st_wait_ms += ms;
+        return ready.load(std::memory_order_acquire);
+    };
     if (!cp->ready.load(std::memory_order_acquire)) {
-        if (may_skip) return void(st_pending_skips++);
-        wait_for(cp->ready);
+        if (may_skip && !brief_wait(cp->ready, nullptr)) return void(st_pending_skips++);
+        if (!may_skip) wait_for(cp->ready);
     }
     if (exposure_log_on() && cp) exposure_note(s, *cp);
     if (cp->failed) SKIP_HERE();
@@ -6330,7 +6522,14 @@ void draw(VkCommandBuffer cmd, NvnState& s, const DrawArgs& d) {
         }
         pe = graphics_pipeline(p, s, at, topo, types);
     }
-    if (!pe->ready.load(std::memory_order_acquire)) {
+    // (Mako §78) Not ready and nothing to draw with: one made now without the driver's optimizer (quick_pipeline), drawn with until
+    // the worker's full build replaces it. AMD's optimizer took 5-13 s a pipeline for Volvagia's intro: left out, the boss was a
+    // black silhouette; waited for, the intro froze for half a minute. RX_VK_QUICK_MS=0: left out, as before
+    if (!pe->ready.load(std::memory_order_acquire) && !pe->pipeline.load(std::memory_order_acquire)) {
+        // (Mako §78b) a draw that cannot be left out gets one too, at once: it waited for the full build, and with nothing in the
+        // caches (a first meeting, a new area) loading froze, one optimized build after another on this thread (0.8 fps)
+        if (quick_pipeline(*pe, p, s, at, topo, !may_skip)) {
+        } else {
         if (may_skip) return void(st_pending_skips++);
         // (hookshot) built here when no worker has started it: otherwise the draw waited behind every queued job
         // (RX 6600 log: one draw 118 s, "26 jobs queued")
@@ -6339,6 +6538,7 @@ void draw(VkCommandBuffer cmd, NvnState& s, const DrawArgs& d) {
             if (told++ < 10) logf("vk: a draw's pipeline built where it waited (%d jobs queued)", jobs_pending());
         }
         wait_for(pe->ready);
+        }
     }
     const VkPipeline pl = pe->pipeline;
     if (!pl) SKIP_HERE();
@@ -7635,6 +7835,9 @@ bool warm_libraries(void (*progress)(size_t done, size_t total)) {
 /// refresh_states: Builder preparation also imports state lists when the seed is already prepared
 bool prepare_run(void (*progress)(size_t done, size_t total), bool background, bool refresh_states) {
     const auto t0 = std::chrono::steady_clock::now();
+    // (before the counts and the check: the folder's list is the built-in one from here; a new one is imported below even when
+    // the shaders are already prepared)
+    const bool new_list = shipped_list_install() && !background;
     const std::string path = prepared_path();
     PreparedFor prepared_for;
     double hash_ms = 0;
@@ -7649,7 +7852,7 @@ bool prepare_run(void (*progress)(size_t done, size_t total), bool background, b
         // A Builder run can add pipeline states without changing the shader seed.
         if (getenv("RX_VK_SEED_CHECK")) {
             if (seed_open() && refresh_states) state_list_prepare(progress);
-        } else if (refresh_states) {
+        } else if (refresh_states || new_list) {
             state_list_prepare(progress, true);
         }
         if (prepared_for.warmed == warmed || background) return false;

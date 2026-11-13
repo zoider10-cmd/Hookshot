@@ -555,14 +555,20 @@ static int build(char *out, size_t cap) {
 int hos_prompts_romfs(const char *key, char *out, size_t cap) {
     /* (Mako) Master Quest's dungeons: prompts/mq/banc/<scene>/<file> (nx2/mq_banc.py: chests' contents, the bosses' hearts), in
        place of the game's while Master Quest is on */
-    /* (Mako) the Master Quest preview ends with the Deku Tree: the Kokiri Emerald's scene (Dm_Kokiri_0130, after the blue warp) asks
-       the menu for its last page (gpu/vk/vk_menu.cpp preview_end: black, More coming, Back to Launcher) */
-    if (!strncmp(key, "event/eventflow/dm_kokiri_0130.", 31) && hos_master_quest()) {
+    /* (Mako) the Master Quest preview ends when Link becomes an adult: the Chamber of Sages' wake-up (Dm_SageRoom_0000, Rauru's
+       "Link... open your eyes", after the Master Sword; not a resident event, the room is first seen there) asks the menu for its
+       last page (gpu/vk/vk_menu.cpp preview_end: black, More coming, Back to Launcher). The child's whole first part is played */
+    if (!strncmp(key, "event/eventflow/dm_sageroom_0000.", 33) && hos_master_quest()) {
         SetEnvironmentVariableA("MAKO_MQ_PREVIEW_END", "1");
-        hos_log("master quest: the preview's end (the Kokiri Emerald's scene)");
+        hos_log("master quest: the preview's end (Link wakes up an adult in the Chamber of Sages)");
         return 0;
     }
-    if (!strncmp(key, "banc/", 5)) {
+    /* (Mako) the actor packs (nx2/mq_banc.py BOSSES: the bosses' life, PACK_INTS: the Deku Shield's price; only those in
+       prompts/mq are served), the texts (mals/: the green rupee's "......a rupee?") and
+       the game data list (gamedata/: GAMEDATA_TRUE, the first green rupee's show already seen) and the RSDB tables (rsdb/:
+       RSDB_INTS, the shop's prices), served the same way */
+    if (!strncmp(key, "banc/", 5) || !strncmp(key, "pack/actor/", 11) || !strncmp(key, "mals/", 5) ||
+        !strncmp(key, "gamedata/", 9) || !strncmp(key, "rsdb/", 5)) {
         char dir[MAX_PATH];
         if (!hos_master_quest() || !game_dir(dir, sizeof dir)) return 0;
         snprintf(out, cap, "%sprompts/mq/%s", dir, key);

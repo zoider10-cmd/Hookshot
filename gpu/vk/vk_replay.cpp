@@ -2004,6 +2004,7 @@ void resume_queue(uint64_t queue, bool forced) {
                 std::lock_guard lk(replay_mu);
                 if (rec_cur) finish_recording(burst_open ? burst_value : q.value);   // (its mirrors synced again after)
                 memory_capture_now(q.value, completed());
+                texture_memory_changed();   // (Mako §77: what the CPU wrote up to the signal, for textures checked before it)
                 st_resume_captures++;
             }
             q.waiting = false;

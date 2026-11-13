@@ -19,6 +19,7 @@
 #include "vk_menu.h"
 #include <deque>
 #include <unordered_map>
+#include <unordered_set>
 #include <thread>
 
 #define NOMINMAX
@@ -1030,11 +1031,22 @@ void shadow_drop_range(uint64_t lo, uint64_t hi) {   // (shadow_mu held)
         for (uint64_t p = p0; p < p1; p++) shadow_erase((uint32_t)p);
     }
 }
-/// (the spans unused for 1800 presents dropped with their shadow pages; the rest published for the capture)
+/// (the spans unused for RX_VK_TEX_SPAN_KEEP presents dropped with their shadow pages; the rest published for the capture)
+/// (Mako §77) 36000 presents, 1800 before: OoT's terrain fills its tiles' source textures (260 x 260, 4-6 formats at the same
+/// addresses) in a small ring the CPU rewrites tile after tile. Unused for 1800 presents (~30 s), the ring's span went; the next
+/// stream of tiles was not in the capture until its first upload, read live, after the CPU had already written the next tile
+/// there: a chunk baked from another tile's texels, the earth floor turning into another material before the player's eyes
+/// (Dodongo's Cavern, Fire Temple). The shadow pages stay bounded by kShadowMax whatever the spans. 0: never dropped
+uint64_t tex_span_keep() {
+    static const uint64_t v = getenv("RX_VK_TEX_SPAN_KEEP") ? (uint64_t)std::max(0, atoi(getenv("RX_VK_TEX_SPAN_KEEP"))) : 36000;
+    return v;
+}
+std::unordered_set<uint64_t> tex_spans_dropped;   // (the spans dropped so far, for the log when one comes back; shadow_mu)
 void publish_tex_spans(uint64_t frame) {
     std::lock_guard lk(shadow_mu);
     for (auto it = tex_spans.begin(); it != tex_spans.end();) {
-        if (frame > it->second.second + 1800) {
+        if (tex_span_keep() && frame > it->second.second + tex_span_keep()) {
+            if (tex_spans_dropped.size() < 4096) tex_spans_dropped.insert(it->first);
             shadow_drop_range(it->first, it->second.first);
             it = tex_spans.erase(it);
             tex_spans_changed = true;
@@ -1075,6 +1087,12 @@ void memory_note_texture_upload(uint64_t guest, uint64_t size) {
     const uint64_t frame = texture_frame_no();
     std::lock_guard lk(shadow_mu);
     auto [it, fresh] = tex_spans.try_emplace(lo, hi, frame);
+    if (fresh && tex_spans_dropped.erase(lo)) {   // (§77: a dropped span back: its first upload was read live)
+        static int told;
+        if (told++ < 40)
+            logf("vk: texture storage %#llx-%#llx back in the capture after it was dropped (its first upload read live)",
+                 (unsigned long long)lo, (unsigned long long)hi);
+    }
     if (!fresh) {
         it->second.second = frame;
         if (it->second.first >= hi) return;
