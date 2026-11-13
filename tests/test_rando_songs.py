@@ -147,7 +147,7 @@ def main():
     check('"rando_songs": 0' in script and '(" songs 2" if a.songs else "")' in script and
           "logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic" in script and '":songs" if a.songs else ""' in script,
           "the script does not read the setting, does not name it in the seed's stamp, or leaves the logic off with it")
-    check("(frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs else None)" in script and "now, found = gift_items(was, words, kinds=(0, 1, 4))" in script and
+    check("(frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs else None," in script and "now, found = gift_items(was, words, kinds=(0, 1, 4))" in script and
           "now = song_stone(open(os.path.join(romfs, *rel.split(\"/\")), \"rb\").read(), now_gives)" in script and "shop_parts | song_parts" in script,
           "the songs are not bound to the lessons, their flows are not gone through, or the royal tomb's stones are left")
     check("if gives[h] != g.item and g.flow and h not in lessons:" in script and "(tuple(SONG_GATES) if a.songs else ())" in script,

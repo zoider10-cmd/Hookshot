@@ -666,6 +666,28 @@ Not the Happy Mask Shop, and not the shelves a game buys from again and again or
 tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
 the same goods list, and both sell the shuffled items.
 
+## Dungeon rewards
+
+The Dungeon rewards setting (`rando_dungeon_rewards`, `--dungeon-rewards`): the three Spiritual Stones and five of the
+Medallions, each given by the scene its dungeon ends in (`REWARDS`: the Deku Tree's last words, Darunia on the trail,
+Ruto at the fountain, the five sages' awakenings). `1`, Dungeons: the eight are shuffled among the eight endings.
+`2`, Anywhere, is not made yet (the launcher does not offer it). The Light Medallion is Rauru's and stays.
+
+**Nothing in the game asks whether Link holds one.** Looked for in every flow, every logic module, every actor's pack
+(9,215 files) and the list of flags: the story's doors go by each dungeon's own quest, an enum that ends in `Complete`
+(`Get_StoneOfForest_IsCompleted_Exp` and the like, eight of them; the Bombchu Shop's door asks one), not by the item.
+So none is a gating item, the rules are as they were, and which one a dungeon gives changes the Quest screen alone.
+The scenes that show them (the Door of Time's three stones, the bridge to Ganon's Castle) name them as things to
+show, not as things asked for.
+
+An awakening's flow has a second file, `<name>.110.bfevfl.zs`: both are written with the same change. The scene
+itself still shows its own stone or medallion in the giver's hands; what goes into the pouch is the shuffled one.
+Made on the game's files (a seed with Songs on too: the eight flows and the five second files written, each group
+kept to its own spots). **Not seen in play yet**, and the endings are not in the tracker (no place is written for
+them). `tests/test_rando_rewards.py` checks the table and the shuffle.
+
+## Shops, continued
+
 **Which shelves: Every shop shelf (`rando_shop_shelves`, `--shop-shelves`).** Off, four shelves of each shop sell a
 shuffled item (`slots`) and the others sell what they always did. On, the other four do too (`rest`: every place of a
 keeper's goods list), each once: the shields, the tunics, the potions and the bombs, arrows, nuts and sticks a game

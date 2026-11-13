@@ -67,7 +67,7 @@ def sources(rows):
     #  file's value, and the New seed window)
     not_yet = re.search(r"RandoNotYet = new Dictionary<string, int> \{\s*([^;]*?) \};", launcher)
     limits = dict((k, int(n)) for k, n in re.findall(r'\{ "(\w+)", (\d+) \}', not_yet.group(1))) if not_yet else {}
-    check(limits == {"rando_dungeon_rewards": 1, "rando_songs": 2, "rando_keys": 2},
+    check(limits == {"rando_dungeon_rewards": 2, "rando_songs": 2, "rando_keys": 2},
           "the launcher's list of settings not available yet is not the three known (%r)" % limits)
     # (the frogs are no longer a choice: the row is kept for a seed's ID and shown nowhere, and Quest rewards says so)
     check('RandoHidden = new HashSet<string> { "rando_frogs" };' in launcher and "Page = hidden ? NoPage : page" in launcher and
@@ -83,8 +83,8 @@ def sources(rows):
           "if (choices <= 1) { box.Items.Add(Selector.NotYet); box.Enabled = false;" in launcher,
           "a setting not available yet can still be picked on the page, from its list, by a pasted ID or in the New seed window")
     check('"2, a song in any item\'s place, is not made yet: as 1"' in read("tools", "rando", "rando_seed.py") and
-          '"rando_dungeon_rewards"' not in read("tools", "rando", "rando_seed.py"),
-          "Songs' Anywhere or Dungeon rewards is made now: take it off the launcher's list of settings not available yet")
+          '2, one in any item\'s place, is not made yet: as 1' in read("tools", "rando", "rando_seed.py"),
+          "Songs' Anywhere or Dungeon rewards' Anywhere is made now: take it off the launcher's list of settings not available yet")
     check("AddSelectors(RandoRows, 3, cx, colW, null, 47, 45, true);" in launcher and '"Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About"' in launcher,
           "the launcher does not show its Randomizer page")
     # (more settings than the page has room for: the list scrolls, and a row is shown, lit and pressed only inside its view)
@@ -101,7 +101,7 @@ def sources(rows):
           "the build does not put the randomizer's script beside the game, where the launcher runs it")
     script = read("tools", "rando", "rando_seed.py")
     check(all('"%s"' % key in script for key in ("rando_on", "rando_seed", "rando_chests", "rando_skulltulas", "rando_keys", "rando_major", "rando_open_deku",
-                                                    "rando_open_forest", "rando_skip_intro", "rando_quests", "rando_frogs", "rando_light_arrows", "rando_start_rupees", "rando_scrubs", "rando_shops", "rando_shop_shelves", "rando_sword_shield", "rando_progressive")),
+                                                    "rando_open_forest", "rando_skip_intro", "rando_quests", "rando_frogs", "rando_light_arrows", "rando_start_rupees", "rando_scrubs", "rando_shops", "rando_shop_shelves", "rando_sword_shield", "rando_dungeon_rewards", "rando_progressive")),
           "rando_seed.py does not read the settings the menu keeps")
     check("hos_rando_init();" in main, "the game does not read the randomizer's settings at its start")
     # ---- Skip cutscenes: the game's own skip, asked of a cutscene's player only ----

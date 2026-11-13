@@ -1889,10 +1889,10 @@ class LauncherForm : Form {
     // has no Randomizer tab since Mako 3.3 (its menu was written anew): this page is where they are set, and where a
     // seed's ID is copied and pasted)
     // (the settings a seed does nothing with yet, and the first of each one's choices that is so: the row offers the
-    // choices before it, and with only Off left says "Not available yet". Dungeon rewards are not made;
+    // choices before it, and with only Off left says "Not available yet". Dungeon rewards' Anywhere,
     // Songs' and Dungeon keys' Anywhere are made as the choice before. tools/rando/rando_seed.py is what places a seed)
     internal static readonly Dictionary<string, int> RandoNotYet = new Dictionary<string, int> {
-        { "rando_dungeon_rewards", 1 }, { "rando_songs", 2 }, { "rando_keys", 2 } };
+        { "rando_dungeon_rewards", 2 }, { "rando_songs", 2 }, { "rando_keys", 2 } };
     // (rows that are no longer a choice and are not shown: the frogs of Zora's River take part whenever Quest rewards is
     // on. The row stays in RandoRows, its place being its place in a seed's ID, gpu/vk/oot_rando.h)
     internal static readonly HashSet<string> RandoHidden = new HashSet<string> { "rando_frogs" };
@@ -1916,7 +1916,7 @@ class LauncherForm : Form {
         new object[] { "rando_scrubs", "Deku Scrubs", new[] { "Off", "On" }, new[] { 0, 1 },
             "The Business Scrubs' one-time sales (two Pieces of Heart, the Deku Stick and Deku Nut upgrades) take part with the chests. Needs Chests." },
         new object[] { "rando_dungeon_rewards", "Dungeon rewards", new[] { "Off", "Dungeons", "Anywhere" }, new[] { 0, 1, 2 },
-            "The Spiritual Stones and Medallions. Dungeons: shuffled among the dungeons' ends. Anywhere: any item's place." },
+            "The Spiritual Stones and Medallions the eight dungeons end in. Dungeons: shuffled among those eight endings. Anywhere: any item's place. None is needed to go on: the story goes by each dungeon being done, not by its stone or medallion." },
         new object[] { "rando_keys", "Dungeon keys", new[] { "Off", "Own dungeon", "Anywhere" }, new[] { 0, 1, 2 },
             "Small keys and Boss Keys. Own dungeon: shuffled inside their dungeon. Anywhere: they can be in any place of the game." },
         new object[] { "rando_major", "Major items", new[] { "Off", "On" }, new[] { 0, 1 },

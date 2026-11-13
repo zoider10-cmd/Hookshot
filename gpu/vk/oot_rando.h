@@ -63,7 +63,7 @@
       "The Business Scrubs' one-time sales (two Pieces of Heart, the Deku Stick and Deku Nut upgrades) take part with the chests. Needs Chests.", \
       "Off", "On") \
     X(DUNGEON_REWARDS, "Dungeon rewards", "rando_dungeon_rewards", \
-      "The Spiritual Stones and Medallions. Dungeons: shuffled among the dungeons' ends. Anywhere: any item's place.", \
+      "The Spiritual Stones and Medallions the eight dungeons end in. Dungeons: shuffled among those eight endings. Anywhere: any item's place. None is needed to go on: the story goes by each dungeon being done, not by its stone or medallion.", \
       "Off", "Dungeons", "Anywhere") \
     X(KEYS, "Dungeon keys", "rando_keys", \
       "Small keys and Boss Keys. Own dungeon: shuffled inside their dungeon. Anywhere: they can be in any place of the game.", \

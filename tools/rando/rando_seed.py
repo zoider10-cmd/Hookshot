@@ -2214,7 +2214,7 @@ def settings(game):
     got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
            "rando_skip_intro": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0,
            "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
-           "rando_shop_shelves": 0, "rando_sword_shield": 0}
+           "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -2496,6 +2496,37 @@ SONGS = (
     Gift("song_nocturne", "Dm_MelodyGet_Shadow", (NOCTURNE,), NOCTURNE, "KakarikoVillage", "Sheik, Kakariko: the Nocturne of Shadow", SONG_ADULT | MEDALS3, "songs"),
     Gift("song_prelude", "Dm_MelodyGet_Shine", (PRELUDE,), PRELUDE, "Market", "Sheik, the Temple of Time: the Prelude of Light", SONG_ADULT | {BOW}, "songs"),
 )
+# ---- Dungeon rewards: the Spiritual Stones and the Medallions (rando_dungeon_rewards, --dungeon-rewards) ----
+# Each of eight dungeons ends in a scene that gives its stone or medallion, by the flow the other gifts go through
+# (GetPouchContentByActorName, the item's name a string of the scene's flow): the Deku Tree's last words, Darunia on
+# the trail, Ruto at the fountain, and the five sages' awakenings (Dm_Awake_*_Get). The Light Medallion is Rauru's, at
+# the Temple of Time, and stays: no dungeon ends in it.
+# What the game does with them, looked for in every flow, every logic module, every actor's pack and the list of
+# flags: nothing asks whether Link holds one. The story's doors go by each dungeon's own quest, an enum of steps that
+# ends in Complete (Get_StoneOfForest, _Fire and _Water; SageOfForest, _Fire, _Water, _Shadow and _Spirit: each has an
+# expression <its name>_IsCompleted_Exp, and the Bombchu Shop's door is one that asks it). The flag IsGet.<item> of
+# each is in the list and no expression reads it. Their names are otherwise in the scenes that show them (the Door
+# of Time's three stones, the bridge to Ganon's Castle) and in their own packs and the menu's. So which stone or
+# medallion a dungeon gives changes what the Quest screen shows and nothing the rules ask for: none is a gating item.
+# 1, Dungeons: the eight are shuffled among the eight endings (bound to them, as the songs are to the lessons).
+# 2, Anywhere, is not made yet: as 1.
+# An ending asks for what its dungeon asks for (meant to ask for too much). Not in the tracker yet: no place is
+# written for them (GIFT_PLACES). Not seen in play yet.
+REWARD_ITEMS = ("Item_Stone_Forest", "Item_Stone_Fire", "Item_Stone_Water",
+                "Item_Medal_Forest", "Item_Medal_Fire", "Item_Medal_Water", "Item_Medal_Shadow", "Item_Medal_Spirit")
+REWARDS = (
+    Gift("reward_deku", "Dm_Kokiri_0130", (REWARD_ITEMS[0],), REWARD_ITEMS[0], "KokiriForest", "the Great Deku Tree's ending", CHILD, "rewards"),
+    Gift("reward_dodongo", "Dm_DeathMtTrail_0025", (REWARD_ITEMS[1],), REWARD_ITEMS[1], "DeathMountainTrail", "Dodongo's Cavern's ending: Darunia", CHILD | {BB}, "rewards"),
+    Gift("reward_jabu", "Dm_ZoraFountain_0030", (REWARD_ITEMS[2],), REWARD_ITEMS[2], "ZoraFountain", "Jabu-Jabu's ending: Ruto", ADULT, "rewards"),
+    Gift("reward_forest", "Dm_Awake_Forest_Get", (REWARD_ITEMS[3],), REWARD_ITEMS[3], "ForestTemple", "the Forest Temple's ending: Saria", ADULT | {BOW}, "rewards"),
+    Gift("reward_fire", "Dm_Awake_Fire_Get", (REWARD_ITEMS[4],), REWARD_ITEMS[4], "FireTemple", "the Fire Temple's ending: Darunia", ADULT | {HAM, BOW}, "rewards"),
+    Gift("reward_water", "Dm_Awake_Water_Get", (REWARD_ITEMS[5],), REWARD_ITEMS[5], "WaterTemple", "the Water Temple's ending: Ruto", ADULT | {IRON, LONG, BOW}, "rewards"),
+    Gift("reward_shadow", "Dm_Awake_Shadow_Get", (REWARD_ITEMS[6],), REWARD_ITEMS[6], "ShadowTemple", "the Shadow Temple's ending: Impa", MEDALS3 | {LENS, HOVER}, "rewards"),
+    Gift("reward_spirit", "Dm_Awake_Spirit_Get", (REWARD_ITEMS[7],), REWARD_ITEMS[7], "SpiritTemple", "the Spirit Temple's ending: Nabooru", DESERT | {SG, BOW, MS}, "rewards"),
+)
+# A flow of the game can have a second file, <name>.110.bfevfl.zs, the one a later version of the game added (the five
+# awakenings have one each): both are written with the same change (FLOW_TWIN).
+FLOW_TWIN = ".110"
 # (the flows that name a song where the lesson is meant: the lessons, and who asks whether one is done)
 SONG_FLOWS = tuple(g.flow for g in SONGS) + (
     "AllSage", "BottomOfTheWell", "SageOfWater", "Npc_Hylia_007_Adult", "Npc_Hylia_009_Adult", "Npc_Hylia_009_Child", "Npc_Hylia_051_Adult",
@@ -2664,9 +2695,14 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None):
     With the logic, the thirteen gating items are placed so that each can be reached with the others (an assumed
     fill), counting the ones that stay in their own chests; then the rest goes where there is room.
     bound: None, or (items, hashes): those items go to those spots only, and those spots hold nothing else (the songs
-    and the lessons)."""
-    bound_items, bound_spots = bound or ((), ())
-    fits = lambda item, h: (item in bound_items) == (h in bound_spots)
+    and the lessons); or a list of such pairs, each a group of its own (the songs, and the dungeons' rewards)."""
+    groups = [g for g in ([bound] if isinstance(bound, tuple) else bound or []) if g]
+    bound = groups or None
+    bound_items = frozenset(i for items, _ in groups for i in items)
+    bound_spots = frozenset(h for _, hashes in groups for h in hashes)
+    group_of_item = lambda item: next((k for k, (items, _) in enumerate(groups) if item in items), None)
+    group_of_spot = lambda h: next((k for k, (_, hashes) in enumerate(groups) if h in hashes), None)
+    fits = lambda item, h: group_of_item(item) == group_of_spot(h)
     stays = collections.Counter()
     pool = []
     for h, (area, item, dungeon, why) in spots.items():
@@ -2718,11 +2754,11 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None):
         gives.update(placed)
         rest = [h for h in rest if h not in placed]
         items = [i for i in items if i not in PROGRESSION]
-    if bound:   # (the songs that are left, among the lessons that are left)
-        mine, theirs = [h for h in rest if h in bound_spots], [i for i in items if i in bound_items]
+    for group_items, group_spots in groups:   # (the songs that are left, among the lessons that are left; and so each group)
+        mine, theirs = [h for h in rest if h in group_spots], [i for i in items if i in group_items]
         rng.shuffle(theirs)
         gives.update(zip(mine, theirs))
-        rest, items = [h for h in rest if h not in bound_spots], [i for i in items if i not in bound_items]
+        rest, items = [h for h in rest if h not in group_spots], [i for i in items if i not in group_items]
     # everything else among the chests that are left, wherever they are
     rng.shuffle(items)
     for h, item in zip(rest, items):
@@ -2757,6 +2793,8 @@ def main():
                                                                 "the chests' items a pick-up can be, and may hold a gating item")
     p.add_argument("--songs", type=int, choices=(0, 1, 2), help="in place of rando_songs: the twelve songs are shuffled among the twelve lessons (SONGS). "
                                                                "2, a song in any item's place, is not made yet: as 1")
+    p.add_argument("--dungeon-rewards", type=int, choices=(0, 1, 2), help="in place of rando_dungeon_rewards: the eight dungeons' stones and medallions are "
+                                                                         "shuffled among their eight endings (REWARDS). 2, one in any item's place, is not made yet: as 1")
     p.add_argument("--progressive", action="store_true", help="as rando_progressive=1: the rules count an upgrade found as the next of its family")
     p.add_argument("--start-rupees", action="store_true", help="as rando_start_rupees=1: a new game starts with %d rupees" % START_RUPEES)
     p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already this seed's (the launcher, at Play)")
@@ -2786,6 +2824,8 @@ def main():
     a.event_chests = a.event_chests or ini["rando_major"] != 0
     a.songs = a.songs if a.songs is not None else ini["rando_songs"]
     a.songs = 1 if a.songs in (1, 2) else 0
+    a.dungeon_rewards = a.dungeon_rewards if a.dungeon_rewards is not None else ini["rando_dungeon_rewards"]
+    a.dungeon_rewards = 1 if a.dungeon_rewards in (1, 2) else 0
     a.heart_pieces = a.heart_pieces or ini["rando_heart_pieces"] != 0
     # (the songs gate the game: with them shuffled the logic places them, whatever Major items says)
     logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic
@@ -2855,7 +2895,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2" if a.songs else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2" if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -3003,6 +3043,11 @@ def main():
         for g in SONGS:
             gifts[gift_hash(g.key)] = lessons[gift_hash(g.key)] = g
             spots[gift_hash(g.key)] = [g.area, g.item, None, None, "song", g.name, ""]
+    endings = collections.OrderedDict()   # a dungeon's ending's hash -> its Gift
+    if a.dungeon_rewards:   # (Dungeon rewards: with or without the others; none is a gating item)
+        for g in REWARDS:
+            gifts[gift_hash(g.key)] = endings[gift_hash(g.key)] = g
+            spots[gift_hash(g.key)] = [g.area, g.item, None, None, "reward", g.name, ""]
     shelves = collections.OrderedDict()   # a shop shelf's hash -> (its Shop, its place in the goods list, the game's own actor there)
     shelf_prices = {}                     # the same -> what it costs
     if a.shops:   # (Shops: with or without the others)
@@ -3041,7 +3086,9 @@ def main():
         quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0])))
     try:
         gives, stays, spheres = place(rng, collections.OrderedDict((h, tuple(s[:4])) for h, s in spots.items()), which, keys_mode,
-                                      needs if logic else None, (frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs else None)
+                                      needs if logic else None,
+                                      [group for group in ((frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs else None,
+                                                           (frozenset(REWARD_ITEMS), frozenset(endings)) if a.dungeon_rewards else None) if group] or None)
     except ValueError as e:
         sys.exit("%s. Nothing written. Try Chests: All, or --no-logic." % e)
     unknown = sorted({s[0] for h, s in spots.items() if s[0] not in RULES and h not in gifts})
@@ -3226,15 +3273,16 @@ def main():
         swaps.setdefault(flow, {})[old] = new
         print("TEST: %s gives %s in place of %s (rando\\test_gifts.txt)" % (flow, new, old))
     for flow, change in swaps.items():
-        rel = "%s/%s.bfevfl.zs" % (GIFT_FLOWS, flow)
-        try:
-            now, found = gift_items(unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts), change)
-        except (OSError, ValueError, struct.error) as e:
-            sys.exit("a gift's flow, %s: %s. Nothing written." % (flow, e))
-        if set(change) - found:
-            sys.exit("%s gives no %s (rando\\test_gifts.txt, or the game's flow is not the one the gifts were listed from). Nothing written." % (
-                flow, ", ".join(sorted(str(k) for k in set(change) - found))))
-        gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
+        twin = "%s/%s%s.bfevfl.zs" % (GIFT_FLOWS, flow, FLOW_TWIN)
+        for rel in ["%s/%s.bfevfl.zs" % (GIFT_FLOWS, flow)] + ([twin] if os.path.isfile(os.path.join(romfs, *twin.split("/"))) else []):
+            try:
+                now, found = gift_items(unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts), change)
+            except (OSError, ValueError, struct.error) as e:
+                sys.exit("a gift's flow, %s: %s. Nothing written." % (rel, e))
+            if set(change) - found:
+                sys.exit("%s gives no %s (rando\\test_gifts.txt, or the game's flow is not the one the gifts were listed from). Nothing written." % (
+                    rel, ", ".join(sorted(str(k) for k in set(change) - found))))
+            gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
     # ---- the songs: each lesson gives the song the shuffle put there, and who asks about a lesson asks for that song ----
     song_parts = set()
     if lessons:
