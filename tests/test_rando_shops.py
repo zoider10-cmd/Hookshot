@@ -15,8 +15,9 @@ Four shelves of each of six shops sell what the shuffle put there, once. Checked
 - a map file's shelves (shelf_actors): by actor and place in the row (none is 0), the others left;
 - the words under an item's name (msbt_add, shop_caption): another line with the item's description, found by its
   label in the group the game's hash puts it in; the file's other lines as they were; done again, nothing;
-- a price is rolled, 1 to 1000: mostly low in the one way, evenly in the other, the same for the same seed; and
-  the wallet it asks for is the one that holds it (200 a child's, 500 the Adult's, 1000 the Giant's);
+- a price is rolled, 1 to 750: mostly low in the one way, evenly in the other with the child's a little more often,
+  the same for the same seed; and the wallet it asks for is the one that holds it (200 a child's, 500 the Adult's,
+  the Giant's past that);
 - the script reads the setting, names it in the seed's stamp, and writes the shops' files with the seed.
 
     python -I -B tests/test_rando_shops.py
@@ -146,15 +147,16 @@ def main():
     # ---- a price ----
     low = [seed.shop_price(random.Random(k), 1) for k in range(4000)]
     even = [seed.shop_price(random.Random(k), 2) for k in range(4000)]
-    check(seed.SHOP_PRICE_MAX == 1000 and all(1 <= p <= 1000 for p in low + even) and max(low) > 900 and max(even) > 990 and min(low + even) == 1,
-          "a price is not rolled from 1 to 1000")
+    check(seed.SHOP_PRICE_MAX == 750 and all(1 <= p <= 750 for p in low + even) and max(low) > 680 and max(even) > 740 and min(low + even) == 1,
+          "a price is not rolled from 1 to 750")
     share = lambda prices, most: sum(1 for p in prices if p <= most) / len(prices)
-    check(0.52 < share(low, 200) < 0.66 and 0.74 < share(low, 500) < 0.86 and 0.17 < share(even, 200) < 0.23 and 0.46 < share(even, 500) < 0.54,
-          "the low prices are not mostly within the child's wallet, or the others are not even: %.2f %.2f %.2f %.2f" % (
+    # (within the child's wallet: more than its share of the range, 200 of 750 = 0.27, in the even way, and a little more than the cube's 0.64 in the low)
+    check(0.66 < share(low, 200) < 0.76 and 0.84 < share(low, 500) < 0.94 and 0.33 < share(even, 200) < 0.43 and 0.66 < share(even, 500) < 0.76,
+          "the low prices are not mostly within the child's wallet, or the others are not even with the child's a little more often: %.2f %.2f %.2f %.2f" % (
               share(low, 200), share(low, 500), share(even, 200), share(even, 500)))
     check(all(p < 10 or p % 5 == 0 for p in low) and seed.shop_price(random.Random(7), 1) == seed.shop_price(random.Random(7), 1),
           "a low price is not in fives, or the same seed rolls another")
-    check([seed.wallet_need(p) for p in (1, 200, 201, 500, 501, 1000)] == [seed.NONE, seed.NONE, {seed.WM}, {seed.WM}, {seed.WL}, {seed.WL}] and
+    check([seed.wallet_need(p) for p in (1, 200, 201, 500, 501, 750)] == [seed.NONE, seed.NONE, {seed.WM}, {seed.WM}, {seed.WL}, {seed.WL}] and
           seed.SHOP_GATES == {"Item_Wallet_Medium", "Item_Wallet_Large"} and seed.WALLETS[0][0] == 200 and seed.WALLETS[1][0] == 500,
           "a price does not ask for the wallet that holds it")
     by_key = {g.key: g for g in seed.GIFTS}

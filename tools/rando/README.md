@@ -693,9 +693,11 @@ what Dodongo's Cavern asks for (`DODONGO_DONE`), and the tracker's line for them
 Cavern". Seen in play: shut at night before King Dodongo. Not looked at: the keeper's own schedule, and whether the
 quest ends the same way once Dungeon rewards are shuffled.
 
-A shelf's price is always rolled by the seed, 1 to 1000 rupees (`shop_price`): `1`, Low prices, most of them low
-(more than half within the child's wallet); `2`, Any price, each as likely as another. Link pays what his wallet
-holds: 200 as a child, 500 with the Adult's Wallet, 1000 with the Giant's (its owner's numbers). So with Shops the
+A shelf's price is always rolled by the seed, 1 to 750 rupees (`shop_price`; it was 1000): `1`, Low prices, most of
+them low (about seven in ten within the child's wallet); `2`, Any price, each as likely as another but for the
+child's wallet's, which come up a little more often (about four in ten, where an even roll gives a little over a
+quarter). Link pays what his wallet holds: 200 as a child, 500 with the Adult's Wallet, 1000 with the Giant's (its
+owner's numbers). So with Shops the
 two wallets are gating items: the two Gold Skulltula family's gifts that give them take part whether Quest rewards
 is on or not, the wallets are placed by the logic, a shelf asks for the wallet its price needs (`wallet_need`), and
 the tracker names it. Each shelf has an actor of its own (`Shop_Rando_<shop>_<place>`), so two shelves with one item

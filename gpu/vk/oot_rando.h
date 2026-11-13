@@ -57,7 +57,7 @@
       "With Major items: the 14 Pieces of Heart lying in the world take part. A piece can be a key item: it still looks like a Piece of Heart and its scene says so, but the key item is what Link gets, and the chest it left holds the piece. Pieces given by a character or held by a chest are not these.", \
       "Off", "On") \
     X(SHOPS, "Shops", "rando_shops", \
-      "Four shelves of each shop sell a shuffled item, once each, at a rolled price of 1 to 1000 rupees. The wallets are shuffled too: a price asks for one that holds it. Needs Chests.", \
+      "Four shelves of each shop sell a shuffled item, once each, at a rolled price of 1 to 750 rupees. The wallets are shuffled too: a price asks for one that holds it. Needs Chests.", \
       "Off", "Low prices", "Any price") \
     X(SCRUBS, "Deku Scrubs", "rando_scrubs", \
       "The Business Scrubs' one-time sales (two Pieces of Heart, the Deku Stick and Deku Nut upgrades) take part with the chests. Needs Chests.", \

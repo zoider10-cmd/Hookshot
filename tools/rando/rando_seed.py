@@ -339,10 +339,14 @@ ACTOR_REF = "Work/Actor/%s.engine__actor__ActorParam.gyml"
 # rewards is on or not), and a shelf asks for the wallet its price needs (wallet_need) with what its shop asks for.
 # A price up to 500 asks for the Adult's Wallet though the Giant's would do: too much, never too little. Seen in
 # play: a green rupee bought for 150 gave one rupee and was sold out after, in its shop and when it was come back to.
+# The most a shelf costs was 1000 and is 750 (its owner's word, 2026-11-13), and a price within the child's wallet
+# comes up a little more often than its share of the range, in both ways (SHOP_CHILD_MORE: that often the price is
+# rolled within the child's 200 alone). A seed made before keeps its prices.
 WM, WL = "Item_Wallet_Medium", "Item_Wallet_Large"
 SHOP_GATES = frozenset((WM, WL))
 SHOP_WALLET_GIFTS = ("skulltula_house_10", "skulltula_house_30")
-SHOP_PRICE_MAX = 1000
+SHOP_PRICE_MAX = 750
+SHOP_CHILD, SHOP_CHILD_MORE = 200, 0.15
 WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,))))
 
 
@@ -473,12 +477,14 @@ def shop_actor(name):
 
 
 def shop_price(rng, mode):
-    """A shelf's price, 1 to SHOP_PRICE_MAX. mode 1: most of them low (the cube of an even roll: more than half
-    within the child's wallet, about a fifth past the Adult's), in fives from 10 up; 2: any price as likely as
-    another."""
+    """A shelf's price, 1 to SHOP_PRICE_MAX. mode 1: most of them low (the cube of an even roll: about seven in ten
+    within the child's wallet, one in eight past the Adult's), in fives from 10 up; 2: any price as likely as
+    another, but for the child's wallet's, which come up a little more often (about four in ten). In both, SHOP_CHILD_MORE
+    of the prices are rolled within the child's wallet alone."""
+    most = SHOP_CHILD if rng.random() < SHOP_CHILD_MORE else SHOP_PRICE_MAX
     if mode == 2:
-        return rng.randint(1, SHOP_PRICE_MAX)
-    price = 1 + int((SHOP_PRICE_MAX - 1) * rng.random() ** 3)
+        return rng.randint(1, most)
+    price = 1 + int((most - 1) * rng.random() ** 3)
     return price if price < 10 else min(SHOP_PRICE_MAX, 5 * round(price / 5))
 
 
