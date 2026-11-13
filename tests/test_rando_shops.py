@@ -295,6 +295,11 @@ def main():
           "table = shop_rows(table, kind, item, price, actor)" in script, "a shelf has not an actor of its own, with its own price")
     check("[(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name, None, gives[h])" in script and "for h, (shop, _, _) in shelves.items() if h in gives]" in script,
           "the shelves are not among the tracker's checks")
+    # ---- the Bombchu Shop: young Link's, at night, once Dodongo's Cavern is done (the door's own condition) ----
+    chu = next(shop for shop in seed.SHOPS if shop.key == "bombchu")
+    check(chu.ages == "C" and chu.need == seed.DODONGO_DONE == seed.RULES["DodongoCavern"][0] and seed.BB in chu.need,
+          "the Bombchu Shop's shelves do not ask for what Dodongo's Cavern asks for, or are an adult's")
+    check("night" in chu.name and "Dodongo" in chu.name, "the Bombchu Shop's name does not tell the tracker when its door opens")
     print("PASS: Shops")
 
 

@@ -666,6 +666,15 @@ Not the Happy Mask Shop, and not the shelves a game buys from again and again or
 tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
 the same goods list, and both sell the shuffled items.
 
+**The Bombchu Shop opens late, as in the game.** It is young Link's alone (the adult's Market has its ruin), and its
+door says "Closed due to bomb shortage" until it is night and the Goron's Ruby's quest is at its last step: the
+Market's logic for the door (`Logic/Market_Child_Prefab_0c76`) asks for `Get_StoneOfFire_IsCompleted_Exp` and the
+night, and that expression is the quest's enum of 21 steps being at `Complete`, past the boss and the way out of
+Dodongo's Cavern. The quest's step is the gate, not an item: bombs found early do not open it. So its shelves ask for
+what Dodongo's Cavern asks for (`DODONGO_DONE`), and the tracker's line for them says "at night, after Dodongo's
+Cavern". Seen in play: shut at night before King Dodongo. Not looked at: the keeper's own schedule, and whether the
+quest ends the same way once Dungeon rewards are shuffled.
+
 A shelf's price is always rolled by the seed, 1 to 1000 rupees (`shop_price`): `1`, Low prices, most of them low
 (more than half within the child's wallet); `2`, Any price, each as likely as another. Link pays what his wallet
 holds: 200 as a child, 500 with the Adult's Wallet, 1000 with the Giant's (its owner's numbers). So with Shops the

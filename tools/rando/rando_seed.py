@@ -297,6 +297,14 @@ SCRUBS = (
 # tracker, is before its counter: three metres from its keeper, away from the shelves (the keeper's own place put
 # Link behind the Bombchu Shop's counter, where a wall he could not see kept him: seen in play), or the game's own
 # place for Link there (the Kokiri shop's ShopPosition_Link, the anchor before the Goron's and the Zora's keeper).
+# The Bombchu Shop is young Link's alone (the adult's Market has its ruin), and its door is shut ("Closed due to bomb
+# shortage") until two things hold, by the Market's logic for it (Logic/Market_Child_Prefab_0c76: the door's EnableOpen
+# is Get_StoneOfFire_IsCompleted_Exp AND the time's division Night): it is night, and the Goron's Ruby's quest is at
+# its last step, Complete (the list of flags: an enum of 21 steps from NotReady, through Darunia, Saria's Song,
+# DungeonStart, BossBattle and EscapeDungeon). So its shelves ask for what Dodongo's Cavern asks for, DODONGO_DONE:
+# the quest's step, not an item, is the gate, and bombs found early do not open it. Seen in play: shut at night
+# before King Dodongo. Its name says so for the tracker.
+DODONGO_DONE = CHILD | {BB}
 Shop = collections.namedtuple("Shop", "key params areas name need place ages slots")
 SHOPS = (
     Shop("kokiri", ("Npc_Kokiri_001_Shop_Child", "Npc_Kokiri_001_Shop_Child_ShortStock"), ("KokiriForest",), "the Kokiri shop", NONE,
@@ -305,7 +313,7 @@ SHOPS = (
          (19.5, 100.4, 16.1), "C", ((0, "Shop_Heart"), (1, "Shop_MagicJar_Small"), (2, "Shop_DekuSeedBundle_02"), (7, "Shop_DekuStick"))),
     Shop("medicine", ("Npc_Hylia_020_Shop",), ("Market", "KakarikoVillage"), "the Potion Shop", CHILD,
          (20.6, 100.1, 6.0), "C", ((2, "Shop_Bottle_HalfMilk"), (5, "Shop_Bottle_Poe"), (6, "Shop_Bottle_Bug"), (7, "Shop_Bottle_Fish"))),
-    Shop("bombchu", ("Npc_Hylia_021_Shop",), ("Market",), "the Bombchu Shop", ADULT,
+    Shop("bombchu", ("Npc_Hylia_021_Shop",), ("Market",), "the Bombchu Shop (at night, after Dodongo's Cavern)", DODONGO_DONE,
          (-24.1, 100.4, 32.4), "C", ((4, "Shop_BombchuBundle_01"), (5, "Shop_BombchuBundle_07"), (6, "Shop_BombchuBundle_02"), (7, "Shop_BombchuBundle_08"))),
     Shop("goron", ("Npc_Goron_011_Shop_Child",), ("GoronCity",), "the Goron shop", CHILD | {BB},
          (-16.6, 98.0, -20.2), "CA", ((0, "Shop_Heart"), (2, "Shop_Bottle_Bug"), (6, "Shop_BombBundle_03"), (7, "Shop_BombBundle_04"))),
