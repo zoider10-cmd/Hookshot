@@ -67,7 +67,7 @@ def main():
 
     # ---- the script and the launcher ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_dungeon_rewards": 0' in script and 'a.dungeon_rewards = 1 if a.dungeon_rewards in (1, 2) else 0' in script and
+    check('"rando_dungeon_rewards": 0' in script and 'a.dungeon_rewards = 1 if a.dungeon_rewards in (1, 2) and REWARDS_READY else 0' in script and
           '(" rewards 1" if a.dungeon_rewards else "")' in script,
           "the script does not read the setting, or names it in the seed's stamp when off (a seed made before it would be made again)")
     check("for g in REWARDS:" in script and '(frozenset(REWARD_ITEMS), frozenset(endings)) if a.dungeon_rewards else None' in script,
@@ -76,7 +76,10 @@ def main():
           "+ ([twin] if os.path.isfile(os.path.join(romfs, *twin.split(\"/\"))) else [])" in script,
           "a flow's second file (.110) is not written with the same change: the game may read that one")
     launcher = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
-    check('{ "rando_dungeon_rewards", 2 }' in launcher, "the launcher does not offer Dungeons, or offers Anywhere, which is not made")
+    # (held off until seen in play, or on: the script's switch and the launcher's row say the same)
+    offered = 2 if seed.REWARDS_READY else 1
+    check('{ "rando_dungeon_rewards", %d }' % offered in launcher,
+          "the launcher's row and the script's REWARDS_READY differ: %s" % ("Dungeons is not offered, or Anywhere is" if seed.REWARDS_READY else "the row is not held off"))
     print("PASS: Dungeon rewards")
 
 

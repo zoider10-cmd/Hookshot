@@ -687,6 +687,8 @@ The Dungeon rewards setting (`rando_dungeon_rewards`, `--dungeon-rewards`): the 
 Medallions, each given by the scene its dungeon ends in (`REWARDS`: the Deku Tree's last words, Darunia on the trail,
 Ruto at the fountain, the five sages' awakenings). `1`, Dungeons: the eight are shuffled among the eight endings.
 `2`, Anywhere, is not made yet (the launcher does not offer it). The Light Medallion is Rauru's and stays.
+**Held off for now** (`REWARDS_READY` in the script): until its endings are seen in play the script takes the
+setting as off and the launcher's row says "Not available yet".
 
 **Nothing in the game asks whether Link holds one.** Looked for in every flow, every logic module, every actor's pack
 (9,215 files) and the list of flags: the story's doors go by each dungeon's own quest, an enum that ends in `Complete`

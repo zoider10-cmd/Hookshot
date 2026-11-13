@@ -2512,6 +2512,11 @@ SONGS = (
 # 2, Anywhere, is not made yet: as 1.
 # An ending asks for what its dungeon asks for (meant to ask for too much). Not in the tracker yet: no place is
 # written for them (GIFT_PLACES). Not seen in play yet.
+# REWARDS_READY: the setting is held off until its endings are seen in play (its owner's word, 2026-11-13: off in what
+# is pushed, on in the work at hand). Off, the script takes the setting as 0 whatever the options file says, and the
+# launcher's row says "Not available yet" (RandoNotYet: 1; on: 2, Dungeons offered and Anywhere not). The two are
+# kept in step by tests/test_rando_rewards.py.
+REWARDS_READY = False
 REWARD_ITEMS = ("Item_Stone_Forest", "Item_Stone_Fire", "Item_Stone_Water",
                 "Item_Medal_Forest", "Item_Medal_Fire", "Item_Medal_Water", "Item_Medal_Shadow", "Item_Medal_Spirit")
 REWARDS = (
@@ -2825,7 +2830,7 @@ def main():
     a.songs = a.songs if a.songs is not None else ini["rando_songs"]
     a.songs = 1 if a.songs in (1, 2) else 0
     a.dungeon_rewards = a.dungeon_rewards if a.dungeon_rewards is not None else ini["rando_dungeon_rewards"]
-    a.dungeon_rewards = 1 if a.dungeon_rewards in (1, 2) else 0
+    a.dungeon_rewards = 1 if a.dungeon_rewards in (1, 2) and REWARDS_READY else 0
     a.heart_pieces = a.heart_pieces or ini["rando_heart_pieces"] != 0
     # (the songs gate the game: with them shuffled the logic places them, whatever Major items says)
     logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic

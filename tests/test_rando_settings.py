@@ -67,7 +67,7 @@ def sources(rows):
     #  file's value, and the New seed window)
     not_yet = re.search(r"RandoNotYet = new Dictionary<string, int> \{\s*([^;]*?) \};", launcher)
     limits = dict((k, int(n)) for k, n in re.findall(r'\{ "(\w+)", (\d+) \}', not_yet.group(1))) if not_yet else {}
-    check(limits == {"rando_dungeon_rewards": 2, "rando_songs": 2, "rando_keys": 2},
+    check(limits in ({"rando_dungeon_rewards": 1, "rando_songs": 2, "rando_keys": 2}, {"rando_dungeon_rewards": 2, "rando_songs": 2, "rando_keys": 2}),
           "the launcher's list of settings not available yet is not the three known (%r)" % limits)
     # (the frogs are no longer a choice: the row is kept for a seed's ID and shown nowhere, and Quest rewards says so)
     check('RandoHidden = new HashSet<string> { "rando_frogs" };' in launcher and "Page = hidden ? NoPage : page" in launcher and
