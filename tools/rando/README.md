@@ -696,19 +696,6 @@ Not the Happy Mask Shop, and not the shelves a game buys from again and again or
 tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
 the same goods list, and both sell the shuffled items.
 
-## A shelf that stays sold out
-
-A shelf that sold its one item was for sale again after the Sun's Song was played (reported from play, 2026-11-14,
-the Kokiri shop). What a shelf has sold is kept by the shelf's actor, as an opened chest is by the chest's (the list
-of flags' truth values keyed by an actor's hash), but a chest's entry is kept for good (`ResetTypeValue` 24) and a
-shelf's is not (25: the masks, the bottles' wares, the Bombchus, the tunics), and a shelf that sells without end has
-no entry at all (every shelf of the Kokiri shop and the Bazaar). The game's other way is a flag named by the goods
-list's entry (`Release.SoldOutGameData`; the Potion Shop's Blue Fire names `IsGet.Item_Bottle_BlueFire`). A shelf
-whose item is got once and has such a flag (a song, or one of `lesson_items`) names it (`shop_goods`' `sold`,
-`SHOP_SOLD`). **Not seen in play.** A shelf that sells anything else (a rupee, a bundle, a token, a Piece of Heart) is
-as it was. Not looked into: whether a day's turn or any reload is what brings a shelf back, and whether a shelf
-without an entry is kept when the game is closed.
-
 ## Bombchus without a Bomb Bag
 
 The game counts Bombchus against the Bomb Bag: found before one they were lost (a chest of five gave none, the Items

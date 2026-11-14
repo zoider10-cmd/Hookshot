@@ -672,24 +672,10 @@ def chu_limit(data, limit=BOMBCHU_LIMIT):
     return byml_build(tree, version)
 
 
-# A shelf that sold its one item was for sale again after the Sun's Song was played (reported from play, 2026-11-14:
-# the Sun's Song and Saria's Song, in the Kokiri shop). What a shelf has sold is kept by the shelf's actor, as an
-# opened chest is by the chest's (the list of flags' truth values keyed by an actor's hash), with two differences:
-# a chest's entry is kept for good (ResetTypeValue 24) and a shelf's is not (25: the masks, the bottles' wares, the
-# Bombchus, the tunics), and the shelves that sell without end have no entry at all (every shelf of the Kokiri shop
-# and the Bazaar). The game has another way, which a goods list's entry names: Release.SoldOutGameData, a flag that
-# says the shelf is sold out (the Potion Shop's Blue Fire: IsGet.Item_Bottle_BlueFire). So a shelf whose item is got
-# once and has such a flag (a song, or one of lesson_items) names it (SHOP_SOLD): it stays sold once Link has the
-# item. NOT SEEN IN PLAY. A shelf that sells anything else (a rupee, a bundle, a token, a Piece of Heart) is as it
-# was: for sale again when the game says so.
-SHOP_SOLD = "IsGet."
-
-
-def shop_goods(data, sells, sold=None):
+def shop_goods(data, sells):
     """A keeper's goods list with the places of `sells` ({place: (the game's own shelf actor there, the new one)})
     selling the new actor, one in stock, from the start (what the game waits for before it shows a shelf, and what
-    it takes off its price, are left out). sold: {place: the flag that says it is sold out} for the places that
-    have one. ValueError: a place whose actor is not the one named."""
+    it takes off its price, are left out). ValueError: a place whose actor is not the one named."""
     tree, version = byml_parse(data)
     goods = tree[1].get("GoodsList")
     if not goods or goods[0] != "array":
@@ -701,10 +687,6 @@ def shop_goods(data, sells, sold=None):
         entry = collections.OrderedDict((k, v) for k, v in goods[1][index][1].items() if k not in ("Release", "PriceOffset", "ConditionalPriceOffsetList"))
         entry["Actor"] = ("string", ACTOR_REF % new)
         entry["StockNum"] = (stock, struct.pack("<I", 1))
-        if sold and index in sold:
-            entry["Release"] = ("dict", collections.OrderedDict((("IsCheckReleaseGameData", (0xD0, struct.pack("<I", 0))),
-                                                                 ("IsCheckSoldOutGameData", (0xD0, struct.pack("<I", 1))),
-                                                                 ("SoldOutGameData", ("string", sold[index])))))
         goods[1][index] = ("dict", collections.OrderedDict(sorted(entry.items())))
     return byml_build(tree, version)
 
@@ -3239,10 +3221,9 @@ def main():
     # (what a Gold Skulltula asks for, by the same settings)
     skull_asks = lambda h: step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
         quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0])))
-    # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags.
-    #  Shops: the same items are the ones a shelf stays sold out of, SHOP_SOLD)
+    # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags)
     lesson_safe, lesson_only = frozenset(), {}
-    if a.songs == 2 or a.shops:
+    if a.songs == 2:
         try:
             folder = os.path.join(romfs, FLAG_LIST)
             n = sorted(n for n in os.listdir(folder) if n.startswith("GameDataList.") and ".byml" in n.lower())[0]
@@ -3258,8 +3239,7 @@ def main():
             return True
 
         lesson_safe = lesson_items(collections.Counter(s[1] for s in spots.values()), a.progressive, flagged)
-        if a.songs == 2:
-            lesson_only = {gift_hash(key): (lesson_safe, frozenset(SONG_ITEMS)) for key in SONG_ASKED}
+        lesson_only = {gift_hash(key): (lesson_safe, frozenset(SONG_ITEMS)) for key in SONG_ASKED}
     try:
         gives, stays, spheres = place(rng, collections.OrderedDict((h, tuple(s[:4])) for h, s in spots.items()), which, keys_mode,
                                       needs if logic else None,
@@ -3597,15 +3577,13 @@ def main():
             packs = sorted(n[:-len(".pack.zs")] for n in os.listdir(os.path.join(romfs, "Pack", "Actor")) if "Shop" in n and n.startswith("Npc_") and n.endswith(".pack.zs"))
             for shop in SHOPS:   # (the goods lists, in every pack that has a copy, and the shelves of the map files)
                 sells = {index: (actor, shop_actor("%s_%d" % (shop.key, index))) for index, actor in shop_slots(shop, a.shop_shelves, shield_shelf)}
-                sold = {index: SHOP_SOLD + gives[h] for h, (its, index, _) in shelves.items()
-                        if its is shop and (gives[h] in SONG_ITEMS or gives[h] in lesson_safe)}
                 for param in shop.params:
                     name, found = SHOP_PARAM % param, 0
                     for keeper in packs:
                         parts = sarc_read(pack(keeper))
                         if name not in parts:
                             continue
-                        parts[name] = shop_goods(parts[name], sells, sold)
+                        parts[name] = shop_goods(parts[name], sells)
                         new = sarc_write(parts)
                         pack_files["Pack/Actor/%s.pack.zs" % keeper] = new
                         pack_sizes["Pack/Actor/%s.pack" % keeper] = len(new)
