@@ -103,12 +103,19 @@ std::atomic<int> tracker_on{0};   // (the game side said the randomizer's game i
 static_assert(TAB_TRACKER == TAB_COUNT - 1, "the Tracker is the strip's last tab: it is left out by counting one less");
 int tabs_shown() { return tracker_on.load(std::memory_order_relaxed) ? TAB_COUNT : TAB_TRACKER; }
 void tracker_load();
+// (the whole game's row; an area's row shows its checks in the panel instead: tracker_panel)
 const char kTrackerHelp[] =
-    "The checks of this area that take part in the randomizer's seed: treasure chests, Gold Skulltulas, gifts and shop shelves. It is what the seed "
-    "has there, not what is left: the game does not tell the menu what has been opened. Left and Right step through "
-    "the area's checks one by one; with the debug tools on, confirm takes Link to the one shown. With the mouse: the "
-    "arrows step, a click on the row's name goes there. Left: not collected yet, by the randomizer's own record of the items given since it began; on the first row, confirm twice to forget it (a new game), and Left and Right choose what the tab shows: every check, the ones left, or the ones left and in logic. In logic: Link carries all that the seed's rules ask for at "
-    "that check. The rules ask for more than a check may need, so one not in logic may still be within reach.";
+    "Every check of the randomizer's seed: treasure chests, Gold Skulltulas, gifts and shop shelves. Choose an area below to see "
+    "its checks; Left and Right step through them, and with the debug tools on, confirm takes Link to the one shown. The area "
+    "Link is in comes first, then the areas with something in logic.\n\n"
+    "In logic: Link carries all that the seed's rules ask for at that check. The rules ask for more than a check may need, so "
+    "one not in logic may still be within reach.\n\n"
+    "Collected is the randomizer's own record of the items given. Starting the seed again? Confirm twice here to forget it.";
+const char kTrackerShowHelp[] =
+    "Which checks the tab lists: all of them, only the ones left to collect, or only the ones left that are in logic now. An "
+    "area with nothing to list is left out.";
+constexpr int kTrackerShowRow = 1;    // (the tab's second row: what it lists)
+constexpr int kTrackerFirstArea = 2;  // (the first of the areas' rows, after the whole game's and that one)
 // The checks one by one: tools/rando/rando_seed.py writes <game folder>\mods\rando-seed\checks.txt beside the tracker's
 // file, a line "<area>|<kind>|<folder>|<ages>|<x> <y> <z>" for each chest and Gold Skulltula of the seed (tracker_load
 // reads it too). A row steps through the checks of its area, the ones whose <area> is the row's name (tracker_pick: 0 the
@@ -124,6 +131,7 @@ struct TrackerCheck {
     char area[48], kind[80], folder[40], ages[4];   // (kind: the check's name; Chest or Gold Skulltula in a file without names)
     float pos[3];
     float stand[3];   // (where Link is put to go to it: a chest's front; its own place where the file has no other)
+    char gives[64];   // (the item it gives, the game's name for it: said once it is collected; "" a file without it)
     char needs[96];   // (with the songs a rule names up to 24 items. what the seed's rules ask for: kLogicItems' letters with commas, "-" nothing, "?" a file without it)
 };
 /// A check with what Link carries: 1 in logic (he has all its rule asks for), 0 not (missing, when given: what he has
@@ -141,7 +149,56 @@ int tracker_pick[kTrackerRows];
 // that are in logic now. A check not shown is stepped over, and an area with none to show has no row.
 enum { kTrackerShowAll, kTrackerShowLeft, kTrackerShowReachable, kTrackerShows };
 int tracker_show = kTrackerShowAll;
-const char* const kTrackerShowWords[kTrackerShows] = {"all", "left to collect", "left and in logic"};
+const char* const kTrackerShowWords[kTrackerShows] = {"All checks", "Left to collect", "Left and in logic"};
+std::atomic<int> tracker_here{-1};   // (a check of the map Link is in, by the game's side: OOT_TRACKER_HERE; -1 none)
+/// The area Link is in (a row's name), or nullptr
+const char* tracker_here_area() {
+    const int i = tracker_here.load(std::memory_order_relaxed);
+    return i >= 0 && i < tracker_check_count ? tracker_checks[i].area : nullptr;
+}
+/// What a check gives, in words: the game's name for the item made readable (the ones a seed places most by a table)
+std::string tracker_item_name(const char* actor) {
+    static const struct { const char *actor, *name; } known[] = {
+        {"Item_Token_Gold", "Gold Skulltula Token"}, {"Obj_Heart_Piece", "Piece of Heart"}, {"Obj_Heart_Container", "Heart Container"},
+        {"Item_GlassTruth", "Lens of Truth"}, {"Item_Range_Bow", "Fairy Bow"}, {"Item_Range_SlingShot", "Fairy Slingshot"},
+        {"Item_HeavyBoot", "Iron Boots"}, {"Item_HoverBoot", "Hover Boots"}, {"Item_Hammer", "Megaton Hammer"},
+        {"Item_Gauntlet_Goron", "Goron's Bracelet"}, {"Item_Gauntlet_Silver", "Silver Gauntlets"}, {"Item_Gauntlet_Gold", "Golden Gauntlets"},
+        {"Item_Shield_Mirror", "Mirror Shield"}, {"TBox_Shield_Hylian", "Hylian Shield"}, {"TBox_Shield_Deku", "Deku Shield"},
+        {"Item_Sword_Kokiri", "Kokiri Sword"}, {"Item_AgonyStone", "Stone of Agony"}, {"Item_ScrubBusinessSeed", "Deku Seeds"},
+        {"Item_Wallet_Medium", "Adult's Wallet"}, {"Item_Wallet_Large", "Giant's Wallet"}, {"Item_Scale_Silver", "Silver Scale"},
+        {"Item_Scale_Gold", "Golden Scale"}, {"Item_BombBag_Small", "Bomb Bag"}, {"Item_BombBag_Medium", "Big Bomb Bag"},
+        {"Item_BombBag_Large", "Biggest Bomb Bag"}, {"Item_Quiver_Medium", "Big Quiver"}, {"Item_Quiver_Large", "Biggest Quiver"},
+        {"Item_BulletBag_Medium", "Big Deku Seed Bag"}, {"Item_BulletBag_Large", "Biggest Deku Seed Bag"},
+        {"Item_NutBag_Medium", "Big Deku Nut Bag"}, {"Item_NutBag_Large", "Biggest Deku Nut Bag"},
+        {"Item_StickBag_Medium", "Big Deku Stick Bag"}, {"Item_StickBag_Large", "Biggest Deku Stick Bag"},
+        {"Item_Arrow_Fire", "Fire Arrows"}, {"Item_Arrow_Ice", "Ice Arrows"}, {"Item_Arrow_Light", "Light Arrows"},
+        {"Item_DinFire", "Din's Fire"}, {"Item_FaroreWind", "Farore's Wind"}, {"Item_NayruLove", "Nayru's Love"},
+        {"Item_BombBundle_Small", "Bombs"}, {"Item_BombchuBundle_Small", "Bombchus"}, {"Item_DekuStickBundle_Small", "Deku Sticks"},
+        {"TBox_DekuNutBundle", "Deku Nuts"}, {"TBox_ArrowBundle_Medium", "Arrows"}, {"TBox_ArrowBundle_Large", "Arrows"},
+        {"Tbox_MagicJar_Large", "Magic Jar"}, {"TBox_Rupee_Green", "Green Rupee"}, {"TBox_Rupee_Blue", "Blue Rupee"},
+        {"TBox_Rupee_Red", "Red Rupee"}, {"TBox_Rupee_Purple", "Purple Rupee"}, {"TBox_Rupee_Gold", "Gold Rupee"},
+        {"Item_Melody_ZeldaLullaby", "Zelda's Lullaby"}, {"Item_Melody_EponaSong", "Epona's Song"}, {"Item_Melody_SariaSong", "Saria's Song"},
+        {"Item_Melody_SunSong", "Sun's Song"}, {"Item_Melody_TimeSong", "Song of Time"}, {"Item_Melody_StormSong", "Song of Storms"},
+        {"Item_Melody_ForestMinuet", "Minuet of Forest"}, {"Item_Melody_FireBolero", "Bolero of Fire"},
+        {"Item_Melody_WaterSerenade", "Serenade of Water"}, {"Item_Melody_SpiritRequiem", "Requiem of Spirit"},
+        {"Item_Melody_ShadowNocturne", "Nocturne of Shadow"}, {"Item_Melody_LightPrelude", "Prelude of Light"},
+        {"Item_Dungeon_SmallKey", "Small Key"}, {"Item_Dungeon_BossKey", "Boss Key"}, {"Item_Dungeon_Map", "Dungeon Map"},
+        {"Item_Dungeon_Compass", "Compass"},
+    };
+    for (const auto& k : known)
+        if (!strcmp(k.actor, actor)) return k.name;
+    // (any other: its name without the first word, a space before each capital and for each underscore)
+    const char* p = strchr(actor, '_');
+    std::string words;
+    for (p = p ? p + 1 : actor; *p; p++) {
+        if (*p == '_') words += ' ';
+        else {
+            if (*p >= 'A' && *p <= 'Z' && !words.empty() && words.back() != ' ' && !(p[-1] >= 'A' && p[-1] <= 'Z')) words += ' ';
+            words += *p;
+        }
+    }
+    return words;
+}
 /// A check is shown: not one collected when those are hidden, nor one out of logic when only the reachable are shown (one
 /// whose logic is not known is)
 bool tracker_check_shown(int i) {
@@ -162,7 +219,7 @@ const TrackerCheck* tracker_row_check(int row, int n) {
 }
 /// An area's row is hidden: it has checks, and none of them to show
 bool tracker_row_hidden(int row) {
-    return row > 0 && tracker_show != kTrackerShowAll && tracker_row_checks(row, true) > 0 && !tracker_row_checks(row);
+    return row >= kTrackerFirstArea && tracker_show != kTrackerShowAll && tracker_row_checks(row, true) > 0 && !tracker_row_checks(row);
 }
 /// What a row says: its own words, or the check it is stepped to ("3 of 10: Chest, child's, at -27 68 65")
 std::string tracker_says(int row) {
@@ -183,9 +240,17 @@ std::string tracker_says(int row) {
         // (how many are left and how many of those are in logic, and nothing of their kinds: its owner's word. The file's own
         // words only where there is no check to count: no seed)
         const auto checks = [](int n) { return std::to_string(n) + (n == 1 ? " check" : " checks"); };
+        if (row == kTrackerShowRow && tracker_check_count) return kTrackerShowWords[tracker_show];
+        if (!row && all && told) {   // (the whole game: how far the seed is, and what can be gone for now)
+            std::string words = std::to_string(all - left) + " of " + std::to_string(all) + " collected";
+            if (known) words += ", " + std::to_string(in) + " in logic now";
+            return words;
+        }
         std::string words = all ? checks(told ? left : all) + (told ? " left" : "") : std::string(tracker_value[row]);
-        if (all && known) words += ", " + std::to_string(in) + " in logic";
-        if (!row && tracker_check_count) words += std::string(". Showing: ") + kTrackerShowWords[tracker_show];
+        if (all && told && !left) words = "All collected";
+        else if (all && known) words += ", " + std::to_string(in) + " in logic";
+        const char* here = row >= kTrackerFirstArea ? tracker_here_area() : nullptr;
+        if (here && !strcmp(here, tracker_name[row])) words = "Here: " + words;   // (the area Link is in: the first of them)
         return words;
     }
     const bool collected = tracker_done[k - tracker_checks].load(std::memory_order_relaxed) == 1;
@@ -197,11 +262,80 @@ std::string tracker_says(int row) {
              collected ? ": done" : state > 0 ? ": in logic" : state == 0 ? ": not in logic" : "");
     return text;
 }
+/// The help's panel for an area's row: every check of the area that the tab lists, one a line, each with its mark (collected,
+/// and then what it gave; in logic; not in logic), the one the row is stepped to lit and kept in view; under them what the
+/// marks mean, and the stepped check's own line (hint). From y0 down, no lower than y_max.
+void tracker_panel(ui::Ctx& c, float x0, float x1, float y0, float y_max, int row, const char* hint) {
+    const float s = c.s, px = 17 * s, pitch = 26 * s, w = x1 - x0 - 48 * s;
+    constexpr ImU32 kIn = ui::rgba(120, 224, 150), kOut = ui::rgba(138, 156, 184), kGot = ui::rgba(110, 126, 152);
+    struct Line { const TrackerCheck* k; int state; };   // (state: 2 collected, 1 in logic, 0 not, -1 not known)
+    std::vector<Line> lines;
+    for (int i = 0; i < tracker_check_count; i++) {
+        if (strcmp(tracker_checks[i].area, tracker_name[row]) || !tracker_check_shown(i)) continue;
+        const bool got = tracker_done[i].load(std::memory_order_relaxed) == 1;
+        lines.push_back({&tracker_checks[i], got ? 2 : tracker_in_logic(tracker_checks[i])});
+    }
+    const int n = (int)lines.size(), pick = tracker_pick[row];
+    const float hh = hint ? ui::para(c, c.f.body, 16 * s, ImVec2(), 0, hint, w - 18 * s, false) : 0;
+    const float fixed = 22 * s + 32 * s + 12 * s + 24 * s + (hint ? 14 * s + hh : 0) + 20 * s;
+    const int fit = std::max(1, std::min(n, (int)((y_max - y0 - fixed) / pitch)));
+    const int first = n > fit ? std::clamp(pick - 1 - fit / 2, 0, n - fit) : 0;
+    const float y1 = std::min(y0 + fixed + fit * pitch, y_max);
+    ui::box(c, ImVec2(x0, y0), ImVec2(x1, y1));
+    c.d->PushClipRect(ImVec2(x0, y0), ImVec2(x1, y1), true);
+    float y = y0 + 22 * s;
+    ui::text(c, c.f.heading, 21 * s, ImVec2(x0 + 24 * s, y), ui::kInk, tracker_name[row]);
+    if (n > fit) {   // (more of them than fit: which are shown)
+        char range[40];
+        snprintf(range, sizeof range, "%d-%d of %d", first + 1, first + fit, n);
+        ui::text_mid(c, c.f.body, 15 * s, x1 - 24 * s - ui::size_of(c.f.body, 15 * s, range).x, y + 12 * s, ui::kDim, range);
+    }
+    y += 32 * s;
+    const auto mark = [&](float mx, float my, int state) {
+        if (state == 2) {   // (collected: a tick)
+            c.d->AddLine(ImVec2(mx - 5 * s, my), ImVec2(mx - 1.5f * s, my + 4 * s), kGot, 2 * s);
+            c.d->AddLine(ImVec2(mx - 1.5f * s, my + 4 * s), ImVec2(mx + 5.5f * s, my - 4.5f * s), kGot, 2 * s);
+        } else if (state == 1) c.d->AddCircleFilled(ImVec2(mx, my), 5 * s, kIn);
+        else if (state == 0) c.d->AddCircle(ImVec2(mx, my), 4.5f * s, kOut, 0, 1.6f * s);
+        else c.d->AddLine(ImVec2(mx - 4 * s, my), ImVec2(mx + 4 * s, my), kOut, 1.6f * s);
+    };
+    for (int i = first; i < first + fit && i < n; i++, y += pitch) {
+        const Line& l = lines[i];
+        if (i + 1 == pick) c.d->AddRectFilled(ImVec2(x0 + 14 * s, y - 2 * s), ImVec2(x1 - 14 * s, y + pitch - 4 * s), ui::kCellNameSel, 4 * s);
+        mark(x0 + 32 * s, y + pitch * 0.5f - 3 * s, l.state);
+        std::string text = l.k->kind;
+        if (!strcmp(l.k->ages, "C")) text += " (child)";
+        else if (!strcmp(l.k->ages, "A")) text += " (adult)";
+        const ImU32 col = l.state == 2 ? kGot : l.state == 1 ? ui::kInkBright : ui::kSoft;
+        const float tx = x0 + 48 * s, ty = y + pitch * 0.5f - 3 * s;
+        c.d->PushClipRect(ImVec2(tx, y), ImVec2(x1 - 20 * s, y + pitch), true);
+        const float end = tx + ui::text_mid(c, c.f.body, px, tx, ty, col, text.c_str());   // (text_mid: the words' width)
+        if (l.state == 2 && l.k->gives[0])   // (what it gave, once it is collected)
+            ui::text_mid(c, c.f.body, px, end + 10 * s, ty, ui::kSoft, tracker_item_name(l.k->gives).c_str());
+        c.d->PopClipRect();
+    }
+    y += 12 * s;
+    {   // (what the marks mean)
+        float lx = x0 + 32 * s;
+        const struct { int state; const char* says; } legend[] = {{1, "in logic"}, {0, "not yet"}, {2, "collected"}};
+        for (const auto& e : legend) {
+            mark(lx, y + 8 * s, e.state);
+            lx += 12 * s + ui::text_mid(c, c.f.body, 14 * s, lx + 12 * s, y + 8 * s, ui::kDim, e.says) + 26 * s;
+        }
+    }
+    if (hint) {
+        const float hy = y + 24 * s + 14 * s;
+        c.d->AddRectFilled(ImVec2(x0 + 24 * s, hy + 2 * s), ImVec2(x0 + 26.5f * s, hy + hh - 2 * s), ui::kAccent, s);
+        ui::para(c, c.f.body, 16 * s, ImVec2(x0 + 40 * s, hy), ui::kSoft, hint, w - 18 * s);
+    }
+    c.d->PopClipRect();
+}
 /// The help's last line for a row stepped to a check: in logic, or what Link still needs for it
 std::string tracker_hint(int row) {
     const TrackerCheck* k = tracker_pick[row] ? tracker_row_check(row, tracker_pick[row]) : nullptr;
     std::string missing;
-    if (k && tracker_done[k - tracker_checks].load(std::memory_order_relaxed) == 1) return "Done: its item was given to Link here.";
+    if (k && tracker_done[k - tracker_checks].load(std::memory_order_relaxed) == 1)
+        return k->gives[0] ? "Collected: it gave " + tracker_item_name(k->gives) + "." : std::string("Collected: its item was given to Link here.");
     const int state = k ? tracker_in_logic(*k, &missing) : -1;
     return state > 0 ? "In logic: Link carries all the seed's rules ask for here." : state == 0 ? "Not in logic. Still asked for: " + missing + "." : "";
 }
@@ -1406,8 +1540,14 @@ std::string ini_path() {
 }
 /// The Tracker tab's rows from the seed's file, or one row saying there is none; read again at most once a second
 void tracker_load() {
-    static ULONGLONG last = 0;
+    static ULONGLONG last = 0, called = 0;
+    static std::vector<std::string> order;   // (the areas' rows as they were last put in order)
+    static bool sort = true;
     const ULONGLONG now = GetTickCount64();
+    // (the tab was not on screen for a while: its areas are put in order anew when it is again. Not while it is, where a
+    //  row would move under the selection)
+    if (!called || now - called > 1500) sort = true;
+    called = now;
     if (last && now - last < 1000) return;
     last = now;
     std::string path = ini_path();
@@ -1434,6 +1574,14 @@ void tracker_load() {
         snprintf(tracker_value[0], sizeof tracker_value[0], "The randomizer is off");
         n = 1;
     }
+    const bool seed = on && n > 0 && strcmp(tracker_name[0], "No seed");
+    if (seed) {   // (the second row is the tab's own: what it lists. The areas follow it)
+        n = std::min(n + 1, kTrackerRows);
+        for (int i = n - 1; i > kTrackerShowRow; i--)
+            memcpy(tracker_name[i], tracker_name[i - 1], sizeof tracker_name[i]), memcpy(tracker_value[i], tracker_value[i - 1], sizeof tracker_value[i]);
+        snprintf(tracker_name[kTrackerShowRow], sizeof tracker_name[0], "Show");
+        tracker_value[kTrackerShowRow][0] = 0;
+    }
     tracker_count = n;
     int checks = 0;
     path = path.substr(0, path.find_last_of("\\/") + 1) + "checks.txt";
@@ -1447,6 +1595,8 @@ void tracker_load() {
                                                         k.folder, k.ages, &k.pos[0], &k.pos[1], &k.pos[2], k.needs, hash, gives, &k.stand[0], &k.stand[1],
                                                         &k.stand[2]);
             if (got >= 7) {
+                snprintf(k.gives, sizeof k.gives, "%s", got >= 10 && strcmp(gives, "-") ? gives : "");
+                k.gives[strcspn(k.gives, "\r\n")] = 0;
                 if (got < 13) memcpy(k.stand, k.pos, sizeof k.stand);
                 checks++;
             }
@@ -1454,6 +1604,50 @@ void tracker_load() {
         fclose(f);
     }
     tracker_check_count = checks;
+    if (seed && n > kTrackerFirstArea) {
+        // The areas' order: the one Link is in, then the ones with a check in logic, then the ones with a check left, then
+        // the rest; within each as the file has them (by name). Made when the tab comes on screen and kept while it is.
+        const auto name_at = [](int i) { return std::string(tracker_name[i]); };
+        if (sort) {
+            const char* here = tracker_here_area();
+            const auto rank = [&](int row) {
+                if (here && !strcmp(here, tracker_name[row])) return 0;
+                int left = 0, in = 0, any = 0;
+                for (int i = 0; i < tracker_check_count; i++) {
+                    if (strcmp(tracker_checks[i].area, tracker_name[row])) continue;
+                    any++;
+                    if (tracker_done[i].load(std::memory_order_relaxed) == 1) continue;
+                    left++, in += tracker_in_logic(tracker_checks[i]) > 0;
+                }
+                return in ? 1 : left || !any ? 2 : 3;
+            };
+            std::vector<int> rows_now;
+            for (int i = kTrackerFirstArea; i < n; i++) rows_now.push_back(i);
+            std::vector<int> ranks(n);
+            for (int i : rows_now) ranks[i] = rank(i);
+            std::stable_sort(rows_now.begin(), rows_now.end(), [&](int a, int b) { return ranks[a] < ranks[b]; });
+            std::vector<std::string> next;
+            for (int i : rows_now) next.push_back(name_at(i));
+            if (next != order) {   // (rows changed places: each row's own words again)
+                order = next;
+                for (int r = kTrackerFirstArea; r < kTrackerRows; r++) tracker_pick[r] = 0;
+            }
+            sort = false;
+        }
+        // (the file's rows put in that order: a name the order has not, an area new to the seed, after them)
+        std::vector<std::pair<std::string, std::string>> have;
+        for (int i = kTrackerFirstArea; i < n; i++) have.push_back({tracker_name[i], tracker_value[i]});
+        std::vector<std::pair<std::string, std::string>> placed;
+        for (const std::string& name : order)
+            for (auto& h : have)
+                if (h.first == name) placed.push_back(h), h.first.clear();
+        for (const auto& h : have)
+            if (!h.first.empty()) placed.push_back(h);
+        for (int i = kTrackerFirstArea; i < n && i - kTrackerFirstArea < (int)placed.size(); i++) {
+            snprintf(tracker_name[i], sizeof tracker_name[i], "%s", placed[i - kTrackerFirstArea].first.c_str());
+            snprintf(tracker_value[i], sizeof tracker_value[i], "%s", placed[i - kTrackerFirstArea].second.c_str());
+        }
+    }
     for (int row = 0; row < kTrackerRows; row++)   // (a seed made anew: a row stepped past its area's checks is its own words again)
         if (row >= n || tracker_pick[row] > tracker_row_checks(row)) tracker_pick[row] = 0;
 }
@@ -2223,9 +2417,9 @@ void draw_options(ui::Ctx& c) {
     if (cur_tab == TAB_MOTION) prompt_list[2] = {ui::kBack, "Back"};   // (Esc: to Controls)
     if (selr.tracker >= 0) {   // (a line of the Tracker tab: its area's checks to step through, and the one shown to go to)
         prompts_n = 1;
-        if (tracker_row_checks(selr.tracker)) prompt_list[prompts_n++] = {ui::kLeftRight, "Checks"};
-        if (!selr.tracker && tracker_check_count)   // (the whole game's row: what the tab shows, and the record forgotten)
-            prompt_list[prompts_n++] = {ui::kLeftRight, "Show"}, prompt_list[prompts_n++] = {ui::kConfirm, "Forget"};
+        if (selr.tracker >= kTrackerFirstArea && tracker_row_checks(selr.tracker)) prompt_list[prompts_n++] = {ui::kLeftRight, "Checks"};
+        if (selr.tracker == kTrackerShowRow && tracker_check_count) prompt_list[prompts_n++] = {ui::kLeftRight, "Change"};
+        if (!selr.tracker && tracker_check_count) prompt_list[prompts_n++] = {ui::kConfirm, "Forget"};   // (the whole game's row: the record forgotten)
         if (tracker_pick[selr.tracker] && cheats_on()) prompt_list[prompts_n++] = {ui::kConfirm, "Go there"};
         prompt_list[prompts_n++] = {ui::kTabs, "Tabs"}, prompt_list[prompts_n++] = {ui::kBack, "Close"};
     }
@@ -2239,14 +2433,20 @@ void draw_options(ui::Ctx& c) {
     const float bar_top = ui::prompt_bar_top(c);   // (the strip itself drawn last, over all: below)
     float bottom = std::min(c.h - c.safe, bar_top) - 10 * s;   // (the rows end above the prompts)
     const bool after = restart_changed(selr);
+    // (the Tracker tab: an area's row shows its checks where the help is; the tab's second row has words of its own)
+    const bool area_panel = selr.tracker >= kTrackerFirstArea && tracker_check_count > 0 && tracker_row_checks(selr.tracker, true) > 0;
+    const char* row_help = selr.tracker == kTrackerShowRow && tracker_check_count ? kTrackerShowHelp : selr.help;
     if (narrow) {   // (the help over the column's foot, the rows above it: at most half the room, the rows get the rest)
         const float help_h = std::min(22 * s + 32 * s + help_tall + (after ? 30 * s : 0) + (pending_line.empty() ? 0 : 52 * s) + 22 * s,
                                       (bottom - hh) * 0.5f);
         bottom = std::min(bar_top, c.h - c.safe) - help_h - 16 * s;
-        help_box(c, hx0, hx1, bottom + 8 * s, selr.name, selr.help, hint, pending_line.empty() ? nullptr : pending_line.c_str(), help_tall,
-                 after, bottom + 8 * s, bar_top - 10 * s);
+        if (area_panel) tracker_panel(c, hx0, hx1, bottom + 8 * s, bar_top - 10 * s, selr.tracker, hint);
+        else help_box(c, hx0, hx1, bottom + 8 * s, selr.name, row_help, hint, pending_line.empty() ? nullptr : pending_line.c_str(), help_tall,
+                      after, bottom + 8 * s, bar_top - 10 * s);
+    } else if (area_panel) {   // (an area's row of the Tracker tab: its checks, from under the banner down)
+        tracker_panel(c, hx0, hx1, hh + 18 * s, bar_top - 12 * s, selr.tracker, hint);
     } else {
-        help_box(c, hx0, hx1, std::max(hh + 26 * s, c.h * 0.30f), selr.name, selr.help, hint,
+        help_box(c, hx0, hx1, std::max(hh + 26 * s, c.h * 0.30f), selr.name, row_help, hint,
                  pending_line.empty() ? nullptr : pending_line.c_str(), help_tall, after, hh + 18 * s, bar_top - 12 * s);
     }
     const float rh = 40 * s, pitch = 48 * s, top = hh + 24 * s, rx0 = cx0 + 44 * s, rx1 = cx1 - 44 * s, split = rx0 + (rx1 - rx0) * 0.55f;
@@ -2282,7 +2482,7 @@ void draw_options(ui::Ctx& c) {
         } else if (r.cheat >= 0 && !tool.empty()) {   // (a debug tool with a value: arrows when Left and Right choose it)
             choice_cell(c, va, vb, tool, selected, cheat_chooses(r.cheat), cheat_chooses(r.cheat));
         } else if (r.tracker >= 0) {   // (a line of the Tracker tab: what the seed's file says, or the check it is stepped to)
-            const bool steps = tracker_row_checks(r.tracker) > 0 || (!r.tracker && tracker_check_count > 0);
+            const bool steps = r.tracker == kTrackerShowRow ? tracker_check_count > 0 : r.tracker >= kTrackerFirstArea && tracker_row_checks(r.tracker) > 0;
             choice_cell(c, va, vb, tracker_says(r.tracker), selected, steps, steps);
         } else if (!r.value) {   // (a page, or Restart and Quit: Confirm until the second press)
             if (pending == &r) choice_cell(c, va, vb, "Press again to confirm", selected, false, false);
@@ -3433,6 +3633,10 @@ void menu_option_set(int id, int value) {
         if (tracker_on.exchange(value != 0, std::memory_order_relaxed) != (value != 0) && page == 0 && cur_tab == TAB_TRACKER) menu_refresh = true;
         return;
     }
+    if (id == OOT_TRACKER_HERE) {   // (a check of the map Link is in: its area's row comes first)
+        tracker_here.store(value, std::memory_order_relaxed);
+        return;
+    }
     if (id >= OOT_TRACKER_BASE && id < OOT_TRACKER_BASE + kTrackerChecks) {   // (the game side's word on a check: collected or not)
         const signed char state = (signed char)std::clamp(value, -1, 1);
         if (tracker_done[id - OOT_TRACKER_BASE].exchange(state, std::memory_order_relaxed) != state && page == 0 && cur_tab == TAB_TRACKER)
@@ -3493,12 +3697,15 @@ void teleport_mouse(const MkwVkPointer& ptr, int mx, int my, bool* press, bool& 
 /// confirm, with the debug tools on, has the game take Link to the check shown: its place, a metre above it, with its
 /// folder and ages, goes into <game folder>\rando\goto_check.txt and the action to the game, and the menu closes
 void tracker_press(int row, const bool* press, bool& changed) {
-    if (!row && tracker_check_count) {   // (the whole game's row: Left and Right choose what the tab shows; confirm, and again within a moment, forgets what is collected)
-        if (press[3] || press[4]) {
-            tracker_show = (tracker_show + kTrackerShows + (press[4] ? 1 : -1)) % kTrackerShows;
+    if (row == kTrackerShowRow && tracker_check_count) {   // (the tab's second row: Left and Right, or confirm, choose what the tab lists)
+        if (press[3] || press[4] || press[7]) {
+            tracker_show = (tracker_show + kTrackerShows + (press[3] ? -1 : 1)) % kTrackerShows;
             for (int r = 1; r < kTrackerRows; r++) tracker_pick[r] = 0;   // (the rows' own words again: their checks are other ones now)
             changed = true;
         }
+        return;
+    }
+    if (!row && tracker_check_count) {   // (the whole game's row: confirm, and again within a moment, forgets what is collected)
         if (press[7]) {
             const ULONGLONG now = GetTickCount64();
             if (tracker_forget_asked && now - tracker_forget_asked < kTrackerForgetMs) {

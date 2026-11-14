@@ -168,11 +168,15 @@ def main():
           "a check collected is shown when those are hidden, one out of logic when only the reachable are, or one is hidden when all are shown")
     check("if (!strcmp(tracker_checks[i].area, tracker_name[row]) && tracker_check_shown(i) && !--n) return &tracker_checks[i];" in menu and
           "!(rows[i].tracker > 0 && tracker_row_hidden(rows[i].tracker)) &&" in menu and
-          "return row > 0 && tracker_show != kTrackerShowAll && tracker_row_checks(row, true) > 0 && !tracker_row_checks(row);" in menu,
+          "return row >= kTrackerFirstArea && tracker_show != kTrackerShowAll && tracker_row_checks(row, true) > 0 && !tracker_row_checks(row);" in menu,
           "a check not shown is stepped to, or an area with none to show keeps its row, or the whole game's row is hidden")
-    check("tracker_show = (tracker_show + kTrackerShows + (press[4] ? 1 : -1)) % kTrackerShows;" in menu and
-          "for (int r = 1; r < kTrackerRows; r++) tracker_pick[r] = 0;" in menu and 'words += std::string(". Showing: ") + kTrackerShowWords[tracker_show];' in menu and
-          '{"all", "left to collect", "left and in logic"}' in menu,
+    # (what the tab lists is a row of its own, the second, since the tab was made easier to read: 2026-11-14)
+    check("tracker_show = (tracker_show + kTrackerShows + (press[3] ? -1 : 1)) % kTrackerShows;" in menu and
+          "for (int r = 1; r < kTrackerRows; r++) tracker_pick[r] = 0;" in menu and
+          "if (row == kTrackerShowRow && tracker_check_count) return kTrackerShowWords[tracker_show];" in menu and
+          "constexpr int kTrackerShowRow = 1;" in menu and "constexpr int kTrackerFirstArea = 2;" in menu and
+          'snprintf(tracker_name[kTrackerShowRow], sizeof tracker_name[0], "Show");' in menu and
+          '{"All checks", "Left to collect", "Left and in logic"}' in menu,
           "the first row's Left and Right do not choose what the tab shows, a row stays stepped to a check that is another now, or the row does not say what is shown")
     made = [name("Chest", item, {}, ()) for item in seed.ITEM_WORDS]
     check(all(len(n) <= seed.CHECK_NAME - 40 for n in made) and set(seed.PROGRESSION) <= set(seed.ITEM_WORDS) and set(seed.DUNGEON_ITEMS) <= set(seed.ITEM_WORDS),
@@ -223,6 +227,30 @@ def main():
           "!strchr(check.ages, child ? 'C' : 'A')" in host and
           "} else if (!oot_banc_in_folder(current, check.folder) || loading || oot_event_playing(c)) {" in host,
           "the game does not go to the check's map first, or takes the place before Link has arrived, or at an age whose map has not the check")
+    # ---- easier to read (asked for by its owner, 2026-11-14): an area's checks at once, the area Link is in first, the
+    #      whole game's row a summary, and what a collected check gave ----
+    host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
+    items = (ROOT / "gpu" / "vk" / "oot_cheat_items.h").read_text(encoding="utf-8")
+    check("void tracker_panel(ui::Ctx& c, float x0, float x1, float y0, float y_max, int row, const char* hint) {" in menu and
+          "if (area_panel) tracker_panel(c, hx0, hx1, bottom + 8 * s, bar_top - 10 * s, selr.tracker, hint);" in menu and
+          "tracker_panel(c, hx0, hx1, hh + 18 * s, bar_top - 12 * s, selr.tracker, hint);" in menu and
+          "const int first = n > fit ? std::clamp(pick - 1 - fit / 2, 0, n - fit) : 0;" in menu and
+          "if (strcmp(tracker_checks[i].area, tracker_name[row]) || !tracker_check_shown(i)) continue;" in menu,
+          "an area's row does not show its checks in the help's place, or not the ones the tab lists, or not the one stepped to")
+    check("#define OOT_TRACKER_HERE 8190" in items and "rx_option_set(OOT_TRACKER_HERE, here);" in host and
+          "if (oot_banc_in_folder(oot_link_map, oot_checks[i].folder)) here = i;" in host and
+          "if (id == OOT_TRACKER_HERE) {" in menu and "if (here && !strcmp(here, tracker_name[row])) return 0;" in menu and
+          "return in ? 1 : left || !any ? 2 : 3;" in menu and "if (!called || now - called > 1500) sort = true;" in menu and
+          'if (here && !strcmp(here, tracker_name[row])) words = "Here: " + words;' in menu,
+          "the area Link is in is not first, the areas with a check in logic are not next, or the rows move while the tab is on screen")
+    check('std::string words = std::to_string(all - left) + " of " + std::to_string(all) + " collected";' in menu and
+          'if (known) words += ", " + std::to_string(in) + " in logic now";' in menu and 'if (all && told && !left) words = "All collected";' in menu,
+          "the whole game's row does not say how many are collected and how many are in logic now")
+    check("if (l.state == 2 && l.k->gives[0])   // (what it gave, once it is collected)" in menu and
+          'snprintf(k.gives, sizeof k.gives, "%s", got >= 10 && strcmp(gives, "-") ? gives : "");' in menu and
+          '{"Item_Melody_SunSong", "Sun\'s Song"}' in menu and '{"TBox_Rupee_Red", "Red Rupee"}' in menu and
+          'return k->gives[0] ? "Collected: it gave " + tracker_item_name(k->gives) + "."' in menu,
+          "a check collected does not say what it gave, or one not collected does")
     check('"No seed"' in menu and "now - last < 1000" in menu, "the tab says nothing without a seed, or reads its file every frame")
     print("PASS: the randomizer's Tracker tab")
 

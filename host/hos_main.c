@@ -1725,6 +1725,12 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
         if (oot_check_count < 0 || strcmp(stamp, oot_checks_seed)) oot_tracker_load(stamp);
     }
     for (int i = 0; i < oot_check_count; i++) rx_option_set(OOT_TRACKER_BASE + i, oot_checks[i].done == 1);
+    {   /* (where Link is, for the Tracker tab's order: a check of the map he is in, the first of the file) */
+        int here = -1;
+        for (int i = 0; i < oot_check_count && here < 0; i++)
+            if (oot_banc_in_folder(oot_link_map, oot_checks[i].folder)) here = i;
+        rx_option_set(OOT_TRACKER_HERE, here);
+    }
     ReleaseSRWLockExclusive(&oot_checks_lock);
 }
 

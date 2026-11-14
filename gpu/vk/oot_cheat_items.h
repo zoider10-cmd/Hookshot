@@ -111,6 +111,9 @@
 /* (and that the randomizer's game is the one played: rx_option_set(OOT_TRACKER_ON, 1). Never sent in the normal game or in
    Master Quest, where the Tracker tab says so and reads no seed, though a seed's files may be in the folder) */
 #define OOT_TRACKER_ON 8191
+/* (and where Link is: rx_option_set(OOT_TRACKER_HERE, i), a check of the seed's file that is in the map he is in, or -1:
+   the Tracker tab puts that check's area first) */
+#define OOT_TRACKER_HERE 8190
 #define OOT_TRACKER_MAX 320
 #define OOT_CHEAT_AGE_ID 4090      /* rx_option_set(OOT_CHEAT_AGE_ID, age) from the game side: 0 child, 1 adult, -1 unknown */
 #define OOT_CHEAT_ITEM_ACTION 3000 /* + item * 256 + op: op 0..127 adds op - 64; op 200 unlocks (1) or relocks (all) */

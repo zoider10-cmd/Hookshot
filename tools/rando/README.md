@@ -945,6 +945,28 @@ otherwise than a chest's own item is (x4 2, x7 0 against 7 and 1); the bag is fi
 randomizer on the first is not made (`hos_oot_pouch_add` returns 1 and the add is left at once), so the bombs find no
 bag and are not kept. A Bomb Bag that is a chest's or a shelf's own item is added as the bundle is. NOT seen in play yet.
 
+## The Tracker tab, easier to read
+
+Asked for by its owner (2026-11-14: "improve the tracker and make it more user friendly"), who chose all four of:
+
+- **An area's checks at once.** With an area's row selected, the panel where the help is lists every check of the area
+  that the tab lists, one a line with its mark: a green dot in logic, a ring not yet, a tick collected; the check the
+  row is stepped to is lit and kept in view, and its own line (what it still asks for) is under the list
+  (`tracker_panel`).
+- **The area Link is in first.** The game's side tells the menu a check of the map Link is in (`OOT_TRACKER_HERE`);
+  that check's area is the first of the areas' rows and says "Here:", then the areas with a check in logic, then the
+  ones with a check left, then the rest, each group by name. The order is made when the tab comes on screen and kept
+  while it is, so that a row does not move under the selection (`tracker_load`).
+- **A summary, and a row for what is listed.** The whole game's row says "9 of 300 collected, 10 in logic now"; the
+  tab's second row, Show, chooses what is listed (all, left to collect, left and in logic), which the first row's
+  Left and Right did. The first row's confirm, twice, still forgets the record.
+- **What a collected check gave.** Its line in the panel, and the stepped check's own line, name the item
+  (`tracker_item_name`: the game's name for it made readable). Only once it is collected: the tab is no spoiler.
+
+Seen without a window (`RX_VK_SHOT_MENU=1`, `RX_VK_MENU_SCRIPT`), on a save in the Shadow Temple: that area first,
+then Inside the Deku Tree and Kokiri Forest (in logic), the panel's marks, and Kokiri Forest's collected checks with
+their items (Bottle, Giant's Wallet, Bomb Bag). Not seen: with a window, a mouse, or a narrow window.
+
 ## What is collected, on the Tracker tab
 
 The randomizer keeps its own record. The pouch manager's add sees every item given (`hos_oot_pouch_add`), and the
