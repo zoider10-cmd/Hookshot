@@ -1,0 +1,6 @@
+{
+  "comment": "The public key the Hookshot Launcher trusts (its Core/ReleaseTrust.cs, ReleaseKeys.BuiltIn): the same one. scripts/release.py verify checks a release with it. docs/releases.md, One-time setup.",
+  "keys": [
+    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE5PKAyo4V9MLugswS3bMuUstnNAeNqaQBHbrDfpyhHu58osA/N8hEFI7WXqMwFh1oUFYfLaCe+AkTQ5IlTWirCQ=="
+  ]
+}

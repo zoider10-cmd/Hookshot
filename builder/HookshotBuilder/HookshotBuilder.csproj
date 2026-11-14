@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- The Windows builder has no window (Program.cs): its cli mode runs nx2/make_game.py for RecompLauncher, through the setup.
+       Players use the Hookshot Launcher. A GUI-subsystem program all the same: started by the setup or RecompLauncher with
+       their pipes, it opens no console window, and started by hand it shows its message in a message box -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>HookshotBuilder</AssemblyName>

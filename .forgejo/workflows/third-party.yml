@@ -1,0 +1,46 @@
+# The third_party rule (CONTRIBUTING.md): its parts are unmodified upstream copies, with their notices in PROVENANCE.md, and a
+# change goes in a new folder with its own note. scripts/check_third_party.py checks every part against the tree-sha256 its
+# note records, and a pull request's changes against its base (a part changed without its note). Every night it also compares
+# the parts whose notes name an upstream archive with that archive. Standard library only; no game data is involved.
+name: Third-party parts
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: As their notes say
+    if: github.event_name != 'schedule'
+    runs-on: quick  # (a quick job: the runner kept free for these takes it, or any runner with room)
+    timeout-minutes: 10
+    steps:
+      - uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Every part
+        run: python3 -I scripts/check_third_party.py
+      - name: The pull request's changes
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch -q origin "${{ github.base_ref }}"
+          python3 -I scripts/check_third_party.py --base FETCH_HEAD
+
+  upstream:
+    name: The same as upstream
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -I scripts/check_third_party.py --upstream

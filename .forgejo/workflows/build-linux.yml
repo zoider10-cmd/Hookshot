@@ -1,0 +1,245 @@
+# The Linux Hookshot Builder (docs/releases.md): Hookshot-<version>-x86_64.AppImage, the builder with its Python, Hookshot's
+# sources and the Vulkan back end built (scripts/linux/deps.sh's pinned downloads, scripts/linux/appimage.sh), and
+# recomplauncher.json inside. Its build tools (the compiler, the sysroot, FFmpeg, SDL2, the Vulkan headers) are not in it:
+# they are tools.lock's linux-x64 lines, installed here to build the back end and check the image, and on the player's PC by
+# the launcher or the builder's first start. No game data is involved. Built in Ubuntu 22.04, the oldest system it is for
+# (glibc 2.35). The AppImage is a workflow artifact; called by release.yml with the version's name, it is the release's.
+# It carries the version (its name, usr/share/hookshot/VERSION, and hookshot_vk.so's menu and bug report: nx2/version.py), so
+# a tag always builds it again; a tag whose commit CI released already (release.yml's `checked`) skips only the build check
+# that ships nothing and passed in that run (the back end with AMD FSR 4).
+name: Linux AppImage
+on:
+  # (no pull_request trigger for now: the Release workflow builds main's pushes and tags by calling this one; build a
+  # branch by hand with Run workflow)
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        description: the version's name (v3.1.0, v3.1.0-rc.1, nightly-<count>-<commit>); its files are uploaded
+        type: string
+        required: true
+      ref:
+        description: the commit to build
+        type: string
+        required: true
+      checked:
+        description: a published release of the same commit (scripts/release.py released-as), whose run passed the build check that ships no file (AMD FSR 4); it is not run again
+        type: string
+        required: false
+        default: ''
+permissions:
+  contents: read
+env:
+  # (the version this run is for, from the Release workflow; empty on other runs)
+  RELEASE_TAG: ${{ inputs.tag }}
+  # (a published release of the same commit, when there is one: the AMD FSR 4 build check, passed in its run, is not run again)
+  RELEASE_CHECKED: ${{ inputs.checked }}
+concurrency:
+  group: linux-appimage-${{ inputs.tag || github.ref }}
+  # (a pull request's older run is cancelled; a release's never is)
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  appimage:
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+    # (about 4 minutes with the dependencies cached; building them all, as a release does, takes longer)
+    timeout-minutes: 60
+    steps:
+      # (dpkg without an fsync per file: this container is thrown away after the job, so an install cut short loses nothing)
+      - name: Package installs without fsync
+        run: echo force-unsafe-io > /etc/dpkg/dpkg.cfg.d/force-unsafe-io
+      - name: System packages
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          retry_packages() {
+            for try in 1 2 3; do
+              if "$@"; then return 0; else package_status=$?; fi
+              if [ "$try" = 3 ]; then return "$package_status"; fi
+              sleep 20
+            done
+          }
+          base_packages() {
+            apt-get update &&
+              apt-get install -y --no-install-recommends software-properties-common gpg-agent
+          }
+          toolchain_packages() {
+            # Enrollment can leave a source without its key after a network failure. Repair it before refreshing
+            # indexes that depend on that key; retrying the base refresh first would stop at NO_PUBKEY (#2266).
+            # --no-update only separates enrollment from the explicit, signed index refresh immediately afterward.
+            # (libstdc++ 13, from the toolchain PPA: C++20 <format>; linked in statically)
+            # Launchpad metadata connections can hang past the entire job's hour. Give each retry a real chance;
+            # terminate enrollment after three minutes, then kill it if termination itself stalls.
+            timeout --kill-after=5s 180s add-apt-repository -y --no-update ppa:ubuntu-toolchain-r/test &&
+              apt-get update &&
+              apt-get install -y --no-install-recommends g++-13 libstdc++-13-dev &&
+              apt-get install -y --no-install-recommends git ca-certificates curl xz-utils zstd file unzip python3 \
+              build-essential gcc-12 g++-12 libstdc++-12-dev nasm meson ninja-build cmake pkg-config \
+              libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxfixes-dev libxinerama-dev \
+              libxkbcommon-dev libwayland-dev wayland-protocols libdecor-0-dev libegl-dev libgles-dev libdrm-dev libgbm-dev \
+              libpulse-dev libasound2-dev libpipewire-0.3-dev libudev-dev libdbus-1-dev zlib1g-dev
+          }
+          retry_packages base_packages
+          retry_packages toolchain_packages
+
+      # (Node for the actions this job uses, which are JavaScript (checkout, cache, upload-artifact: `using: node24`): the
+      # runner starts them with the job container's own `node`, and ubuntu:22.04 has none (exec: "node": executable file
+      # not found, the first nightly's run). Ubuntu 22.04's own nodejs is version 12, too old for them; this is Node.js's
+      # Linux build, pinned by its SHA-256, only its node program, before the first action)
+      - name: Node for the actions
+        env:
+          NODE_VER: v24.22.3
+          NODE_SHA256: 4f2b175a6d53a5c617a80dba2676238a0688cef28c6da4eba35c7d844e66fcfb
+        run: |
+          node_tar="$RUNNER_TEMP/node.tar.xz"
+          curl -fL --retry 5 --retry-all-errors --retry-delay 5 --proto '=https' -o "$node_tar" \
+            "https://nodejs.org/dist/$NODE_VER/node-$NODE_VER-linux-x64.tar.xz"
+          echo "$NODE_SHA256  $node_tar" | sha256sum -c --quiet -
+          tar -xJf "$node_tar" -C /usr/local --strip-components=1 "node-$NODE_VER-linux-x64/bin/node"
+          rm -f "$node_tar"
+          node --version
+
+      - uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # (the release's commit; with its history, git describe names a build that is no release)
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # (a release builds what the AppImage carries from its checked downloads: no built deps from a cache, which other
+      # runs write. Other runs take the built deps, without the downloads they were built from: deps.sh fetches only a
+      # part it has not built (its .<part> marks), and the downloads were most of the cache, about 1.4 of 2.3 GB)
+      - if: env.RELEASE_TAG == ''
+        uses: https://github.com/actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            build-linux/deps
+            !build-linux/deps/downloads
+          key: linux-deps-built-${{ hashFiles('scripts/linux/deps.sh', 'requirements.txt', 'nx2/prompt_requirements.txt') }}
+      - if: env.RELEASE_TAG != ''
+        uses: https://github.com/actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build-linux/deps/downloads
+          key: linux-deps-downloads-${{ hashFiles('scripts/linux/deps.sh') }}
+
+      - name: Dependencies (Python, the AppImage packer)
+        run: scripts/linux/deps.sh
+
+      # (tools.lock's linux-x64 tools, from Hookshot's packages, each checked by its SHA-256: what the player's builder
+      # downloads. Kept between runs by tools.lock's own hash; a release fetches them again)
+      - if: env.RELEASE_TAG == ''
+        uses: https://github.com/actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build-linux/tools
+          key: linux-tools-${{ hashFiles('tools.lock') }}
+      - name: The build tools (tools.lock, linux-x64)
+        run: python3 -I scripts/tools.py install build-linux/tools --system linux-x64 --cache "$RUNNER_TEMP/tools-cache"
+
+      # The Vulkan back end's compiled objects (nx2/build.py's object cache, build-linux/vk-work/objcache: each object
+      # under the SHA-1 of its source, its flags and the headers it can see), for pull requests: a pull request compiles
+      # only the files its change reaches, not all 209 (about 80-140 s here). Written after every build but a release's
+      # (a pull request's own, for its next push; main's, for every pull request). Read only by pull requests: a push to
+      # main compiles every object itself, as a release does, so the nightly and the releases never take one from a cache. The
+      # key also names the compiler (tools.lock pins it) and this system's C and C++ library headers, which the objects'
+      # own keys leave out.
+      - name: Object cache key
+        if: env.RELEASE_TAG == ''
+        id: objkey
+        env:
+          COMPILER: ${{ hashFiles('tools.lock') }}
+          SOURCES: ${{ hashFiles('gpu/**', 'third_party/imgui/**', 'third_party/zstd/**', 'host/posix/**', 'nx2/build.py') }}
+        run: |
+          system=$(dpkg-query -W -f '${Package}=${Version}\n' libc6-dev libstdc++-13-dev libstdc++-12-dev | sha256sum | cut -c1-16)
+          echo "prefix=linux-vk-objects-$COMPILER-$system-" >> "$GITHUB_OUTPUT"
+          echo "key=linux-vk-objects-$COMPILER-$system-$SOURCES" >> "$GITHUB_OUTPUT"
+      - if: env.RELEASE_TAG == '' && github.event_name == 'pull_request'
+        uses: https://github.com/actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build-linux/vk-work/objcache
+          key: ${{ steps.objkey.outputs.key }}
+          restore-keys: ${{ steps.objkey.outputs.prefix }}
+
+      # work/: the play profile made on the development PC (addresses and counts, no game code): tools.lock's profile when
+      # it has one (RELEASING.md, One-time setup); without it the game is built all the same, a little slower in play
+      - name: Play profile
+        run: |
+          if [ -f work/hot_order.txt ]; then echo "work/ is in the repository"; exit 0; fi
+          grep -q '^tool profile ' tools.lock || { echo "tools.lock has no profile yet: built without it"; exit 0; }
+          python3 -I scripts/tools.py install "$RUNNER_TEMP/profile" --only profile --cache "$RUNNER_TEMP/tools-cache"
+          mkdir -p work && cp -r "$RUNNER_TEMP"/profile/HookshotBuilder/tools/work/. work/
+          ls -la work
+
+      # (the AppImage, named by the release's version: a release's tag or the nightly's name)
+      - name: AppImage
+        env:
+          HOOKSHOT_VERSION: ${{ env.RELEASE_TAG }}
+        run: scripts/linux/appimage.sh
+
+      # (the object cache down to the objects this build used, as nx2/make_game.py prune_object_cache does: each object in
+      # sa/build/obj names its key in <obj>.sha1. Nothing goes when no stamp is found)
+      - name: Object cache for pull requests
+        if: env.RELEASE_TAG == ''
+        shell: bash
+        run: |
+          W=build-linux/vk-work
+          shopt -s nullglob
+          stamps=("$W"/sa/build/obj/*.sha1)
+          [ "${#stamps[@]}" -gt 0 ] || { echo "no object stamps: the cache is kept as it is"; exit 0; }
+          # (one key a line: a stamp holds its key with no line end, so cat would run them together)
+          awk '{ sub(/\r$/, ""); print }' "${stamps[@]}" | sort -u > "$RUNNER_TEMP/used.txt"
+          for f in "$W"/objcache/*.o; do
+            k=$(basename "$f" .o)
+            grep -qxF "$k" "$RUNNER_TEMP/used.txt" || rm -f "$f"
+          done
+          left=("$W"/objcache/*.o)
+          echo "objcache: ${#left[@]} objects, $(du -sh "$W/objcache" | cut -f1)"
+      - if: env.RELEASE_TAG == ''
+        uses: https://github.com/actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build-linux/vk-work/objcache
+          key: ${{ steps.objkey.outputs.key }}
+
+      # (AMD FSR 4's Linux side, a build option the AppImage's prebuilt back end leaves off (a player's build with --fsr compiles
+      # its own: scripts/linux/check_player_build.sh) (gpu/vk/vk_fsr4.cpp: dlopen, the older backend
+      # description, the unit exposure; the descriptor buffers in vk_main.cpp): built once more in a copy of the back end's
+      # work folder, where only vk_fsr4.cpp compiles again. The AppImage above is not changed)
+      - name: hookshot_vk.so with AMD FSR 4 (build check)
+        if: env.RELEASE_CHECKED == ''
+        shell: bash   # (this container's default is sh, which has no PIPESTATUS)
+        run: |
+          cp -r build-linux/vk-work "$RUNNER_TEMP/vk-fsr"
+          rm -f "$RUNNER_TEMP/vk-fsr/sa/build/hookshot_vk.so"   # (the AppImage's own, without FSR: the test below is this build's)
+          D="$PWD/build-linux/deps" T="$PWD/build-linux/tools"
+          OOT_WORK="$RUNNER_TEMP/vk-fsr" EMSDK="$T/usr/lib/hookshot/emsdk" RX_CPM="$T/usr/share/hookshot/cpm" RX_MARCH=x86-64-v3 \
+            RX_VK_ONLY=1 RX_RELEASE=1 HOOKSHOT_FSR=1 "$D/python/bin/python3" -I nx2/build.py --standalone --jobs "$(nproc)" |
+            tee "$RUNNER_TEMP/vk-fsr.log"
+          test "${PIPESTATUS[0]}" -eq 0
+          grep -q "with AMD FSR 4" "$RUNNER_TEMP/vk-fsr.log"
+          test -f "$RUNNER_TEMP/vk-fsr/sa/build/hookshot_vk.so"
+
+      # (an artifact goes to Forgejo by its public address, ROOT_URL, behind Cloudflare, whatever address the runner has: a
+      # request there can fail once, and the action does not send a block again (2026-11-13, the launcher's nightly: one
+      # 8 MB block, "SSL alert bad record mac"). Sent once more when it failed: Forgejo takes the same name again)
+      - id: upload_1
+        continue-on-error: true
+        uses: https://data.forgejo.org/forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e   # v4 (4.3.1 with the GHES check off; Forgejo's: GitHub's v4 and later refuse a server that is not github.com)
+        with:
+          name: Hookshot-linux-x86_64
+          path: build-linux/*.AppImage
+          if-no-files-found: error
+      - if: steps.upload_1.outcome == 'failure'
+        uses: https://data.forgejo.org/forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e   # v4 (4.3.1 with the GHES check off; Forgejo's: GitHub's v4 and later refuse a server that is not github.com)
+        with:
+          name: Hookshot-linux-x86_64
+          path: build-linux/*.AppImage
+          if-no-files-found: error
+
+      # (a player's build started from the AppImage itself, with no game, up to where the lifted game is needed: a file the
+      # AppImage does not carry fails here, not in every player's build. 2026-11-10: third_party/fonts, #1567. After the upload,
+      # so a failing image can be looked at; a release needs this job to pass)
+      - name: A player's build from the AppImage
+        run: scripts/linux/check_player_build.sh

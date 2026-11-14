@@ -1,0 +1,196 @@
+---
+import { repository, sourceUrl } from '../site.ts';
+import { buildFeed } from '../lib/progress-feed.ts';
+
+// The front page works without project activity; the feed is collected when the site is built.
+const feed = await buildFeed();
+const stable = feed?.stableRelease;
+const date = (value: string) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const activity = (feed?.items || []).filter(i => i.kind === 'pull' && i.status === 'merged' && i.mergedAt)
+  .sort((a, b) => Date.parse(b.mergedAt) - Date.parse(a.mergedAt)).slice(0, 4);
+
+// What Hookshot does, from the README (Project status, In-game menu, Mods).
+const features = [
+  { title: 'Native, no emulator', text: 'The game’s code is recompiled to C and built into a Windows or Linux program. The console’s system software is reimplemented, and the graphics are rebuilt on Vulkan.' },
+  { title: 'Any screen', text: 'Resolutions up to 4K and 5K, ultrawide 21:9 and 32:9 or 4:3 with the HUD and movies kept in the middle, and HDR.' },
+  { title: 'Upscaling', text: 'NVIDIA DLSS and DLAA, AMD FSR 3.1 and FSR 4, or the game’s own dynamic resolution, with sharpening.' },
+  { title: 'Smooth and responsive', text: 'Frame generation from 2x to 8x (DLSS Frame Generation on RTX 40 and newer), a frame cap from 60 to 240 FPS or none, NVIDIA Reflex and AMD Anti-Lag 2.' },
+  { title: 'Play your way', text: 'Controller, keyboard or mouse camera, Xbox, PlayStation and Steam Deck prompts, motion controls, field of view, and text up to instant.' },
+  { title: 'A menu in the game’s style', text: 'Every option in one in-game menu, with quality presets for your graphics card’s memory and an Auto preset that picks one for this PC.' },
+  { title: 'Mods', text: 'RomFS mods load from a mods folder, in the layout emulators use, in the order you name them.' },
+  { title: 'The launcher does the rest', text: 'The Hookshot Launcher builds the game from your copy, starts it, and keeps it and itself up to date, checked against signed checksums.' },
+];
+const steps = [
+  ['Lift', 'The game’s ARM64 code is translated to C.'],
+  ['Build', 'That C is compiled with Hookshot’s host, which plays the part of the console’s system.'],
+  ['Replay', 'The game’s graphics calls are recorded and replayed on Vulkan, its shaders translated to SPIR-V.'],
+];
+---
+<div class="home not-content">
+  <section class="section" id="features" aria-labelledby="features-title">
+    <p class="eyebrow">WHAT YOU GET</p>
+    <h2 id="features-title">The whole adventure, on your PC.</h2>
+    <p class="lead">Hookshot isn’t a port or an emulator: it is the game itself, built for your PC from your copy, with the options a PC game should have.</p>
+    <div class="features">{features.map(f => <article><h3>{f.title}</h3><p>{f.text}</p></article>)}</div>
+    <p class="more"><a href="/settings/">Every graphics and control setting <span aria-hidden="true">→</span></a><a href="/requirements/">System requirements <span aria-hidden="true">→</span></a></p>
+  </section>
+
+  <section class="release" aria-labelledby="release-title">
+    <img src="/branding/hookshot.png" alt="" width="512" height="512" loading="lazy" />
+    <div>
+      <p class="eyebrow">DOWNLOAD</p>
+      <h2 id="release-title">Get the Hookshot Launcher.</h2>
+      <p>It builds the game from your copy, starts it, and keeps it up to date. <strong>No game files are included:</strong> we don't host or distribute game files, assets or keys.{stable && ` The latest Hookshot is ${stable.tag}, released ${date(stable.publishedAt)}.`}</p>
+      <p class="release-files"><a href="/download/launcher/windows">Windows</a><a href="/download/launcher/windows-portable">Windows, portable</a><a href="/download/launcher/linux">Linux</a><a href={stable?.url || `${repository}/releases`}>Release notes ↗</a></p>
+    </div>
+    <div class="release-actions">
+      <a class="button primary" href="/download">Download <span aria-hidden="true">↓</span></a>
+      <a class="text-link" href="/install/">Installation guide <span aria-hidden="true">→</span></a>
+    </div>
+  </section>
+
+  <section class="section development" id="development" aria-labelledby="development-title">
+    <div>
+      <p class="eyebrow">DEVELOPMENT</p>
+      <h2 id="development-title">Built in the open.</h2>
+      <p>Hookshot is free software under the GPL, developed on Team MagicBean’s Forgejo. It continues Hookshot, the recompilation NotRexed made.</p>
+      <ol class="steps">{steps.map(([name, text]) => <li><strong>{name}</strong> {text}</li>)}</ol>
+      <p class="links"><a class="text-link" href={repository}>Hookshot on Forgejo <span aria-hidden="true">↗</span></a><a class="text-link" href={sourceUrl('docs/development.md')}>Development guide <span aria-hidden="true">↗</span></a></p>
+    </div>
+    <div class="feed">
+      <h3>Recently merged</h3>
+      <p class="feed-note">A merge is not a release: changes reach players in the next build.</p>
+      {activity.length ? (
+        <ol class="activity">{activity.map(item => <li><div><span class="merged">Merged</span><time datetime={item.mergedAt}>{date(item.mergedAt)}</time><span>#{item.number}</span></div><a href={item.url}>{item.title}</a></li>)}</ol>
+      ) : <p>Activity is unavailable right now. <a href={`${repository}/pulls`}>Browse the pull requests on Forgejo</a>.</p>}
+      {feed && <p class="snapshot">As of {new Date(feed.generatedAt).toISOString().replace('T', ' ').slice(0, 16)} UTC · <a href="/progress/">All progress</a></p>}
+    </div>
+  </section>
+
+  <section class="section help" id="help" aria-labelledby="help-title">
+    <div>
+      <p class="eyebrow">HELP</p>
+      <h2 id="help-title">Stuck? Someone may have been there.</h2>
+      <p>Start with the troubleshooting guide, or search what other players have reported.</p>
+      <img class="help-bean" src="/branding/magicbean-green.png" alt="" width="1024" height="1024" loading="lazy" />
+    </div>
+    <div class="help-tools">
+      <a class="help-guide" href="/help/"><span><strong>Troubleshooting guide</strong><small>Common problems and what to check first</small></span><span aria-hidden="true">→</span></a>
+      <form data-frontpage-search role="search" aria-label="Search reported issues" action="/progress/#problem-search">
+        <label for="frontpage-query">Has someone reported your issue?</label>
+        <div class="search-row"><input id="frontpage-query" type="search" placeholder="Black screen, controller, stutter…" maxlength="300" /><button type="submit">Search reports <span aria-hidden="true">→</span></button></div>
+      </form>
+      <div class="topics"><span>Try:</span>{['Black screen', 'Controller', 'Stutter'].map(q => <a href={`/progress/#problem-search?q=${encodeURIComponent(q)}`}>{q}</a>)}</div>
+      <noscript><p>Enable JavaScript to carry your search to the report board, or use the guide above.</p></noscript>
+    </div>
+  </section>
+
+  <a class="team" href="/about/team/" aria-labelledby="team-title">
+    <img src="/branding/magicbean-team-logo.webp" alt="" width="512" height="512" loading="lazy" />
+    <div><p class="eyebrow">THE PEOPLE BEHIND THE BEANS</p><h2 id="team-title">Made by Team MagicBean.</h2><p>Serious about the details. Less serious about ourselves.</p></div>
+    <span class="button primary">Meet the team <span aria-hidden="true">→</span></span>
+  </a>
+</div>
+
+<script>
+  import { problemSearchHash } from '../lib/problem-search.ts';
+  const form = document.querySelector<HTMLFormElement>('[data-frontpage-search]');
+  form?.addEventListener('submit', event => {
+    event.preventDefault();
+    const url = new URL(form.action);
+    url.hash = problemSearchHash(document.querySelector<HTMLInputElement>('#frontpage-query')!.value);
+    location.assign(url.href);
+  });
+</script>
+
+<style>
+  .home { font-size: var(--text-base); line-height: 1.65; }
+  .home * { box-sizing: border-box; }
+  h2 { font-size: var(--text-heading); color: var(--sl-color-white); letter-spacing: -.025em; line-height: 1.15; margin: .6rem 0 0; }
+  h3 { font-family: var(--sl-font); font-weight: 700; color: var(--sl-color-white); margin: 0; }
+  p { color: var(--sl-color-gray-2); }
+  [id] { scroll-margin-top: calc(var(--sl-nav-height) + 1.5rem); }
+  .section { margin-top: 5rem; }
+  .text-link { display: inline-flex; align-items: center; gap: .6rem; min-height: 44px; color: var(--sl-color-text-accent); }
+
+  .lead { max-width: 44rem; margin: 1rem 0 2rem; font-size: var(--text-base); }
+  .features { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+  .features article { padding: 1.4rem; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+  .features h3 { font-size: var(--text-base); }
+  .features p { margin: .6rem 0 0; font-size: var(--text-sm); }
+  .more { display: flex; flex-wrap: wrap; gap: .5rem 2rem; margin-top: 1rem; }
+  .more a { display: inline-flex; align-items: center; gap: .6rem; min-height: 44px; color: var(--sl-color-text-accent); }
+
+  .release, .team {
+    display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; gap: 1.8rem; align-items: center; margin-top: 4rem; padding: 2rem;
+    border: 1px solid var(--sl-color-gray-4); border-left: 4px solid var(--sl-color-text-accent); border-radius: 12px; background: var(--panel);
+  }
+  .release img, .team img { display: block; width: 88px; height: auto; }
+  .release h2, .team h2 { font-size: var(--text-heading); margin: .4rem 0 .5rem; }
+  .release p, .team p { margin: 0; }
+  .release-actions { display: flex; flex-direction: column; gap: .4rem; align-items: stretch; }
+  .release-files { display: flex; flex-wrap: wrap; gap: .25rem 1.2rem; margin-top: .6rem !important; }
+  .release-files a { display: inline-flex; align-items: center; min-height: 44px; color: var(--sl-color-text-accent); }
+  .release-actions .text-link { justify-content: center; }
+  .team { color: var(--sl-color-white); text-decoration: none; transition: background .18s; }
+  .team:hover { background: var(--panel-hover); }
+  .team:hover .button { background: var(--button-hover); }
+
+  .help { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 4rem; align-items: center; padding: 2.5rem; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+  .help-bean { display: block; width: 6rem; height: auto; margin-top: 1rem; }
+  .help-tools { min-width: 0; }
+  .help-guide { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 1rem; margin-bottom: 1.4rem; border-block: 1px solid var(--border); color: var(--sl-color-white); text-decoration: none; }
+  .help-guide small { display: block; font-size: var(--text-xs); color: var(--sl-color-gray-2); }
+  .help-guide:hover strong { text-decoration: underline; }
+  label { display: block; font-size: var(--text-base); font-weight: 700; margin-bottom: .8rem; }
+  .search-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .search-row input { flex: 1 1 14rem; min-width: 0; padding: .85rem; background: var(--sl-color-bg); border: 1px solid var(--sl-color-gray-3); border-radius: 6px; color: var(--sl-color-white); font: inherit; }
+  .search-row input::placeholder { color: var(--sl-color-gray-2); opacity: 1; }
+  .search-row button { display: flex; flex: 1 1 auto; align-items: center; justify-content: center; gap: .6rem; min-height: 48px; padding: .85rem 1rem; border: 1px solid var(--button); border-radius: 6px; background: var(--button); color: var(--button-text); font: 700 1rem var(--sl-font); cursor: pointer; }
+  .search-row button:hover { background: var(--button-hover); }
+  .topics { display: flex; flex-wrap: wrap; gap: .25rem .6rem; align-items: center; margin-top: .6rem; font-size: var(--text-xs); color: var(--sl-color-gray-2); }
+  .topics a { display: inline-flex; align-items: center; min-height: 44px; padding-inline: .3rem; color: var(--sl-color-text-accent); }
+
+  .development { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.3fr); gap: 4rem; padding-top: 3.5rem; border-top: 1px solid var(--border); }
+  .steps { margin: 1.4rem 0; padding-left: 1.3rem; color: var(--sl-color-gray-2); }
+  .steps li { margin-block: .5rem; }
+  .steps strong { color: var(--sl-color-white); }
+  .links { display: flex; flex-wrap: wrap; gap: .25rem 1.5rem; }
+  .feed { min-width: 0; padding: 1.6rem 1.8rem; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+  .feed h3 { font-size: var(--text-xl); }
+  .feed-note { font-size: var(--text-xs); margin: .4rem 0 1rem; }
+  .activity { margin: 0; padding: 0; list-style: none; }
+  .activity li { padding: 1.1rem 0; border-top: 1px solid var(--border); }
+  .activity div { display: flex; flex-wrap: wrap; gap: .6rem; color: var(--sl-color-gray-2); font-size: var(--text-label); }
+  .activity div > span:last-child { margin-left: auto; }
+  .merged { color: var(--sl-color-text-accent); }
+  .activity a { display: block; margin-top: .4rem; color: var(--sl-color-white); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+  .activity a:hover { text-decoration: underline; }
+  .snapshot { font-size: var(--text-label); border-top: 1px solid var(--border); padding-top: 1rem; margin: 0; }
+  .snapshot a { color: var(--sl-color-text-accent); }
+
+  @media (max-width: 70rem) {
+    .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .development, .help { gap: 2rem; }
+  }
+  @media (max-width: 62rem) {
+    .release, .team { grid-template-columns: 64px minmax(0, 1fr); }
+    .release img, .team img { width: 64px; }
+    .release-actions, .team .button { grid-column: 2; justify-self: start; }
+  }
+  @media (max-width: 49.99rem) {
+    .section { margin-top: 3.8rem; }
+    .development, .help { grid-template-columns: 1fr; }
+    .help { padding: 1.6rem; }
+  }
+  @media (max-width: 38rem) {
+    .features { grid-template-columns: 1fr; }
+    .release, .team { grid-template-columns: minmax(0, 1fr); gap: 1rem; padding: 1.5rem; }
+    .release img, .team img { width: 56px; }
+    .release-actions, .team .button { grid-column: 1; justify-self: stretch; }
+  }
+  @media (max-width: 25rem) {
+    .search-row { flex-direction: column; }
+    .feed, .help { padding: 1.2rem; }
+  }
+</style>

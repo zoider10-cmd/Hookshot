@@ -20,9 +20,9 @@ def main():
     menu, option, vi, launcher = (read("gpu", "vk", "vk_menu.cpp"), read("gpu", "vk", "vk_replay.cpp"),
                                   read("host", "nn_vi.c"), read("launcher", "Launcher.cs"))
     check('"Fast forward", &opts.fast_forward, 0, 2, 1' in menu, "the Insert menu has no row for it")
-    # (a number of its own since the merge of Mako 3.3, whose gyro is option 18)
+    # (a number of its own since the merge of Mako 3.3, whose gyro is option 18; and 58 since Mako 4.1.1, whose Camera speed is 48)
     api = read("gpu", "vk", "vk_api.h")
-    check("enum { HOS_OPT_FAST_FORWARD = 48 };" in api and "HOS_OPT_GYRO = 18" in api, "the fast forward's option number is not its own")
+    check("enum { HOS_OPT_FAST_FORWARD = 58 };" in api and "HOS_OPT_GYRO = 18" in api and "HOS_OPT_CAMERA_SPEED = 48" in api, "the fast forward's option number is not its own")
     check("if (id == HOS_OPT_FAST_FORWARD) return opts.fast_forward;" in option, "the host cannot see the menu's row (HOS_OPT_FAST_FORWARD)")
     check("rx_option(HOS_OPT_FAST_FORWARD, 0)" in vi, "the host does not read the option")
     held = vi.index("if (fast_forward_held())")

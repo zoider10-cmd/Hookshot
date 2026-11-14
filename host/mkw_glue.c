@@ -2,6 +2,11 @@
    commit (TOTK commits its whole 4 GB window up front; MKW's 512 GB window is only reserved), and stand-ins for the
    hooks of files not taken into host/ (the renderer and display, the profiler, mods, TOTK's own patches). */
 #include "hos.h"
+#include "hos_crash_record.h"
+#include "hos_paths.h"
+#ifndef HOOKSHOT_ENV_H   /* (env_on: the switches' one rule) */
+#include "../gpu/vk/compat/hookshot_env.h"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #define WIN32_LEAN_AND_MEAN
@@ -15,26 +20,54 @@
    The runtime commits what it hands out (image, system region, heap, address regions: hos_commit), because host
    APIs given guest buffers (ReadFile into a game buffer) fail on reserved pages without raising an exception. A
    guest or host access to a page nothing committed is committed on first touch, 64 KB at a time, by the handler. */
-void hos_commit(uint64_t addr, uint64_t size) {
-    if (!size) return;
+/* (hookshot) a commit refused at Windows' commit limit (1455: RAM and page file full) is tried again for up to 5 s: the renderer's
+   textures give commit back below a reserve (vk_texture.cpp's commit rule: every VRAM block is charged to the process's commit).
+   Before, the commit failed and the game's next write to those pages crashed it: a 16 GB PC at 33.9 GB of commit, an area loading
+   (a 960 KB commit, then a write into it from "ARes Loading 1"). 1: committed after waiting; 0: not */
+static int commit_wait(void *p, SIZE_T size) {
+    static volatile LONG waits, recovered;
+    for (int i = 0; i < 100; i++) {   /* (100 x 50 ms) */
+        Sleep(50);
+        if (VirtualAlloc(p, size, MEM_COMMIT, PAGE_READWRITE)) {
+            const LONG n = InterlockedIncrement(&recovered);
+            if (n <= 8 || (n & 255) == 0)
+                hos_log("mem: commit of %#llx bytes at the commit limit made after %d ms (%ld so far)", (unsigned long long)size,
+                        (i + 1) * 50, (long)n);
+            return 1;
+        }
+        if (GetLastError() != ERROR_COMMITMENT_LIMIT) return 0;
+    }
+    if (InterlockedIncrement(&waits) <= 8) hos_log("mem: commit of %#llx bytes still refused after 5 s at the commit limit", (unsigned long long)size);
+    return 0;
+}
+/* (a commit that failed: the line, and at the commit limit Windows' out-of-memory notice, said once, on its own thread) */
+static void commit_refused(uint64_t lo, uint64_t size, DWORD err) {
+    hos_log("mem: commit of %#llx bytes at %#llx failed (error %lu)", (unsigned long long)size, (unsigned long long)lo, err);
+    if (err == ERROR_COMMITMENT_LIMIT) {   /* (1455: RAM and page file full; the game crashes soon after) */
+        static volatile LONG said;
+        if (InterlockedExchange(&said, 1) == 0) {
+            hos_log("mem: Windows is out of memory (RAM and page file): close other programs, or let Windows manage the page file size");
+            extern DWORD WINAPI hos_out_of_memory_box(LPVOID);
+            CloseHandle(CreateThread(NULL, 0, hos_out_of_memory_box, NULL, 0, NULL));
+        }
+    }
+}
+
+/* 1: the range is committed; 0: it is not (outside the guest window, or refused: logged) */
+int hos_commit(uint64_t addr, uint64_t size) {
+    if (!size) return 1;
     if (!hos_guest_range(addr, size)) {   /* (hookshot: guest pages only; the posix layer's commit changes any page's protection) */
         hos_log("mem: commit of %#llx bytes at %#llx: outside the guest window", (unsigned long long)size, (unsigned long long)addr);
-        return;
+        return 0;
     }
     const uint64_t lo = addr & ~0xFFFFULL, hi = (addr + size + 0xFFFF) & ~0xFFFFULL;
     if (!VirtualAlloc(GP(lo), (SIZE_T)(hi - lo), MEM_COMMIT, PAGE_READWRITE)) {
         const DWORD err = GetLastError();
-        hos_log("mem: commit of %#llx bytes at %#llx failed (error %lu)", (unsigned long long)(hi - lo),
-                (unsigned long long)lo, err);
-        if (err == ERROR_COMMITMENT_LIMIT) {   /* (1455: RAM and page file full; the game crashes soon after. Said once, on its own thread) */
-            static volatile LONG said;
-            if (InterlockedExchange(&said, 1) == 0) {
-                hos_log("mem: Windows is out of memory (RAM and page file): close other programs, or let Windows manage the page file size");
-                extern DWORD WINAPI hos_out_of_memory_box(LPVOID);
-                CloseHandle(CreateThread(NULL, 0, hos_out_of_memory_box, NULL, 0, NULL));
-            }
-        }
+        if (err == ERROR_COMMITMENT_LIMIT && commit_wait(GP(lo), (SIZE_T)(hi - lo))) return 1;
+        commit_refused(lo, hi - lo, err);
+        return 0;
     }
+    return 1;
 }
 
 DWORD WINAPI hos_out_of_memory_box(LPVOID unused) {
@@ -56,12 +89,30 @@ static LONG CALLBACK commit_on_touch(EXCEPTION_POINTERS *info) {
     const uint64_t guest = (uint64_t)(p - A64_MEM);
     if (guest < 0x100000) return EXCEPTION_CONTINUE_SEARCH;   /* (a null pointer: the game's own fault) */
     MEMORY_BASIC_INFORMATION mbi;
-    if (!VirtualQuery(p, &mbi, sizeof mbi) || mbi.State != MEM_RESERVE) return EXCEPTION_CONTINUE_SEARCH;
+    if (!VirtualQuery(p, &mbi, sizeof mbi)) return EXCEPTION_CONTINUE_SEARCH;
+#ifdef _WIN32
+    /* (another thread committed this 64 KB between the fault and the look: the access is tried again. The heap is committed on
+       touch now (hos_mem.c), and two threads touching one new chunk at once crashed the second in the boot's module loads.
+       Not an execute fault (8, DEP): a jump into guest memory would fault again at once, forever; it goes on to the crash report.
+       Windows only: Linux commits nothing lazily, its VirtualQuery stand-in calls every guest page committed and read-write, and
+       its signal handler never sets 8, so there every SIGSEGV and SIGBUS in the window would be tried again forever, at 100% CPU,
+       rather than reach report_crash) */
+    /* (Mako 4.1.1: or PAGE_EXECUTE_READWRITE: a range the renderer imported is made a region of its own that way, vk_memory.cpp
+       make_own_region; a touch racing that import crashed the game at its start, ModuleSystemWorker1's copy into it) */
+    if (mbi.State == MEM_COMMIT && (mbi.Protect == PAGE_READWRITE || mbi.Protect == PAGE_EXECUTE_READWRITE) &&
+        rec->ExceptionInformation[0] != 8)
+        return EXCEPTION_CONTINUE_EXECUTION;
+#endif
+    if (mbi.State != MEM_RESERVE) return EXCEPTION_CONTINUE_SEARCH;
     static volatile LONG touched;
     if (InterlockedIncrement(&touched) <= 16)
         hos_log("mem: %#llx committed on first touch (nothing handed it out)", (unsigned long long)guest);
-    return VirtualAlloc(GP(guest & ~0xFFFFULL), 0x10000, MEM_COMMIT, PAGE_READWRITE) ? EXCEPTION_CONTINUE_EXECUTION
-                                                                                      : EXCEPTION_CONTINUE_SEARCH;
+    if (VirtualAlloc(GP(guest & ~0xFFFFULL), 0x10000, MEM_COMMIT, PAGE_READWRITE)) return EXCEPTION_CONTINUE_EXECUTION;
+    /* (hookshot: at the commit limit the touch waits for the renderer to give commit back, as hos_commit does) */
+    const DWORD err = GetLastError();
+    if (err == ERROR_COMMITMENT_LIMIT && commit_wait(GP(guest & ~0xFFFFULL), 0x10000)) return EXCEPTION_CONTINUE_EXECUTION;
+    commit_refused(guest & ~0xFFFFULL, 0x10000, err);
+    return EXCEPTION_CONTINUE_SEARCH;
 }
 
 /* A crash nothing handles: what, where (mkw.exe+offset: nx2/dllmap.py reads mkw.map the same way), and the guest
@@ -72,7 +123,76 @@ static uint64_t peek_guest(uint64_t a) {
     return G64(a);
 }
 
+/* The independent record is complete before the legacy logger/loader/CRT calls.
+   Those CRASH lines remain unchanged and are still useful when they can run. */
+static void record_exception(EXCEPTION_POINTERS *info) {
+    Ctx *c = hos_ctx();
+    HosThread *thread = hos_self();
+    const EXCEPTION_RECORD *rec = info->ExceptionRecord;
+    HosCrashContext context = {0};
+    context.reason = "unhandled exception";
+    context.thread = thread ? hos_thread_name(thread) : "host";
+    context.code = rec->ExceptionCode;
+    context.pc = (uintptr_t)info->ContextRecord->Rip;
+    context.sp = (uintptr_t)info->ContextRecord->Rsp;
+    context.fp = (uintptr_t)info->ContextRecord->Rbp;
+    context.fault_address = rec->NumberParameters > 1 ? rec->ExceptionInformation[1] : 0;
+    context.guest_base = (uintptr_t)A64_MEM;
+    context.guest_size = HOS_GUEST_SPACE;
+    context.guest_registers = c ? c->x : NULL;
+#ifdef _WIN32
+    context.native_context = info->ContextRecord;
+    context.exception_filter = 1;
+#else
+    context.signal_number = (int)rec->ExceptionInformation[13];
+    context.signal_code = (int)(intptr_t)rec->ExceptionInformation[14];
+    if (context.signal_number) context.reason = "fatal signal";
+#endif
+    if (hos_crash_record_write(&context)) {
+#ifdef _WIN32
+        hos_crash_record_dump(info);
+#endif
+    }
+}
+
+void hos_crash_record_fatal(const uint64_t *guest_registers, const char *reason) {
+    HosThread *thread = hos_self();
+    HosCrashContext context = {0};
+    context.reason = reason;
+    context.thread = thread ? hos_thread_name(thread) : "host";
+    context.guest_base = (uintptr_t)A64_MEM;
+    context.guest_size = HOS_GUEST_SPACE;
+    context.guest_registers = guest_registers;
+#ifdef _WIN32
+    CONTEXT native;
+    RtlCaptureContext(&native);
+    context.native_context = &native;
+    context.pc = (uintptr_t)native.Rip;
+    context.sp = (uintptr_t)native.Rsp;
+    context.fp = (uintptr_t)native.Rbp;
+#else
+    context.pc = (uintptr_t)hos_crash_record_fatal;
+    context.sp = (uintptr_t)&context;
+    context.fp = (uintptr_t)__builtin_frame_address(0);
+#endif
+    hos_crash_record_write(&context);
+}
+
+/* Before log rotation, so recovery reads the last run rather than this run's
+   new log. hos_game_path_a also understands the installed bin/ layout. */
+void hos_crash_record_prepare(const char *log_path) {
+    char path[4096];
+    DWORD n = hos_game_path_a(path, sizeof path);
+    if (!n || n >= sizeof path) return;
+    while (n && path[n - 1] != '/' && path[n - 1] != '\\') --n;
+    if (!n) return;
+    path[n] = 0;
+    const char *hos_version(void);
+    hos_crash_record_start(path, hos_version(), log_path);
+}
+
 static LONG WINAPI report_crash(EXCEPTION_POINTERS *info) {
+    record_exception(info);
     EXCEPTION_RECORD *rec = info->ExceptionRecord;
     const uint64_t rip = info->ContextRecord->Rip;
     HMODULE mod = NULL;
@@ -579,6 +699,7 @@ static DWORD WINAPI sample_all_thread(void *p) {
             }
             CloseHandle(snap);
             t0 = hos_now_ns();
+            fprintf(out, "# t0_ns %lld\n", (long long)t0);   /* (the clock of HOS_CHAIN's records: scripts/chain.py) */
             hos_log("prof: all-thread sampling of %d threads into %s", nt, path);
         }
         Sleep(2);
@@ -692,7 +813,7 @@ int hos_ab(void) { return 0; }                    /* (hos_prof.c: A/B measuremen
 /* (with the renderer's mem: lines) HOS_MEM_MAP=1: how much of the guest window is committed, and its resident part */
 void hos_memory_map_log(void) {
     static int on = -1;
-    if (on < 0) on = getenv("HOS_MEM_MAP") != NULL;
+    if (on < 0) on = env_on("HOS_MEM_MAP");
     if (!on) return;
     uint64_t committed = 0, regions = 0;
     for (uint64_t a = 0; a < HOS_GUEST_SPACE;) {

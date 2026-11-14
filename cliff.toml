@@ -1,0 +1,39 @@
+# git-cliff's settings for the release notes (docs/releases.md, RELEASING.md): scripts/release.py notes runs it over the
+# commits since the previous tag, and the release workflow puts the result on the release page. Nothing is written back to
+# the repository. A squash-merged pull request's title is its commit's subject, a Conventional Commit (CONTRIBUTING.md).
+
+[changelog]
+header = ""
+body = """
+{% if version %}## {{ version }}{% if timestamp %} ({{ timestamp | date(format="%Y-%m-%d") }}){% endif %}{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{% if commit.breaking %}**Breaking:** {% endif %}{{ commit.message | split(pat="\n") | first | upper_first | trim }}{% if commit.remote.pr_number %} (#{{ commit.remote.pr_number }}){% endif %}
+{%- endfor %}
+{% endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "v[0-9]+\\.[0-9]+\\.[0-9]+.*"
+topo_order = false
+sort_commits = "oldest"
+commit_parsers = [
+  { message = "^feat", group = "<!-- 0 -->Features" },
+  { message = "^fix", group = "<!-- 1 -->Fixes" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^revert", group = "<!-- 3 -->Reverted" },
+  { message = "^docs", group = "<!-- 4 -->Documentation" },
+  { message = "^refactor", group = "<!-- 5 -->Code" },
+  { message = "^build", group = "<!-- 6 -->Build" },
+  { message = "^test", group = "<!-- 7 -->Tests" },
+  { message = "^ci", skip = true },
+  { message = "^chore", skip = true },
+]

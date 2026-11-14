@@ -1,0 +1,9 @@
+User-supplied branding assets for the local Hookshot preview, November 12, 2026.
+Hookshot artwork supplied as image 4; magicbean characters supplied as images 1–3.
+Copied byte-for-byte, with no image modifications. No license or authorship inferred.
+The preview copied these supplied files directly; it did not extract game assets. Included in the website source at the user’s request.
+Teary Elf Bean Adventure.png supplied November 12 for the main hero, copied unchanged as teary-elf-bean.png.
+Grappling Hook Bean Sticker.png supplied November 12 as the replacement hero, copied unchanged as grappling-hook-bean.png.
+Glowing Fairy Bean Sticker.png supplied November 12 for the three-click Easter egg, copied unchanged as glowing-fairy-bean.png.
+Team logo identified by user: https://magicbean.dev/logo.webp, retrieved November 12, 2026.
+Saved unchanged as magicbean-team-logo.webp (512x512 RGBA WebP); SHA-256 ab917dbf23483b73e1caa80b38bdbbbe1b136943e70db386e89605fc1d33d80c.

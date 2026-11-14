@@ -1,0 +1,20 @@
+name: Idea
+about: Something Hookshot doesn't do yet
+title: "Idea: "
+labels: [kind/feature]
+body:
+  - type: markdown
+    attributes:
+      value: Search the [open issues](https://git.magicbean.dev/MagicBeanDev/Hookshot/issues) first; if someone asked already, add to theirs. English, please.
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you want, and why it would help.
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: How another port or emulator does it, links, pictures.

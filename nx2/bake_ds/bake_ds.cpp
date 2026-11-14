@@ -68,7 +68,10 @@
 #include "shader_recompiler/frontend/maxwell/control_flow.h"
 #include "shader_recompiler/frontend/maxwell/translate_program.h"
 #include "shader_recompiler/host_translate_info.h"
-#include "shader_recompiler/ir_opt/oot_visual_workaround.h"
+#include "shader_recompiler/ir_opt/fragment_output_guard.h"
+#ifndef HOOKSHOT_ENV_H   // (env_on, as the live back end reads its switches)
+#include "hookshot_env.h"
+#endif
 #include "shader_recompiler/object_pool.h"
 #include "shader_recompiler/profile.h"
 #include "shader_recompiler/program_header.h"
@@ -103,6 +106,7 @@ constexpr uint64_t kFnvPrime = 0x100000001b3ull;
 // (emit_spirv_warp.cpp), so the SPIR-V needs no cooperative-matrix device feature)
 enum class TensorMode { Off, Emulate, Software, Stub };
 TensorMode g_tensor = TensorMode::Off;   // (set from --target before any stage is parsed)
+bool g_handle_tables = true;              // (Target::handle_tables, set with it; host_info and disk_stamp read it)
 
 struct Target {
     std::string name = "plain";
@@ -110,6 +114,10 @@ struct Target {
     bool integer_variants = true;     // (compute answer variants, as live's seed_compute enumerates them; live does this for every compute program, no tensor switch involved: vk_draw.cpp:5490-5494)
     bool cooperative_matrix = false;  // (device class only: recorded, not a baked mode -- see the comment on gfx1201)
     std::vector<std::string> env;     // (KEY=VALUE the game must run with; live folds these into disk_stamp)
+    // (live: handle_tables_on(), vk_shader.cpp: on where the GPU indexes sampled image arrays nonuniformly, the GPUs a bank
+    // is baked for; off, the translation is the one before handle tables and the stamp carries live's "nhtb" word, so the
+    // bank loads only in a run that has them off too: RX_VK_HANDLE_TABLES=0, or a GPU without the feature)
+    bool handle_tables = true;
 };
 
 std::string tensor_mode_name(TensorMode m) {
@@ -162,7 +170,8 @@ std::optional<Target> target_preset(std::string_view name) {
     return std::nullopt;
 }
 
-/// --feature <comma list>: tensor | tensor=emulate|software|stub | integer | no-integer, on top of a preset
+/// --feature <comma list>: tensor | tensor=emulate|software|stub | integer | no-integer | handle-tables |
+/// no-handle-tables, on top of a preset
 bool apply_features(Target& t, const std::string& list) {
     size_t at = 0;
     while (at <= list.size()) {
@@ -181,6 +190,8 @@ bool apply_features(Target& t, const std::string& list) {
         else if (f == "no-tensor") set_tensor(TensorMode::Off, nullptr);
         else if (f == "integer") t.integer_variants = true;
         else if (f == "no-integer") t.integer_variants = false;
+        else if (f == "handle-tables") t.handle_tables = true;
+        else if (f == "no-handle-tables") t.handle_tables = false;
         else return false;
     }
     return true;
@@ -413,7 +424,7 @@ public:
     u32 LocalMemorySize() const override { return local_memory; }
     u32 SharedMemorySize() const override {
         // (live: vk_shader.cpp:416; RX_VK_SHARED_48K=1 is the pre-PR-91 48 KB)
-        static const bool old = std::getenv("RX_VK_SHARED_48K") != nullptr;
+        static const bool old = env_on("RX_VK_SHARED_48K");
         return old ? 48u << 10 : nvn.shared_memory;
     }
     std::array<u32, 3> WorkgroupSize() const override {
@@ -421,7 +432,7 @@ public:
     }
     bool HasHLEMacroState() const override {
         // (live: vk_shader.cpp:430; RX_VK_NO_DRAW_PARAMS=1 is the pre-fix bank)
-        static const bool off = std::getenv("RX_VK_NO_DRAW_PARAMS") != nullptr;
+        static const bool off = env_on("RX_VK_NO_DRAW_PARAMS");
         return !off && stage == Shader::Stage::VertexB;
     }
     bool HasNativeInstructions() const override { return true; }
@@ -512,19 +523,10 @@ Shader::HostTranslateInfo host_info() {   // (live: vk_shader.cpp:508)
     h.min_ssbo_alignment = g_ssbo_align;
     h.support_geometry_shader_passthrough = false;
     h.support_conditional_barrier = true;
+    h.support_handle_table_arrays = g_handle_tables;   // (live: handle_tables_on(), vk_shader.cpp)
     return h;
 }
 
-/// (live: vk_shader.cpp:805 oot_visual; off unless RX_VK_OOT_VISUAL is set, which is also what the cache stamp sees)
-void oot_visual(Shader::IR::Program& program, uint64_t key) {
-    static const bool on = std::getenv("RX_VK_OOT_VISUAL") && std::atoi(std::getenv("RX_VK_OOT_VISUAL")) != 0;
-    if (!on) return;
-    static const float fog = std::getenv("RX_VK_OOT_FOG") ? static_cast<float>(std::atof(std::getenv("RX_VK_OOT_FOG"))) : 0.08f;
-    static const float exposure =
-        std::getenv("RX_VK_OOT_EXPOSURE") ? static_cast<float>(std::atof(std::getenv("RX_VK_OOT_EXPOSURE"))) : 1.0f;
-    Shader::Optimization::ApplyOotVisualWorkaround(program, fog, exposure);
-    (void)key;
-}
 
 struct Translation {
     Shader::ObjectPool<Shader::IR::Inst> insts;
@@ -703,14 +705,21 @@ uint64_t disk_stamp(uint64_t translator_stamp, uint32_t depth) {   // (live: vk_
                             static_cast<uint32_t>(sizeof(std::vector<uint32_t>)),
                             3u, 0u};   // libstdc++ (a libc++ or MSVC build writes 1/2 and its version)
     add(abi, sizeof abi);
+    // (and handle tables off: live's translator_stamp adds the same word after the same sizes, only then)
+    if (!g_handle_tables) {
+        const uint32_t no_tables = 0x6e687462u;   // ("nhtb")
+        add(&no_tables, sizeof no_tables);
+    }
     // (the allowlisted environment, in the process block's order, unsorted and not deduplicated: exactly
     // vk_shader.cpp:860-862. The target's switches were exported by export_target_env before this call, so they
     // sit where `environ` puts them -- the same position a run of this build sees. A multi-variable environment
     // whose allowlist entries are in another order is a different stamp, as it is live.)
     for (char** e = environ; e && *e; e++) {
-        for (const char* pre : {"RX_VK_OOT", "RX_VK_MMA", "RX_VK_NATIVE", "RX_VK_NAN", "RX_VK_TASK_CAP", "RX_VK_NETWORK",
-                                "RX_VK_GP", "RX_VK_FOLLOW", "RX_VK_NO_FOLLOW", "RX_VK_NO_F16", "RX_VK_SHARED", "RX_VK_MESH",
-                                "EDEN_"})
+        for (const char* pre : {"RX_VK_MMA", "RX_VK_NATIVE", "RX_VK_NAN", "RX_VK_TASK_CAP", "RX_VK_NETWORK",
+                                "RX_VK_GP_", "RX_VK_FOLLOW", "RX_VK_NO_FOLLOW", "RX_VK_NO_F16", "RX_VK_SHARED", "RX_VK_MESH",
+                                "RX_VK_NO_INVARIANT", "RX_VK_MARKERS", "RX_VK_NO_CBUF_LOAD_RULE",
+                                "RX_VK_PTR_SPLIT_FALLBACK", "RX_VK_ALL_GLOBAL_PROGS", "RX_VK_NO_EXTREGS", "RX_VK_NO_DRAW_PARAMS",
+                                "RX_VK_MISS_LOG", "RX_VK_BLOCK_PROBE", "EDEN_"})
             if (!std::strncmp(*e, pre, std::strlen(pre))) add(*e, std::strlen(*e));
     }
     return h;
@@ -938,7 +947,8 @@ int usage() {
                  "\n"
                  "  --target      the feature profile the bank is baked for; its switches enter the cache stamp, so a bank\n"
                  "                made for one profile is refused by a run with another (as live refuses any stamp)\n"
-                 "  --feature     comma list on top of the preset: tensor | tensor=emulate|software|stub | integer | no-integer\n");
+                 "  --feature     comma list on top of the preset: tensor | tensor=emulate|software|stub | integer | no-integer |\n"
+                 "                handle-tables | no-handle-tables (on by default; off needs RX_VK_HANDLE_TABLES=0 in the game)\n");
     return 2;
 }
 
@@ -1099,6 +1109,9 @@ int run_translate(const Options& o) {
                  hex64(o.stamp == ~0ull ? 0 : o.stamp).c_str(), hex64(disk).c_str(), sizeof(Shader::Info),
                  sizeof(ProgramLayout));
     for (const std::string& kv : o.target.env) std::fprintf(stderr, "bake_ds: target requires %s in the game's environment\n", kv.c_str());
+    if (!o.target.handle_tables)
+        std::fprintf(stderr, "bake_ds: target has no handle tables: requires RX_VK_HANDLE_TABLES=0 in the game's environment "
+                             "(or a GPU without them)\n");
     FILE* bank = nullptr;
     std::string bank_path = o.out + "/hookshot_programs.bin";
     std::vector<uint8_t> bank_head;
@@ -1215,7 +1228,6 @@ int run_translate(const Options& o) {
             try {
                 auto tr = translate(env, false);
                 t.questions = env.texture_questions;
-                oot_visual(tr->program, by_stage[5]->key);
                 Shader::RuntimeInfo rt{};
                 StageResult sr;
                 sr.info = tr->program.info;
@@ -1463,7 +1475,6 @@ int run_translate(const Options& o) {
                             if (fs->program.info.loads.Generic(i) && !mesh_t->program.info.stores.Generic(i))
                                 frt.point_coord_generics.set(i);
                     for (int i = 0; i < 8; i++) frt.color_output_types[i] = static_cast<Shader::AttributeType>(no_types[i]);
-                    oot_visual(fs->program, by_stage[1]->key);
                     uint32_t float_targets = 0;
                     for (int i = 0; i < 8; i++)
                         if (frt.color_output_types[i] == Shader::AttributeType::Float) float_targets |= 1u << i;
@@ -1502,7 +1513,6 @@ int run_translate(const Options& o) {
                     OfflineEnv fenv{*by_stage[1], Shader::Stage::Fragment};
                     auto ft = translate(fenv, true);
                     questions += fenv.texture_questions;
-                    oot_visual(ft->program, by_stage[1]->key);
                     Shader::RuntimeInfo frt{};
                     frt.previous_stage_stores = t->program.info.stores;
                     for (int i = 0; i < 8; i++) frt.color_output_types[i] = static_cast<Shader::AttributeType>(no_types[i]);
@@ -1577,14 +1587,14 @@ int run_translate(const Options& o) {
                      "  \"program_slots\": %zu,\n  \"translated\": %zu,\n  \"failed\": %zu,\n  \"skipped\": %zu,\n"
                      "  \"target\": \"%s\",\n  \"tensor\": \"%s\",\n  \"cooperative_matrix_class\": %s,\n"
                      "  \"integer_variants\": %s,\n  \"variant_cap\": %d,\n  \"duplicate_variants\": %zu,\n"
-                     "  \"mma_software\": %s,\n  \"feature_env\": [%s],\n"
+                     "  \"mma_software\": %s,\n  \"handle_tables\": %s,\n  \"feature_env\": [%s],\n"
                      "  \"cache_stamp\": \"%s\",\n  \"translator_stamp\": \"%s\",\n  \"depth_mode\": %u,\n"
                      "  \"sizeof_info\": %zu,\n  \"sizeof_program_layout\": %zu,\n  \"ssbo_alignment\": %llu,\n  \"bank\": %s\n}\n",
                      json_escape(o.seed).c_str(), seed.stages.size(), seed.programs.size(), program_slots, translated, failed,
                      skipped, json_escape(o.target.name).c_str(), tensor_mode_name(o.target.tensor).c_str(),
                      o.target.cooperative_matrix ? "true" : "false", o.target.integer_variants ? "true" : "false",
                      o.variant_cap, duplicate_variants, Shader::Backend::SPIRV::mma_software ? "true" : "false",
-                     env_json.c_str(), hex64(disk).c_str(), hex64(o.stamp == ~0ull ? 0 : o.stamp).c_str(),
+                     o.target.handle_tables ? "true" : "false", env_json.c_str(), hex64(disk).c_str(), hex64(o.stamp == ~0ull ? 0 : o.stamp).c_str(),
                      o.depth, sizeof(Shader::Info), sizeof(ProgramLayout), static_cast<unsigned long long>(g_ssbo_align),
                      o.bank ? "\"hookshot_programs.bin\"" : "null");
         std::fclose(mf);
@@ -1709,6 +1719,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     export_target_env(o.target);
+    g_handle_tables = o.target.handle_tables;   // (before verify's disk_stamp and any translation)
     if (cmd == "verify") {
         if (!bank_arg) return usage();
         // (no --target: read the bank as any profile, as before; with one, also check the stamp)

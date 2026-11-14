@@ -2,9 +2,11 @@
 // into a ring of the last seconds; from Breakdown on, where each frame's time went. OoT simulates on its main thread and
 // records its frame on its presentation thread, which presents: the parts are that thread's. The renderer's time is its
 // entries' (submit, present, finish, which replay on the calling thread), less the waits inside them; the waits for the GPU
-// are the recording slots', the fences', the swapchain's frame fence and OoT's own present poll (the host's, MkwVkHost
-// slept_ns); the pacing is the window acquire's sleep, the game's other sleeps, vsync (the swapchain's acquire and present)
-// and Reflex's or Anti-Lag 2's wait; the game is the rest, its own code on that thread and its waits for its main thread.
+// are the recording slots', the fences', the swapchain's frame fence, OoT's own present poll (the host's, MkwVkHost
+// slept_ns) and a present that waited for the frame's copy (NVIDIA on Linux: vk_replay.cpp present_out; the presenter
+// thread's wait for it); the pacing is the window acquire's sleep, the game's other sleeps, vsync (the swapchain's acquire
+// and present) and Reflex's or Anti-Lag 2's wait; the game is the rest, its own code on that thread and its waits for its
+// main thread.
 #include "vk_fps.h"
 
 #include <algorithm>

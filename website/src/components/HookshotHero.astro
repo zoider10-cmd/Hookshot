@@ -1,0 +1,102 @@
+---
+import DefaultHero from '@astrojs/starlight/components/Hero.astro';
+import { beanBites } from '../lib/bean-bites.ts';
+const isHome = Astro.url.pathname === '/';
+---
+{isHome ? (
+<section class="hero" aria-labelledby="_top">
+  <div class="copy">
+    <h1 id="_top" data-page-title>Hookshot,<br /><em>native on your PC.</em></h1>
+    <p class="intro">
+      Your supported game, running natively on <strong>Windows and Linux</strong>,
+      with no emulator. Hookshot recompiles the game into a PC program, <strong>on your PC, from your own copy</strong>.
+    </p>
+    <div class="actions">
+      <a class="button primary" href="/install/">Get started <span aria-hidden="true">→</span></a>
+      <a class="button" href="/contributing/">Contribute <span aria-hidden="true">→</span></a>
+      <a class="button discord" href="https://discord.gg/magicbean"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 2v-10a9 9 0 0 1 18 0Z"/><path d="M7 11h.01M12 11h.01M17 11h.01" stroke-width="3" stroke-linecap="round"/></svg>Join Discord <span aria-hidden="true">↗</span></a>
+    </div>
+    <p class="note">Bring your own copy of the game: Hookshot never includes the game, its keys or an executable.</p>
+  </div>
+  <figure class="art">
+    <div class="halo" aria-hidden="true"></div>
+    <button class="bean" type="button" aria-label="Poke the bean" data-bean-secret data-fairy-src="/branding/glowing-fairy-bean.png">
+      <img src="/branding/grappling-hook-bean.png" alt="A delighted blue bean adventurer swinging a grappling hook." width="1254" height="1254" fetchpriority="high" decoding="async" />
+    </button>
+    <span class="bean-status" data-bean-status role="status" aria-live="polite"></span>
+    <figcaption><span aria-hidden="true">↳</span> <span data-bean-bite>{beanBites[0]}</span></figcaption>
+  </figure>
+</section>
+) : <DefaultHero />}
+
+<script>
+  import { refreshBeanBite } from '../lib/bean-bites.ts';
+  refreshBeanBite(document.querySelector('[data-bean-bite]'), window);
+  const bean = document.querySelector<HTMLButtonElement>('[data-bean-secret]');
+  const artwork = bean?.querySelector('img');
+  const status = document.querySelector<HTMLElement>('[data-bean-status]');
+  if (bean && artwork && status) {
+    let pokes = 0;
+    // Native button clicks also cover touch, Enter and Space. Reload resets the secret.
+    bean.addEventListener('click', async () => {
+      if (pokes >= 3) return;
+      if (++pokes !== 3) return;
+      bean.setAttribute('aria-busy', 'true');
+      try {
+        const fairy = new Image();
+        fairy.src = bean.dataset.fairySrc!;
+        await fairy.decode();
+        artwork.src = fairy.src;
+        artwork.alt = 'A glowing blue fairy bean with luminous wings and a flower crown.';
+        bean.setAttribute('aria-label', 'Fairy bean unlocked');
+        bean.setAttribute('aria-disabled', 'true');
+        status.textContent = 'Secret unlocked: fairy bean!';
+      } catch {
+        pokes = 2;
+        status.textContent = 'The fairy bean is taking a moment. Poke again to retry.';
+      } finally {
+        bean.removeAttribute('aria-busy');
+      }
+    });
+  }
+</script>
+
+<style>
+  .hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 2rem; align-items: center; padding: 3.2rem 0 2.6rem; color: var(--sl-color-white); font-size: var(--text-base); line-height: 1.65; }
+  .hero * { box-sizing: border-box; }
+
+  h1 { color: var(--sl-color-white); font-size: var(--text-display); line-height: 1.04; letter-spacing: -.045em; margin: 0 0 1.5rem; }
+  h1 em { color: var(--sl-color-text-accent); font-style: normal; }
+  .intro { font-size: var(--text-lg); max-width: 32rem; color: var(--sl-color-gray-2); margin: 0; }
+  .intro strong { font-weight: 700; color: var(--sl-color-white); }
+  .actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.8rem; }
+  .note { color: var(--sl-color-gray-2); font-size: var(--text-label); margin: 1.15rem 0 0; }
+
+  .art { position: relative; margin: 0; display: grid; justify-items: center; isolation: isolate; min-width: 0; }
+  .halo { position: absolute; inset: 10% -5% 12%; z-index: -1; background: radial-gradient(ellipse, #a6d95820, transparent 68%); }
+  .bean { display: grid; place-items: center; width: 100%; padding: 0; border: 0; border-radius: 24px; background: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .bean:focus-visible { outline: 3px solid var(--sl-color-text-accent); outline-offset: 6px; }
+  .bean[aria-disabled='true'] { cursor: default; }
+  .bean img { width: 100%; max-width: 520px; height: auto; object-fit: contain; filter: drop-shadow(0 22px 22px #0003); }
+  /* Match the main MagicBean site's gentle bob; the button and focus ring stay still. */
+  @media (prefers-reduced-motion: no-preference) {
+    .bean img { animation: sway 6s ease-in-out infinite; }
+    .bean:is(:hover, :focus) img { animation-play-state: paused; }
+  }
+  @keyframes sway {
+    0%, 100% { transform: translateY(0) rotate(0); }
+    50% { transform: translateY(-8px) rotate(-1.5deg); }
+  }
+  .bean-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  figcaption { display: flex; align-items: center; gap: .6rem; color: var(--sl-color-gray-2); font-size: var(--text-xs); font-weight: 600; margin-top: .8rem; }
+  figcaption > span:first-child { color: var(--sl-color-text-accent); font-size: var(--text-sm); }
+
+  @media (max-width: 49.99rem) {
+    .hero { grid-template-columns: 1fr; gap: 1.2rem; padding: 1.7rem 0 2rem; }
+    .bean img { max-width: 340px; }
+  }
+  @media (max-width: 25rem) {
+    .actions { flex-direction: column; align-items: stretch; }
+    .bean img { max-width: 270px; }
+  }
+</style>

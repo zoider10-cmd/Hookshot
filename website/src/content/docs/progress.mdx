@@ -1,0 +1,38 @@
+---
+title: Progress & updates
+description: Search reported problems, feature requests, proposed changes and releases, and check reports for the current stable version.
+tableOfContents: false
+---
+import ProgressBoard from '../../components/ProgressBoard.astro';
+
+See whether your problem has been reported, what's being worked on, and what has been released. The data comes from
+[Hookshot on Forgejo](https://git.magicbean.dev/MagicBeanDev/Hookshot) and is refreshed every hour.
+
+A **proposed** change is waiting for review, a **merged** one is accepted but may not be in a release yet, and a
+**release** is a version you can download.
+
+<ProgressBoard />
+
+## How to read this overview
+
+- **Reported problems** includes unconfirmed reports and questions. Open does not necessarily mean someone is working on it.
+- **Feature requests** are suggestions, not promises or release dates.
+- **Changes & work** includes proposed and draft changes, accepted changes, and items explicitly labelled “in progress.”
+- **Releases** separates stable versions from previews. Follow the release notes for included changes.
+- **Current version watch** matches exact versions in report forms. It groups reports and shows reviewed serious issues when available; it cannot diagnose a bug or measure how many players are affected.
+
+Closed reports may be duplicates, declined requests or resolved problems. Read the linked discussion before assuming a fix.
+Reviewed summaries and workarounds show their review date and sources. If the source changes, that advice is hidden until reviewed again.
+
+The page checks its data source every five minutes while open. The “Data checked” time tells you how recent the underlying
+Forgejo snapshot is. Static hosting needs a refreshed publication to update that snapshot; automatic checks alone do not make old data current.
+
+Search and filters stay in your browser. Forgejo receives no search terms from this overview.
+For instructions and troubleshooting advice, use the documentation search at the top of the site or the [common issues guide](/help/).
+
+## Need help now?
+
+- [Look for a workaround in the common issues guide](/help/).
+- [Check how to update and back up your saves](/saves/).
+- [Learn how to report a problem or contribute](/help/report/).
+- [Report a new Hookshot problem](https://git.magicbean.dev/MagicBeanDev/Hookshot/issues/new) if you cannot find an existing report.

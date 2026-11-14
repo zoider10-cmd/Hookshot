@@ -11,6 +11,7 @@
 #include <deque>
 #include <exception>
 #include <map>
+#include <condition_variable>
 #include <mutex>
 #include <set>
 #include <string>
@@ -29,6 +30,13 @@ bool coherent=false,fail_buffer=false;
 unsigned flushed=0,queued=0;
 std::mutex par_mutex;
 struct ParLock { std::lock_guard<std::mutex> lock{par_mutex}; };
+namespace rec {   // (vk_recorder.h's RX_VK_RECORDER_OWN marks, as they are with the recorder off)
+inline void slot_begin(uint64_t) {}
+inline void slot_done() {}
+inline uint64_t produced() { return 0; }
+struct OwnSlot { OwnSlot() {} ~OwnSlot() {} };   // (a scope, as the real one)
+}   // namespace rec
+uint64_t rec_end_pos[64];   // (vk_replay.cpp: each slot's end in the recorder's ring)
 void logf(const char*,...) {}
 bool create_buffer(uint64_t size,VkBufferUsageFlags,bool,VkBuffer& buffer,VmaAllocation& allocation,void** mapped,bool=false) {
     if(fail_buffer) return false;
@@ -68,7 +76,7 @@ std::array<std::array<BankCache,2>,2>& bank_cache() { static std::array<std::arr
 void make_dummies() {}
 /* FLUSH */
 /* BEGIN */
-struct Recording { int slot;VkCommandBuffer cmd,upload,init; VkFence fence;uint64_t value=1,batch=0;bool submitted=false; };
+struct Recording { int slot;VkCommandBuffer cmd,upload,init; VkFence fence;uint64_t value=1,batch=0,part=0;bool submitted=false; };
 struct Expected { BufferRef ref;std::vector<uint8_t> bytes; };
 std::map<VkCommandBuffer,std::vector<Expected>> expected;
 std::vector<int> submitted_slots;
@@ -80,13 +88,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEndCommandBuffer(VkCommandBuffer) { return VK_S
 VkSemaphore timeline{},rec_timeline{};
 uint64_t rec_seq=0;
 std::mutex rec_map_mu;
+// (the readback's part bookkeeping and the held-submit flag: gpu/vk/vk_replay.cpp)
+uint64_t rec_part_next = 0;
+std::map<uint64_t,uint64_t> part_rec;
+std::condition_variable rec_map_cv;
+std::atomic<bool> pend_held{false};
 std::multimap<uint64_t,uint64_t> value_rec;
 std::set<uint64_t> rec_open_values;
-struct { std::vector<VkCommandBufferSubmitInfo> cbs;uint64_t signal=0,rec=0;bool any_signal=false; } pend;
+struct { std::vector<VkCommandBufferSubmitInfo> cbs;uint64_t signal=0,rec=0;bool any_signal=false;uint64_t reflex=0; } pend;
+uint64_t reflex_frame() { return 0; }   // (vk_reflex.cpp: no Reflex here)
+const void* reflex_submit_id(const void* next, uint64_t = ~0ull) { return next; }   // (vk_reflex.cpp: no tag without Reflex)
 uint64_t batch_next=0;std::chrono::steady_clock::time_point pend_since;
 bool batch=false;bool batch_on() { return batch; }
 int flush_reason=0;constexpr int FR_CAP=1,FR_OTHER=0;bool batch_gpu_idle() { return false; }
 void device_lost() { require(false,"unexpected device loss"); }
+void note_timeline_sent(uint64_t) {}
+bool memory_sparse_wait(VkSemaphoreSubmitInfo*) { return false; }   // (vk_memory.cpp: no sparse mirror binds here)
 #define PROF(x) ((void)0)
 VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit2(VkQueue,uint32_t count,const VkSubmitInfo2* submits,VkFence) {
     for(unsigned i=0;i<count;i++) for(unsigned j=0;j<submits[i].commandBufferInfoCount;j++) {

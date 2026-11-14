@@ -88,19 +88,11 @@ def code_key(control: bytes, area: bytes) -> int:
 
 
 def translator_stamp(vk_dir: str = None) -> str:
-    """Mirror of the HOOKSHOT_SHADER_STAMP block (nx2/build.py:693-699)."""
-    vk = vk_dir or os.path.join(ROOT, "gpu", "vk")
-    stamp = hashlib.sha1()
-    translator = [os.path.join(d, f) for top in ("eden", "sirit", "compat")
-                  for d, _, fs in os.walk(os.path.join(vk, top)) for f in fs]
-    names = sorted(translator) + [os.path.join(vk, n) for n in
-                                  ("vk_shader.cpp", "vk_bank.cpp",
-                                   "vk_state.h", "vk_api.h")]
-    for f in names:
-        with open(f, "rb") as src:
-            stamp.update(os.path.relpath(f, vk).replace("\\", "/").encode()
-                         + src.read().replace(bytes((13, 10)), bytes((10,))))
-    return stamp.hexdigest()[:16]
+    """HOOKSHOT_SHADER_STAMP as nx2/build.py makes it: nx2/translator_files.py's."""
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import translator_files
+    return translator_files.stamp(vk_dir or os.path.join(ROOT, "gpu", "vk"))
 
 
 def parse_seed(path: str):
@@ -221,7 +213,7 @@ def bake_seed(seed_path: str, bank_dir: str, max_pipelines: int = 8,
     os.makedirs(bank_dir, exist_ok=True)
     stages, programs = parse_seed(seed_path)
     with open(seed_path, "rb") as f:
-        seed_sha = hashlib.sha1(f.read()).hexdigest()
+        seed_sha = hashlib.sha1(f.read(), usedforsecurity=False).hexdigest()
     stamp = translator_stamp()
     manifest_path = os.path.join(bank_dir, "bake_bank.json")
     done = set()
@@ -346,7 +338,7 @@ def verify_bank(bank_dir: str, strict: bool = False):
     reports (gpu/vk/vk_main.cpp:253,256,360 — f12 chained into
     VkDeviceCreateInfo, never cleared), which includes
     uniformBufferStandardLayout, and CI validates the back end's own modules
-    the same way (.github/workflows/source-regressions.yml:147-148). Strict
+    the same way (.forgejo/workflows/ci.yml). Strict
     (no-flag) validity is NOT the gate; --strict additionally records the
     strict count for information only. Returns (summary, ok). Writes
     verify.json next to the manifest."""
@@ -369,7 +361,7 @@ def verify_bank(bank_dir: str, strict: bool = False):
         # else fall back to presence of the recorded sha.
         if seed and os.path.isfile(seed):
             with open(seed, "rb") as f:
-                summary["seed_ok"] = hashlib.sha1(f.read()).hexdigest() == \
+                summary["seed_ok"] = hashlib.sha1(f.read(), usedforsecurity=False).hexdigest() == \
                     manifest.get("seed_sha")
         else:
             summary["seed_ok"] = bool(manifest.get("seed_sha"))

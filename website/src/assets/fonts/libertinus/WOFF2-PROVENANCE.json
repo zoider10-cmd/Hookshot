@@ -1,0 +1,15 @@
+{
+  "description": "WOFF2 encoding of the adjacent bundled Libertinus fonts; full character repertoire retained, with no subsetting or design changes. Original TTFs and SIL OFL notice remain in the repository.",
+  "encoder": "Google woff2_compress 1.0.2 (CachyOS package woff2 1.0.2-7.1)",
+  "reproduce": "Run woff2_compress on each adjacent .ttf file. The resulting .woff2 files are committed, so website builds do not require a font encoder.",
+  "license": "SIL Open Font License 1.1; see website/public/fonts/libertinus/OFL.txt",
+  "files": {
+    "LibertinusSerif-Semibold.woff2": {
+      "source": "LibertinusSerif-Semibold.ttf",
+      "sourceSha256": "a51b4c1c5664750f4e5a758b33735863c33b6db577fa68cc236b05002f11f077",
+      "sha256": "7cb82e18dd7243e9220ae65d17156b0db441f65845849cf1a0ec40251168c35c",
+      "sourceBytes": 456324,
+      "bytes": 177668
+    }
+  }
+}

@@ -7,6 +7,9 @@ import shutil
 import subprocess
 import tempfile
 
+# (env_on, the switches' rule, before the code cut out of the sources: gpu/vk/compat/hookshot_env.h)
+ENV_ON_H = str(Path(__file__).resolve().parents[1] / "gpu" / "vk" / "compat" / "hookshot_env.h")
+
 ROOT = Path(__file__).resolve().parents[1]
 RUN_ALL_ARGS = ["--cxx", "{cxx}"]
 CASES = ("mirror_off", "upload_off", "refused", "virtual_write", "large_write", "no_recording",
@@ -54,6 +57,13 @@ def main():
         block(source, "uint64_t gpu_bind_stamp("), block(source, "uint32_t bind_slot("), block(source, "bool bind_memo_hit("),
         block(source, "struct BindMemo {", True), "thread_local BindMemo bind_memo[256];", direct_note,
         block(source, "void shadow_forget(Pool& p, uint64_t at, uint64_t len) {"),
+        # (a sparse mirror's blocks, which gpu_buffer_bind asks: none here, the pools' mirrors are whole)
+        '#include "%s"' % (ROOT / "gpu/vk/sparse_mirror.h").as_posix(),
+        block(source, "uint64_t sparse_block("), block(source, "bool block_has("), block(source, "bool sparse_has("),
+        "std::vector<Pool*> sparse_wanted;\nint64_t st_sparse_in_place = 0, st_sparse_mixed = 0, st_sparse_past = 0;",
+        block(source, "struct GuestPool {", True), "std::vector<GuestPool> guest_pools;",
+        block(source, "bool sparse_none("), block(source, "bool sparse_gaps_outside_pools("), block(source, "void sparse_touch("),
+        block(source, "void sparse_want("),
         block(source, "BufferRef gpu_buffer_bind(")])
     flags = subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS if os.name == "nt" else 0
     env = dict(os.environ)
@@ -63,7 +73,7 @@ def main():
         (tmp / "direct_write_types.inc").write_text(types + "\n", encoding="utf-8")
         (tmp / "direct_write_actual.inc").write_text(actual + "\n", encoding="utf-8")
         exe = tmp / ("direct_writes.exe" if os.name == "nt" else "direct_writes")
-        command = [cxx, "-std=c++20", "-O0", "-Wall", "-Wextra", "-Werror", "-D_CRT_SECURE_NO_WARNINGS",
+        command = [cxx, "-std=c++20", "-include", ENV_ON_H, "-O0", "-Wall", "-Wextra", "-Werror", "-D_CRT_SECURE_NO_WARNINGS",
                    "-I" + str(tmp), str(ROOT / "tests/direct_buffer_writes_test.cpp"), "-o", str(exe)]
         result = subprocess.run(command, cwd=tmp, env=env, capture_output=True, text=True, timeout=60,
                                 creationflags=flags)

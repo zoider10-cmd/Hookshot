@@ -16,6 +16,8 @@ follow.
 | Tracking issues (`[Tracking] ...`) | one per family of reports (AMD rendering, no mesh shaders, Linux, VRAM, missing walls, FPS, ...) |
 | Discord #bug-reporting (forum) | first reports, often without a log; turn the reproducible ones into issues |
 | Discord #dev-work | claims, progress, review requests |
+| Matrix `#agent-updates:magicbean.dev` | the same, posted by agents (`scripts/team_chat.py`, sign-in with Discord); copied to Discord #dev-agents |
+| Matrix `#test-requests:magicbean.dev` | PRs that need a test on other hardware, who is testing them and the results ([test-requests.md](test-requests.md), `scripts/test_requests.py`); copied to Discord |
 | Discord #dev-stuff | security scan results (Syntak): handled before anything else |
 | CI | a red check on `main` is everyone's first problem |
 
@@ -81,13 +83,20 @@ problem with a log outranks an NVIDIA one of the same severity.
    - A game-free test that fails without the change (see AGENTS.md: tests read the source).
    - `python -I -B tests/run_all.py`, all of it.
    - In the game, on your hardware: what you did and what you saw, with numbers from `hookshot_log.txt` for performance.
-   - Add a row to [tested configurations](tested-configurations.md) for each run you measured.
-   - Say what you could not test (another OS, another vendor, real input devices).
-5. **Pull request.** Open the description with why the PR is needed; then what changed, how it was tested, what was
-   not tested, and screenshots when it shows on screen. Link the issue and the tracking issue. Post the link in
-   #dev-work.
-6. **Review.** Answer every comment in the PR. Rebase onto `main` before asking for review again: a PR that does not
-   merge cleanly waits.
+   - Add one self-contained file under `docs/tested/` for each new run you measured, following
+     [tested configurations](tested-configurations.md). Existing rows stay frozen; do not append there or commit the
+     assembled view.
+   - Say what you could not test (another OS, another vendor, real input devices), and open a test request for
+     what others must test: the description's Testing section
+     ([CONTRIBUTING.md](../CONTRIBUTING.md#commits-and-pull-requests)).
+5. **Pull request.** Open it as work in progress (`forge.py pr create`, a `WIP:` title) and fill in
+   [the template](../.forgejo/pull_request_template.md) as
+   [CONTRIBUTING.md](../CONTRIBUTING.md#commits-and-pull-requests) says. Mark it ready (`pr ready`) only once it is
+   measured and every *For everyone* box is ticked. Link the issue and the tracking issue. Post the link in #dev-work.
+6. **Review.** Reviewers take PRs marked ready, not WIP ones; one that needs more work goes back to WIP (with the label
+   `needs measurements` when that is what it lacks). Answer every comment in the PR. For each new commit, measurement
+   or test run, update the description and comment what changed (`pr update`). Rebase onto `main` before asking for
+   review again: a PR that does not merge cleanly waits.
 7. **Merge and release.** Release branches are merged back into `main` right after a release, so that `main`'s builds
    carry the release's fixes and the right version string (`git describe` only sees tags on `main`'s history).
 8. **Verify.** Ask the reporter to retest on the release, then close the issue, or keep it open on the tracking issue
@@ -113,6 +122,7 @@ next thing to work on is the top of `is:open label:reproduced -label:claimed sor
 - Start here, then AGENTS.md, then CONTRIBUTING.md.
 - Pick from the top of [docs/worklist.md](worklist.md); add a scored row there for a new problem you find.
 - Prefer problems you can reproduce on the hardware you run on.
-- Claim before working, report progress where you claimed, and post the PR there.
+- Claim before working, report progress where you claimed, and post the PR there. Agents post to the Matrix room
+  `#agent-updates:magicbean.dev` (AGENTS.md, *Team updates*): read it before claiming.
 - Measure, don't guess: every claim about speed or correctness carries the log line, the test or the screenshot.
 - Never open a PR whose tests you have not run, or that has not been rebased onto `main`.

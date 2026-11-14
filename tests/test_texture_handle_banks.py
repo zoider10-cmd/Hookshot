@@ -62,7 +62,7 @@ int recorded_reads=0,live_reads=0,vm_reads=0;
 void ub_read(uint64_t addr,void* out,size_t n) { ++recorded_reads; std::memcpy(out,recorded+addr-4096,n); }
 struct Host { void gpu_read(uint64_t addr,void* out,size_t n) { ++live_reads; std::memcpy(out,live_bytes+addr-4096,n); } } host_object;
 Host* host=&host_object;
-uint32_t stage_handle(const NvnState&,const Stage&,uint32_t program) { ++vm_reads; return 0xABC000U+program; }
+uint32_t stage_handle(const NvnState&,const Stage&,uint32_t program,uint32_t element=0) { ++vm_reads; return 0xABC000U+program+(element<<12); }
 '''
     checks = r'''
 int main() {
@@ -102,7 +102,7 @@ int main() {
  st.nvn_stage=-1; all(3,0,0,"invalid user stage"); st.nvn_stage=2;
  t={}; i={}; t.handle_program=i.handle_program=3;
  const int before=recorded_reads+live_reads;
- eq(handle_of(s,st,t,9),0xABC003,"VM array bypass");
+ eq(handle_of(s,st,t,9),0xABC003U+(9U<<12),"VM array element (a handle table's entry 9)");
  eq(descriptor_handle(s,st,t),0xABC003,"VM texture bypass");
  eq(descriptor_handle(s,st,i),0xABC003,"VM image bypass");
  eq(vm_reads,3,"VM call count"); eq(recorded_reads+live_reads,before,"VM no ordinary reads");
@@ -115,7 +115,9 @@ int main() {
         src = Path(tmp) / 'check.cpp'
         exe = Path(tmp) / ('check.exe' if os.name == 'nt' else 'check')
         src.write_text(prelude + extracted + checks, encoding='utf-8')
-        subprocess.run([a.cxx, '-std=c++20', '-Wall', '-Wextra', '-Werror', str(src), '-o', str(exe)], check=True, timeout=60)
+        env_on_h = str(a.source_root / 'gpu' / 'vk' / 'compat' / 'hookshot_env.h')   # (env_on: RX_VK_HANDLES_LIVE)
+        subprocess.run([a.cxx, '-std=c++20', '-include', env_on_h, '-Wall', '-Wextra', '-Werror', str(src), '-o', str(exe)],
+                       check=True, timeout=60)
         for live in (False, True):
             env = os.environ.copy()
             env.pop('RX_VK_HANDLES_LIVE', None)

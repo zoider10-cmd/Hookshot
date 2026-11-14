@@ -1,6 +1,6 @@
 /* The game folder's path, for the files the game keeps there (image.bin, romfs, saves, settings, caches, logs).
-   On Windows the game is bin\hookshot.exe since the launcher came: hookshot.exe in the folder is the launcher (the builder's
-   setup in launch mode), the game and its DLLs are in bin\, the game's files stay in the folder. hos_game_path_a/_w answer as
+   On Windows the game is bin\hookshot.exe since the launcher came: hookshot.exe in the folder is its launcher (the builder's
+   setup, builder/setup/setup.c, which starts bin\hookshot.exe), the game and its DLLs are in bin\, the game's files stay in the folder. hos_game_path_a/_w answer as
    GetModuleFileName(NULL, ...) does, but with the folder's path when the exe is in a "bin" folder beside image.bin, so code that
    strips the exe's name and adds a file's finds the folder's file. Modules (DLLs) are still loaded from beside the exe itself. */
 #pragma once

@@ -16,8 +16,12 @@
 #include <vector>
 
 #include "vk_internal.h"
+#include "vk_draw.h"   // (extern_guarded_shader_module, extern_guarded_compute)
 #include "shader_recompiler/backend/spirv/mma_layout.h"
 #include <sirit/sirit.h>
+#ifndef HOOKSHOT_ENV_H   // (env_on: the switches' one rule)
+#include "hookshot_env.h"
+#endif
 
 namespace mkwvk {
 namespace {
@@ -147,16 +151,19 @@ bool run_shader(const std::vector<uint32_t>& code, std::vector<uint32_t>& data) 
     VkShaderModuleCreateInfo smi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
     smi.codeSize = code.size() * 4, smi.pCode = code.data();
     VkShaderModule module{};
-    vkCreateShaderModule(dev.device, &smi, nullptr, &module);
     VkComputePipelineCreateInfo cpi{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
-    cpi.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, module, "main", nullptr};
     VkPipelineShaderStageRequiredSubgroupSizeCreateInfo lanes{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO};
     lanes.requiredSubgroupSize = 32;   // (as the programs it stands for will run: vk_main.cpp)
-    if (dev.sg32_stages & VK_SHADER_STAGE_COMPUTE_BIT) cpi.stage.pNext = &lanes;
-    cpi.layout = layout;
     VkPipeline pipeline{};
-    const VkResult pr = module ? vkCreateComputePipelines(dev.device, VK_NULL_HANDLE, 1, &cpi, nullptr, &pipeline)
-                               : VK_ERROR_INITIALIZATION_FAILED;
+    VkResult pr;
+    {
+        IntelDriverGate gate;
+        if (extern_guarded_shader_module(&smi, &module) != VK_SUCCESS) module = VK_NULL_HANDLE;
+        cpi.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_COMPUTE_BIT, module, "main", nullptr};
+        if (dev.sg32_stages & VK_SHADER_STAGE_COMPUTE_BIT) cpi.stage.pNext = &lanes;
+        cpi.layout = layout;
+        pr = module ? extern_guarded_compute(VK_NULL_HANDLE, &cpi, &pipeline) : VK_ERROR_INITIALIZATION_FAILED;
+    }
     bool ok = false;
     if (pr == VK_SUCCESS) {
         VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1};
@@ -340,15 +347,33 @@ void software_multiplies(const char* why) {
     dev.native_mma = true;
     logf("vk: matrix multiplies in software (%s)", why);
 }
+/// (hookshot, mma_layout.h global_table_loop) Intel's Mesa driver only for now (Mesa inlines DontInline; Windows not tried); env is
+/// RX_VK_GM_LOOP, 0 or 1 over the default. A table indexed by the loop's counter needs dynamic indexing of storage buffer arrays
+/// (tests/test_global_table_loop.py)
+bool table_loop_wanted(VkDriverId driver, bool dynamic_indexing, const char* env) {
+    return (env ? !env_value_off(env) : driver == VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA) && dynamic_indexing;
+}
 } // namespace
 
 void coopmat_init() {
     // (amd-fix) NaN guard on float colour outputs (mma_layout.h frag_nan_guard), on every card since v2.0.6 as NX2navi's patch 0027
-    // has it: the neon plants were reported on NVIDIA cards too, and one NaN texel spreads through bloom and blur
-    Shader::Backend::SPIRV::frag_nan_guard = !std::getenv("RX_VK_NO_NAN_GUARD");
+    // has it: the neon plants were reported on NVIDIA cards too, and one NaN texel spreads through bloom and blur. RX_VK_NAN_GUARD=0:
+    // off, with vk_shader.cpp's GuardFragmentOutputs (one switch for both guards; it replaces RX_VK_NO_NAN_GUARD)
+    {
+        const char* e = std::getenv("RX_VK_NAN_GUARD");
+        Shader::Backend::SPIRV::frag_nan_guard = !e || std::atoi(e) != 0;
+    }
     if (Shader::Backend::SPIRV::frag_nan_guard) logf("vk: colour outputs NaN-guarded");
-    Shader::Backend::SPIRV::position_invariant = dev.props.vendorID != 0x10DE && !std::getenv("RX_VK_NO_INVARIANT");
+    Shader::Backend::SPIRV::position_invariant = dev.props.vendorID != 0x10DE && !env_on("RX_VK_NO_INVARIANT");
     if (Shader::Backend::SPIRV::position_invariant) logf("vk: positions invariant (not an NVIDIA card)");
+    Shader::Backend::SPIRV::global_table_loop = table_loop_wanted(dev.driver_id, dev.features.shaderStorageBufferArrayDynamicIndexing,
+                                                                  std::getenv("RX_VK_GM_LOOP"));
+    if (Shader::Backend::SPIRV::global_table_loop) logf("vk: storage buffer tables searched in loops (RX_VK_GM_LOOP=0: written out)");
+    // (hookshot) the translation's vendor fixes (vk_vendor.h, dev.fixes): out-of-bounds texel fetches answer 0, NaN tests on bits
+    Shader::Backend::SPIRV::fetch_bounds = dev.fixes.fetch_bounds;
+    // (dev.features.robustBufferAccess: on exactly when robustBufferAccess2 is, vk_main.cpp create_device)
+    Shader::Backend::SPIRV::fetch_bounds_buffers = dev.fixes.fetch_bounds && !dev.features.robustBufferAccess;
+    Shader::Backend::SPIRV::nan_bits = dev.fixes.nan_bits;
     // (hookshot) RX_VK_MMA_SOFTWARE=1: HMMA_nx2 in a shader function on subgroup shuffles, no cooperative matrices
     // (emit_spirv_warp.cpp, from Lichii): the lowering still gives HMMA_nx2 (dev.native_mma)
     if (const char* sw = std::getenv("RX_VK_MMA_SOFTWARE"); sw && std::atoi(sw)) {
@@ -362,7 +387,7 @@ void coopmat_init() {
         logf("vk: native matrix multiplies off (RX_VK_NATIVE_MMA=0)");
         return;
     }
-    if (!dev.coop_matrix || !vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR || std::getenv("RX_VK_MMA_NO_COOP")) {
+    if (!dev.coop_matrix || !vkGetPhysicalDeviceCooperativeMatrixPropertiesKHR || env_on("RX_VK_MMA_NO_COOP")) {
         software_multiplies("no cooperative matrices");
         return;
     }

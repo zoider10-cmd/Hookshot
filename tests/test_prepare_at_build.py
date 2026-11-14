@@ -1,10 +1,9 @@
 """make_game.py's last step, hookshot --prepare-shaders, run against stub games: its stage and progress lines go on to the builder,
-its own @@done and @@error don't (the builders read those as the build's end or failure), a failure or a silent hang leaves the work
-to the first start (never a failed build), and the game runs in its own environment, as the builders' Play starts it.
+its own @@done and @@error don't (a launcher reads those as the build's end or failure), a failure or a silent hang leaves the work
+to the first start (never a failed build), and the game runs in its own environment, as Play starts it.
 
 python -I -B tests/test_prepare_at_build.py
 """
-import ast
 import contextlib
 import importlib.util
 import io
@@ -24,7 +23,6 @@ SOURCE = ROOT / "nx2" / "make_game.py"
 spec = importlib.util.spec_from_file_location("make_game_prepare", SOURCE)
 make_game = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(make_game)
-BUILDER = ROOT / "builder" / "linux" / "hookshot_builder.py"
 
 
 def stub(code):
@@ -155,40 +153,44 @@ class SkipTests(unittest.TestCase):
         self.assertLess(main.index("prepare_skipped(a)"), main.index('say("done", out)'))
 
 
-def builder_method(name):
-    """One method of the Linux builder's window, compiled alone (no Tk)"""
-    tree = ast.parse(BUILDER.read_text(encoding="utf-8"))
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Builder")
-    node = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == name)
-    stages = next(n for n in tree.body if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "STAGES")
-    namespace = {"make_game": make_game, "time": time}
-    exec(compile(ast.Module(body=[stages, node], type_ignores=[]), str(BUILDER), "exec"), namespace)
-    return namespace[name]
+class CompileShadersTests(unittest.TestCase):
+    """Compile shaders: --compile-shaders kept in the folder's hookshot_options.ini as compile_shaders= (0 Most, 1 All), the
+    game's other lines as they are"""
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="hookshot-compile-shaders-")
+        self.addCleanup(self.temporary.cleanup)
+        self.out = self.temporary.name
 
+    def ini(self):
+        with open(os.path.join(self.out, "hookshot_options.ini"), encoding="utf-8") as f:
+            return f.read()
 
-class LinuxBuilderTests(unittest.TestCase):
-    def window(self):
-        text = []
-        return SimpleNamespace(stage_text=SimpleNamespace(set=text.append), bar=SimpleNamespace(configure=lambda **k: None),
-                               compile_started=None, eta=None, shaders_later=False), text
+    def test_all_written_to_a_new_folder(self):
+        self.assertIsNone(make_game.folder_compile_level(self.out))
+        make_game.write_compile_level(self.out, "all")
+        self.assertEqual(self.ini(), "compile_shaders=1\n")
+        self.assertEqual(make_game.folder_compile_level(self.out), "all")
 
-    def test_a_later_stage_clears_the_compiles_clock_and_countdown(self):
-        on_line = builder_method("on_line")
-        w, text = self.window()
-        on_line(w, "@@stage compile Compiling")
-        on_line(w, "@@eta 300")
-        self.assertIsNotNone(w.compile_started)
-        self.assertEqual(w.eta, 300)
-        on_line(w, "@@stage shaders Preparing shaders")
-        self.assertIsNone(w.compile_started)
-        self.assertIsNone(w.eta)
-        self.assertEqual(text[-1], "Preparing shaders")
+    def test_the_other_lines_kept_and_the_choice_replaced(self):
+        with open(os.path.join(self.out, "hookshot_options.ini"), "w", encoding="utf-8") as f:
+            f.write("options_version=6\ncompile_shaders=0\nfullscreen=1\n")
+        make_game.write_compile_level(self.out, "all")
+        self.assertEqual(self.ini(), "options_version=6\nfullscreen=1\ncompile_shaders=1\n")
+        self.assertEqual(make_game.folder_compile_level(self.out), "all")
 
-    def test_the_not_prepared_line_is_noted(self):
-        on_line = builder_method("on_line")
-        w, _ = self.window()
-        on_line(w, "the shaders were not prepared now (no usable Vulkan here): the game prepares them at its first start")
-        self.assertTrue(w.shaders_later)
+    def test_the_level_given_else_the_folders_else_most(self):
+        a = SimpleNamespace(no_prepare_shaders=False, compile_shaders=None)
+        self.assertEqual(make_game.compile_level(a, self.out), "most")
+        make_game.write_compile_level(self.out, "all")
+        self.assertEqual(make_game.compile_level(a, self.out), "all")
+        a.compile_shaders = "most"
+        self.assertEqual(make_game.compile_level(a, self.out), "most")
+        self.assertIsNone(make_game.prepare_skipped(a, {}))
+
+    def test_the_preparation_is_told_the_level(self):
+        main = SOURCE.read_text(encoding="utf-8").split("\ndef main(", 1)[1]
+        self.assertIn('"--prepare-shaders", "--compile-shaders", level]', main)
+        self.assertLess(main.index("write_compile_level(out, a.compile_shaders)"), main.index("prepare_skipped(a)"))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,110 @@
+name: Game problem
+about: A crash, freeze, wrong graphics, low fps or stutter, sound or controls while playing
+title: "Game: "
+labels: [kind/bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **The fastest way:** in the game, press Insert, then **Gameplay → Bug report**. It writes a folder with the answers below, both logs and a picture; open the link at the end of its `report.txt` (it fills in the first fields) and drag the folder's files in.
+
+        Before you start: try the [newest release](https://git.magicbean.dev/MagicBeanDev/Hookshot/releases), search the [open issues](https://git.magicbean.dev/MagicBeanDev/Hookshot/issues) (add to one that matches), and write in English. **Never attach game files or saves.**
+  - type: input
+    id: version
+    attributes:
+      label: Hookshot version
+      description: The first line of `hookshot_log.txt` (after `hookshot`), or the version the launcher shows.
+      placeholder: v3.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: track
+    attributes:
+      label: Channel
+      description: The Hookshot Launcher's channel you installed from.
+      options:
+        - Release
+        - Release candidate
+        - Nightly
+        - Built from source
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem
+      options:
+        - Crash, freeze or black screen
+        - Graphics (missing, black or wrong-coloured things, lighting, flicker)
+        - Low fps or stutter
+        - Sound
+        - Controls
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, what you expected, and the steps to get there. For low fps or stutter, the fps before and after, and whether it happens again on a second pass through the same spot.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where in the game
+      description: The area, cutscene or menu, and what you were doing.
+      placeholder: Kokiri Forest, walking out of Link's house
+    validations:
+      required: true
+  - type: dropdown
+    id: often
+    attributes:
+      label: How often
+      options:
+        - Every time
+        - Sometimes
+        - Once so far
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card and driver version
+      placeholder: RTX 3080 Ti, NVIDIA 596.21
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: CPU, RAM and operating system
+      placeholder: Ryzen 7 7700, 32 GB, Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Changes from the defaults
+      description: Insert-menu options you changed, the lines of `hookshot_env.txt` if you have one, and any overlay, ReShade, shader-cache tool or frame-generation injector hooked into the game (test without them first). Leave empty if none.
+  - type: textarea
+    id: log
+    attributes:
+      label: hookshot_log.txt
+      description: Drag the file here. It is in the `logs` folder of your game folder and holds the last run; `hookshot_log.1.txt` is the run before. If you started the game again after the problem, attach that one too. Logs hold no game files.
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots or video
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: The problem is still there on the newest release or nightly.
+          required: true
+        - label: I searched the open issues for it.
+          required: true
+        - label: I'm not attaching game files, keys, the game's executable, its .bin caches or saves.
+          required: true

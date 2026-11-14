@@ -1,0 +1,73 @@
+---
+import { buildContributors } from '../lib/contributors.ts';
+import { repository } from '../site.ts';
+
+const contributors = await buildContributors();
+const shown = contributors?.slice(0, 30) ?? [];
+---
+<div class="team not-content">
+  <section class="intro" aria-labelledby="team-title">
+    <div>
+      <p class="eyebrow">THE PEOPLE BEHIND HOOKSHOT</p>
+      <h2 id="team-title">A very human bean team.</h2>
+      <p>Hookshot is made by everyone who sends a change. These are the people with the most commits in Hookshot, Hookshot’s history included.</p>
+    </div>
+    <img src="/branding/magicbean-team-logo.webp" alt="Team MagicBean logo" width="512" height="512" />
+  </section>
+
+  {contributors ? (
+    <ul class="grid" role="list">
+      {shown.map(person => (
+        <li>
+          {(() => {
+            const Tag = person.profile ? 'a' : 'div';
+            return <Tag class="card" href={person.profile ?? undefined}>
+              {person.avatar ? <img src={person.avatar} alt="" width="56" height="56" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
+                : <span class="initial" aria-hidden="true">{Array.from(person.name)[0]?.toUpperCase()}</span>}
+              <strong>{person.name}</strong>
+              <small>{person.commits} {person.commits === 1 ? 'commit' : 'commits'}</small>
+            </Tag>;
+          })()}
+        </li>
+      ))}
+    </ul>
+  ) : <p>The contributor list is unavailable right now. See the <a href={`${repository}/activity`}>activity on Forgejo</a>.</p>}
+
+  <section class="join" aria-labelledby="join-title">
+    <h2 id="join-title">Join them.</h2>
+    <p>Every merged change counts: your commits put you on this page at the next build. Say hi on Discord first, where the team talks and posts test requests.</p>
+    <p class="actions"><a class="button primary" href="/contributing/">How to contribute <span aria-hidden="true">→</span></a><a class="button discord" href="https://discord.gg/magicbean">Join the Discord <span aria-hidden="true">↗</span></a><a class="button" href="/about/#credits-and-licensing">Credits <span aria-hidden="true">→</span></a></p>
+  </section>
+</div>
+
+<style>
+  .team { font-size: var(--text-base); line-height: 1.65; }
+  .team * { box-sizing: border-box; }
+  h2 { font-size: var(--text-heading); color: var(--sl-color-white); letter-spacing: -.025em; line-height: 1.15; margin: .5rem 0 .8rem; }
+  p { color: var(--sl-color-gray-2); margin: 0; }
+
+  .intro { display: grid; grid-template-columns: minmax(0, 1fr) 140px; gap: 2rem; align-items: center; margin: 1.5rem 0 2.5rem; }
+  .intro img { width: 140px; height: auto; }
+
+  .grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .75rem; margin: 0; padding: 0; list-style: none; }
+  .card {
+    display: flex; flex-direction: column; align-items: center; gap: .15rem; height: 100%; padding: 1rem .6rem; text-align: center;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--sl-color-white); text-decoration: none;
+    transition: background .18s, border-color .18s;
+  }
+  a.card:hover { background: var(--panel-hover); border-color: var(--sl-color-text-accent); }
+  .card img, .initial { width: 56px; height: 56px; border-radius: 50%; margin-bottom: .45rem; background: var(--sl-color-gray-5); }
+  .initial { display: grid; place-items: center; font: 600 1.5rem var(--heading-font); color: var(--sl-color-text-accent); }
+  .card strong { font-size: var(--text-sm); line-height: 1.3; overflow-wrap: anywhere; }
+  .card small { margin-top: .3rem; font-size: var(--text-label); color: var(--sl-color-text-accent); }
+
+  .join { margin-top: 3rem; padding: 2rem; border: 1px solid var(--border); border-left: 4px solid var(--sl-color-text-accent); border-radius: 12px; background: var(--panel); }
+  .actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.2rem; }
+
+  @media (max-width: 70rem) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 42rem) {
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .intro { grid-template-columns: 1fr; }
+    .intro img { width: 96px; }
+  }
+</style>

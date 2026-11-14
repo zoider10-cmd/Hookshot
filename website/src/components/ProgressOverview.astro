@@ -1,0 +1,15 @@
+<section class="progress-overview" aria-labelledby="progress-overview-title">
+  <h2 id="progress-overview-title">Development at a glance</h2>
+  <p class="progress-note">A snapshot of public work, not a completion percentage or a release promise. Weekly counts end at the “Data checked” time below and cover items in this feed.</p>
+  <div class="progress-overview-grid" data-overview><p>Loading the development overview…</p></div>
+</section>
+
+<style is:global>
+  .progress-overview h2 { font-size: var(--text-xl); margin: 1.4rem 0 .5rem; }
+  .progress-overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin-top: 1rem; }
+  .progress-overview-card { padding: 1rem; background: var(--panel); border: 1px solid var(--border); border-radius: .5rem; }
+  .progress-overview-card h3 { font-size: var(--text-base); margin: 0; }
+  .progress-overview-card strong { display: block; font-size: var(--text-2xl); color: var(--sl-color-accent-high); }
+  .progress-overview-card p { font-size: var(--text-xs); color: var(--sl-color-gray-2); }
+  @media (max-width: 30rem) { .progress-overview-grid { grid-template-columns: 1fr; } }
+</style>

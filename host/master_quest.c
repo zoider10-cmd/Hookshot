@@ -2,7 +2,7 @@
    Read once at the start, so a whole run is one mode.
    - the title logo: host/prompts.c serves the Master Quest one (prompts/mq/, made by nx2/mq_logo.py at build time);
    - the damage Link takes: master_quest_damage=2 (default) or 3, 4 times the game's (HOS_MASTER_QUEST_DAMAGE too), through
-     the life write nx2/oot_patches.py patch_life hooks (hos_oot_life_damage). The hearts cheat (Debug tab) still wins. */
+     the life write nx2/oot_patches.py patch_life hooks (host/oot_damage.c hos_oot_damage, with hos_mq_damage). The hearts cheat (Debug tab) still wins. */
 #include "hos.h"
 #include "hos_paths.h"
 #include <stdio.h>
@@ -56,16 +56,11 @@ const char *hos_save_dir(void) {
     return bench ? "save_bench" : hos_master_quest() ? "save_mq" : "save";
 }
 
-/* nx2/oot_patches.py patch_life: Link's life going from old to new (a hit, a fall, lava...), the value to write instead: the
-   hearts cheat keeps it, Master Quest multiplies the loss. Retried compare-and-swaps come back with the fresh old value, so a
-   loss is multiplied once */
-uint64_t hos_oot_life_damage(uint32_t old, uint32_t now) {
-    int hos_oot_hearts_enabled(void);
-    if (hos_oot_hearts_enabled()) return old;
-    if (!hos_master_quest() || mq_damage <= 1 || now >= old) return now;
-    const uint64_t loss = (uint64_t)(old - now) * (uint64_t)mq_damage;
-    const uint64_t left = loss < old ? old - loss : 0;
+/* host/oot_damage.c hos_oot_damage (nx2/oot_patches.py patch_life): Link's life going from old to next, Master Quest's multiplier
+   for the loss (1 outside it or on healing); the Damage taken setting and the hearts cheat are applied there */
+int hos_mq_damage(uint32_t old, uint32_t next) {
+    if (!hos_master_quest() || mq_damage <= 1 || next >= old) return 1;
     static volatile LONG logged;
-    if (InterlockedIncrement(&logged) <= 20) hos_log("master quest: Link's life %u -> %u (x%d: %u)", old, now, (int)mq_damage, (unsigned)left);
-    return left;
+    if (InterlockedIncrement(&logged) <= 20) hos_log("master quest: Link's life %u -> %u (x%d)", old, next, (int)mq_damage);
+    return (int)mq_damage;
 }

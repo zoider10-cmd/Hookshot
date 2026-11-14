@@ -19,6 +19,7 @@ typedef DWORD (*ThreadProc)(void *);
 #define GetLastError mock_GetLastError
 #define ExitProcess mock_ExitProcess
 #define getenv mock_getenv
+#define env_on(name) (getenv(name) && !env_value_off(getenv(name)))   /* (the switches read through the stand-in above) */
 
 static jmp_buf process_exit;
 static int failures;
@@ -55,6 +56,7 @@ void hos_log(const char *format, ...) {
     va_list args; va_start(args, format); vsnprintf(log_line, sizeof log_line, format, args); va_end(args);
 }
 void hos_log_flush(void) { flush_calls++; }
+void hos_crash_clean_end(void) { CHECK("clean-end mark precedes exit", exit_calls == 0); }
 
 /* ACTUAL_DISPLAY_STARTUP */
 

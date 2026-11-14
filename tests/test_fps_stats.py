@@ -43,15 +43,18 @@ def main():
     # (the key the row saves under is its name's: fps_counter, as before the levels, so an old file's 1 is FPS)
     need("show_fps" not in body(menu, "const char* ini_key("), "the FPS counter's key was renamed: old options files would not load")
     hints = body(menu, "MENU_HINTS(hn_fps,")
-    need(hints.count('"') // 2 >= 4, "the FPS counter's hints do not cover every level")
+    need(hints.count('"') // 2 >= 5, "the FPS counter's hints do not cover every level")
+    texts = body(menu, "void fps_texts(")
+    for use in ("fs::kDev", "draw_stats(", "draw_stats2(", "texture_stats(", "vram_usage(", "texture_count()", "fps_dev_text"):
+        need(use in texts, "fps_texts does not write the Dev level's %s" % use)
     need(re.search(r'\{TAB_GAMEPLAY, "FPS counter position", &opts\.fps_corner, 0, 3, 1, tx_fps_corner,', menu),
          "the Gameplay tab has no FPS counter position row")
     tick = menu[menu.index("void menu_tick()"):menu.index("void menu_record(")]
     need("fps_level_now.store(" in tick and "fps_texts(" in tick, "menu_tick does not tell vk_fps.cpp the level or write the lines")
     need("fps_level_now.store(" in body(menu, "void menu_init()"), "menu_init does not tell vk_fps.cpp the saved level")
     target = body(menu, "double fps_target_ms()")
-    need("fps_stats::cap_rate(fps_cap_started" in target and "HOS_FPS_MAX" in target and "menu_vsync() == 1" in target,
-         "the target is not the cap the game started with (HOS_FPS_MAX over it), or the display's with V-Sync On")
+    need("fps_stats::cap_rate(opts.fps_cap" in target and "HOS_FPS_MAX" in target and "menu_vsync() == 1" in target,
+         "the target is not the Game frame rate cap row's (HOS_FPS_MAX over it), or the display's with V-Sync On")
     draw = body(menu, "void draw_fps(")
     for use in ("fps_graph(", "fps_target_ms()", "fs::graph_top(", "fs::rate_grade(", "fps_part_text", "fps_ms_text"):
         need(use in draw, "draw_fps does not use %s" % use)
@@ -63,6 +66,15 @@ def main():
     need("st_wait_ns +=" in body(replay, "Recording& begin_recording(") and "slot_wait_ns()" in body(
         (vk / "vk_fps.cpp").read_text(encoding="utf-8"), "void fps_presented()"), "the recording slot's wait is not a GPU wait")
     need("fps_wait(fps_stats::kPace" in body(replay, "void present_image("), "the swapchain's acquire is not the pacing's")
+    # (a present that returned only once the frame's copy, not done when it was called, was done waited for the GPU, not vsync:
+    # NVIDIA on Linux; read with two fence reads, nothing waited for)
+    out = body(replay, "static bool present_out(uint32_t index, std::unique_lock<std::mutex>& qk) {")
+    need("copy_was_done" in out and "waited_gpu ? fps_stats::kGpuWait : fps_stats::kPace" in out,
+         "the present's wait is not split into the GPU's (the copy not done before, done after) and the pacing's")
+    need("(::vkx::vkWaitForFences)(dev.device, 1, &copy, VK_TRUE, 0)" in out and out.count("vkWaitForFences") == 1,
+         "present_out waits for the copy to time it (only a wait of no time, its state): the Breakdown would change the present")
+    need("presenter.copy_done_at" in body(replay, "bool presenter_wait_idle(") and "presenter_wait_idle(lk)" in body(
+        replay, "void present_hand_off(uint32_t index, VkFence done) {"), "the wait for the presenter thread is not split at the end of its wait for the copy")
     fps = (vk / "vk_fps.cpp").read_text(encoding="utf-8")
     # (off and FPS: nothing measured; the Breakdown's timers only while it shows)
     pres = body(fps, "void fps_presented()")

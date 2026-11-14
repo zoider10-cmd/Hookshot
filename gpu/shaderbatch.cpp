@@ -12,7 +12,7 @@
 // Shader::Stage an NVN stage number becomes, Profile/HostTranslateInfo, and the RuntimeInfo each stage's emit takes.
 // What it cannot know with no game running: the bound textures' answers (Program::answers, the variants of
 // seed_compute), the driver constant banks (ReadCbufValue is the program's own c1 only), and the device limits in
-// min_ssbo_alignment (16 here). Those are what a Vulkan machine fills in — BAKE.md §3 (machine stop-lines).
+// min_ssbo_alignment (16 here). Those are what a Vulkan machine fills in — docs/BAKE.md §3 (machine stop-lines).
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -38,7 +38,7 @@
 #include "shader_recompiler/frontend/maxwell/control_flow.h"
 #include "shader_recompiler/frontend/maxwell/translate_program.h"
 #include "shader_recompiler/host_translate_info.h"
-#include "shader_recompiler/ir_opt/oot_visual_workaround.h"
+#include "shader_recompiler/ir_opt/fragment_output_guard.h"
 #include "shader_recompiler/object_pool.h"
 #include "shader_recompiler/profile.h"
 #include "shader_recompiler/program_header.h"
@@ -369,6 +369,9 @@ Shader::HostTranslateInfo make_host() {
     h.min_ssbo_alignment = 16;
     h.support_geometry_shader_passthrough = false;
     h.support_conditional_barrier = true;
+    // (live: handle_tables_on(), on where the GPU indexes sampled image arrays nonuniformly: the modules with a handle
+    // table's array are the ones scripts/validate_spirv.py should see)
+    h.support_handle_table_arrays = true;
     return h;
 }
 

@@ -65,7 +65,8 @@ def main():
     check(oot_patches.patch_pouch_add(source.replace("f_8112d570", "f_8112d571")) is None, "a source without the function is changed")
     patches = (ROOT / "nx2" / "oot_patches.py").read_text(encoding="utf-8")
     check('done["progressive items"] = 0' in patches and "pouch = patch_pouch_add(out) if protect_hearts else None" in patches and
-          'done["progressive items"] += 1' in patches, "the lift does not make the hook, or does not count it made")
+          'counts["progressive items"] += 1' in patches,   # (Mako 4.1.1: each file's patches are counted in a worker of its own)
+          "the lift does not make the hook, or does not count it made")
 
     # ---- the game's side ----
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")

@@ -1335,7 +1335,7 @@ static class Fsr {
 // (Mako) The Recommended tab: what this PC has (graphics card and its memory, processor, memory, screen), read once, and the
 // settings that suit it, with the reason for each
 class PcInfo {
-    public string Gpu = "", Cpu = "";
+    public string Gpu = "", Cpu = "", Driver = "", DriverDate = "";
     public int Tier, Threads, ScreenW, ScreenH, Hz;
     public long VramMB, RamMB;
     public bool Amd, Nvidia, Intel, Integrated;
@@ -1371,6 +1371,8 @@ class PcInfo {
                         try {
                             using (var a = cls.OpenSubKey(k)) {
                                 if (a == null || (a.GetValue("DriverDesc") as string) != p.Gpu) continue;
+                                p.Driver = (a.GetValue("DriverVersion") as string) ?? p.Driver;   // (Mako 4.1.1: for the report's summary)
+                                p.DriverDate = (a.GetValue("DriverDate") as string) ?? p.DriverDate;
                                 object q = a.GetValue("HardwareInformation.qwMemorySize"), m = a.GetValue("HardwareInformation.MemorySize");
                                 long bytes = 0;
                                 if (q is long) bytes = (long)q;
@@ -1404,6 +1406,166 @@ class PcInfo {
 
     public int VramGB { get { return (int)Math.Round(VramMB / 1024.0); } }
     public int RamGB { get { return (int)Math.Round(RamMB / 1024.0); } }
+}
+
+// (Mako 4.1.1) Send logs: summary.txt, the first file of the report. The PC (driver and Windows versions too), the launcher's settings
+// and the game's, and what each log says in a few lines: crashes and lost graphics devices, the frame rate over the session, the
+// slowest frames, video and system memory at their highest, the last lines. Read in seconds instead of a megabyte of log; every
+// part guarded: a summary that cannot be made is left out and the logs still go
+static class ReportSummary {
+    static readonly System.Globalization.CultureInfo Ci = System.Globalization.CultureInfo.InvariantCulture;
+
+    public static string Build(string dir, PcInfo pc, string ver, string problem, List<string> logs) {
+        var sb = new StringBuilder();
+        Action<string> L = t => sb.Append(t).Append("\r\n");
+        L("MAKO REPORT SUMMARY  (" + DateTime.Now.ToString("yyyy-MM-dd HH:mm", Ci) + ")");
+        L("");
+        L("== The player's words");
+        L(problem);
+        L("");
+        L("== PC");
+        L("Mako        " + ver + (Fork.Label.Length > 0 ? "  (launcher " + Fork.Label + ")" : ""));
+        L("Windows     " + WindowsVersion());
+        L("GPU         " + (pc.Gpu.Length > 0 ? pc.Gpu : "?") + (pc.VramMB > 0 ? "  " + pc.VramMB + " MB" : "") + (pc.Integrated ? "  (integrated)" : ""));
+        L("Driver      " + (pc.Driver.Length > 0 ? pc.Driver : "?") + (pc.DriverDate.Length > 0 ? "  (" + pc.DriverDate + ")" : ""));
+        L("CPU         " + (pc.Cpu.Length > 0 ? pc.Cpu : "?") + "  " + pc.Threads + " threads");
+        L("RAM         " + pc.RamMB + " MB");
+        L("Screen      " + pc.ScreenW + "x" + pc.ScreenH + " " + pc.Hz + " Hz");
+        try {
+            var d = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(dir)));
+            L("Disk        " + (d.AvailableFreeSpace >> 30) + " GB free of " + (d.TotalSize >> 30) + " GB (" + d.DriveFormat + ")");
+        } catch { }
+        L("");
+        try { Section(sb, "== Game settings (hookshot_options.ini)", Path.Combine(dir, "hookshot_options.ini"), false); } catch { }
+        try { Section(sb, "== Switches in use (hookshot_env.txt, comments left out)", Path.Combine(dir, "hookshot_env.txt"), true); } catch { }
+        foreach (var n in logs) {
+            try { LogFacts(sb, Path.Combine(dir, n), n); } catch (Exception ex) { L("== " + n + ": not read (" + ex.Message + ")"); L(""); }
+        }
+        return sb.ToString();
+    }
+
+    static string WindowsVersion() {
+        try {
+            using (var k = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+                if (k != null) {
+                    string name = (k.GetValue("ProductName") as string) ?? "Windows";
+                    string disp = (k.GetValue("DisplayVersion") as string) ?? "";
+                    string build = (k.GetValue("CurrentBuildNumber") as string) ?? "";
+                    object ubr = k.GetValue("UBR");
+                    // (Windows 11 still says "Windows 10" in ProductName: the build number tells)
+                    int b;
+                    if (int.TryParse(build, out b) && b >= 22000) name = name.Replace("Windows 10", "Windows 11");
+                    return name + (disp.Length > 0 ? " " + disp : "") + " (build " + build + (ubr is int ? "." + (int)ubr : "") + ")";
+                }
+        } catch { }
+        return Environment.OSVersion.VersionString;
+    }
+
+    static string ReadShared(string path) {
+        using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        using (var r = new StreamReader(fs, Encoding.UTF8)) return r.ReadToEnd();
+    }
+
+    static void Section(StringBuilder sb, string title, string path, bool activeOnly) {
+        if (!File.Exists(path)) return;
+        sb.Append(title).Append("\r\n");
+        int n = 0;
+        foreach (var raw in ReadShared(path).Split('\n')) {
+            string l = raw.TrimEnd('\r');
+            if (l.Trim().Length == 0) continue;
+            if (activeOnly && l.TrimStart().StartsWith("#")) continue;
+            if (l.StartsWith("pad_") || l.StartsWith("key_")) continue;   // (the controls' bindings: noise in a report)
+            sb.Append("  ").Append(l).Append("\r\n");
+            if (++n >= 120) { sb.Append("  ...\r\n"); break; }
+        }
+        if (n == 0) sb.Append("  (none)\r\n");
+        sb.Append("\r\n");
+    }
+
+    static readonly Regex ReFps = new Regex(@"frames presented \(([0-9.]+) fps");
+    static readonly Regex ReStatus = new Regex(@"status: \d+ frames, the slowest ([0-9.]+) ms; VRAM ([0-9.]+) of ([0-9.]+) GB");
+    static readonly Regex ReWs = new Regex(@"memory: working set (\d+) MB \(peak (\d+)\)");
+    static readonly Regex ReStut = new Regex(@"stutters: (\d+) frames over 40 ms \((\d+) over 100 ms\)");
+
+    static void LogFacts(StringBuilder sb, string path, string name) {
+        if (!File.Exists(path)) return;
+        var lines = ReadShared(path).Split('\n');
+        var fps = new List<double>();
+        var problems = new List<string>();
+        var seen = new HashSet<string>();
+        double slowest = 0, vramHi = 0, vramOf = 0, wsPeak = 0;
+        int stut40 = 0, stut100 = 0, over100 = 0, over250 = 0, slowSubmits = 0, slowUploads = 0, devLost = 0, crashes = 0, statusN = 0;
+        string gpuLine = "", swapLine = "", fsrLine = "";
+        foreach (var raw in lines) {
+            string l = raw.TrimEnd('\r');
+            Match m = ReFps.Match(l);
+            if (m.Success) { fps.Add(double.Parse(m.Groups[1].Value, Ci)); continue; }
+            m = ReStatus.Match(l);
+            if (m.Success) {
+                statusN++;
+                double ms = double.Parse(m.Groups[1].Value, Ci), v = double.Parse(m.Groups[2].Value, Ci), of = double.Parse(m.Groups[3].Value, Ci);
+                slowest = Math.Max(slowest, ms);
+                if (ms > 100) over100++;
+                if (ms > 250) over250++;
+                if (v > vramHi) { vramHi = v; vramOf = of; }
+                continue;
+            }
+            m = ReStut.Match(l);
+            if (m.Success) { stut40 += int.Parse(m.Groups[1].Value, Ci); stut100 += int.Parse(m.Groups[2].Value, Ci); continue; }
+            m = ReWs.Match(l);
+            if (m.Success) { wsPeak = Math.Max(wsPeak, double.Parse(m.Groups[2].Value, Ci)); continue; }
+            if (l.Contains("slow submit:")) slowSubmits++;
+            if (l.Contains("slow upload")) slowUploads++;
+            if (gpuLine.Length == 0 && l.Contains("vk: ") && l.Contains("Vulkan 1.")) gpuLine = l.Trim();
+            if (swapLine.Length == 0 && l.Contains("vk: swapchain")) swapLine = l.Trim();
+            if (fsrLine.Length == 0 && l.Contains("AMD FSR 4:") && !l.Contains("frames drawn")) fsrLine = l.Trim();
+            bool bad = l.Contains("CRASH:") || l.Contains("device lost") || l.Contains("DEVICE_LOST") || l.Contains("OUT_OF_DEVICE_MEMORY") ||
+                       l.Contains("OUT_OF_HOST_MEMORY") || l.Contains("out of memory") || l.Contains("FATAL") || l.Contains("fatal error");
+            if (l.Contains("CRASH:")) crashes++;
+            if (l.Contains("vk: device lost")) devLost++;
+            if (bad) {
+                string key = Regex.Replace(l, @"0x[0-9a-fA-F]+|\d+", "#");
+                if (seen.Add(key) && problems.Count < 25) problems.Add(l.Trim());
+            }
+        }
+        // (its last lines: what the game did just before it ended; the virtual cores' counts left out)
+        var last = new List<string>();
+        for (int i = lines.Length - 1; i >= 0 && last.Count < 15; i--) {
+            string l = lines[i].TrimEnd('\r');
+            if (l.Trim().Length == 0 || l.Contains("vcores:")) continue;
+            last.Insert(0, "  " + (l.Length > 220 ? l.Substring(0, 220) + "..." : l));
+        }
+        sb.Append("== ").Append(name).Append("  (").Append(lines.Length).Append(" lines)\r\n");
+        if (gpuLine.Length > 0) sb.Append("  ").Append(gpuLine).Append("\r\n");
+        if (swapLine.Length > 0) sb.Append("  ").Append(swapLine).Append("\r\n");
+        if (fsrLine.Length > 0) sb.Append("  ").Append(fsrLine).Append("\r\n");
+        sb.Append("  Crashes: ").Append(crashes).Append(" · graphics device lost: ").Append(devLost > 0 ? "YES" : "no").Append("\r\n");
+        if (fps.Count > 0) {
+            var sorted = new List<double>(fps);
+            sorted.Sort();
+            double avg = 0;
+            foreach (var f in fps) avg += f;
+            avg /= fps.Count;
+            int u50 = 0, u40 = 0, u30 = 0;
+            foreach (var f in fps) { if (f < 50) u50++; if (f < 40) u40++; if (f < 30) u30++; }
+            sb.Append("  Frame rate over ").Append(fps.Count * 5 / 60).Append(" min ").Append(fps.Count * 5 % 60).Append(" s (5 s windows): average ")
+              .Append(avg.ToString("0.0", Ci)).Append(", lowest ").Append(sorted[0].ToString("0.0", Ci)).Append(", median ")
+              .Append(sorted[sorted.Count / 2].ToString("0.0", Ci)).Append("; windows under 50: ").Append(u50).Append(", under 40: ").Append(u40)
+              .Append(", under 30: ").Append(u30).Append("\r\n");
+        }
+        if (statusN > 0)
+            sb.Append("  Slowest frame ").Append(slowest.ToString("0", Ci)).Append(" ms; 10 s windows with a frame over 100 ms: ").Append(over100)
+              .Append(", over 250 ms: ").Append(over250).Append("\r\n  Video memory at its highest: ").Append(vramHi.ToString("0.0", Ci)).Append(" of ")
+              .Append(vramOf.ToString("0.0", Ci)).Append(" GB").Append(vramOf > 0 && vramHi >= vramOf * 0.95 ? "  (FULL)" : "").Append("\r\n");
+        if (wsPeak > 0) sb.Append("  Game's RAM at its highest: ").Append(wsPeak.ToString("0", Ci)).Append(" MB\r\n");
+        if (statusN > 0) sb.Append("  Stutters: ").Append(stut40).Append(" frames over 40 ms, ").Append(stut100).Append(" over 100 ms (Mako 4.1.1 and later)\r\n");
+        sb.Append("  Slow submits: ").Append(slowSubmits).Append(" · slow texture uploads: ").Append(slowUploads).Append("\r\n");
+        if (problems.Count > 0) {
+            sb.Append("  Problems (the first of each kind):\r\n");
+            foreach (var p in problems) sb.Append("    ").Append(p.Length > 260 ? p.Substring(0, 260) + "..." : p).Append("\r\n");
+        }
+        sb.Append("  Last lines:\r\n").Append(string.Join("\r\n", last.ToArray())).Append("\r\n\r\n");
+    }
 }
 
 // (Mako 4.0) Test my PC: what one run of the game measured, read from its own log lines (host/nn_vi.c "frames presented" and
@@ -1458,9 +1620,9 @@ static class Fork {
     public const string Name = "Mako";
     // (the update check compares the first number of the tags: the first Mako release must be numbered above amd-fix-2.1, or the
     // 2.x launchers players have would think it older and never offer it)
-    public const string Base = "mako-4.1";      // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
-    public const string Version = "mako-4.1";   // (HOOKSHOT_FORK_VERSION)
-    public const int Api = 16;                  // (gpu/vk/vk_api.h MKWVK_API_VERSION)
+    public const string Base = "mako-4.1.1";     // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
+    public const string Version = "mako-4.1.1";  // (HOOKSHOT_FORK_VERSION)
+    public const int Api = 23;                  // (gpu/vk/vk_api.h MKWVK_API_VERSION)
     public const string Api_Url = "https://api.github.com/repos/Shakoquo/Mako/releases/latest";
     public const string Page = "https://github.com/Shakoquo/Mako/releases/latest";
     public const string Home = "https://github.com/Shakoquo/Mako";
@@ -1930,7 +2092,7 @@ class LauncherForm : Form {
     float helpFade; string helpShown = "";
     PointF mouse = new PointF(-1, -1);
     Widget pressed;
-    bool loading;
+    bool loading, vramTooHigh;
     int randoSeed;          // (rando_seed: the randomizer seed's random part, 0 none yet)
     bool randoDropImport;   // (a randomizer setting was changed here: a rando_import line still in the file would undo it at the game's start)
     readonly Dictionary<string, Selector> cosmetics = new Dictionary<string, Selector>();   // (the Cosmetics page's selectors, by their line)
@@ -2107,6 +2269,15 @@ class LauncherForm : Form {
     /// (Mako 4.1) the texture cap advised for a card: what is left once the game's other video memory (render targets, buffers,
     /// pipelines: ~3.5-4 GB in Hyrule Field) is set aside from 90% of the card, in 512 MB steps; at most 6 GB up to 16 GB cards
     /// (more filled them past what they hold), 8 GB above; at least 1 GB; 2.5 GB on a GPU sharing the PC's RAM
+    // The slider's end: 60% of the card, at least the recommended value, at most 10 GB. (4.1 went to the card less 2 GB: testers
+    // set 9.5 GB on 12 GB cards and 11 GB on 16 GB ones; with the game's other video memory (~3.5-6 GB) the card was full)
+    public static int VramMaxMB(long cardMB, bool integrated) {
+        if (cardMB <= 0) return 6144;
+        int rec = RecommendedVramMB(cardMB, integrated);
+        int m = (int)(cardMB * 6 / 10) / 512 * 512;
+        return Math.Max(Math.Max(rec, 2048), Math.Min(10240, m));
+    }
+
     public static int RecommendedVramMB(long cardMB, bool integrated) {
         if (integrated) return 2560;
         if (cardMB <= 0) return 0;
@@ -2245,7 +2416,7 @@ class LauncherForm : Form {
             int card = (int)pcNow.VramMB;
             vramSlider = new VramSlider { Page = 1, R = new RectangleF(cx, 112 + (GraphicsRows.Length + 1) / 2 * 70, cw, 62), CardMB = card,
                                           RecMB = RecommendedVramMB(card, pcNow.Integrated),
-                                          MaxMB = Math.Max(4096, card > 0 ? Math.Min(16384, (card - 2048) / 512 * 512) : 8192) };
+                                          MaxMB = VramMaxMB(card, pcNow.Integrated) };
             vramSlider.Changed = v => { if (!loading) SaveEnv(); };
             widgets.Add(vramSlider);
         }
@@ -2326,6 +2497,7 @@ class LauncherForm : Form {
         widgets.Add(new Btn { Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 312, 612, cw - 312, 42), Page = 0, Click = OnApplyRecommended });
 
         LoadAll();
+        if (vramTooHigh) { vramTooHigh = false; SaveEnv(); }
         int first;
         string[] cmd = Environment.GetCommandLineArgs();
         ShowPage(cmd.Length > 2 && int.TryParse(cmd[2], out first) && first >= 0 && first <= CosmeticPage ? first : 0);
@@ -2856,8 +3028,9 @@ class LauncherForm : Form {
         string vm; int vmb;
         if (vramSlider != null)
             vramSlider.ValueMB = env.TryGetValue("RX_VK_VRAM_MB", out vm) && int.TryParse(vm, out vmb) && vmb > 0
-                                     ? Math.Max(vramSlider.MinMB, Math.Min(Math.Max(vramSlider.MaxMB, vmb), vmb)) : 0;
-        if (vramSlider != null && vramSlider.ValueMB > vramSlider.MaxMB) vramSlider.MaxMB = vramSlider.ValueMB;
+                                     ? Math.Max(vramSlider.MinMB, vmb) : 0;
+        // (4.1.1: a cap set past the safe maximum in 4.1 (9.5 GB on a 12 GB card filled it: device lost) comes back to it, saved)
+        if (vramSlider != null && vramSlider.ValueMB > vramSlider.MaxMB) { vramSlider.ValueMB = vramSlider.MaxMB; vramTooHigh = true; }
         string rs;
         if (env.TryGetValue("RX_VK_REDSTONE", out rs) && rs == "1" && settings["frame_generation"].Value == 2)
             settings["frame_generation"].Index = settings["frame_generation"].Items.Length - 1;
@@ -3899,7 +4072,7 @@ class LauncherForm : Form {
     void OnSendLogs() {
         string hook = ReportHook();
         if (hook.Length == 0) {
-            MessageBox.Show(this, "Sending logs is not set up in this build. Open the game folder and send hookshot_log.txt on the Mako Discord.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, "Sending logs is not set up in this build. Open the game folder and send logs\\hookshot_log.txt on the Mako Discord.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         string stamp = Path.Combine(dir, "user", "report_last.txt");
@@ -3910,7 +4083,12 @@ class LauncherForm : Form {
             }
         } catch { }
         var logs = new List<string>();
-        foreach (var n in new[] { "hookshot_log.txt", "hookshot_log.1.txt" }) if (File.Exists(Path.Combine(dir, n))) logs.Add(n);
+        // (Mako 4.1.1: the game writes its logs in logs\ since the Longshot merge; a game from before, beside it)
+        foreach (var n in new[] { "hookshot_log.txt", "hookshot_log.1.txt" }) {
+            string inLogs = Path.Combine("logs", n);
+            if (File.Exists(Path.Combine(dir, inLogs))) logs.Add(inLogs);
+            else if (File.Exists(Path.Combine(dir, n))) logs.Add(n);
+        }
         if (logs.Count == 0) {
             MessageBox.Show(this, "There is no game log yet: start the game once, then send.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
@@ -3925,7 +4103,7 @@ class LauncherForm : Form {
                                     BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
             var what = new Label { AutoSize = false, Bounds = new Rectangle(16, 198, 488, 74), ForeColor = Theme.Dim,
                                    Text = "Sent to the Mako team's private channel: your text, the game's last logs (" + string.Join(", ", logs) + "), " +
-                                          "your graphics card, processor, memory and Mako version. Your Windows account name is removed from the logs. " +
+                                          "your graphics card, processor, memory, Windows and driver versions, Mako version and settings. Your Windows account name is removed from the logs. " +
                                           "Nothing else: no saves, no game files." };
             var send = new Button { Text = "Send", Bounds = new Rectangle(300, 284, 100, 32), FlatStyle = FlatStyle.Flat, BackColor = Theme.Blue, ForeColor = Color.White };
             var cancel = new Button { Text = "Cancel", Bounds = new Rectangle(404, 284, 100, 32), FlatStyle = FlatStyle.Flat, BackColor = Theme.Card, ForeColor = Theme.Text, DialogResult = DialogResult.Cancel };
@@ -3942,7 +4120,7 @@ class LauncherForm : Form {
                 try { Directory.CreateDirectory(Path.Combine(dir, "user")); File.WriteAllText(stamp, DateTime.UtcNow.ToString("o")); } catch { }
                 MessageBox.Show(this, "Sent. Thank you: the Mako team will read it.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
             } else
-                MessageBox.Show(this, "The report could not be sent:\n" + err + "\n\nYou can send hookshot_log.txt (game folder) on the Mako Discord instead.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "The report could not be sent:\n" + err + "\n\nYou can send logs\\hookshot_log.txt (game folder) on the Mako Discord instead.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -3953,14 +4131,20 @@ class LauncherForm : Form {
             // (the logs, zipped: a log is under 1 MB, about 100 KB zipped)
             byte[] zip;
             using (var ms = new MemoryStream()) {
-                using (var za = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, true))
+                using (var za = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, true)) {
+                    // (Mako 4.1.1) a summary first: the PC, the settings and what the logs say, read in seconds (ReportSummary)
+                    try {
+                        var se = za.CreateEntry("summary.txt", System.IO.Compression.CompressionLevel.Optimal);
+                        using (var w = new StreamWriter(se.Open(), new UTF8Encoding(false))) w.Write(Scrub(ReportSummary.Build(dir, pc, ver, problem, logs)));
+                    } catch { }
                     foreach (var n in logs) {
                         string text;
                         using (var fs = new FileStream(Path.Combine(dir, n), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
                         using (var r = new StreamReader(fs, Encoding.UTF8)) text = r.ReadToEnd();
-                        var e = za.CreateEntry(n, System.IO.Compression.CompressionLevel.Optimal);
+                        var e = za.CreateEntry(Path.GetFileName(n), System.IO.Compression.CompressionLevel.Optimal);
                         using (var w = new StreamWriter(e.Open(), new UTF8Encoding(false))) w.Write(Scrub(text));
                     }
+                }
                 zip = ms.ToArray();
             }
             string clean = Scrub(problem).Replace("```", "` ` `");

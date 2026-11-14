@@ -1,0 +1,183 @@
+# Hookshot's releases (docs/releases.md; how to make one: RELEASING.md). The same workflow as MagicBeanDev/HookshotLauncher's,
+# but for what is built: here the two builders.
+#
+#   a push to main       the nightly: nightly-<commits since the fork>-<commit>, a pre-release
+#   a tag vX.Y.Z-rc.N    a release candidate, a pre-release (the rc channel)
+#   a tag vX.Y.Z         a stable (the stable channel, and rc too). Hookshot's first is v3.0.0
+#
+# 1. version: tools.lock is checked first (scripts/tools.py check --require: every tool the Windows and the Linux builder
+#    need is in Hookshot's packages), then the version's name; a tag is checked too (scripts/release.py check-tag: its form, on main, above
+#    every release, and as high as the commits since the last stable call for). Either refused builds nothing.
+#    A tag whose commit CI has released already (its nightly; for a stable, its release candidate) names that release in
+#    `checked` (scripts/release.py released-as: published, its SHA256SUMS signed by a key the launcher trusts and naming its
+#    every file; one that is not stops the run). Its run passed every check of the commit, so the build checks that ship
+#    no file are not run again. Its files are not reused: each carries its version (the AppImage's VERSION and Vulkan back
+#    end, the zip's VERSION and builder), and a release never ships a file that names another version.
+# 2. linux, windows: Hookshot-<v>-x86_64.AppImage and HookshotBuilder-<v>-windows-x64.zip (build-linux.yml, build-windows.yml).
+# 3. publish: SHA256SUMS over the files and tools.lock, SHA256SUMS.sig (the release key), the notes (git-cliff, cliff.toml),
+#    then a draft release with every file, published last: until then no launcher sees it. A nightly also prunes the
+#    nightlies past the newest 5. Nothing is committed back to the repository.
+#
+# Secret (RELEASING.md, One-time setup): RELEASE_SIGNING_KEY (the release key's private PEM). Releases are made with the job's
+# own token (forgejo.token, passed to scripts/release.py as RELEASE_TOKEN; no secret, no bot account): on a push to this repository Forgejo gives it write access to this repository's every
+# unit (routers/api/v1/permissions/repo_access.go), so it may make, upload to, publish and delete releases and delete tags
+# here, and nowhere else. No `permissions:` key: Forgejo 17 ignores it (with a warning). Variable: RELEASE_UPLOAD_API (passed to release.py as FORGEJO_UPLOAD_API; Forgejo reserves the FORGEJO_ prefix for variables), the
+# API's address without Cloudflare in front, when a file is larger than its 100 MB upload limit.
+name: Release
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  version:
+    name: The version
+    runs-on: quick  # (a quick job: the runner kept free for these takes it, or any runner with room)
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.name.outputs.tag }}
+      ref: ${{ steps.name.outputs.ref }}
+      checked: ${{ steps.name.outputs.checked }}
+    steps:
+      - uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: The tools
+        run: |
+          # (every tool the Windows and the Linux builder need is in tools.lock and its packages: before any build, not
+          # after both. Neither builder carries its tools: they download them by tools.lock)
+          if ! python3 -I scripts/tools.py check --require; then
+            echo "::error::tools.lock or its packages lack a tool a builder needs; RELEASING.md, Bump a tool"
+            exit 1
+          fi
+      - id: name
+        env:
+          RELEASE_TOKEN: ${{ forgejo.token }}
+          FORGEJO_UPLOAD_API: ${{ vars.RELEASE_UPLOAD_API }}
+        run: |
+          git fetch -q --tags origin main
+          ref=$(git rev-parse HEAD)
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            tag=${GITHUB_REF#refs/tags/}
+            python3 -I scripts/release.py check-tag "$tag" --main origin/main
+            # (the release CI made of this commit already, checked: its build checks are not run again; it stops here when
+            # a release of this commit is not signed or not whole)
+            checked=$(python3 -I scripts/release.py released-as "$ref" --not "$tag")
+            echo "checked=$checked" >> "$GITHUB_OUTPUT"
+            [[ -z $checked ]] || echo "::notice::$checked is this commit's release: its build checks are not run again"
+          else
+            # (a nightly whose commit is no longer main's skips itself: the release runs queue one at a time, and of a few
+            # merges in a row only the newest one builds; the one already running goes on)
+            head=$(git rev-parse origin/main)
+            if [[ $GITHUB_EVENT_NAME == push && $head != "$ref" ]]; then
+              echo "::notice::main has moved on to ${head:0:8}: this nightly skips, the newer one builds"
+              echo "tag=" >> "$GITHUB_OUTPUT"
+              echo "ref=$ref" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            tag=$(python3 -I scripts/release.py nightly-name)
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "$tag, from $ref"
+
+  linux:
+    name: Linux builder
+    needs: version
+    if: needs.version.outputs.tag != ''
+    uses: ./.forgejo/workflows/build-linux.yml
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      ref: ${{ needs.version.outputs.ref }}
+      checked: ${{ needs.version.outputs.checked }}
+
+  windows:
+    name: Windows builder
+    needs: version
+    if: needs.version.outputs.tag != ''
+    uses: ./.forgejo/workflows/build-windows.yml
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      ref: ${{ needs.version.outputs.ref }}
+      checked: ${{ needs.version.outputs.checked }}
+
+  publish:
+    name: Sign and publish
+    needs: [version, linux, windows]
+    if: needs.version.outputs.tag != ''
+    runs-on: quick  # (a short job: it starts as the builds end, never behind them; the same machine and secrets)
+    timeout-minutes: 60
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+      REF: ${{ needs.version.outputs.ref }}
+      RELEASE_TOKEN: ${{ forgejo.token }}
+      FORGEJO_UPLOAD_API: ${{ vars.RELEASE_UPLOAD_API }}
+    steps:
+      - uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      # (from Forgejo's public address behind Cloudflare, as the build jobs' upload: fetched once more when it failed)
+      - id: download_1
+        continue-on-error: true
+        uses: https://data.forgejo.org/forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e   # v4 (4.1.4 with the GHES check off)
+        with:
+          name: Hookshot-linux-x86_64
+          path: files
+      - if: steps.download_1.outcome == 'failure'
+        uses: https://data.forgejo.org/forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e   # v4 (4.1.4 with the GHES check off)
+        with:
+          name: Hookshot-linux-x86_64
+          path: files
+      # (from Forgejo's public address behind Cloudflare, as the build jobs' upload: fetched once more when it failed)
+      - id: download_2
+        continue-on-error: true
+        uses: https://data.forgejo.org/forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e   # v4 (4.1.4 with the GHES check off)
+        with:
+          name: HookshotBuilder-windows
+          path: files
+      - if: steps.download_2.outcome == 'failure'
+        uses: https://data.forgejo.org/forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e   # v4 (4.1.4 with the GHES check off)
+        with:
+          name: HookshotBuilder-windows
+          path: files
+      - name: The files
+        run: |
+          git fetch -q --tags origin
+          cp tools.lock files/
+          ls -l files
+          test -f "files/Hookshot-$TAG-x86_64.AppImage" && test -f "files/HookshotBuilder-$TAG-windows-x64.zip"
+      - name: SHA256SUMS, signed
+        env:
+          KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          [[ -n $KEY ]] || { echo "::error::no RELEASE_SIGNING_KEY secret (RELEASING.md, One-time setup)"; exit 1; }
+          python3 -I scripts/release.py sums files/* --out files/SHA256SUMS
+          umask 077
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/key.pem"
+          python3 -I scripts/release.py sign files/SHA256SUMS --key "$RUNNER_TEMP/key.pem" --out files/SHA256SUMS.sig
+          rm -f "$RUNNER_TEMP/key.pem"
+          # (checked with the key the launcher is built with, not the one just used: a key it does not trust stops here)
+          python3 -I scripts/release.py verify files/SHA256SUMS --files files
+          cat files/SHA256SUMS
+      - name: The notes
+        run: |
+          GIT_CLIFF=$(python3 -I scripts/release.py git-cliff "$RUNNER_TEMP/cliff")
+          export GIT_CLIFF
+          python3 -I scripts/release.py notes "$TAG" --out notes.md
+          cat notes.md
+      - name: Publish
+        run: python3 -I scripts/release.py publish "$TAG" --target "$REF" --notes notes.md files/*
+      - name: Prune the nightlies
+        if: startsWith(needs.version.outputs.tag, 'nightly-')
+        run: python3 -I scripts/release.py prune --keep 5

@@ -1,0 +1,114 @@
+/* The site's theme: fonts, colours and the few rules every page shares. Components keep their own styles in their
+   <style> blocks; the HTML made from the repository's documents is styled in content.css. */
+
+/* Atkinson Hyperlegible Next for text and controls, Libertinus Serif for large headings (both SIL OFL 1.1). */
+@font-face {
+  font-family: 'Atkinson Hyperlegible Next';
+  src: url('../assets/fonts/atkinson/AtkinsonHyperlegibleNext.woff2') format('woff2');
+  font-style: normal; font-weight: 200 800; font-display: swap;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible Next';
+  src: url('../assets/fonts/atkinson/AtkinsonHyperlegibleNext-Italic.woff2') format('woff2');
+  font-style: italic; font-weight: 200 800; font-display: swap;
+}
+@font-face {
+  font-family: 'Libertinus Serif';
+  src: url('../assets/fonts/libertinus/LibertinusSerif-Semibold.woff2') format('woff2');
+  font-style: normal; font-weight: 600; font-display: swap;
+}
+
+:root {
+  --sl-font: 'Atkinson Hyperlegible Next', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  --heading-font: 'Libertinus Serif', Georgia, 'Times New Roman', serif;
+  /* The type scale: every font size on the site is one of these. */
+  --text-label: .8125rem;  /* uppercase labels only */
+  --text-xs: .875rem;      /* dates, counts, fine print */
+  --text-sm: 1rem;         /* secondary text, card text */
+  --text-base: 1.0625rem;  /* body */
+  --text-lg: 1.25rem;      /* card titles, lead paragraphs */
+  --text-xl: 1.5rem;       /* small headings */
+  --text-2xl: 2rem;        /* section headings on narrow screens */
+  --text-heading: clamp(2rem, 1.5rem + 1.5vw, 2.75rem);  /* section headings */
+  --text-display: clamp(2.5rem, 1.6rem + 3.4vw, 4.5rem); /* the front page's heading */
+  --sl-text-body: var(--text-base);
+  --sl-text-sm: var(--text-xs);
+  --sl-text-h1: 2.65rem;
+  --sl-line-height: 1.65;
+  --sl-nav-height: 5rem;
+  --sl-sidebar-width: 16.5rem;
+  --sl-content-width: 49rem;
+
+  /* Near-neutral surfaces with only a trace of green; the accent carries the colour. */
+  --sl-color-bg: #0e100f; --sl-color-bg-nav: #0e100ff5; --sl-color-bg-sidebar: #121413;
+  --sl-color-black: #0e100f; --sl-color-gray-6: #181b19; --sl-color-gray-5: #2a2e2b;
+  --sl-color-gray-4: #5b625d; --sl-color-gray-3: #949b96; --sl-color-gray-2: #c0c6c1;
+  --sl-color-gray-1: #e4e8e4; --sl-color-white: #f5f7f3;
+  --sl-color-accent-low: #26371d; --sl-color-accent: #c2ed83; --sl-color-accent-high: #ddf4bf;
+  --sl-color-text-accent: #c2ed83;
+  /* Our own: cards and panels, their borders, and the filled button. */
+  --border: #2f3431;
+  --panel: #161917;
+  --panel-hover: #1f2320;
+  --button: #c2ed83;
+  --button-hover: #daf5b2;
+  --button-text: #13210d;
+}
+:root[data-theme='light'] {
+  --sl-color-bg: #f6f7f4; --sl-color-bg-nav: #f6f7f4f5; --sl-color-bg-sidebar: #eef0eb;
+  --sl-color-black: #f6f7f4; --sl-color-gray-7: #f4f5f1; --sl-color-gray-6: #eaece7; --sl-color-gray-5: #d6d9d3;
+  --sl-color-gray-4: #8a9187; --sl-color-gray-3: #5f665c; --sl-color-gray-2: #434a41;
+  --sl-color-gray-1: #262c25; --sl-color-white: #121712;
+  --sl-color-accent-low: #e2edcf; --sl-color-accent: #3c651e; --sl-color-accent-high: #254415;
+  --sl-color-text-accent: #365e1b;
+  --border: #cfd3cb;
+  --panel: #eef0ea;
+  --panel-hover: #e5e8e1;
+}
+@media (max-width: 70rem) { :root { --sl-nav-height: 8rem; } }
+
+* { scrollbar-color: var(--sl-color-gray-4) transparent; }
+::selection { background: #466b4c; color: #fff9dc; }
+a { text-underline-offset: .2em; }
+:is(a, button, input, select, summary):focus-visible { outline: 2px solid var(--sl-color-text-accent); outline-offset: 4px; }
+:is(h1, h2, h3, h4, h5, h6) { font-family: var(--heading-font); font-weight: 600; text-wrap: balance; }
+h1#_top { letter-spacing: -.03em; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+
+/* Starlight's frame */
+header.header { border-bottom: 1px solid var(--border); }
+.content-panel { border: 0; }
+.sidebar-pane, .right-sidebar { border-color: var(--border); }
+.right-sidebar { font-size: var(--text-xs); }
+.sidebar-content {
+  padding-top: 1.7rem;
+  .top-level > li { margin-bottom: 1.3rem; }
+  .large { font-size: var(--text-xs); font-weight: 600; letter-spacing: .03em; }
+  ul ul { border-inline-start-color: var(--border); }
+  a { font-size: var(--text-xs); border-radius: 5px; padding-block: .4rem; }
+  a[aria-current='page'] { background: var(--sl-color-accent-low); color: var(--sl-color-accent-high); }
+}
+
+/* The front page: wide, without Starlight's own footer */
+:root[data-has-hero] { --sl-content-width: 78rem; }
+[data-has-hero] main { padding-top: 1.5rem; }
+[data-has-hero] .content-panel { padding-top: 0; }
+[data-has-hero] footer.sl-flex { display: none; }
+
+/* Shared by the hero and the front page */
+.eyebrow { margin: 0; color: var(--sl-color-text-accent); font-size: var(--text-label); font-weight: 700; letter-spacing: .12em; line-height: 1.6; }
+.button {
+  display: inline-flex; align-items: center; justify-content: center; gap: .65rem; min-height: 48px; padding: .8rem 1.15rem;
+  border: 1px solid var(--sl-color-gray-4); border-radius: 7px; color: var(--sl-color-white); text-decoration: none;
+  font-weight: 600; font-size: var(--text-sm); transition: background .18s, border-color .18s;
+  &:hover { background: var(--panel); border-color: var(--sl-color-text-accent); }
+  &.primary { background: var(--button); border-color: var(--button); color: var(--button-text); }
+  &.primary:hover { background: var(--button-hover); }
+  &.discord { border-color: #747de8; background: #25294b; color: #f0f1ff; }
+  &.discord:hover { background: #353b66; border-color: #adb3ff; }
+  :root[data-theme='light'] &.discord { background: #eceeff; color: #343b91; border-color: #8187c5; }
+  :root[data-theme='light'] &.discord:hover { background: #dfe3ff; }
+  svg { flex-shrink: 0; }
+}

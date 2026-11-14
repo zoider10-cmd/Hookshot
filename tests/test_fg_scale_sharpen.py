@@ -4,7 +4,12 @@ per-pixel math, the shader's own sharpen() compiled as C++, is the picture uncha
 darkest pixel around it nor outside 0..1 (no halos, no clipping) at any setting, and steeper edges as the setting rises.
 fg_scale_comp_spv.h names the hash of the fg_scale.comp it was made from (its first line), checked against the shader as it
 is now with or without glslang; with glslangValidator the shader compiles, and with the version the header names, the rest of
-the header is its output byte for byte. --write makes the header: glslang's output with that line on top.
+the header is its output byte for byte. --write makes the header: glslang's output with that line on top. The same for
+fg_scale_pq_comp_spv.h, fg_scale.comp compiled with FG_SCALE_PQ (its destination RGB10A2, for the game's own HDR10 picture:
+Native HDR), whose destination and dither this checks too. And the scaling filters, the shader's own kernel() compiled as C++
+over its tap range: shrinking (the picture larger than the window), each stretched by the shrink, so detail finer than the
+window can show stays out (it aliased, worse than the plain linear copy, at the picture's own spacing); at stretch 1 the
+4 x 4 Catmull-Rom and Lanczos taps as before.
 
 python -I -B tests/test_fg_scale_sharpen.py [--cxx g++] [--glslang glslangValidator] [--write]
 """
@@ -22,18 +27,23 @@ ROOT = Path(__file__).resolve().parents[1]
 SHADERS = ROOT / "gpu" / "vk" / "shaders"
 
 
-def source_line(comp):
+# (the headers made from fg_scale.comp: file, variable, glslang's defines)
+HEADERS = (("fg_scale_comp_spv.h", "FG_SCALE_COMP_SPV", []),
+           ("fg_scale_pq_comp_spv.h", "FG_SCALE_PQ_COMP_SPV", ["-DFG_SCALE_PQ"]))
+
+
+def source_line(comp, var="FG_SCALE_COMP_SPV", defines=()):
     """the header's first line: the shader's hash (line ends as LF, as the checkout has them) and how the header is made"""
     digest = hashlib.sha256(comp.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
     return ("// fg_scale.comp sha256 %s (tests/test_fg_scale_sharpen.py --write: glslangValidator -V --target-env vulkan1.2 "
-            "--vn FG_SCALE_COMP_SPV)\n" % digest).encode()
+            "%s--vn %s)\n" % (digest, "".join(d + " " for d in defines), var)).encode()
 
 
-def compile_header(glslang, comp, out):
-    r = subprocess.run([glslang, "-V", "--target-env", "vulkan1.2", "--vn", "FG_SCALE_COMP_SPV", "-o", str(out), str(comp)],
+def compile_header(glslang, comp, out, var="FG_SCALE_COMP_SPV", defines=()):
+    r = subprocess.run([glslang, "-V", "--target-env", "vulkan1.2", *defines, "--vn", var, "-o", str(out), str(comp)],
                        capture_output=True, text=True)
     if r.returncode:
-        raise SystemExit("fg_scale.comp does not compile:\n" + r.stdout + r.stderr)
+        raise SystemExit("fg_scale.comp does not compile (%s):\n" % (" ".join(defines) or "as it is") + r.stdout + r.stderr)
     return out.read_bytes()
 
 
@@ -124,29 +134,82 @@ int main() {
 }
 '''
 
+# (the scaling filters: the shader's kernel() and reach() over its tap range, one axis; a sine finer than the window can show
+# should come out nearly flat, its swing what aliases into the window)
+FILTER = r'''
+#include <vector>
+#define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "FAIL:%d %s\n", __LINE__, #x); std::exit(1); } } while (0)
+static float shrink_alias(int S, int D) {
+    const float r = (float)S / (float)D, s = std::clamp(r, 1.0f, kMaxStretch), nyq = 0.5f / r;
+    std::vector<float> sig(S);
+    float total = 0.0f;
+    for (int k = 0; k < 24; k++) {
+        const float f = nyq * 1.3f + (0.5f - nyq * 1.3f) * (float)k / 23.0f;
+        for (int i = 0; i < S; i++) sig[i] = std::sin(6.2831853f * f * (float)i + 0.3f);
+        float lo = 1e9f, hi = -1e9f;
+        for (int g = D / 8; g < D - D / 8; g++) {   // (away from the clamped edges)
+            const float p = ((float)g + 0.5f) * r - 0.5f;
+            const int a = (int)std::floor(p - reach() * s) + 1, b = (int)std::floor(p + reach() * s);
+            float sum = 0.0f, w = 0.0f;
+            for (int x = a; x <= b; x++) {
+                const float kw = kernel(((float)x - p) / s);
+                sum += kw * sig[std::clamp(x, 0, S - 1)];
+                w += kw;
+            }
+            lo = std::min(lo, sum / w), hi = std::max(hi, sum / w);
+        }
+        total += (hi - lo) / 2.0f;
+    }
+    return total / 24.0f;
+}
+int main() {
+    // (4K, 5K and 1440p pictures in 1440p and 1080p windows: 1.33 to 2.67 picture pixels a window pixel. At the picture's own
+    // spacing these were 0.27 to 0.89 of the sine's swing; stretched, 0.02 to 0.27)
+    const int sizes[][2] = {{3840, 2560}, {5120, 2560}, {2560, 1920}, {3840, 1920}, {5120, 1920}};
+    for (int mode : {0, 1, 2}) {
+        pc.mode = mode;
+        for (const auto& z : sizes) {
+            const float a = shrink_alias(z[0], z[1]);
+            if (!(a < 0.3f)) std::fprintf(stderr, "mode %d, %d to %d: %.3f of the swing aliases\n", mode, z[0], z[1], a);
+            CHECK(a < 0.3f);
+        }
+    }
+    std::printf("PASS: shrinking, each filter is stretched and keeps detail finer than the window from aliasing\n");
+}
+'''
+
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--cxx", default="g++")
     p.add_argument("--glslang", default="glslangValidator")
-    p.add_argument("--write", action="store_true", help="make fg_scale_comp_spv.h from fg_scale.comp")
+    p.add_argument("--write", action="store_true", help="make fg_scale_comp_spv.h and fg_scale_pq_comp_spv.h from fg_scale.comp")
     a = p.parse_args()
     comp = SHADERS / "fg_scale.comp"
-    header_path = SHADERS / "fg_scale_comp_spv.h"
     if a.write:
         glslang = shutil.which(a.glslang)
         if not glslang:
             raise SystemExit("--write needs %s" % a.glslang)
         with tempfile.TemporaryDirectory(prefix="fg-sharpen-") as tmp:
-            header_path.write_bytes(source_line(comp) + compile_header(glslang, comp, Path(tmp) / "out.h"))
-        print("wrote %s" % header_path)
+            for name, var, defines in HEADERS:
+                (SHADERS / name).write_bytes(source_line(comp, var, defines) +
+                                             compile_header(glslang, comp, Path(tmp) / "out.h", var, defines))
+                print("wrote %s" % (SHADERS / name))
         return
-    header = header_path.read_bytes()
-    first, _, hbody = header.partition(b"\n")
-    if first + b"\n" != source_line(comp):
-        raise SystemExit("fg_scale_comp_spv.h was not made from this fg_scale.comp (its first line names another hash): "
-                         "python -I -B tests/test_fg_scale_sharpen.py --write")
+    bodies = {}
+    for name, var, defines in HEADERS:
+        first, _, bodies[name] = (SHADERS / name).read_bytes().partition(b"\n")
+        if first + b"\n" != source_line(comp, var, defines):
+            raise SystemExit("%s was not made from this fg_scale.comp (its first line names another hash or command): "
+                             "python -I -B tests/test_fg_scale_sharpen.py --write" % name)
     text = comp.read_text(encoding="utf-8")
+    # (FG_SCALE_PQ: the destination RGB10A2, the dither less than one of its steps; else RGBA8 and 8 bits)
+    pq = re.search(r"#ifdef FG_SCALE_PQ\n(.*?)#else\n(.*?)#endif", text, re.S)
+    if not pq or "layout(binding = 1, rgb10_a2) uniform writeonly image2D dst;" not in pq.group(1) or \
+            "const float kSteps = 1023.0;" not in pq.group(1) or \
+            "layout(binding = 1, rgba8) uniform writeonly image2D dst;" not in pq.group(2) or \
+            "const float kSteps = 255.0;" not in pq.group(2) or "/ kSteps; }" not in text:
+        raise SystemExit("fg_scale.comp: FG_SCALE_PQ does not make the destination RGB10A2 (and its dither 10-bit steps)")
     body = block(text, "void main()")
     sharp = body[body.index("if (pc.sharp > 0.0)"):]
     if "textureSize(src, 0)" not in sharp:
@@ -166,10 +229,26 @@ def main():
         cpp.write_text(fixture, encoding="utf-8")
         subprocess.run([a.cxx, "-std=c++20", "-O1", "-Wall", "-Wextra", "-Wno-unused-function", str(cpp), "-o", str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
+        if "clamp(size / vec2(imageSize(dst)), vec2(1.0), vec2(kMaxStretch))" not in block(text, "vec3 filtered("):
+            raise SystemExit("filtered() does not stretch its filter by the picture's pixels per window pixel")
+        filt = "\n".join(re.search(r"const float %s = [^;]*;" % n, text).group(0).replace("const", "static const")
+                         for n in ("PI", "kMaxStretch"))
+        filt += "".join("\nstatic " + block(text, f) for f in ("float lanczos2(", "float catmull(", "float tent(",
+                                                             "float kernel(", "float reach("))
+        cpp.write_text(SHIM + "using std::abs;\nusing std::sin;\nstatic struct { int mode; } pc;\n" + filt + FILTER,
+                       encoding="utf-8")
+        subprocess.run([a.cxx, "-std=c++20", "-O1", "-Wall", "-Wextra", "-Wno-unused-function", str(cpp), "-o", str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
         glslang = shutil.which(a.glslang)
         if not glslang:
             print("PASS: the header names this shader (no %s: its compile not checked)" % a.glslang)
             return
+        for name, var, defines in HEADERS[1:]:   # (the variants: compiled; byte for byte as below when glslang is the same)
+            made = compile_header(glslang, comp, Path(tmp) / name, var, defines)
+            if made.splitlines()[0] == bodies[name].splitlines()[0] and made != bodies[name]:
+                raise SystemExit("%s is not fg_scale.comp compiled with %s: python -I -B tests/test_fg_scale_sharpen.py "
+                                 "--write" % (name, " ".join(defines)))
+        hbody = bodies["fg_scale_comp_spv.h"]
         made = compile_header(glslang, comp, Path(tmp) / "fg_scale_comp_spv.h")
         if made.splitlines()[0] != hbody.splitlines()[0]:
             print("PASS: the header names this shader, and it compiles (glslang %s, the header's is %s: bytes not compared)" %
@@ -177,7 +256,7 @@ def main():
             return
         if made != hbody:
             raise SystemExit("fg_scale_comp_spv.h is not fg_scale.comp compiled: python -I -B tests/test_fg_scale_sharpen.py --write")
-        print("PASS: fg_scale_comp_spv.h is fg_scale.comp compiled")
+        print("PASS: fg_scale_comp_spv.h and fg_scale_pq_comp_spv.h are fg_scale.comp compiled")
 
 
 if __name__ == "__main__":

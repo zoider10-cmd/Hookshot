@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Looking for the game or a ROM
+    url: https://git.magicbean.dev/MagicBeanDev/Hookshot/issues/19
+    about: We don't share the game, ROMs or keys, and don't help find them. Hookshot needs your own copy.
+  - name: Share your pipeline list
+    url: https://git.magicbean.dev/MagicBeanDev/Hookshot/issues/14
+    about: Send the pipeline list your game wrote, to cut first-load stutter for everyone. It goes as a comment on issue 14, not a new issue.
+  - name: Newest release
+    url: https://git.magicbean.dev/MagicBeanDev/Hookshot/releases
+    about: Every release has all the fixes before it. Try the newest before reporting.
+  - name: Ask in Discord
+    url: https://discord.gg/magicbean
+    about: Questions, help with setup, and talk with the team.

@@ -171,6 +171,7 @@ typedef struct {
     pthread_mutex_t mu;
     pthread_cond_t cv;
     int done, priority;
+    int pinned;   /* (SetThreadAffinityMask set its affinity: thread_entry leaves it; under mu) */
     DWORD code;
     volatile int refs;
     LPTHREAD_START_ROUTINE fn;
@@ -191,6 +192,30 @@ static HThread *thread_new(void) {
     monitor_init(&t->mu, &t->cv);
     return t;
 }
+/* The process's affinity as the process started: Windows keeps a process mask apart from its threads' masks, Linux has
+   only the threads'. Read from the asking thread each time, it was that thread's own mask, which shrank once hos_thread_pin
+   pinned it off the reserved core: the Presentation Thread's pin, asked for from a game thread kept off that core, then
+   saw no reserved core in the "process" mask and kept the Presentation Thread off it too, against render_thread_on_reserved
+   (host/hos_thread.c; Ryzen 9 9950X3D, 2026-11-09). Taken once, before main, when no thread is pinned yet.
+   Also applied when a thread first registers here (CreateThread's thread_entry, or a std::thread in thread_self on its
+   first GetCurrentThread call in SetThreadDescription / SetThreadPriority), so a thread made inside a pinned replay
+   (ReplayPin in gpu/vk/vk_replay.cpp) starts with the process's affinity as on Windows rather than inheriting the pin.
+   (A thread that never registers here, a std::thread that calls none of these or a library's, keeps what it inherited) */
+static DWORD_PTR process_affinity;
+__attribute__((constructor)) static void init_process_affinity(void) {
+    cpu_set_t s;
+    CPU_ZERO(&s);
+    if (sched_getaffinity(0, sizeof s, &s) == 0)
+        for (int i = 0; i < 64; i++) if (CPU_ISSET(i, &s)) process_affinity |= (DWORD_PTR)1 << i;
+}
+static void apply_process_affinity(pthread_t th) {
+    if (!process_affinity) init_process_affinity();
+    if (!process_affinity) return;
+    cpu_set_t want;
+    CPU_ZERO(&want);
+    for (int i = 0; i < 64; i++) if (process_affinity >> i & 1) CPU_SET(i, &want);
+    pthread_setaffinity_np(th, sizeof want, &want);
+}
 static HThread *thread_self(void) {
     if (!self_thread) {   /* (a thread this file did not start: the main thread, a library's) */
         HThread *t = thread_new();
@@ -198,6 +223,7 @@ static HThread *thread_self(void) {
         t->tid = (pid_t)syscall(SYS_gettid);
         t->refs = 1;   /* (kept for the thread's life) */
         self_thread = t;
+        apply_process_affinity(t->th);
     }
     return self_thread;
 }
@@ -220,6 +246,11 @@ static void *thread_entry(void *p) {
     HThread *t = (HThread *)p;
     self_thread = t;
     t->tid = (pid_t)syscall(SYS_gettid);
+    /* (hookshot: unless its maker has pinned it by its handle already, hos_thread_start's hos_thread_pin right after
+       CreateThread: the reset coming second would have put a game thread back on the reserved core) */
+    pthread_mutex_lock(&t->mu);
+    if (!t->pinned) apply_process_affinity(t->th);
+    pthread_mutex_unlock(&t->mu);
     thread_finish(t->fn(t->arg));
     return NULL;
 }
@@ -289,22 +320,14 @@ DWORD_PTR SetThreadAffinityMask(HANDLE h, DWORD_PTR mask) {
     pthread_getaffinity_np(t->th, sizeof old, &old);
     CPU_ZERO(&want);
     for (int i = 0; i < 64; i++) if (mask >> i & 1) CPU_SET(i, &want);
-    if (pthread_setaffinity_np(t->th, sizeof want, &want)) { last_error = ERROR_INVALID_PARAMETER; return 0; }
+    pthread_mutex_lock(&t->mu);   /* (with thread_entry's reset to the process's affinity: whichever comes first, this one stays) */
+    const int failed = pthread_setaffinity_np(t->th, sizeof want, &want);
+    if (!failed) t->pinned = 1;
+    pthread_mutex_unlock(&t->mu);
+    if (failed) { last_error = ERROR_INVALID_PARAMETER; return 0; }
     DWORD_PTR r = 0;
     for (int i = 0; i < 64; i++) if (CPU_ISSET(i, &old)) r |= (DWORD_PTR)1 << i;
     return r ? r : 1;
-}
-/* The process's affinity as the process started: Windows keeps a process mask apart from its threads' masks, Linux has
-   only the threads'. Read from the asking thread each time, it was that thread's own mask, which shrank once hos_thread_pin
-   pinned it off the reserved core: the Presentation Thread's pin, asked for from a game thread kept off that core, then
-   saw no reserved core in the "process" mask and kept the Presentation Thread off it too, against render_thread_on_reserved
-   (host/hos_thread.c; Ryzen 9 9950X3D, 2026-11-09). Taken once, before main, when no thread is pinned yet. */
-static DWORD_PTR process_affinity;
-__attribute__((constructor)) static void init_process_affinity(void) {
-    cpu_set_t s;
-    CPU_ZERO(&s);
-    if (sched_getaffinity(0, sizeof s, &s) == 0)
-        for (int i = 0; i < 64; i++) if (CPU_ISSET(i, &s)) process_affinity |= (DWORD_PTR)1 << i;
 }
 BOOL GetProcessAffinityMask(HANDLE p, DWORD_PTR *proc, DWORD_PTR *sys) {
     (void)p;
@@ -754,7 +777,9 @@ static const char *linux_name(const char *base) {
         if (!strcasecmp(base, map[i][0])) return map[i][1];
     return NULL;
 }
+static __thread char load_error[512];   /* (dlerror()'s text for the last failure: hos_load_error) */
 HMODULE LoadLibraryA(LPCSTR name) {
+    load_error[0] = 0;
     if (!name) return NULL;
     char path[PATH_MAX];
     snprintf(path, sizeof path, "%s", name);
@@ -772,9 +797,14 @@ HMODULE LoadLibraryA(LPCSTR name) {
         }
     }
     HMODULE m = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-    if (!m) last_error = ERROR_FILE_NOT_FOUND;
+    if (!m) {
+        last_error = ERROR_FILE_NOT_FOUND;
+        const char *why = dlerror();
+        snprintf(load_error, sizeof load_error, "%s", why ? why : "");
+    }
     return m;
 }
+const char *hos_load_error(void) { return load_error; }
 BOOL FreeLibrary(HMODULE m) { return m && dlclose(m) == 0; }
 FARPROC GetProcAddress(HMODULE m, LPCSTR name) { return m ? (FARPROC)dlsym(m, name) : NULL; }
 HMODULE GetModuleHandleA(LPCSTR name) {
@@ -1131,6 +1161,10 @@ static void on_signal(int sig, siginfo_t *si, void *uctx) {
             context_to(uc, &ctx);
             return;
         }
+    /* Keep POSIX metadata in the unused tail, without changing NumberParameters
+       (the legacy CRASH log's read/write interpretation stays unchanged). */
+    rec.ExceptionInformation[13] = (ULONG_PTR)sig;
+    rec.ExceptionInformation[14] = (ULONG_PTR)(intptr_t)si->si_code;
     if (unhandled && unhandled(&ep) == EXCEPTION_CONTINUE_EXECUTION) {
         context_to(uc, &ctx);
         return;
@@ -1146,12 +1180,13 @@ static void on_signal(int sig, siginfo_t *si, void *uctx) {
         return;
     }
     signal(sig, SIG_DFL);
+    if (si->si_code <= 0) raise(sig);   /* sent signals cannot re-fault; real faults keep their original core siginfo */
 }
 static void install_signals(void) {
     static int done;
     if (done) return;
     done = 1;
-    const int sigs[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE};
+    const int sigs[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT};
     for (size_t i = 0; i < sizeof sigs / sizeof sigs[0]; i++) {
         struct sigaction sa;
         memset(&sa, 0, sizeof sa);
@@ -1299,7 +1334,13 @@ MMRESULT waveOutWrite(HWAVEOUT hw, WAVEHDR *h, UINT size) {
     (void)size;
     WaveOut *w = (WaveOut *)hw;
     pthread_mutex_lock(&w->mu);
-    if (w->count == 64) { pthread_mutex_unlock(&w->mu); return MMSYSERR_ERROR; }
+    if (w->count >= 60) {
+        WAVEHDR *old = w->q[w->head];
+        __atomic_store_n(&old->dwFlags, (old->dwFlags & ~(DWORD)WHDR_INQUEUE) | WHDR_DONE, __ATOMIC_RELEASE);
+        w->head = (w->head + 1) % 64;
+        w->count--;
+        w->pos = 0;
+    }
     h->dwFlags = (h->dwFlags & ~(DWORD)WHDR_DONE) | WHDR_INQUEUE;
     w->q[(w->head + w->count) % 64] = h;
     w->count++;

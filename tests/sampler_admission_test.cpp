@@ -95,6 +95,7 @@ const char* getenv(const char* name) {
     if (!std::strcmp(name, "RX_VK_FORCE_LINEAR") && policy == "force-linear") return "1";
     return nullptr;
 }
+bool env_on(const char* name) { const char* v = getenv(name); return v && !env_value_off(v); }   // (the switches through the stand-in)
 void logf(const char*, ...) {}
 VkResult vkCreateSampler(VkDevice, const VkSamplerCreateInfo* ci, const VkAllocationCallbacks*, VkSampler* out) {
     creates++;
@@ -126,8 +127,8 @@ void vkDestroySampler(VkDevice, VkSampler sampler, const VkAllocationCallbacks*)
 /* ACTUAL */
 
 struct Program { bool push = true; VkPipelineLayout layout{}; VkDescriptorSetLayout set_layout{}; };
-struct DescriptorWrites { std::vector<VkWriteDescriptorSet> writes; } descriptor_writes;
-DescriptorWrites& dw() { return descriptor_writes; }
+struct DescWriter { std::vector<VkWriteDescriptorSet> writes; } descriptor_writes;   // (bind_descriptors names the type)
+DescWriter& dw() { return descriptor_writes; }
 struct Pushed;
 std::array<Pushed, 2>& pushed();
 struct Recording { VkDescriptorPool pool{}; std::vector<VkDescriptorPool> extra; } recording;

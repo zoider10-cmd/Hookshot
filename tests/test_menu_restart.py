@@ -62,6 +62,25 @@ int main(int argc, char **argv) {
     int found = 0;
     for (int i = 0; i < r.envc; i++) found |= !strcmp(r.envp[i], "HOS_RELAUNCH_TEST=one two");
     assert(found);
+    /* Windows' restart: the environment block the game started with, HOS_RESTART_OF put in its place by name (case left
+       out), the old one dropped; =C: and the like stay first */
+    {
+        static const wchar_t saved[] = L"=C:=C:\\games\0ALLUSERSPROFILE=a\0hos_restart_of=1\0RX_VK_PACE=0\0Zed=z\0";
+        static const wchar_t *const want[] = {L"=C:=C:\\games", L"ALLUSERSPROFILE=a", L"HOS_RESTART_OF=42", L"RX_VK_PACE=0", L"Zed=z"};
+        wchar_t *b = hos_relaunch_env_block(saved, L"HOS_RESTART_OF", L"42");
+        const wchar_t *e = b;
+        for (size_t i = 0; i < sizeof want / sizeof *want; i++, e += wcslen(e) + 1) assert(!wcscmp(e, want[i]));
+        assert(!*e);
+        free(b);
+        /* last in the order, and an empty block */
+        static const wchar_t two[] = L"A=1\0B=2\0";
+        b = hos_relaunch_env_block(two, L"HOS_RESTART_OF", L"7");
+        assert(!wcscmp(b, L"A=1") && !wcscmp(b + 4, L"B=2") && !wcscmp(b + 8, L"HOS_RESTART_OF=7") && !b[25]);
+        free(b);
+        b = hos_relaunch_env_block(L"", L"HOS_RESTART_OF", L"7");
+        assert(!wcscmp(b, L"HOS_RESTART_OF=7") && !b[17]);
+        free(b);
+    }
     puts("relaunch command: all checks passed");
     return 0;
 }
@@ -79,7 +98,7 @@ def function(source, start):
 def sources():
     menu = (ROOT / "gpu" / "vk" / "vk_menu.cpp").read_text(encoding="utf-8")
     for row in ('"GPU device", &opts.gpu_device', '"Output resolution", &opts.output_res', '"Profile", &opts.handheld',
-                '"Ultrawide", &opts.ultrawide', '"Robust buffers", &opts.robust'):
+                '"Aspect ratio", &opts.ultrawide', '"Robust buffers", &opts.robust'):
         at = menu.find(row)
         if at < 0:
             raise SystemExit("vk_menu.cpp: a row that takes a restart is missing: " + row)
@@ -97,6 +116,14 @@ def sources():
         raise SystemExit("vk_menu.cpp: no After restart tag on a changed value, or no Restart needed line")
     if "restart_init();" not in function(menu, "void menu_init() {"):
         raise SystemExit("menu_init does not keep the start values")
+    # (Auto (this PC) sets the Output resolution and the Profile once the device is known, after host/hos_main.c read them at
+    # boot: they apply at the next start, but a new install's first close of the menu asked to restart for what the player never
+    # chose. restart_init runs once, so calling it there kept nothing: Auto's change is taken as Later instead)
+    auto = function(menu, "void menu_auto_for_gpu(")
+    if "restart_init();" in auto:
+        raise SystemExit("menu_auto_for_gpu: restart_init does nothing after menu_init (it runs once); Auto's rows are not Later")
+    if "restart_state.choose_later(" not in auto[auto.index("apply_auto("):]:
+        raise SystemExit("menu_auto_for_gpu: the rows Auto sets ask to restart at the menu's first close (not taken as Later)")
     if "restart_state.note(" not in function(menu, "void set_row("):
         raise SystemExit("set_row does not tell the restart state of a change")
     tick = function(menu, "void menu_tick() {")
@@ -123,6 +150,18 @@ def sources():
                  'execve("/proc/self/exe"'):
         if need not in relaunch:
             raise SystemExit("hos_relaunch.c: no " + need)
+    # (Windows: the new process gets the environment the game started with, not this one's with hookshot_env.txt's lines in
+    # it, or a restart takes each of the file's lines for the environment's and leaves the file's edits out)
+    windows = relaunch[relaunch.index("static void relaunch(void) {"):relaunch.index("#else")]
+    if not re.search(r"CreateProcessW\([^;]*CREATE_UNICODE_ENVIRONMENT[^;]*, env,", windows) or \
+            "hos_relaunch_env_block(start_env, L\"HOS_RESTART_OF\"" not in windows:
+        raise SystemExit("hos_relaunch.c: Windows' restart does not start the game with the environment it started with")
+    if "GetEnvironmentStringsW()" not in function(relaunch, "void hos_relaunch_keep_env(void) {"):
+        raise SystemExit("hos_relaunch.c: hos_relaunch_keep_env does not keep the environment block")
+    hos_main = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
+    keep, load = hos_main.find("hos_relaunch_keep_env();"), hos_main.find("load_hookshot_env();")
+    if keep < 0 or keep > load:
+        raise SystemExit("hos_main.c: the environment is not kept before hookshot_env.txt is read")
 
 
 def main():

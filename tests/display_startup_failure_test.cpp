@@ -41,6 +41,7 @@ static void hos_log(const char* format, ...) {
     logs.emplace_back(text);
 }
 [[maybe_unused]] static void hos_log_flush() { ++flushes; }
+void hos_crash_clean_end(void) { require(flushes != 0, "clean-end mark before log flush"); }
 static const char* hos_sdl_error() { return "authored missing Vulkan loader"; }
 static int hos_sdl_load() { ++loads; return mode == "load_failure" || mode.starts_with("prepare_") ? 0 : 3; }
 static void hos_sdl_identity(const char*, const char*) {}
@@ -99,7 +100,9 @@ static void WaitForSingleObject(HANDLE h, unsigned timeout) {
     ++waited;
 }
 static void load_hookshot_env() {}
+static void hos_game_layout() {}   // (host/game_layout.c: the game folder's cache/ and logs/)
 static void driver_cache_room() {}   // (host/hos_main.c: the drivers' shader caches' size, #2033)
+static void driver_cache_folder() {}   // (host/hos_main.c: the folder __GL_SHADER_DISK_CACHE_PATH names, made)
 
 #include "display_startup_actual.inc"
 
@@ -139,12 +142,12 @@ int main(int argc, char** argv) {
                     "unexpected startup failure continued offscreen or signaled success");
             require(threads == (mode == "window_failure" ? 1u : 0u),
                     "SDL initialization failure started game work");
-        } else if (mode == "headless" || mode == "headless_zero") {
+        } else if (mode == "headless") {
             require(status == 0 && threads == 1 && offscreen == 1 && waited == 1,
                     "changed explicit headless/offscreen behavior");
             require(!loads && !inits && !windows && !visible_window_started && !flushes,
                     "explicit headless used the display");
-        } else if (mode == "visible_success" || path_value) {
+        } else if (mode == "visible_success" || mode == "headless_zero" || path_value) {   // (HOS_HEADLESS=0: off, a window)
             require(status == 0 && threads == 1 && waited == 1 && loads && inits == 1 && windows == 1 &&
                     visible_window_started == 1 && !offscreen && !flushes && !sleeps,
                     "changed successful visible startup handshake");

@@ -1,0 +1,88 @@
+name: Install or build problem
+about: The launcher, the builder or the AppImage stops, fails to build, update or start the game
+title: "Install: "
+labels: [kind/bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you start: check the [build requirements](https://git.magicbean.dev/MagicBeanDev/Hookshot#what-you-need) (on Windows, Visual Studio Build Tools with "Desktop development with C++" and the Windows SDK; about 60 GB free) and search the [open issues](https://git.magicbean.dev/MagicBeanDev/Hookshot/issues). English, please. **Never attach game files or anything built from them.**
+  - type: dropdown
+    id: tool
+    attributes:
+      label: What you used
+      options:
+        - Hookshot Launcher
+        - Hookshot Builder (Windows)
+        - Linux AppImage
+        - Command line (nx2/make_game.py)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The launcher's or the builder's version, and the Hookshot version it was installing.
+      placeholder: Launcher v1.0.0, Hookshot v3.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: track
+    attributes:
+      label: Channel
+      options:
+        - Release
+        - Release candidate
+        - Nightly
+        - Built from source
+    validations:
+      required: true
+  - type: dropdown
+    id: step
+    attributes:
+      label: Where it stopped
+      options:
+        - Installing or updating the launcher or the builder
+        - Reading the game files
+        - Building the game
+        - Updating an installed game
+        - Starting the game
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: The error
+      description: Copy the text it shows, with the failed step's details (text, not a screenshot of it).
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Operating system and free space on the output drive
+      placeholder: "Windows 11 24H2, 210 GB free on D:"
+    validations:
+      required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: Visual Studio or Build Tools version, and Windows SDK version
+      description: Windows builds only. Visual Studio Installer shows both.
+      placeholder: Build Tools 2022 17.14, Windows SDK 10.0.26100
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Drag the launcher's or the builder's log here if it wrote one.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: It still fails on the newest release.
+          required: true
+        - label: I searched the open issues for this error.
+          required: true
+        - label: I'm not attaching game files or anything built from them.
+          required: true

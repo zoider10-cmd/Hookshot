@@ -21,7 +21,7 @@ def extract(source):
     if marker.startswith("static RunResult"):
         start = source.rindex("typedef struct {", 0, start)
     call_start = source.index("            GetSystemDirectoryW(sys, MAX_PATH);")
-    call_end = source.index('            if (strcmp(p->from, "-")', call_start)
+    call_end = source.index('            {   /* (the tool\'s prefix folder, moved in as dest) */', call_start)
     return source[start:end], source[call_start:call_end]
 
 

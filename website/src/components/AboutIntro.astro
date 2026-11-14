@@ -1,0 +1,19 @@
+---
+---
+<div class="about-intro not-content">
+  <div>
+    <p class="about-kicker">BY TEAM MAGICBEAN</p>
+    <p class="about-title">Serious recompilation.<br /><span>Slightly emotional beans.</span></p>
+    <p>A community project with shared roots, a curious team and plenty more to build.</p>
+  </div>
+  <img src={`/branding/magicbean-team-logo.webp`} alt="Team MagicBean" width="512" height="512" />
+</div>
+<style>
+  .about-intro { display: grid; grid-template-columns: minmax(0,1fr) 120px; align-items: center; gap: 1.5rem; padding: clamp(1.2rem,3vw,2rem); border: 1px solid var(--border); border-left: 4px solid var(--sl-color-text-accent); border-radius: 12px; background: var(--panel); }
+  .about-intro p { margin: 0; color: var(--sl-color-gray-2); }
+  .about-intro .about-kicker { font-size: var(--text-label); font-weight: 700; letter-spacing: .1em; color: var(--sl-color-text-accent); }
+  .about-intro .about-title { margin: .8rem 0 1rem; font: 600 clamp(1.8rem,3vw,2.6rem)/1.15 var(--heading-font); color: var(--sl-color-white); }
+  .about-title span { color: var(--sl-color-text-accent); }
+  .about-intro img { width: 100%; height: auto; }
+  @media (max-width: 40rem) { .about-intro { grid-template-columns: minmax(0,1fr); } .about-intro img { width: 90px; } }
+</style>

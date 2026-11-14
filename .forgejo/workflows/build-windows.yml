@@ -1,0 +1,304 @@
+# The Windows Hookshot Builder (docs/releases.md): HookshotBuilder-<version>-windows-x64.zip, made without game data. It holds
+# the setup (builder/setup/setup.c, built with llvm-mingw) as HookshotBuilder.exe, the builder (dotnet publish) with Hookshot's
+# sources under HookshotBuilder\tools\, tools.lock, VERSION and recomplauncher.json (scripts/builder_package.py). The build
+# tools are not in it: tools.lock names them, and the setup or the launcher downloads them on the player's PC. The Windows
+# Vulkan back end is compiled too, with the same llvm-mingw: players build it on their PC, this only checks that it still
+# builds; a tag whose commit CI released already (release.yml's `checked`: its nightly, or a stable's release candidate)
+# skips that check, which ships nothing and passed in that run. The zip carries the version (VERSION, the builder's
+# version), so it is always made again. It is a workflow artifact; called by release.yml with the version's name, it is
+# the release's. dav1d for the AV1 movies is not built here: it is in tools.lock's CPM cache (the cpm package), and the
+# zip's job checks that package's dav1d under Wine.
+# Every job runs on the Linux runner (ubuntu-24.04): there is no Windows one (docs/forgejo-runners.md). The setup and the
+# Vulkan back end are cross-compiled with llvm-mingw's Linux build of tools.lock's release (scripts/builder_package.py,
+# LINUX_LLVM_MINGW), the builder (command-line only) is published for win-x64 with EnableWindowsTargeting, and the files are checked as
+# Windows files (their PE headers, resources and runtime) and started under Wine. What only a Windows PC can check is in
+# RELEASING.md, "Needs a Windows tester".
+name: Windows builder
+
+on:
+  # (no pull_request trigger for now: the Release workflow builds main's pushes and tags by calling this one; build a
+  # branch by hand with Run workflow)
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        description: the version's name (v3.1.0, v3.1.0-rc.1, nightly-<count>-<commit>); its files are uploaded
+        type: string
+        required: true
+      ref:
+        description: the commit to build
+        type: string
+        required: true
+      checked:
+        description: a published release of the same commit (scripts/release.py released-as), whose run passed the build check below that ships no file; it is not run again
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  # (the version this run is for, from the Release workflow; empty on other runs)
+  RELEASE_TAG: ${{ inputs.tag }}
+  # (a published release of the same commit, when there is one: the Vulkan back end, checked in its run, is not built again)
+  RELEASE_CHECKED: ${{ inputs.checked }}
+
+concurrency:
+  # (a fixed name: when called, github.workflow is the caller's)
+  group: build-windows-${{ inputs.tag || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  package:
+    name: Hookshot Builder zip
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          # (the version is git describe's: the tags and the history since them)
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: https://github.com/actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Set up .NET
+        uses: https://github.com/actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '8.0.x'
+
+      # (llvm-objdump and llvm-readobj below read the Windows files; Wine starts them)
+      - name: Wine
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends wine64 xvfb xauth
+
+      - name: llvm-mingw version
+        id: llvm
+        run: echo "name=$(python -I scripts/builder_package.py llvm-mingw --name --host linux)" >> "$GITHUB_OUTPUT"
+      # (a release unpacks llvm-mingw from its checked download, not from a cache other runs write)
+      - if: env.RELEASE_TAG == ''
+        uses: https://github.com/actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/llvm
+          key: ${{ steps.llvm.outputs.name }}
+      - name: llvm-mingw
+        run: echo "LLVM_MINGW=$(python -I scripts/builder_package.py llvm-mingw "$RUNNER_TEMP/llvm" --host linux)" >> "$GITHUB_ENV"
+
+      # (the Release workflow's name for the version: v3.1.0, v3.1.0-rc.1, or the nightly's nightly-<count>-<commit>; any other run
+      # is git describe --long's, v3.0.1-3-g1a2b3c4. The builder's MSBuild version is a release's number, else 0.0.0)
+      - name: Version
+        run: |
+          if [[ -n $RELEASE_TAG ]]; then
+            tag=$RELEASE_TAG
+          else
+            tag=$(git describe --tags --long --match 'v[0-9]*' 2>/dev/null || echo "v0.0.0-0-g$(git rev-parse --short HEAD)")
+          fi
+          version=0.0.0
+          if [[ $tag =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?)$ ]]; then version=${BASH_REMATCH[1]}; fi
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "version: $tag"
+
+      # (--dependent-load-flag 0x800, LOAD_LIBRARY_SEARCH_SYSTEM32: the libraries it imports come from System32, not from
+      # the folder it was downloaded to. It is in the package as a game folder's hookshot.exe; players get the Hookshot Launcher)
+      - name: HookshotBuilder-Setup.exe
+        working-directory: builder/setup
+        run: |
+          "$LLVM_MINGW/bin/x86_64-w64-mingw32-windres" setup.rc -O coff -o "$RUNNER_TEMP/setup_rc.o"
+          "$LLVM_MINGW/bin/x86_64-w64-mingw32-clang" -O2 -mwindows -municode \
+            setup.c "$RUNNER_TEMP/setup_rc.o" \
+            -lwinhttp -lbcrypt -lcomctl32 -lshell32 -lole32 -Wl,--dependent-load-flag=0x800 \
+            -o "$RUNNER_TEMP/HookshotBuilder-Setup.exe"
+          ls -l "$RUNNER_TEMP/HookshotBuilder-Setup.exe"
+
+      # (self-contained for win-x64, as the project's Release configuration has it; EnableWindowsTargeting: the Windows
+      # targeting and runtime packs come from NuGet on a system that is not Windows)
+      - name: Hookshot Builder
+        run: >-
+          dotnet publish builder/HookshotBuilder/HookshotBuilder.csproj --configuration Release
+          --runtime win-x64 -p:EnableWindowsTargeting=true
+          -p:Version="$VERSION" -p:NuGetAudit=false --output "$RUNNER_TEMP/publish"
+
+      # (it stops when assets/pipeline_states/, the sources of the pipeline state list every release ships, hold none or one does not read)
+      - name: Package folder
+        run: >-
+          python -I scripts/builder_package.py package "$RUNNER_TEMP/package"
+          --publish "$RUNNER_TEMP/publish" --setup "$RUNNER_TEMP/HookshotBuilder-Setup.exe"
+      # (the release's file: the setup as HookshotBuilder.exe, the package, tools.lock, VERSION and recomplauncher.json)
+      - name: The zip
+        run: |
+          mkdir -p dist
+          python -I scripts/builder_package.py zip "$RUNNER_TEMP/package" "$TAG" --setup "$RUNNER_TEMP/HookshotBuilder-Setup.exe" \
+            --out "dist/HookshotBuilder-$TAG-windows-x64.zip"
+          ls -l dist
+
+      # (what a Windows build gave and a Linux one could quietly lose: the setup's icon, manifest and version (windres),
+      # and its imports; the builder's GUI subsystem (no console window), its apphost's version and manifest, win-x64
+      # self-contained .NET 8 without WPF. scripts/check_windows_files.py says what is wrong)
+      - name: Check the Windows files
+        run: >-
+          python -I scripts/check_windows_files.py --objdump "$LLVM_MINGW/bin/llvm-objdump"
+          --readobj "$LLVM_MINGW/bin/llvm-readobj" "dist/HookshotBuilder-$TAG-windows-x64.zip"
+      # (the setup's --play of an empty folder and the builder's --cli with no Python: each says why it stops, with no
+      # window and nothing downloaded. A sign that they load and their imports and .NET resolve, not a test of what
+      # they do. Wine's mscoree must stay on: its loader maps .NET's IL assemblies through it. Gecko is not wanted)
+      - name: Start them under Wine
+        run: |
+          export WINEPREFIX="$RUNNER_TEMP/wine" WINEDEBUG=-all WINEDLLOVERRIDES="mshtml="
+          xvfb-run -a python -I scripts/check_windows_files.py \
+            --wine "$(command -v wine || command -v wine64 || echo /usr/lib/wine/wine64)" "dist/HookshotBuilder-$TAG-windows-x64.zip"
+
+      # dav1d for the AV1 movies (issue 2316: the CPM cache's FFmpeg has none) is in tools.lock's CPM cache, the cpm package
+      # the setup installs on the player's PC; a maintainer makes it with scripts/windows/dav1d.sh and tools.py assemble cpm
+      # --add (RELEASING.md, "Bump a tool"). That package's dav1d, checked by its SHA-256, under the test of host/dav1d_av1.c,
+      # compiled with the llvm-mingw above and run under Wine
+      - name: tools.lock's dav1d
+        run: |
+          python -I scripts/tools.py install "$RUNNER_TEMP/cpm-tool" --system windows-x64 --only cpm --cache "$RUNNER_TEMP/tools-cache"
+          dav1d=("$RUNNER_TEMP"/cpm-tool/HookshotBuilder/tools/cpm/dav1d/*)
+          [ -f "${dav1d[0]}/lib/libdav1d.a" ] || { echo "::error::tools.lock's cpm package has no dav1d"; exit 1; }
+          echo "DAV1D=${dav1d[0]}" >> "$GITHUB_ENV"
+      - name: host/dav1d_av1.c on it, under Wine
+        run: |
+          export WINEPREFIX="$RUNNER_TEMP/wine" WINEDEBUG=-all WINEDLLOVERRIDES="mshtml="
+          python -I -B tests/test_dav1d_av1.py --cross "$LLVM_MINGW/bin/x86_64-w64-mingw32-clang" \
+            --run "$(command -v wine || command -v wine64 || echo /usr/lib/wine/wine64)" --dav1d "$DAV1D"
+
+      # (an artifact goes to Forgejo by its public address, ROOT_URL, behind Cloudflare, whatever address the runner has: a
+      # request there can fail once, and the action does not send a block again (2026-11-13, the launcher's nightly: one
+      # 8 MB block, "SSL alert bad record mac"). Sent once more when it failed: Forgejo takes the same name again)
+      - id: upload_1
+        continue-on-error: true
+        uses: https://data.forgejo.org/forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e   # v4 (4.3.1 with the GHES check off; Forgejo's: GitHub's v4 and later refuse a server that is not github.com)
+        with:
+          name: HookshotBuilder-windows
+          path: dist/
+          if-no-files-found: error
+      - if: steps.upload_1.outcome == 'failure'
+        uses: https://data.forgejo.org/forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e   # v4 (4.3.1 with the GHES check off; Forgejo's: GitHub's v4 and later refuse a server that is not github.com)
+        with:
+          name: HookshotBuilder-windows
+          path: dist/
+          if-no-files-found: error
+
+  vulkan:
+    name: Windows Vulkan back end (llvm-mingw)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        if: env.RELEASE_CHECKED == ''
+        uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      # (the headers in the CPM cache layout nx2/build.py reads, at the versions scripts/linux/deps.sh pins)
+      - name: Check out pinned Vulkan headers
+        if: env.RELEASE_CHECKED == ''
+        run: scripts/fetch_commit.sh https://github.com/KhronosGroup/Vulkan-Headers 74d8a6cb930c68ef617b202c3ff3c59d919e086b _deps/cpm/vulkanheaders/v1.4.345   # v1.4.345
+      - name: Check out pinned SPIR-V headers
+        if: env.RELEASE_CHECKED == ''
+        run: scripts/fetch_commit.sh https://github.com/KhronosGroup/SPIRV-Headers 04f10f650d514df88b76d25e83db360142c7b174 _deps/cpm/spirv-headers/vulkan-sdk-1.4.341.0   # vulkan-sdk-1.4.341.0
+      - name: Check out pinned VulkanMemoryAllocator
+        if: env.RELEASE_CHECKED == ''
+        run: scripts/fetch_commit.sh https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator 1d8f600fd424278486eade7ed3e877c99f0846b1 _deps/cpm/vulkanmemoryallocator/v3.3.0   # v3.3.0
+      - name: Set up Python
+        if: env.RELEASE_CHECKED == ''
+        uses: https://github.com/actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: llvm-mingw version
+        if: env.RELEASE_CHECKED == ''
+        id: llvm
+        run: echo "name=$(python -I scripts/builder_package.py llvm-mingw --name --host linux)" >> "$GITHUB_OUTPUT"
+      # (a release unpacks llvm-mingw from its checked download, not from a cache other runs write)
+      - if: env.RELEASE_CHECKED == '' && env.RELEASE_TAG == ''
+        uses: https://github.com/actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/llvm
+          key: ${{ steps.llvm.outputs.name }}
+      # (RX_TARGET=windows: nx2/build.py builds the Windows back end on Linux, README.md "The Windows game, built on Linux")
+      - name: llvm-mingw
+        if: env.RELEASE_CHECKED == ''
+        run: |
+          echo "HOOKSHOT_MINGW=$(python -I scripts/builder_package.py llvm-mingw "$RUNNER_TEMP/llvm" --host linux)" >> "$GITHUB_ENV"
+          echo "RX_TARGET=windows" >> "$GITHUB_ENV"
+      # The back end's compiled objects (nx2/build.py's object cache, vk-work/objcache: each object under the SHA-1 of its
+      # source, its flags and the headers it can see), for pull requests, as the Linux AppImage workflow keeps its own: a
+      # pull request compiles only the files its change reaches, not all of them (about 160 s here). Written after every
+      # build but a release's (a pull request's own, for its next push; main's, for every pull request). Read only by pull
+      # requests: a push to main and a release compile every object themselves. The key also names llvm-mingw (its C and
+      # C++ library headers, which the objects' own keys leave out) and this file (the pinned header checkouts above).
+      - name: Object cache key
+        if: env.RELEASE_CHECKED == '' && env.RELEASE_TAG == ''
+        id: objkey
+        env:
+          COMPILER: ${{ steps.llvm.outputs.name }}
+          PINS: ${{ hashFiles('.forgejo/workflows/build-windows.yml') }}
+          SOURCES: ${{ hashFiles('gpu/**', 'third_party/imgui/**', 'third_party/zstd/**', 'nx2/build.py') }}
+        run: |
+          echo "prefix=windows-vk-objects-$COMPILER-${PINS:0:16}-" >> "$GITHUB_OUTPUT"
+          echo "key=windows-vk-objects-$COMPILER-${PINS:0:16}-$SOURCES" >> "$GITHUB_OUTPUT"
+      - if: env.RELEASE_CHECKED == '' && env.RELEASE_TAG == '' && github.event_name == 'pull_request'
+        uses: https://github.com/actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/vk-work/objcache
+          key: ${{ steps.objkey.outputs.key }}
+          restore-keys: ${{ steps.objkey.outputs.prefix }}
+      # (as scripts/linux/appimage.sh builds Linux's: the back end alone, no lift, no game)
+      - name: hookshot_vk.dll
+        if: env.RELEASE_CHECKED == ''
+        env:
+          RX_VK_ONLY: '1'
+          RX_RELEASE: '1'
+        run: |
+          OOT_WORK="$RUNNER_TEMP/vk-work" RX_CPM="$GITHUB_WORKSPACE/_deps/cpm" \
+            python -I nx2/build.py --standalone --jobs "$(nproc)"
+          ls -l "$RUNNER_TEMP/vk-work/sa/build/hookshot_vk.dll"
+      # (the object cache down to the objects this build used, as the Linux AppImage workflow prunes its own: each object
+      # in sa/build/obj names its key in <obj>.sha1. Nothing goes when no stamp is found)
+      - name: Object cache for pull requests
+        if: env.RELEASE_CHECKED == '' && env.RELEASE_TAG == ''
+        run: |
+          W="$RUNNER_TEMP/vk-work"
+          shopt -s nullglob
+          stamps=("$W"/sa/build/obj/*.sha1)
+          [ "${#stamps[@]}" -gt 0 ] || { echo "no object stamps: the cache is kept as it is"; exit 0; }
+          # (one key a line: a stamp holds its key with no line end)
+          declare -A used
+          while read -r k; do used[$k]=1; done < <(awk '{ sub(/\r$/, ""); print }' "${stamps[@]}")
+          for f in "$W"/objcache/*.o; do
+            k=${f##*/}
+            [ -n "${used[${k%.o}]+x}" ] || rm -f "$f"
+          done
+          left=("$W"/objcache/*.o)
+          echo "objcache: ${#left[@]} objects, $(du -sh "$W/objcache" | cut -f1)"
+      - if: env.RELEASE_CHECKED == '' && env.RELEASE_TAG == ''
+        uses: https://github.com/actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/vk-work/objcache
+          key: ${{ steps.objkey.outputs.key }}
+      # (an artifact goes to Forgejo by its public address, ROOT_URL, behind Cloudflare, whatever address the runner has: a
+      # request there can fail once, and the action does not send a block again (2026-11-13, the launcher's nightly: one
+      # 8 MB block, "SSL alert bad record mac"). Sent once more when it failed: Forgejo takes the same name again)
+      - id: upload_2
+        if: env.RELEASE_CHECKED == ''
+        continue-on-error: true
+        uses: https://data.forgejo.org/forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e   # v4 (4.3.1 with the GHES check off; Forgejo's: GitHub's v4 and later refuse a server that is not github.com)
+        with:
+          name: hookshot_vk-windows
+          path: ${{ runner.temp }}/vk-work/sa/build/hookshot_vk.dll
+          if-no-files-found: error
+      - if: env.RELEASE_CHECKED == '' && steps.upload_2.outcome == 'failure'
+        uses: https://data.forgejo.org/forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e   # v4 (4.3.1 with the GHES check off; Forgejo's: GitHub's v4 and later refuse a server that is not github.com)
+        with:
+          name: hookshot_vk-windows
+          path: ${{ runner.temp }}/vk-work/sa/build/hookshot_vk.dll
+          if-no-files-found: error

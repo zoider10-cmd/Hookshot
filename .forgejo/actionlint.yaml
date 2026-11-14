@@ -1,0 +1,11 @@
+# actionlint's settings for the workflows here (ci.yml, "Workflow lint"): it knows GitHub, not Forgejo.
+self-hosted-runner:
+  # (docs/forgejo-runners.md: quick is the label of the short jobs' runner)
+  labels: [quick]
+paths:
+  .forgejo/workflows/*.yml:
+    ignore:
+      # (Forgejo takes a full URL in uses:, https://github.com/... or https://data.forgejo.org/...)
+      - 'specifying action ".+" in invalid format because owner and repo and ref should not be empty'
+      # (Forgejo's own context, as github)
+      - 'undefined variable "forgejo"'

@@ -2,17 +2,32 @@
 
     python -I scripts/hardware_report.py [--limit 1000] [--state all|open|closed]
 
-Reads the issues with the gh CLI (logged in) and counts the "Graphics card and driver version" and "CPU, RAM and operating
+Reads MagicBeanDev/Hookshot's issues on git.magicbean.dev through the Forgejo API, signed in as scripts/forge.py is (run
+`python -I scripts/forge.py login` once), and counts the "Graphics card and driver version" and "CPU, RAM and operating
 system" answers. It counts reports, not players: hardware where things break shows up more. Standard library only.
 """
 import argparse
 import collections
-import json
+import os
 import re
-import subprocess
 import sys
+import urllib.parse
 
-REPO = "NotRexed/Hookshot"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import forge  # noqa: E402  (same folder: its signed-in API client and REPO, MagicBeanDev/Hookshot)
+
+
+def issues(state, limit):
+    """[{number, title, body}] of the repository's issues (not pull requests), newest first, at most limit"""
+    out, page = [], 1
+    while len(out) < limit:
+        items = forge.api("GET", "/repos/%s/issues?type=issues&state=%s&limit=50&page=%d"
+                          % (forge.REPO, urllib.parse.quote(state), page)) or []
+        out += [{"number": i["number"], "title": i.get("title") or "", "body": i.get("body") or ""} for i in items]
+        if len(items) < 50:
+            break
+        page += 1
+    return out[:limit]
 
 
 def section(body: str, name: str) -> str:
@@ -52,15 +67,14 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=1000)
     ap.add_argument("--state", default="all", choices=("all", "open", "closed"))
     a = ap.parse_args()
-    out = subprocess.run(["gh", "issue", "list", "-R", REPO, "--state", a.state, "--limit", str(a.limit),
-                          "--json", "number,title,body"], capture_output=True, text=True, encoding="utf-8")
-    if out.returncode:
-        print(out.stderr.strip() or "gh failed", file=sys.stderr)
+    try:
+        found = issues(a.state, a.limit)
+    except forge.ForgeError as e:
+        print(e, file=sys.stderr)
         return 1
-    issues = json.loads(out.stdout)
     vendor, cls, oses = collections.Counter(), collections.Counter(), collections.Counter()
     n = 0
-    for i in issues:
+    for i in found:
         gpu = section(i["body"], "Graphics card")
         sysinfo = section(i["body"], "CPU, RAM and operating system")
         if not gpu and not sysinfo:
@@ -70,7 +84,7 @@ def main() -> int:
         vendor[v] += 1
         cls[c] += 1
         oses[os_of(sysinfo + " " + gpu + " " + i["title"])] += 1
-    print(f"{len(issues)} issues read, {n} with hardware fields")
+    print(f"{len(found)} issues read, {n} with hardware fields")
     for title, counter in (("vendor", vendor), ("card class", cls), ("OS", oses)):
         print(f"\n{title}:")
         for k, v in counter.most_common():

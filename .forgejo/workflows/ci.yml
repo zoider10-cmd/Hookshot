@@ -1,0 +1,287 @@
+# The checks of every pull request to main and every push to it (docs/releases.md, "CI"): the pull request's title, and every
+# game-free check: tests/run_all.py runs each
+# tests/test_*.py and nx2/test_*.py (all of them, even after a failure), the C++ unit tests under gpu/vk/tests and a
+# byte-compile of every tracked Python file, and writes a table of them to the run's summary. A check that needs a GPU,
+# the game or MSVC says so, and why, in its own file (RUN_ALL_SKIP). No game data is involved.
+# The tests run in two parts at once (run_all.py --shard, split by tests/run_all_times.json): each part is one job, and
+# every check is in exactly one of them. The Windows Builder's checks (its compile, its --cli delivery) are in part 1, on
+# Linux with EnableWindowsTargeting. There is no Windows runner (docs/forgejo-runners.md): what only Windows can check
+# (the suite on Windows' Python, MSVC's compile of the native checks) is in RELEASING.md, "Needs a Windows tester".
+# On Linux the C and C++ compiles go through ccache (the compilers in its PATH), with the cache main's runs leave
+# (actions/cache: read by every run, written only by a push to main, so a pull request never writes what another reads).
+name: CI
+
+# (Mako: inherited from Hookshot; run by hand only, so a push or a tag publishes nothing by itself)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # (a squash-merged pull request's title is its commit on main, a line of the next release's notes, and what decides the next
+  # version: a Conventional Commit, by scripts/forge.py's TITLE, which `forge.py pr create` checks too. Only the title is
+  # read, from the event: the pull request's code is not run for it)
+  title:
+    name: Conventional Commit title
+    if: github.event_name == 'pull_request'
+    runs-on: quick  # (a quick job: the runner kept free for these takes it, or any runner with room)
+    timeout-minutes: 5
+    steps:
+      - uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: The title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python3 -I - <<'PY'
+          import importlib.util, os, sys
+          spec = importlib.util.spec_from_file_location("forge", "scripts/forge.py")
+          forge = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(forge)
+          # (without Forgejo's work-in-progress prefixes, as forge.py and the description check take them off: forge.desc is
+          # scripts/check_pr_description.py, in the sparse checkout with forge.py)
+          title = forge.desc.strip_wip(os.environ["TITLE"])
+          if not forge.TITLE.match(title):
+              print("::error::the title must be a Conventional Commit, type(scope): description, with the type one of %s "
+                    "(CONTRIBUTING.md, Pull request titles): %r" % (", ".join(forge.TITLE_TYPES), title))
+              sys.exit(1)
+          print("ok: %s" % title)
+          PY
+
+  # (off for now: pushes and pull requests run only the light checks; run these by hand, Actions > CI > Run workflow.
+  # CONTRIBUTING.md asks for tests/run_all.py's results in each pull request)
+  python:
+    name: Python source checks (${{ matrix.os }}${{ matrix.shard != '1/1' && format(', part {0}', matrix.shard) || '' }})
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            shard: 1/2
+          - os: ubuntu-24.04
+            shard: 2/2
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # (the versions scripts/linux/deps.sh builds the Vulkan back end with)
+      - name: Check out pinned SPIR-V headers
+        run: scripts/fetch_commit.sh https://github.com/KhronosGroup/SPIRV-Headers 04f10f650d514df88b76d25e83db360142c7b174 _deps/spirv-headers   # vulkan-sdk-1.4.341.0
+      - name: Check out pinned Vulkan headers
+        run: scripts/fetch_commit.sh https://github.com/KhronosGroup/Vulkan-Headers 74d8a6cb930c68ef617b202c3ff3c59d919e086b _deps/vulkan-headers   # v1.4.345
+      - name: Set up Python
+        uses: https://github.com/actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      # (the packages tests import: nx2/test_nup_codec.py's zstandard; tests/test_prompt_guide_lines.py's Pillow and numpy,
+      # nx2/prompt_assets.py's, pinned as nx2/prompt_requirements.txt and requirements.txt have them. The runner itself needs none)
+      - name: Python packages for the tests
+        run: python -m pip install --disable-pip-version-check --no-deps zstandard==0.25.0 pillow==13.0.0 numpy==2.5.4
+      - name: Compilers and the SPIR-V validator
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y g++ clang spirv-tools ccache libdav1d-dev
+      # (the cache's key: the compilers' versions and the shader recompiler's sources, the objects worth keeping: the
+      # bake and nx2 checks compile its ~164 files. A key already cached is not saved again)
+      - name: Compiler cache
+        if: runner.os == 'Linux'
+        id: ccache
+        env:
+          RECOMPILER: ${{ hashFiles('gpu/vk/eden/**', 'gpu/vk/sirit/**', 'gpu/vk/compat/**', 'gpu/compat/**', 'gpu/shaderbatch.cpp') }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/ccache-bin"
+          for c in cc c++ gcc g++ clang clang++; do ln -sf "$(command -v ccache)" "$RUNNER_TEMP/ccache-bin/$c"; done
+          echo "$RUNNER_TEMP/ccache-bin" >> "$GITHUB_PATH"
+          {
+            echo "CCACHE_DIR=$RUNNER_TEMP/ccache"
+            echo "CCACHE_MAXSIZE=400M"
+          } >> "$GITHUB_ENV"
+          compilers=$( { clang++ --version; g++ --version; } | sha256sum | cut -c1-16)
+          prefix="ccache-tests-linux-part${SHARD%/*}-$compilers-"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "key=$prefix$RECOMPILER" >> "$GITHUB_OUTPUT"
+      - if: runner.os == 'Linux'
+        id: ccache-restore
+        uses: https://github.com/actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ${{ steps.ccache.outputs.key }}
+          restore-keys: ${{ steps.ccache.outputs.prefix }}
+      - name: Pinned glslang for generated shader comparisons
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # The checked-in shader headers are generated with glslang16.6.0.
+          # Older distro compilers can lower discard differently even for unchanged GLSL.
+          tool_dir="$RUNNER_TEMP/glslang-16.6.0"
+          mkdir -p "$tool_dir"
+          curl -fL --retry 3 -o "$tool_dir/glslang.tar.gz" https://github.com/KhronosGroup/glslang/releases/download/16.6.0/glslang-16.6.0-linux-x86_64-release.tar.gz
+          echo '2c34071f56ecf39d16233294d3739cf43f981fd39080f2fd9dccb782101191ce  '"$tool_dir/glslang.tar.gz" | sha256sum --check --strict
+          tar -xzf "$tool_dir/glslang.tar.gz" -C "$tool_dir"
+          "$tool_dir/bin/glslangValidator" --version
+          echo "$tool_dir/bin" >> "$GITHUB_PATH"
+
+      # (the steps below all run when one before them failed, so one run shows every failure)
+      # (the Windows builder, command-line only, and its --cli checks are net8.0-windows: EnableWindowsTargeting brings Windows'
+      # reference packs to Linux. The --cli checks run on Linux's .NET, with Linux's Python as the child)
+      - name: Set up .NET for Windows Builder checks
+        if: ${{ !cancelled() && matrix.shard == '1/2' }}
+        uses: https://github.com/actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '8.0.x'
+      - name: Check Windows Builder --cli delivery
+        if: ${{ !cancelled() && matrix.shard == '1/2' }}
+        run: |
+          dotnet restore tests/builder_cli/BuilderCliTests.csproj --configfile tests/builder_cli/NuGet.Config -p:EnableWindowsTargeting=true
+          dotnet run --project tests/builder_cli/BuilderCliTests.csproj --configuration Release --no-restore \
+            -p:EnableWindowsTargeting=true -- "$(command -v python)"
+      - name: Compile Windows Builder
+        if: ${{ !cancelled() && matrix.shard == '1/2' }}
+        run: dotnet build builder/HookshotBuilder/HookshotBuilder.csproj --configuration Debug -p:NuGetAudit=false -p:EnableWindowsTargeting=true
+      # (--strict: a check whose compiler, headers or package is missing here fails instead of being skipped)
+      - name: Every test
+        if: ${{ !cancelled() }}
+        env:
+          HOOKSHOT_SPIRV_HEADERS: ${{ github.workspace }}/_deps/spirv-headers/include
+          HOOKSHOT_VULKAN_HEADERS: ${{ github.workspace }}/_deps/vulkan-headers/include
+          SHARD: ${{ matrix.shard }}
+        run: python -I -B tests/run_all.py --strict --shard ${{ env.SHARD }}
+      - name: Compiler cache statistics
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: ccache --show-stats
+      - if: ${{ !cancelled() && runner.os == 'Linux' && github.event_name == 'push' && steps.ccache-restore.outputs.cache-hit != 'true' }}
+        uses: https://github.com/actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ${{ steps.ccache.outputs.key }}
+
+  # (the focused shader recompiler fixtures, in one job: they build the same recompiler sources, through ccache with the
+  # cache main's runs leave, as the Python checks' above; the direct surface atomic fixture takes the objects the global
+  # load/store one made. The F2I fixture's steps run whether or not the others passed, as when it was a job of its own)
+  # (off for now: pushes and pull requests run only the light checks; run these by hand, Actions > CI > Run workflow.
+  # CONTRIBUTING.md asks for tests/run_all.py's results in each pull request)
+  spirv-fixtures:
+    name: SPIR-V fixtures (global narrow load/store, direct surface atomics, F2I immediate)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out pinned SPIR-V headers
+        run: scripts/fetch_commit.sh https://github.com/KhronosGroup/SPIRV-Headers 496543121ce6419f23d6fa5d7194ba66c36212d2 _deps/spirv-headers
+      - name: Install Clang C++20, SPIR-V validator and ccache
+        run: sudo apt-get update && sudo apt-get install -y clang spirv-tools ccache
+      - name: Compiler cache
+        id: ccache
+        env:
+          RECOMPILER: ${{ hashFiles('gpu/vk/eden/**', 'gpu/vk/sirit/**', 'gpu/vk/compat/**', 'gpu/compat/**') }}
+        run: |
+          {
+            echo "CCACHE_DIR=$RUNNER_TEMP/ccache"
+            echo "CCACHE_MAXSIZE=400M"
+            echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          } >> "$GITHUB_ENV"
+          prefix="ccache-spirv-fixtures-$(clang++ --version | sha256sum | cut -c1-16)-"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "key=$prefix$RECOMPILER" >> "$GITHUB_OUTPUT"
+      - id: ccache-restore
+        uses: https://github.com/actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ${{ steps.ccache.outputs.key }}
+          restore-keys: ${{ steps.ccache.outputs.prefix }}
+      - name: Configure the focused real-IR fixture
+        run: >-
+          CC=clang CXX=clang++ cmake -S tests/global_load_16 -B ${{ runner.temp }}/global-load-16
+          -DREPO_ROOT=${{ github.workspace }}
+          -DSPIRV_HEADERS_ROOT=${{ github.workspace }}/_deps/spirv-headers
+      - name: Build the focused fixture
+        run: cmake --build ${{ runner.temp }}/global-load-16 --parallel "$(nproc)"
+      - name: Emit and inspect real IR modules
+        run: ${{ runner.temp }}/global-load-16/global_load_16_ir ${{ runner.temp }}/global-load-16/modules
+      - name: Check real-IR compare-exchange loop contracts
+        env:
+          RX_VK_FOLLOW_STORES: '1'
+        run: ${{ runner.temp }}/global-load-16/global_load_16_ir --cas-loops ${{ runner.temp }}/global-load-16/modules
+      - name: Validate every emitted module
+        shell: bash
+        # (--uniform-buffer-standard-layout: the back end's device has uniformBufferStandardLayout, gpu/vk/vk_main.cpp
+        # creates it with every feature the GPU reports, so constant buffers are u32 arrays of stride 4)
+        run: |
+          for module in "${{ runner.temp }}"/global-load-16/modules/*.spv; do
+            spirv-val --target-env vulkan1.3 --uniform-buffer-standard-layout "$module"
+          done
+      - name: Configure the authored direct surface atomic fixture
+        run: >-
+          CC=clang CXX=clang++ cmake -S tests/native_suatom -B ${{ runner.temp }}/native-suatom
+          -DREPO_ROOT=${{ github.workspace }}
+          -DSPIRV_HEADERS_ROOT=${{ github.workspace }}/_deps/spirv-headers
+      - name: Build the direct surface atomic fixture
+        run: cmake --build ${{ runner.temp }}/native-suatom --parallel "$(nproc)"
+      - name: Translate authored direct surface atomic programs
+        run: ${{ runner.temp }}/native-suatom/native_suatom ${{ runner.temp }}/native-suatom/modules
+      - name: Validate every direct surface atomic module
+        shell: bash
+        run: |
+          for module in "${{ runner.temp }}"/native-suatom/modules/*.spv; do
+            spirv-val --target-env vulkan1.3 "$module"
+          done
+      - name: Build the F2I immediate fixture
+        id: f2i
+        if: ${{ !cancelled() }}
+        run: |
+          CC=clang CXX=clang++ cmake -S tests/f2i_immediate -B "${{ runner.temp }}/f2i" -DREPO_ROOT="${{ github.workspace }}" -DSPIRV_HEADERS_ROOT="${{ github.workspace }}/_deps/spirv-headers"
+          cmake --build "${{ runner.temp }}/f2i" --parallel "$(nproc)"
+      - name: Emit and validate the F2I immediate modules
+        if: ${{ !cancelled() && steps.f2i.outcome == 'success' }}
+        run: |
+          "${{ runner.temp }}/f2i/f2i_immediate" "${{ runner.temp }}/f2i/modules"
+          for module in "${{ runner.temp }}"/f2i/modules/*.spv; do
+            spirv-val --target-env vulkan1.3 --uniform-buffer-standard-layout "$module"
+          done
+      - name: Compiler cache statistics
+        if: ${{ !cancelled() }}
+        run: ccache --show-stats
+      - if: ${{ !cancelled() && github.event_name == 'push' && steps.ccache-restore.outputs.cache-hit != 'true' }}
+        uses: https://github.com/actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ${{ steps.ccache.outputs.key }}
+
+  actionlint:
+    name: Workflow lint (actionlint)
+    runs-on: quick  # (a quick job: the runner kept free for these takes it, or any runner with room)
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # (the release's own binary, checked against its published SHA-256; shellcheck from the runner image checks the
+      # run: scripts)
+      - name: actionlint 1.7.12
+        env:
+          VERSION: 1.7.12
+          SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          curl -fsSL --retry 5 --retry-delay 10 -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v$VERSION/actionlint_${VERSION}_linux_amd64.tar.gz"
+          echo "$SHA256  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+      - name: Lint the workflows
+        run: '"$RUNNER_TEMP/actionlint" -color -config-file .forgejo/actionlint.yaml .forgejo/workflows/*.yml'

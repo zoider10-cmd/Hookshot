@@ -1,0 +1,18 @@
+{
+  "source": "https://github.com/googlefonts/atkinson-hyperlegible-next",
+  "revision": "7925f50f649b3813257faf2f4c0b381011f434f1",
+  "license": "SIL Open Font License 1.1",
+  "files": {
+    "AtkinsonHyperlegibleNext-Italic.woff2": {
+      "sha256": "34491c5a87f711d314637962f69267d28c7df3ed498082c990cdfbbc02ebf3f2",
+      "bytes": 52692
+    },
+    "AtkinsonHyperlegibleNext.woff2": {
+      "sha256": "abde1ad5cf78b9ac575ef90d991f2e9101eb0b3b6668bde9a00e2e1e27d99afd",
+      "bytes": 48188
+    },
+    "OFL.txt": {
+      "sha256": "aca6a428580965d2297d1b718042dd427c2a9443ece3b0d02d758e161e0c4030"
+    }
+  }
+}

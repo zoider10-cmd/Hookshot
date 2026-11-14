@@ -1,0 +1,40 @@
+# A pull request's description must follow the template (.forgejo/pull_request_template.md, CONTRIBUTING.md "Commits and
+# pull requests"): Why and Measurements filled in, the Before/After commits and table, every "For everyone" box ticked.
+# A PR in work in progress (WIP: or [WIP] at the start of the title) passes with a notice: it is checked once it is
+# marked ready. `forge.py pr ready` runs the same check before it takes the WIP: off. Only the description is read, from
+# the API, with main's script: the pull request's code is never checked out, so pull_request_target, which also runs
+# for pull requests from forks, is safe. No game data is involved.
+#
+# Forgejo 17 has no ready_for_review event: marking a PR ready takes WIP: off its title, which is an edit.
+# (Forgejo reads only the first of .forgejo/, .gitea/ and .github/workflows that exists: this file runs once every
+# workflow has moved here, MagicBeanDev/Hookshot#13, and a runner serves the repository.)
+name: PR description
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  description:
+    name: Description follows the template
+    runs-on: quick  # (a quick job: the runner kept free for these takes it, or any runner with room)
+    timeout-minutes: 5
+    steps:
+      - uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/check_pr_description.py
+            .forgejo/pull_request_template.md
+            tests
+          sparse-checkout-cone-mode: false
+      - name: Check the description
+        env:
+          FORGEJO_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          python3 -I scripts/check_pr_description.py --pr "$PR_NUMBER"
+          --repo "${{ github.repository }}" --server "${{ github.server_url }}"

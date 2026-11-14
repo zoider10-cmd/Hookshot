@@ -68,39 +68,23 @@ sealed record Tools(string Root, string Python, string[]? PythonArgs = null)
     static bool IsStoreShortcut(string path) => path.Contains(@"\Microsoft\WindowsApps\", StringComparison.OrdinalIgnoreCase);
 }
 
-/// nx2/make_game.py as a child process: its lines as they come, and how it ended.
+/// nx2/make_game.py as a child process: its lines as they come, and how it ended (Program.Cli).
 sealed class Runner
 {
     readonly Tools tools;
     readonly List<string> args;
-    readonly int? workers;
-    readonly string? ngxSdk;
-    readonly int? memoryGb;
-    readonly string? ffxSdk;
-    Process? process;
     string? error;
-    bool cancelled;
 
     public event Action<string>? Line;
     public event Action<string?>? Finished;
 
-    /// ngxSdk: NVIDIA DLSS (the builder's tick): the folder of NVIDIA's DLSS SDK, as HOOKSHOT_NGX_SDK; null builds without it.
-    /// ffxSdk: AMD FSR 4 (the builder's tick): where AMD's FSR runtime is kept between builds, as HOOKSHOT_FFX_SDK
-    public Runner(Tools tools, List<string> args, int? workers = null, string? ngxSdk = null, int? memoryGb = null,
-                  string? ffxSdk = null)
+    public Runner(Tools tools, List<string> args)
     {
         this.tools = tools;
         this.args = args;
-        if (workers is <= 0) throw new ArgumentOutOfRangeException(nameof(workers), "Build workers must be positive.");
-        if (memoryGb is <= 0) throw new ArgumentOutOfRangeException(nameof(memoryGb), "Build memory must be positive.");
-        this.workers = workers;
-        this.ngxSdk = ngxSdk;
-        this.memoryGb = memoryGb;
-        this.ffxSdk = ffxSdk;
     }
 
-    static ProcessStartInfo Info(Tools tools, IEnumerable<string> args, int? workers = null, string? ngxSdk = null,
-                                 int? memoryGb = null, string? ffxSdk = null)
+    static ProcessStartInfo Info(Tools tools, IEnumerable<string> args)
     {
         var si = new ProcessStartInfo(tools.Python)
         {
@@ -111,16 +95,13 @@ sealed class Runner
             RedirectStandardError = true,
         };
         si.Environment["PYTHONIOENCODING"] = "utf-8";
-        BuildWorkers.Apply(si, workers);
-        BuildMemory.Apply(si, memoryGb);
-        // (written into the game folder's hookshot_version.txt: the game starts this app again to update, host/hos_update.c)
+        // (written into the game folder's hookshot_version.txt: the builder that made the game)
+        BuilderHome.PassTo(si);
         if (Environment.ProcessPath != null) si.Environment["HOOKSHOT_BUILDER_EXE"] = Environment.ProcessPath;
-        // (NVIDIA DLSS: only when ticked. Without it, one set on the PC is not passed on either: a build is with DLSS only when asked)
-        if (ngxSdk != null) si.Environment["HOOKSHOT_NGX_SDK"] = ngxSdk;
-        else si.Environment.Remove("HOOKSHOT_NGX_SDK");
-        // (AMD FSR 4, the same: AMD's runtime kept in the builder's own folder only when ticked)
-        if (ffxSdk != null) si.Environment["HOOKSHOT_FFX_SDK"] = ffxSdk;
-        else si.Environment.Remove("HOOKSHOT_FFX_SDK");
+        // (NVIDIA DLSS and AMD FSR 4: a build is with them only when its arguments ask (--fetch-ngx-sdk, --fetch-fsr-runtime);
+        // an SDK folder set on the PC is not passed on)
+        si.Environment.Remove("HOOKSHOT_NGX_SDK");
+        si.Environment.Remove("HOOKSHOT_FFX_SDK");
         // (the folder's own compiler, headers and libraries, when it has them: nothing of the PC's but Windows' own)
         var sets = new[] { ("EMSDK", "emsdk"), ("RX_CPM", "cpm"), ("WGPU_NATIVE", "wgpu-native") };
         foreach (var (name, folder) in sets)
@@ -141,8 +122,7 @@ sealed class Runner
         {
             try
             {
-                using var p = Process.Start(Info(tools, args, workers, ngxSdk, memoryGb, ffxSdk))!;
-                process = p;
+                using var p = Process.Start(Info(tools, args))!;
                 p.ErrorDataReceived += (_, e) => { if (e.Data != null) Line?.Invoke(e.Data); };
                 p.BeginErrorReadLine();
                 try { p.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception) { }
@@ -152,7 +132,7 @@ sealed class Runner
                     Line?.Invoke(line);
                 }
                 p.WaitForExit();
-                Finished?.Invoke(cancelled ? "cancelled" : p.ExitCode == 0 ? null : error ?? "The build tools stopped without saying why. See the details.");
+                Finished?.Invoke(p.ExitCode == 0 ? null : error ?? "The build tools stopped without saying why. See the details.");
             }
             catch (Exception e)
             {

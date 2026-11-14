@@ -12,6 +12,9 @@ import os
 import subprocess
 import tempfile
 
+# (env_on, the switches' rule, before the code cut out of the sources: gpu/vk/compat/hookshot_env.h)
+ENV_ON_H = str(Path(__file__).resolve().parents[1] / "gpu" / "vk" / "compat" / "hookshot_env.h")
+
 RUN_ALL_ARGS = ["--cxx", "clang++", "--headers", "{vulkan_headers}"]
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,7 +43,7 @@ static uint32_t handles[3]{};
 static uint8_t answers[4]{0,2,2,2};
 uint32_t driver_bank_word(const NvnState&, int, int, uint32_t offset) { return handles[offset/8]; }
 uint32_t stage_cbuf_word(const NvnState&, const Stage&, uint32_t, uint32_t offset) { return handles[offset/8]; }
-uint32_t stage_handle(const NvnState&, const Stage&, uint32_t) { std::abort(); }
+uint32_t stage_handle(const NvnState&, const Stage&, uint32_t, uint32_t) { std::abort(); }
 uint8_t texture_answer(uint32_t h) { return h ? answers[h] : 0xff; }
 uint32_t texture_slot_version(int id) { return 10+id; }
 #include MATCHER_FUNCTIONS
@@ -146,7 +149,7 @@ def main():
         start = source.rfind('\n', 0, source.index(' answers_in =')) + 1
         functions = source[start:source.index(';', start) + 1] + '\n\n' + functions
     fixture = FIXTURE.replace('#include MATCHER_FUNCTIONS', functions)
-    flags = ['-std=c++20', '-O1', '-w', '-DNDEBUG', '-DVK_NO_PROTOTYPES', '-DMKWVK_INCLUDES=2']
+    flags = ['-std=c++20', '-include', ENV_ON_H, '-O1', '-w', '-DNDEBUG', '-DVK_NO_PROTOTYPES', '-DMKWVK_INCLUDES=2']
     for header in ('algorithm', 'cstdio', 'cstdlib', 'cstring', 'functional', 'string', 'vector'):
         flags += ['-include', header]
     includes = [vk, vk / 'compat', args.source / 'gpu/compat', vk / 'eden',
@@ -164,8 +167,10 @@ def main():
         # Each child reads the existing settings once, just like canonical_answer's static gate.
         for name, overrides, strict in (
             ('default', {}, False),
-            ('handles-live-presence-zero', {'RX_VK_HANDLES_LIVE': '0'}, True),
-            ('register-at-once-presence-zero', {'RX_VK_REGISTER_AT_ONCE': '0'}, True),
+            ('handles-live-zero', {'RX_VK_HANDLES_LIVE': '0'}, False),   # (an on/off switch too: env_on)
+            ('handles-live-one', {'RX_VK_HANDLES_LIVE': '1'}, True),
+            ('register-at-once-zero', {'RX_VK_REGISTER_AT_ONCE': '0'}, False),   # (an on/off switch: 0 is off, env_on)
+            ('register-at-once-one', {'RX_VK_REGISTER_AT_ONCE': '1'}, True),
             ('capture-zero', {'RX_VK_CAPTURE': '0'}, True),
             ('capture-one', {'RX_VK_CAPTURE': '1'}, False),
         ):

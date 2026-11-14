@@ -6,12 +6,14 @@
 #
 #   scripts/linux/check_player_build.sh [<Hookshot-...-x86_64.AppImage>]   (default: the newest in build-linux/)
 #
-# The image is extracted, as its runtime does, and run with AppRun's own environment (the AppImage's Python, compiler,
-# sysroot, FFmpeg and the prebuilt Vulkan back end, HOOKSHOT_VK_PREBUILT) in an otherwise empty one, so nothing of the
-# checkout or of CI's caches stands in for what the image lacks:
-#   - AppRun --cli --help: nx2/make_game.py, as the builder window starts it;
+# The image is extracted, as its runtime does, and run with AppRun's own environment (the AppImage's Python and the prebuilt
+# Vulkan back end, HOOKSHOT_VK_PREBUILT; the build tools as builder/linux/linux_tools.py finds them, here tools.lock's in
+# build-linux/tools ($TOOLS), given as the builder's toolchains folder for this version, so nothing is downloaded) in an
+# otherwise empty one, so nothing of the checkout or of CI's caches stands in for what the image lacks:
+#   - AppRun --cli --help: nx2/make_game.py, as --cli starts it (RecompLauncher's prepare);
 #   - nx2/build.py --standalone --dry-run, as make_game.py runs it: its whole start-up up to the compile, which is where
-#     the game's lifted code is first needed. Every other file the compile would read must be in the image.
+#     the game's lifted code is first needed. Every other file the compile would read must be in the image. Once more with
+#     AMD FSR 4 (HOOKSHOT_FSR=1), which compiles the Vulkan back end from the image's sources and AMD's FSR API headers.
 # Neither may write into the image's tree: on a player's PC it is read-only.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -23,11 +25,20 @@ trap 'rm -rf "$TMP"' EXIT
 (cd "$TMP" && "$IMAGE" --appimage-extract >/dev/null)
 R=$TMP/squashfs-root
 T=$R/usr/share/hookshot
-mkdir -p "$TMP/home" "$TMP/work"
-# (AppRun's environment, from AppRun itself: its lines before it starts Python, sourced with $0 naming it, so HERE is the image)
-sed '/^PY=/,$d' "$R/AppRun" > "$TMP/apprun-env.sh"
+# (the image is the builder alone: its build tools are tools.lock's, never inside it)
+for d in usr/lib/hookshot/emsdk usr/lib/hookshot/sysroot usr/lib/hookshot/ffmpeg usr/lib/hookshot/sdl2 usr/share/hookshot/cpm; do
+    [ ! -e "$R/$d" ] || { echo "the AppImage carries $d: the build tools are tools.lock's (builder/linux/linux_tools.py)"; exit 1; }
+done
+TOOLS=$(readlink -f "${TOOLS:-build-linux/tools}")
+[ -d "$TOOLS/.tools" ] || { echo "no build tools in $TOOLS (scripts/tools.py install $TOOLS --system linux-x64)"; exit 1; }
+mkdir -p "$TMP/home" "$TMP/work" "$TMP/builder-home/hookshot/builder/toolchains"
+ln -s "$TOOLS" "$TMP/builder-home/hookshot/builder/toolchains/$(cat "$T/VERSION")"
+# (AppRun's environment, from AppRun itself: its lines before it chooses what to start, sourced with $0 naming it, so HERE is
+# the image, then its build_tools: the tools found where the builder looks, with nothing to download)
+sed '/^if \[ "\${1:-}" = "--cli" \]/,$d' "$R/AppRun" > "$TMP/apprun-env.sh"
 in_image() {
-    env -i PATH=/usr/bin:/bin HOME="$TMP/home" LANG=C.UTF-8 bash -c '. "$1"; shift; exec "$@"' "$R/AppRun" "$TMP/apprun-env.sh" "$@"
+    env -i PATH=/usr/bin:/bin HOME="$TMP/home" LANG=C.UTF-8 HOOKSHOT_BUILDER_HOME="$TMP/builder-home" \
+        bash -c '. "$1"; build_tools || exit 1; shift; exec "$@"' "$R/AppRun" "$TMP/apprun-env.sh" "$@"
 }
 touch "$TMP/before"
 sleep 1   # (so a file written below is newer than the stamp)
@@ -44,6 +55,11 @@ echo "== nx2/build.py --standalone --dry-run (as nx2/make_game.py runs it, with 
 # (-B: no __pycache__ written into the image's tree. make_game.py's other settings: nx2/make_game.py, the compile's run())
 (cd "$T" && in_image env OOT_WORK="$TMP/work" RX_RELEASE=1 A64_HOT_CHUNK=1 PYTHONIOENCODING=utf-8 \
     "$R/usr/python/bin/python3" -I -B -u -X utf8 nx2/build.py --standalone --jobs 1 --dry-run)
+
+echo "== the same with AMD FSR 4 (make_game.py --fsr): the Vulkan back end compiled from the image's sources and AMD's headers"
+(cd "$T" && in_image env OOT_WORK="$TMP/work-fsr" RX_RELEASE=1 A64_HOT_CHUNK=1 PYTHONIOENCODING=utf-8 HOOKSHOT_FSR=1 \
+    "$R/usr/python/bin/python3" -I -B -u -X utf8 nx2/build.py --standalone --jobs 1 --dry-run) | tee "$TMP/fsr.txt"
+grep -q "with AMD FSR 4" "$TMP/fsr.txt" || { echo "a build with AMD FSR 4 did not compile its own Vulkan back end"; exit 1; }
 
 # (Python's own __pycache__ aside: AppRun runs Python with -I, which writes it where it can, and does without where it cannot)
 written=$(find "$R" -type f -newer "$TMP/before" ! -path "*/__pycache__/*" -print)

@@ -11,6 +11,7 @@ int hos_sdl_load(void);   /* 3 or 2, the SDL loaded (the first call loads it); 0
 enum { HOS_SDL_AUDIO = 0x10, HOS_SDL_VIDEO = 0x20, HOS_SDL_GAMEPAD = 0x2000, HOS_SDL_EVENTS = 0x4000 };   /* (both's) */
 int hos_sdl_init(uint32_t subsystems);   /* 1 when started */
 void hos_sdl_hint(const char *name, const char *value);   /* (a hint the loaded SDL does not know is nothing) */
+int hos_sdl_hint_override(const char *name, const char *value);   /* (over the environment's: SDL_HINT_OVERRIDE) */
 const char *hos_sdl_error(void);
 /* the app's name and id, before the window and the sound start: Wayland's app_id and X11's WM_CLASS (what the desktop
    matches the window to its menu entry by, for its icon and name), the name the sound mixer shows */
@@ -29,21 +30,29 @@ uint32_t hos_sdl_mouse_buttons(void);   /* 1 left, 2 middle, 4 right */
 void hos_sdl_mouse_position(float *x, float *y);   /* main thread, window-coordinate units */
 void hos_sdl_window_size(void *window, int *width, int *height);   /* (in the units of the mouse's position, not pixels) */
 void hos_sdl_icon(void *window, const char *png);   /* (SDL 3.4's PNG loader: nothing on SDL2 or an older SDL3) */
+/* (hookshot) typed text, for the Insert menu's text fields: text input on or off for the window (SDL_StartTextInput: text
+   events, an input method's window; SDL2 has it on from the start, SDL3 off), the clipboard's text (UTF-8, NULL when none;
+   given back with hos_sdl_free) */
+void hos_sdl_text_input(void *window, int on);
+char *hos_sdl_clipboard(void);
+void hos_sdl_free(void *p);
 
 /* ---- events, as the window's loop wants them ---- */
 enum {
     HOS_SDL_EV_OTHER, HOS_SDL_EV_QUIT, HOS_SDL_EV_CLOSE, HOS_SDL_EV_RESIZED, HOS_SDL_EV_FOCUS_GAINED,
     HOS_SDL_EV_FOCUS_LOST, HOS_SDL_EV_MOUSE_LEAVE, HOS_SDL_EV_KEY_DOWN, HOS_SDL_EV_MOUSE_DOWN, HOS_SDL_EV_MOUSE_MOTION,
-    HOS_SDL_EV_MOUSE_UP, HOS_SDL_EV_MOUSE_WHEEL, HOS_SDL_EV_MOUSE_ENTER
+    HOS_SDL_EV_MOUSE_UP, HOS_SDL_EV_MOUSE_WHEEL, HOS_SDL_EV_MOUSE_ENTER, HOS_SDL_EV_TEXT
 };
 typedef struct {
     int type;
     int scancode, repeat;   /* (key down) */
-    uint16_t mod;           /* (key down: 0x300 an Alt key) */
+    int key;                /* (key down: SDL's keycode, by the keyboard's layout: a letter's lower case) */
+    uint16_t mod;           /* (key down: 0x300 an Alt key, 0xC0 a Ctrl key, 3 a Shift key) */
     float dx, dy;           /* (mouse motion, relative) */
     float x, y;             /* (mouse motion, down and up: the cursor in the window, hos_sdl_window_size's units) */
     int button;             /* (mouse down and up: 1 left, 2 middle, 3 right, as SDL numbers them) */
     float wheel;            /* (mouse wheel: notches, up or away from the player positive) */
+    char text[32];          /* (text: what was typed, UTF-8, cut at a character's end to fit) */
 } HosSdlEvent;
 int hos_sdl_wait_event(HosSdlEvent *e, int timeout_ms);   /* 1 when there was one */
 int hos_sdl_poll_event(HosSdlEvent *e);
@@ -72,6 +81,8 @@ void hos_sdl_pads_update(void);
 int hos_sdl_pad_button(void *pad, int button);
 int16_t hos_sdl_pad_axis(void *pad, int axis);
 const char *hos_sdl_pad_name(void *pad);
+/* Connection diagnostics only: hardware GUID and active mapping name, never a serial number or device path. */
+void hos_sdl_pad_log_connection(void *pad, int motion, int steam);
 int32_t hos_sdl_pad_id(void *pad);
 void hos_sdl_pad_rumble(void *pad, uint16_t low, uint16_t high, uint32_t ms);
 /* (HD rumble, host/pad_sdl.c) the pad's SDL_GetGamepadType / SDL_GameControllerGetType, in the loaded SDL's numbers (0
@@ -85,3 +96,8 @@ enum { HOS_SDL_SENSOR_ACCEL = 1, HOS_SDL_SENSOR_GYRO = 2 };
 int hos_sdl_pad_has_sensor(void *pad, int type);
 int hos_sdl_pad_sensor_enable(void *pad, int type, int on);   /* 1 when done */
 int hos_sdl_pad_sensor(void *pad, int type, float *data, int n);   /* 1 when read */
+/* Steam's stand-in pads (host/steam_pads.h): whether the SDL tells them apart (vendor, Steam handle and hint priority
+   calls); a pad's USB vendor (0 unknown); its Steam Input handle (0 for a real pad) */
+int hos_sdl_knows_steam_pads(void);
+uint16_t hos_sdl_pad_vendor(void *pad);
+uint64_t hos_sdl_pad_steam_handle(void *pad);

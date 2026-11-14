@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Hookshot Builder
-Comment=Builds Ocarina of Time for PC from your own copy of the game
+Comment=The command-line builder the Hookshot Launcher uses: get the launcher to play
 Exec=AppRun
 Icon=hookshot
 Categories=Game;

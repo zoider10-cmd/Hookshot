@@ -1,0 +1,65 @@
+name: Save problem
+about: A save lost or not loading, or a copy from Hookshot or an emulator that went wrong
+title: "Saves: "
+labels: [kind/bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The [saves guide](https://git.magicbean.dev/MagicBeanDev/Hookshot/src/branch/main/docs/saves.md) has where saves are and a troubleshooting table: check it first. Every copy made by the launcher or `scripts/oot_saves.py` keeps a backup of the save it replaced, in `oot-save-backups`. **Never attach your save files**: describe them instead.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong
+      options:
+        - A save is gone or does not load
+        - Importing from Hookshot
+        - Importing from an emulator
+        - Exporting to an emulator
+        - Something else
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How you copied
+      options:
+        - Hookshot Launcher's Saves page
+        - scripts/oot_saves.py
+        - By hand
+        - No copy
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Hookshot version
+      placeholder: v3.0.0
+    validations:
+      required: true
+  - type: input
+    id: other
+    attributes:
+      label: The other side
+      description: The program and version you copied from or to, and its save folder if it is not the usual one.
+      placeholder: Hookshot v2.1.0, ~/.local/share/hookshot
+  - type: input
+    id: system
+    attributes:
+      label: Operating system
+      placeholder: Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you see now in the game.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: What the launcher or the script printed, and `python -I scripts/oot_saves.py list`'s output (it lists folders and slots, no save contents).
+      render: text

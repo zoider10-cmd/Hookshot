@@ -1,0 +1,155 @@
+# The player website (website/, Astro) on Cloudflare: hookshot.magicbean.dev, the Worker hookshot-website.
+# - A push to main that changes website/ or the tested-run sources (or Run workflow) builds it, runs its checks and
+#   deploys it. It is also rebuilt every hour, since the build collects progress data from Forgejo (website/PROGRESS.md).
+# - A pull request that changes those sources gets a preview: the build is uploaded as a new version of the Worker
+#   (`wrangler versions upload`, which leaves the site as it is) with the alias pr-<number>, served at
+#   https://pr-<number>-hookshot-website.<subdomain>.workers.dev, and the link is posted on the PR.
+#
+# The PR's website/ code (npm ci, the build) runs with the Cloudflare token, so only trusted code is previewed:
+# - a PR from a branch of Hookshot itself, which only people who may push to it can make: on every push;
+# - any other PR (from a fork) when a maintainer adds the label `preview`, after reading its changes. The
+#   label approves the commit the PR is at: the run checks it is still that commit, then takes the label off, so a
+#   later push needs the label again. pull_request_target runs this file from main, not from the PR, and checkout
+#   needs allow-unsafe-pr-checkout for it: the label and the commit check are what make it safe.
+# The Worker is website/wrangler.jsonc (the site, and worker/index.ts for the download links). Only a deploy applies its
+# domain, and only main deploys, so a PR's configuration can't change where the site goes.
+#
+# No game data is involved.
+#
+# Secrets (organisation or repository, Actions, Secrets): CLOUDFLARE_API_TOKEN (Account, Workers Scripts: Edit; Zone,
+# Workers Routes: Edit on magicbean.dev for the custom domain) and CLOUDFLARE_ACCOUNT_ID. Optional:
+# PREVIEW_COMMENT_TOKEN, a Forgejo token with write:issue: a fork's run gets a read-only job token, so without it the
+# link is only in the run's log and the label stays on.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths: ['website/**', 'docs/tested-configurations.md', 'docs/tested/**', '.forgejo/workflows/website.yml']
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths: ['website/**', 'docs/tested-configurations.md', 'docs/tested/**', '.forgejo/workflows/website.yml']
+  pull_request_target:
+    types: [labeled]
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+
+jobs:
+  website:
+    name: Website on Cloudflare
+    if: >-
+      github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+      || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name == 'pull_request_target' && github.event.label.name == 'preview')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IS_PR: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.number && format('refs/pull/{0}/head', github.event.pull_request.number) || github.ref }}
+          allow-unsafe-pr-checkout: ${{ github.event_name == 'pull_request_target' }}
+
+      - name: Check it is the approved commit
+        if: github.event_name == 'pull_request_target'
+        run: |
+          got=$(git rev-parse HEAD)
+          if [ "$got" != "$HEAD_SHA" ]; then
+            echo "::error::The PR is at $got now, not $HEAD_SHA: read the new changes, then add the label again"
+            exit 1
+          fi
+
+      - name: Is there a website
+        id: site
+        run: |
+          if [ -f website/package.json ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::No website/ at this commit: nothing to build"; echo "present=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Build and check
+        if: steps.site.outputs.present == 'true'
+        working-directory: website
+        run: |
+          node --version
+          npm ci --no-audit --no-fund
+          npm run build
+          npm run check
+
+      - name: Deploy
+        if: steps.site.outputs.present == 'true' && env.IS_PR != 'true'
+        working-directory: website
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --message "main @ ${HEAD_SHA:0:12}"
+
+      - name: Upload the preview
+        id: upload
+        if: steps.site.outputs.present == 'true' && env.IS_PR == 'true'
+        working-directory: website
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          npx wrangler versions upload --preview-alias "pr-$PR_NUMBER" \
+            --tag "pr-$PR_NUMBER" --message "PR #$PR_NUMBER @ ${HEAD_SHA:0:12}" | tee "$RUNNER_TEMP/upload.log"
+          alias_url=$(sed -n 's/.*Version Preview Alias URL: \(https:[^ ]*\).*/\1/p' "$RUNNER_TEMP/upload.log" | tail -n 1)
+          version_url=$(sed -n 's/.*Version Preview URL: \(https:[^ ]*\).*/\1/p' "$RUNNER_TEMP/upload.log" | tail -n 1)
+          if [ -z "$alias_url" ]; then
+            echo "::error::Wrangler printed no preview URL: the Worker's preview URLs are off (a deploy turns them on), or the account has no workers.dev subdomain"
+            exit 1
+          fi
+          echo "alias_url=$alias_url" >> "$GITHUB_OUTPUT"
+          echo "version_url=$version_url" >> "$GITHUB_OUTPUT"
+
+      - name: Post the link on the pull request
+        if: steps.upload.outputs.alias_url != ''
+        env:
+          FORGEJO_TOKEN: ${{ secrets.PREVIEW_COMMENT_TOKEN || github.token }}
+          API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}
+          ALIAS_URL: ${{ steps.upload.outputs.alias_url }}
+          VERSION_URL: ${{ steps.upload.outputs.version_url }}
+        run: |
+          node - <<'EOF'
+          const { API, FORGEJO_TOKEN, PR_NUMBER, HEAD_SHA, ALIAS_URL, VERSION_URL } = process.env;
+          const marker = '<!-- website-preview -->';
+          const body = [
+            marker,
+            `**Website preview:** ${ALIAS_URL}`,
+            '',
+            `This commit (${HEAD_SHA.slice(0, 12)}) on its own: ${VERSION_URL || 'n/a'}`,
+          ].join('\n');
+          const call = async (method, path, data) => {
+            const r = await fetch(API + path, {
+              method,
+              headers: { Authorization: `token ${FORGEJO_TOKEN}`, 'Content-Type': 'application/json' },
+              body: data && JSON.stringify(data),
+            });
+            if (!r.ok) throw new Error(`${method} ${path}: ${r.status} ${await r.text()}`);
+            return r.status === 204 ? null : r.json();
+          };
+          (async () => {
+            const comments = await call('GET', `/issues/${PR_NUMBER}/comments?limit=50`);
+            const mine = comments.find((c) => c.body.startsWith(marker));
+            if (mine) await call('PATCH', `/issues/comments/${mine.id}`, { body });
+            else await call('POST', `/issues/${PR_NUMBER}/comments`, { body });
+          })().catch((e) => {
+            console.log(body);
+            console.log(`::warning::Couldn't post the link on the PR (${e.message.slice(0, 200)}): it is above. A fork's run needs the PREVIEW_COMMENT_TOKEN secret to comment.`);
+          });
+          EOF
+
+      - name: Take the label off
+        if: always() && github.event_name == 'pull_request_target'
+        env:
+          FORGEJO_TOKEN: ${{ secrets.PREVIEW_COMMENT_TOKEN || github.token }}
+          API: ${{ github.server_url }}/api/v1/repos/${{ github.repository }}
+          LABEL_ID: ${{ github.event.label.id }}
+        run: |
+          curl -sS -f -X DELETE -H "Authorization: token $FORGEJO_TOKEN" "$API/issues/$PR_NUMBER/labels/$LABEL_ID" \
+            || echo "::warning::Couldn't take the label off: take it off by hand before adding it again"
