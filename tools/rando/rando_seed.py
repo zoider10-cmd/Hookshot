@@ -108,24 +108,45 @@ OPEN = {
 #     (not where the rule has the Golden Scale: Progressive items then asks for the Silver one of its own right);
 #   - with Open forest exit, the Kokiri Sword, the Slingshot and the Deku Shield, which are the way out of the forest
 #     and a child's: the forest is left without them, and the Master Sword is given at its stone.
-# Bombs stay: an adult's places need them in many rooms and the rules do not say which. What Songs adds for an adult
-# stays too (the Lullaby, Saria's Song, the Song of Time, the Song of Storms): the Lullaby and the Song of Time are
-# an adult's own in the Water Temple and where the blue blocks are, and the rules do not say where.
-# Too much, never too little. A place a child has too is as it was.
+# Bombs and what Songs adds for an adult (the Lullaby, Saria's Song, the Song of Time, the Song of Storms) are another
+# matter: an adult's own places need them in some rooms, and the rules do not say which. They stay, but for the
+# dungeons that only an adult enters, gone through one by one by the ORIGINAL game's layout (asked for: "real adult
+# logic"; the remake's rooms have not been walked for this, so each line is to be seen in play):
+#   - the Silver Scale stays where the way in is past King Zora, who moves aside for a child with Ruto's Letter, the
+#     bottle at the lake's bottom: Zora's Fountain and the Ice Cavern (DOOR_SCALE);
+#   - bombs, and the bracelet Quest rewards asks for with them, are not asked for where no room needs them: the Forest
+#     Temple and the Ice Cavern (DOOR_NO_BOMBS). The Fire, Water and Shadow Temples and the Training Ground have walls
+#     and rocks that do;
+#   - of the four songs, each such dungeon keeps the ones it needs (DOOR_SONGS): the Forest Temple Saria's Song (Mido
+#     bars the way to the meadow without it) and the Song of Time (its blue block); the Fire Temple, the Shadow
+#     Temple and the Training Ground the Song of Time; the Ice Cavern the Lullaby (the way into Zora's Domain); the
+#     Water Temple the Lullaby (its water) and the Song of Time. None needs the Song of Storms.
+# The overworld's places of an adult's alone keep bombs and the four songs: where each is and what it needs is not
+# known. Too much, never too little. A place a child has too is as it was.
 OPEN_DOOR = {"Market_Child_TimeTempleDoor_Opened": True}
 DOOR_ADULT_AREAS = frozenset(("ForestTemple", "FireTemple", "IceCavern", "WaterTemple", "ShadowTemple", "GerudoTrainingGround"))
+DOOR_SCALE = frozenset(("ZoraFountain", "IceCavern"))
+DOOR_NO_BOMBS = frozenset(("ForestTemple", "IceCavern"))
+_ZL, _SARIA, _TIME, _STORMS = ("Item_Melody_" + n for n in ("ZeldaLullaby", "SariaSong", "TimeSong", "StormSong"))   # (ZL and the rest, named below)
+DOOR_SONGS = {"ForestTemple": frozenset((_SARIA, _TIME)), "FireTemple": frozenset((_TIME,)), "IceCavern": frozenset((_ZL,)),
+              "WaterTemple": frozenset((_ZL, _TIME)), "ShadowTemple": frozenset((_TIME,)), "GerudoTrainingGround": frozenset((_TIME,))}
 
 
-def door_need(need, adult_only, open_forest=False):
+def door_need(need, adult_only, open_forest=False, area=None):
     """what a place asks for with the Door of Time open (see above): `need` as the other settings made it;
-    adult_only: only an adult has the place; open_forest: Open forest exit is on too"""
+    adult_only: only an adult has the place; open_forest: Open forest exit is on too; area: the place's (its Banc
+    folder), for the dungeons gone through one by one"""
     if not adult_only or not need >= ADULT:
         return need
     free = {BM}
-    if "Item_Scale_Gold" not in need:
+    if "Item_Scale_Gold" not in need and area not in DOOR_SCALE:
         free.add(SSC)
     if open_forest:
         free.update((S, SL, DS))
+    if area in DOOR_NO_BOMBS:
+        free.update((BB, BR))
+    if area in DOOR_SONGS:
+        free.update({_ZL, _SARIA, _TIME, _STORMS} - DOOR_SONGS[area])
     return frozenset(need - free)
 FLAG_LIST = "GameData"   # (the folder of the romfs: GameDataList.Product.<n>.byml.zs in it)
 # The clock of Hyrule Field. Until the owl's first cutscene there, the field's sky stays the day's whatever the time is
@@ -453,7 +474,7 @@ WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,
 # shop's arrows round the shelf looked at were then far under it (reported from play): they go by the model's box as
 # the list of actors has it, which is the model's own size, so a model far from its origin is not made larger here.
 # At its own size the arrows are round it. Seen so in the Kokiri shop, the Bazaar and the Goron shop.
-SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": -0.67, "Item_Range_Bow": 0.15, "Item_Sword_Kokiri": 0.15, "Item_Shield_Mirror": 0.35, "TBox_Shield_Hylian": 0.35,
+SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": -0.67, "Item_Range_Bow": 0.15, "Item_Range_SlingShot": 0.15, "Item_Sword_Kokiri": 0.15, "Item_Shield_Mirror": 0.35, "TBox_Shield_Hylian": 0.35,
               "TBox_Shield_Deku": 0.3}
 
 
@@ -516,7 +537,9 @@ SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_
 # down and the other way its back, so it has the other quarter turn and a half turn about the upright. Each seen so
 # on shelves of the Kokiri shop, the Bazaar and the Goron shop, whose own angles differ, raised to stand over the
 # price board.)
-SHELF_TURN = {"Item_Range_Bow": (0.0, 1.57, 1.57), "Item_Sword_Kokiri": (0.0, 1.57, 1.57), "Item_Shield_Mirror": (1.57, 0.0, 0.0),
+# (the Fairy Slingshot lay flat and low, half behind its price board: reported from play, 2026-11-14, the Kokiri shop.
+#  It is given the bow's turn and lift, NOT SEEN YET: the game was being played)
+SHELF_TURN = {"Item_Range_Bow": (0.0, 1.57, 1.57), "Item_Range_SlingShot": (0.0, 1.57, 1.57), "Item_Sword_Kokiri": (0.0, 1.57, 1.57), "Item_Shield_Mirror": (1.57, 0.0, 0.0),
               "TBox_Shield_Deku": (1.57, 0.0, 0.0), "TBox_Shield_Hylian": (-1.57, 3.14, 0.0)}
 # An item whose model is made where it is worn, not at its own origin (the gauntlets: 1.17 m up): its shelf's actor is
 # put that much lower (shelf_fit). The gauntlets keep their size: their box is the pair's, 1.6 m from one to the other.
@@ -3134,7 +3157,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 2" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 3" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
@@ -3331,9 +3354,9 @@ def main():
     grown = lambda h, area: area in DOOR_ADULT_AREAS or check_ages(maps[h]) == "A" if h in maps else area in DOOR_ADULT_AREAS
     if a.open_door:
         needs = {h: door_need(n, shelves[h][0].ages == "A" if h in shelves else
-                              GIFT_PLACES.get(gifts[h].key, ("CA",))[0] == "A" if h in gifts else grown(h, spots[h][0]), a.open_forest)
+                              GIFT_PLACES.get(gifts[h].key, ("CA",))[0] == "A" if h in gifts else grown(h, spots[h][0]), a.open_forest, spots[h][0])
                  for h, n in needs.items()}
-    door = (lambda need, h, area: door_need(need, grown(h, area), a.open_forest)) if a.open_door else (lambda need, h, area: need)
+    door = (lambda need, h, area: door_need(need, grown(h, area), a.open_forest, area)) if a.open_door else (lambda need, h, area: need)
     # (what a Gold Skulltula asks for, by the same settings)
     skull_asks = lambda h: door(step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
         quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0]))), h, skulls[h][0])

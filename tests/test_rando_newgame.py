@@ -185,7 +185,7 @@ def sources():
           "the options file's lines do not turn the changes on")
     check("list(changed.items()) + list(new_tables.items()) + list(flag_files.items())" in script,
           "the list of flags and the opening are not written with the seed's files, or not in its list of them")
-    check('(" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 2" if a.open_door else "") + (" intro skipped" if a.skip_intro else "")' in script,
+    check('(" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 3" if a.open_door else "") + (" intro skipped" if a.skip_intro else "")' in script,
           "the mod's stamp does not say which of them it holds: the launcher's run at Play would leave an old one")
     # ---- Open Door of Time: the door's flag starts set, and the game's side is what lets the sword take Link through time ----
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
@@ -203,6 +203,22 @@ def sources():
     check(S.door_need(S.CHILD | {S.BB}, True, True) == S.CHILD | {S.BB} and
           S.SSC in S.door_need(grown | {"Item_Scale_Gold"}, True) and S.BM not in S.door_need(grown | {"Item_Scale_Gold"}, True),
           "a rule that is not an adult's is changed, or the Silver Scale is taken off a rule that has the Golden one")
+    # (the dungeons of an adult's alone, one by one: the scale where King Zora is in the way, no bombs where no room
+    #  needs them, and of an adult's four songs the ones each needs)
+    songs = frozenset((S.ZL, S.SARIA, S.TIME, S.STORMS))
+    deep = grown | songs
+    check(S.door_need(deep, True, True, "ForestTemple") == frozenset({S.BOW, S.SARIA, S.TIME}) and
+          S.door_need(deep, True, True, "IceCavern") == frozenset({S.BOW, S.SSC, S.ZL}) and
+          S.door_need(deep, True, True, "WaterTemple") == frozenset({S.BB, S.BR, S.BOW, S.ZL, S.TIME}) and
+          S.door_need(deep, True, True, "FireTemple") == frozenset({S.BB, S.BR, S.BOW, S.TIME}) and
+          S.door_need(deep, True, True, "HyruleField") == frozenset({S.BB, S.BR, S.BOW}) | songs and
+          S.SSC in S.door_need(deep, True, True, "ZoraFountain") and S.door_need(deep, False, True, "ForestTemple") == deep,
+          "a dungeon of an adult's alone asks for bombs or a song it does not need, drops one it does, the way past King Zora "
+          "is without the Silver Scale, or an overworld place is changed")
+    check(S.DOOR_NO_BOMBS <= S.DOOR_ADULT_AREAS and set(S.DOOR_SONGS) == set(S.DOOR_ADULT_AREAS) and
+          all(v <= songs for v in S.DOOR_SONGS.values()) and (S._ZL, S._SARIA, S._TIME, S._STORMS) == (S.ZL, S.SARIA, S.TIME, S.STORMS) and
+          "a.open_forest, spots[h][0])" in script and "door_need(need, grown(h, area), a.open_forest, area)" in script,
+          "the dungeons' own rules are not for the dungeons of an adult's alone, name songs that are not an adult's four, or are not asked")
     check(not S.DOOR_ADULT_AREAS & {"SpiritTemple", "DesertColossus", "KokiriForest", "InsideJabuJabuBelly", "DodongoCavern", "InsideTheDekuTree", "BottomOfTheWell"} and
           S.DOOR_ADULT_AREAS <= set(S.RULES),
           "a dungeon a child enters is taken for an adult's alone")

@@ -731,8 +731,13 @@ the same goods list, and both sell the shuffled items.
   what it takes to be an adult is taken off, and only from a place an adult alone has (its map files are the
   adult's, or its dungeon is in `DOOR_ADULT_AREAS`) whose rule has all of `ADULT`: the Boomerang; the Silver Scale
   that Quest rewards adds for the same stone; and with Open forest exit the Kokiri Sword, the Slingshot and the Deku
-  Shield. Bombs stay, and what Songs adds for an adult stays: the rules do not say which rooms need them. On the live
-  settings (with Open forest exit) 84 of 296 places ask for less.
+  Shield. Bombs and what Songs adds for an adult stay in the overworld: the rules do not say which places need
+  them. The dungeons only an adult enters were gone through one by one, **by the original game's layout, not walked
+  in the remake**: the Silver Scale stays for Zora's Fountain and the Ice Cavern (the way past King Zora is a child's
+  deed with Ruto's Letter: `DOOR_SCALE`); bombs and the bracelet are not asked for in the Forest Temple and the Ice
+  Cavern (`DOOR_NO_BOMBS`); and of an adult's four songs each dungeon keeps what it needs (`DOOR_SONGS`: the Forest
+  Temple Saria's Song and the Song of Time, the Ice Cavern the Lullaby, the Water Temple the Lullaby and the Song of
+  Time, the Fire and Shadow Temples and the Training Ground the Song of Time; none the Song of Storms).
 - How a quest's step is kept: a value of the list of flags that is one of a set of names (`Data.Enum`), the hash of the
   step's name; in the running game `GameDataMgr+0x258`, 56 bytes each (`oot_gamedata_enum`; the test switch
   `HOS_OOT_SETENUM="<hash>=<a step's hash>"`). `HOS_OOT_OPEN_DOOR=1` is the setting on for a test.
