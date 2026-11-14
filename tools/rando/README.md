@@ -164,8 +164,8 @@ leaves gives the Piece of Heart. A piece holds its own piece or a gating item, n
   a piece an item, for a test. Seen in play: Zora's River's piece gave the Megaton Hammer and stayed taken. Not seen
   yet: a piece taken with none in the pouch (the piece to come is taken out).
 
-**Songs** (`rando_songs`, `--songs`, `SONGS`): the twelve songs are shuffled among the twelve lessons (Song spots;
-Anywhere, a song in any item's place, is not made yet and is the same). A lesson gives its song as a character gives
+**Songs** (`rando_songs`, `--songs`, `SONGS`): the twelve songs are shuffled among the twelve lessons (Song spots),
+or are items as any other (Anywhere: below). A lesson gives its song as a character gives
 a gift: its flow (`Dm_MelodyGet_...`) calls `GetPouchContent` with the song's name, so the name is changed as a gift's
 is. The teacher still plays the notes of the song the game has there; the scene of the song got names the new one.
 - The game also asks "has Link this song" to know whether a lesson is done (the windmill man, Sheik, the Kokiri,
@@ -173,6 +173,21 @@ is. The teacher still plays the notes of the song the game has there; the scene 
   lesson once Link has the Sun's Song (`Component/AIScheduleParam/Obj_Graveyard_Tombstone_A_0x`, `ConditionFlag`).
   Each is made to name the song its lesson gives now (`SONG_FLOWS`, `SONG_STONES`, `song_words`), so a song found
   elsewhere does not shut the place that taught it. The flows that play a song (`Dm_SY_Ocarina...`) are left.
+- **Anywhere** (`--songs 2`; `SONGS_ANYWHERE` False holds it off, and the launcher's `RandoNotYet` then lists it):
+  a song is an item as any other. Seen in play: the Sun's Song and Saria's Song bought from a shop's shelf (a green
+  rupee, with the song's name and price) had the scene of a song learnt, and were played after and worked. The twelve
+  songs are in the pool, and a lesson is a place as a gift is. Eight lessons are asked about by name (`SONG_ASKED`:
+  every file of the game was read for the songs' names) and hold only what has a flag of its own and is got once: a
+  song, or one of `LESSON_ITEMS` (the Stone of Agony, the Boomerang, the Hammer, the three arrows, the three spells)
+  that the seed has once, and an upgrade of a family (`LESSON_FAMILIES`) without Progressive items (`lesson_items`,
+  `place`'s `only`). They are given such items before songs, so that the songs are out in the world; with
+  Progressive items a seed has few, and about half the songs stay in lessons. The other four lessons (the Lullaby's,
+  Epona's, the Song of Time's, the Prelude's) hold anything. A lesson that gives something that is not a song adds a
+  green rupee where the ocarina's flow added its song (`SONG_PLAY_OTHER`): the item is got once, by the scene. A
+  lesson's gating item is not moved to a Gold Skulltula or a Piece of Heart (`gate_skulltulas`' `keep`). Song spots'
+  seeds are as they were, byte for byte (compared on a seed made before and after). **Not seen in play: a lesson
+  that gives something that is not a song; a song from a chest or from a character; the four lessons that hold
+  anything given a second time or not (nothing was found that would give them twice).**
 - Left as the game has them, not looked into: Kakariko's adult logic file, which names the Song of Storms' flag (an
   `ainb`, not changed in place), Navi's hints, the Scarecrow's Song. The Serenade's lesson is started by the Ice
   Cavern's big chest (`SageOfWater_MelodyGet_Water`), whatever that chest holds.

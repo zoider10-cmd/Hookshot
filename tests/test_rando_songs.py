@@ -133,6 +133,66 @@ def main():
     finally:
         S.PROGRESSION = was
 
+    # ---- Anywhere: the songs in the pool; a lesson asked about by name holds a song or an item it may ----
+    check(set(S.SONG_ASKED) < {g.key for g in S.SONGS} and len(S.SONG_ASKED) == 8 and
+          not {"song_zelda", "song_epona", "song_time", "song_prelude"} & set(S.SONG_ASKED),
+          "the lessons asked about by name are not the eight (the Lullaby's, Epona's, the Song of Time's and the Prelude's hold anything)")
+    counts = collections.Counter({"Item_Hammer": 1, "Item_Boomerang": 1, "Item_AgonyStone": 2, "Item_Quiver_Large": 1, "Item_Arrow_Ice": 1})
+    check(S.lesson_items(counts, True) == {"Item_Hammer", "Item_Boomerang", "Item_Arrow_Ice"} and
+          S.lesson_items(counts, False) == {"Item_Hammer", "Item_Boomerang", "Item_Arrow_Ice", "Item_Quiver_Large"} and
+          S.lesson_items(counts, False, lambda i: i != "Item_Hammer") == {"Item_Boomerang", "Item_Arrow_Ice", "Item_Quiver_Large"},
+          "what a lesson may hold is not the listed items the seed has once, an upgrade's family only without Progressive items, the game's flags asked")
+    check(not set(S.LESSON_ITEMS + S.LESSON_FAMILIES) & set(S.SONG_ITEMS) and S.SONG_PLAY_OTHER == "Obj_Rupee_Green" and
+          not any(i.startswith(("TBox_", "Obj_")) for i in S.LESSON_ITEMS + S.LESSON_FAMILIES),
+          "a lesson may hold a song by the items' list, or something a seed has many of")
+    was = S.PROGRESSION
+    S.PROGRESSION = S.PROGRESSION | S.SONG_GATES
+    try:
+        for extra, least in (((), 1), (("Item_AgonyStone", "Item_Arrow_Ice", "Item_Arrow_Fire"), 0)):
+            spots, needs = collections.OrderedDict(), {}
+            for k, item in enumerate(sorted(was) + ["TBox_Rupee_Blue"] * 40 + list(extra)):
+                spots[k] = ("HyruleField", item, False, None)
+                needs[k] = S.NONE if k % 3 else S.song_need(S.ADULT, "HyruleField")
+            lessons = {}
+            for g in S.SONGS:
+                h = S.gift_hash(g.key)
+                lessons[h] = g
+                spots[h] = (g.area, g.item, None, None)
+                needs[h] = g.need
+            safe = S.lesson_items(collections.Counter(s[1] for s in spots.values()), True)
+            only = {S.gift_hash(key): (safe, frozenset(S.SONG_ITEMS)) for key in S.SONG_ASKED}
+            out = 0
+            for n in range(20):
+                gives, _, spheres = S.place(random.Random(n), spots, 3, 0, needs, None, only=only, apart=frozenset(lessons))
+                check(collections.Counter(gives.values()) == collections.Counter(s[1] for s in spots.values()), "seed %d: an item is lost or made" % n)
+                check(all(gives[h] in safe or gives[h] in S.SONG_ITEMS for h in only),
+                      "seed %d: a lesson asked about by name gives %r" % (n, [gives[h] for h in only if gives[h] not in safe and gives[h] not in S.SONG_ITEMS]))
+                got = {i for sphere in spheres for i in sphere}
+                check(got >= S.SONG_GATES | was, "seed %d: a gating item cannot be got: %r" % (n, sorted((S.SONG_GATES | was) - got)))
+                # (the items that are not songs go to those lessons before a song does)
+                plain = [i for i in safe if i not in S.PROGRESSION]
+                check(sum(1 for h in only if gives[h] in plain) == min(len(plain), len(only)), "seed %d: a lesson holds a song while an item it may hold is left" % n)
+                out += sum(1 for h in gives if h not in lessons and gives[h] in S.SONG_ITEMS)
+            check(out >= 20 * 4 and (least or out > 20 * 5), "the songs are not out in the world (%d in 20 seeds)" % out)
+        # (without the logic too, and a seed without enough for the lessons is an error rather than a lesson left open)
+        gives, _, _ = S.place(random.Random(3), spots, 3, 0, None, None, only=only, apart=frozenset(lessons))
+        check(all(gives[h] in safe or gives[h] in S.SONG_ITEMS for h in only), "without the logic a lesson asked about by name gives anything")
+        few = collections.OrderedDict((h, s if s[1] not in S.SONG_ITEMS else (s[0], "TBox_Rupee_Red", s[2], s[3])) for h, s in spots.items())
+        try:
+            S.place(random.Random(3), few, 3, 0, None, None, only={h: (frozenset(), frozenset(S.SONG_ITEMS)) for h in only}, apart=frozenset(lessons))
+            check(False, "a lesson with nothing it may hold is filled all the same")
+        except ValueError:
+            pass
+        # (a gating item in such a lesson is not moved to a Gold Skulltula: the token left would be its gift)
+        h = next(iter(only))
+        held = {h: S.HAM, 1000: S.BOW}
+        asks = {h: S.NONE, 1000: S.NONE}
+        for n in range(30):
+            now, drops, _, _ = S.gate_skulltulas(random.Random(n), held, {}, [2000, 2001], asks, {2000: S.NONE, 2001: S.NONE}, [], share=1.0, keep=frozenset(only))
+            check(now[h] == S.HAM and S.HAM not in drops.values(), "seed %d: a lesson's gating item is moved to a Gold Skulltula" % n)
+    finally:
+        S.PROGRESSION = was
+
     # ---- a flow: a name in an action and a question too, when asked ----
     data = flow([(4, S.ZL), (0, "IsGet." + S.ZL), (1, "IsGet." + S.ZL), (4, S.SUN), (0, "Other")])
     swaps = S.song_words({S.ZL: S.SUN, S.SUN: S.ZL})
@@ -144,16 +204,23 @@ def main():
 
     # ---- the script, the menu and the game ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_songs": 0' in script and '(" songs 2" if a.songs else "")' in script and
-          "logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic" in script and '":songs" if a.songs else ""' in script,
-          "the script does not read the setting, does not name it in the seed's stamp, or leaves the logic off with it")
-    check("(frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs else None," in script and "now, found = gift_items(was, words, kinds=(0, 1, 4))" in script and
-          "now = song_stone(open(os.path.join(romfs, *rel.split(\"/\")), \"rb\").read(), now_gives)" in script and "shop_parts | song_parts" in script,
-          "the songs are not bound to the lessons, their flows are not gone through, or the royal tomb's stones are left")
+    check('"rando_songs": 0' in script and '(" songs 2%s" % (" anywhere 1" if a.songs == 2 else "") if a.songs else "")' in script and
+          "logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic" in script and '":songs2" if a.songs == 2 else ":songs" if a.songs else ""' in script,
+          "the script does not read the setting, does not name it in the seed's stamp (Song spots' as it was, Anywhere apart), or leaves the logic off with it")
+    check("(frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs == 1 else None," in script and "now, found = gift_items(was, words, kinds=(0, 1, 4))" in script and
+          "now = song_stone(open(os.path.join(romfs, *rel.split(\"/\")), \"rb\").read(), asked)" in script and "shop_parts | song_parts" in script,
+          "the songs are not bound to the lessons with Song spots, their flows are not gone through, or the royal tomb's stones are left")
+    check("only=lesson_only, apart=frozenset(lessons) if a.songs == 2 else ())" in script and script.count("keep=frozenset(lesson_only))") == 2 and
+          "now, found = gift_items(was, {own[flow]: now_gives[own[flow]]}, kinds=(4,))" in script and
+          "then, found = gift_items(now if now is not None else was, words, kinds=(0, 1))" in script and
+          "asked = {old: new for old, new in now_gives.items() if new in SONG_ITEMS or new in lesson_safe}" in script,
+          "Anywhere: the lessons asked about by name hold anything, lose their item to a Gold Skulltula or a Piece of Heart, or a lesson's gift "
+          "and what is asked about it are not changed apart")
     check("if gives[h] != g.item and g.flow and h not in lessons:" in script and "(tuple(SONG_GATES) if a.songs else ())" in script,
           "a lesson is changed as a plain gift too, or a gating song can be a Gold Skulltula's")
     # (found in play: the ocarina's own flow added the lesson's own song as well)
-    check("adds = {(entry, old): new for old, new in now_gives.items() if old != new for entry in SONG_PLAY_ENTRIES}" in script and
+    check("adds = {(entry, old): new if new in SONG_ITEMS else SONG_PLAY_OTHER" in script and
+          "for old, new in now_gives.items() if old != new for entry in SONG_PLAY_ENTRIES}" in script and
           "gift_items(unpack(open(os.path.join(romfs, *rel.split(\"/\")), \"rb\").read(), zs, dicts), adds, kinds=(0,))" in script and
           S.SONG_PLAY_FLOW == "Dm_SY_Ocarina" and S.SONG_PLAY_ENTRIES == ("LearningOcarinaPlayAuto", "LearningOcarinaPlayAutoForSeek") and
           S.SONG_PLAY_FLOW not in S.SONG_FLOWS,

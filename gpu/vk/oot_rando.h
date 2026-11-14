@@ -51,7 +51,7 @@
       "What some characters give takes part with the chests: Darunia, mini-games (the frogs of Zora's River among them), side quests and the Gold Skulltula family. Needs Chests.", \
       "Off", "On") \
     X(SONGS, "Songs", "rando_songs", \
-      "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere is not made yet: the same as Song spots.", \
+      "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere: the songs are items like any other, in chests, shops and gifts (a song looks like a green rupee), and a lesson gives whatever the seed put there. Some lessons can only hold a song or a few one-of-a-kind items, so some songs stay in lessons.", \
       "Off", "Song spots", "Anywhere") \
     X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \
       "With Major items: the 14 Pieces of Heart lying in the world take part. A piece can be a key item: it still looks like a Piece of Heart and its scene says so, but the key item is what Link gets, and the chest it left holds the piece. Pieces given by a character or held by a chest are not these.", \

@@ -1889,10 +1889,11 @@ class LauncherForm : Form {
     // has no Randomizer tab since Mako 3.3 (its menu was written anew): this page is where they are set, and where a
     // seed's ID is copied and pasted)
     // (the settings a seed does nothing with yet, and the first of each one's choices that is so: the row offers the
-    // choices before it, and with only Off left says "Not available yet". Dungeon rewards' Anywhere,
-    // Songs' and Dungeon keys' Anywhere are made as the choice before. tools/rando/rando_seed.py is what places a seed)
+    // choices before it, and with only Off left says "Not available yet". Dungeon rewards' Anywhere and
+    // Dungeon keys' Anywhere are made as the choice before. tools/rando/rando_seed.py is what places a seed. Songs'
+    // Anywhere is made: its line is here again, { "rando_songs", 2 }, while the script's SONGS_ANYWHERE is False)
     internal static readonly Dictionary<string, int> RandoNotYet = new Dictionary<string, int> {
-        { "rando_dungeon_rewards", 2 }, { "rando_songs", 2 }, { "rando_keys", 2 } };
+        { "rando_dungeon_rewards", 2 }, { "rando_keys", 2 } };
     // (rows that are no longer a choice and are not shown: the frogs of Zora's River take part whenever Quest rewards is
     // on. The row stays in RandoRows, its place being its place in a seed's ID, gpu/vk/oot_rando.h)
     internal static readonly HashSet<string> RandoHidden = new HashSet<string> { "rando_frogs" };
@@ -1908,7 +1909,7 @@ class LauncherForm : Form {
         new object[] { "rando_quests", "Quest rewards", new[] { "Off", "On" }, new[] { 0, 1 },
             "What some characters give takes part with the chests: Darunia, mini-games (the frogs of Zora's River among them), side quests and the Gold Skulltula family. Needs Chests." },
         new object[] { "rando_songs", "Songs", new[] { "Off", "Song spots", "Anywhere" }, new[] { 0, 1, 2 },
-            "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere is not made yet: the same as Song spots." },
+            "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere: the songs are items like any other, in chests, shops and gifts (a song looks like a green rupee), and a lesson gives whatever the seed put there. Some lessons can only hold a song or a few one-of-a-kind items, so some songs stay in lessons." },
         new object[] { "rando_heart_pieces", "Heart Pieces", new[] { "Off", "On" }, new[] { 0, 1 },
             "With Major items: the 14 Pieces of Heart lying in the world take part. A piece can be a key item: it still looks like a Piece of Heart and its scene says so, but the key item is what Link gets, and the chest it left holds the piece. Pieces given by a character or held by a chest are not these." },
         new object[] { "rando_shops", "Shops", new[] { "Off", "Low prices", "Any price" }, new[] { 0, 1, 2 },

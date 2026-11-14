@@ -67,8 +67,13 @@ def sources(rows):
     #  file's value, and the New seed window)
     not_yet = re.search(r"RandoNotYet = new Dictionary<string, int> \{\s*([^;]*?) \};", launcher)
     limits = dict((k, int(n)) for k, n in re.findall(r'\{ "(\w+)", (\d+) \}', not_yet.group(1))) if not_yet else {}
-    check(limits in ({"rando_dungeon_rewards": 1, "rando_songs": 2, "rando_keys": 2}, {"rando_dungeon_rewards": 2, "rando_songs": 2, "rando_keys": 2}),
-          "the launcher's list of settings not available yet is not the three known (%r)" % limits)
+    rando_seed = read("tools", "rando", "rando_seed.py")
+    songs_made = "\nSONGS_ANYWHERE = True\n" in rando_seed
+    check(songs_made or "\nSONGS_ANYWHERE = False\n" in rando_seed, "the script no longer says whether Songs' Anywhere is offered")
+    check(limits.get("rando_dungeon_rewards") in (1, 2) and limits.get("rando_keys") == 2 and
+          set(limits) == {"rando_dungeon_rewards", "rando_keys"} | (set() if songs_made else {"rando_songs"}) and limits.get("rando_songs", 2) == 2,
+          "the launcher's list of settings not available yet is not the ones known, or Songs' Anywhere is offered while the script holds it "
+          "off (SONGS_ANYWHERE), or held off while the script makes it (%r)" % limits)
     # (the frogs are no longer a choice: the row is kept for a seed's ID and shown nowhere, and Quest rewards says so)
     check('RandoHidden = new HashSet<string> { "rando_frogs" };' in launcher and "Page = hidden ? NoPage : page" in launcher and
           "if (!hidden) place++;" in launcher and "if (LauncherForm.RandoHidden.Contains(key)) continue;" in launcher and
@@ -82,9 +87,10 @@ def sources(rows):
           "if (Last == 0) return;" in launcher and "int choices = LauncherForm.RandoChoices(key, names.Length);" in launcher and
           "if (choices <= 1) { box.Items.Add(Selector.NotYet); box.Enabled = false;" in launcher,
           "a setting not available yet can still be picked on the page, from its list, by a pasted ID or in the New seed window")
-    check('"2, a song in any item\'s place, is not made yet: as 1"' in read("tools", "rando", "rando_seed.py") and
-          '2, one in any item\'s place, is not made yet: as 1' in read("tools", "rando", "rando_seed.py"),
-          "Songs' Anywhere or Dungeon rewards' Anywhere is made now: take it off the launcher's list of settings not available yet")
+    check('2, one in any item\'s place, is not made yet: as 1' in rando_seed,
+          "Dungeon rewards' Anywhere is made now: take it off the launcher's list of settings not available yet")
+    check("a.songs = (a.songs if SONGS_ANYWHERE else 1) if a.songs in (1, 2) else 0" in rando_seed,
+          "the script makes Songs' Anywhere though it is held off, or no longer reads the setting")
     check("AddSelectors(RandoRows, 3, cx, colW, null, 47, 45, true);" in launcher and '"Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About"' in launcher,
           "the launcher does not show its Randomizer page")
     # (more settings than the page has room for: the list scrolls, and a row is shown, lit and pressed only inside its view)

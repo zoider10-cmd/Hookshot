@@ -1496,12 +1496,13 @@ def skulltula_rule(h, area):
     return SKULLTULA_RULES.get(h, rule(area, "") | SKULLTULA_ASKS)
 
 
-def gate_skulltulas(rng, gives, drops, skulls, needs, skull_needs, fixed, share=SKULLTULA_GATING_SHARE, never=(), token=TOKEN):
+def gate_skulltulas(rng, gives, drops, skulls, needs, skull_needs, fixed, share=SKULLTULA_GATING_SHARE, never=(), token=TOKEN, keep=()):
     """Some of the gating items the logic put in chests (gives) moved to Gold Skulltulas that still drop their token
     (skulls: hashes, in a fixed order; drops: the ones that do not), each only if every gating item can still be
     got by the rules. The chest it leaves gives the token. needs and skull_needs: what a chest and a Skulltula ask
     for; fixed: [(what it asks for, the item)] of the gating items in chests that stay.
     never: gating items that are not tried (one not seen dropped by a Skulltula yet).
+    keep: chests whose gating item is not tried (a lesson that may hold only some items: a token is not one).
     token: what a Skulltula's own drop is, which the chest left gives (the Pieces of Heart lying in the world are
     placed by this too: theirs is the piece).
     Returns (what the chests give, what the Skulltulas drop, the spheres, how many were moved)."""
@@ -1516,7 +1517,7 @@ def gate_skulltulas(rng, gives, drops, skulls, needs, skull_needs, fixed, share=
     rng.shuffle(free)
     order = sorted(where)
     rng.shuffle(order)
-    order = [i for i in order if i not in never]   # (after the shuffle: the seeds made before `never` keep theirs)
+    order = [i for i in order if i not in never and where[i][1] not in keep]   # (after the shuffle: the seeds made before `never` keep theirs)
     moved = 0
     for item in order:
         if not free or rng.random() >= share:
@@ -2546,6 +2547,47 @@ SONGS = (
     Gift("song_nocturne", "Dm_MelodyGet_Shadow", (NOCTURNE,), NOCTURNE, "KakarikoVillage", "Sheik, Kakariko: the Nocturne of Shadow", SONG_ADULT | MEDALS3, "songs"),
     Gift("song_prelude", "Dm_MelodyGet_Shine", (PRELUDE,), PRELUDE, "Market", "Sheik, the Temple of Time: the Prelude of Light", SONG_ADULT | {BOW}, "songs"),
 )
+# ---- Songs: Anywhere (rando_songs 2, --songs 2) ----
+# A song is an item as any other: bought from a shop's shelf in a test seed, the Sun's Song and Saria's Song had the
+# scene of a song learnt and were played after, and worked (seen in play, 2026-11-14). So with Anywhere the twelve
+# songs are in the pool with the chests' items, the gifts' and the shelves', and a lesson is a place as a gift is.
+# What a lesson may hold is the one thing that is not free. Eight lessons are asked about by name (SONG_ASKED): the
+# game knows such a lesson is done by its song's flag (IsGet.<song>: the windmill man, Sheik in the meadow, the royal
+# tomb's stones, the sages' scenes, Fado; the Bolero's sets it itself), and those words are made to name what the
+# lesson gives now, as in Song spots. So what it gives must be got nowhere else and have that flag under its own
+# name: a song, or one of LESSON_ITEMS, when the seed has it once (lesson_items). An upgrade of a family
+# (LESSON_FAMILIES) only without Progressive items: with them what is found is not what is put in the pouch, and the
+# flag asked about would be another's. The other four (Zelda's Lullaby, Epona's Song, the Song of Time, the Prelude)
+# are named by no flow that asks whether they are done, by no logic module and no actor's pack (every file of the
+# game was read for the songs' names): the story's own steps keep them, and they hold anything. The list of flags has
+# one expression more that reads the Lullaby's flag, by its hash; it reads the song, as it does in Song spots.
+# The eight are given the items they may hold that are not songs first, so that as many songs as can be are out in
+# the world; when the seed has fewer such items than lessons left, a gating song or item is put in a lesson by the
+# logic (place's `only`), and the rest of them hold songs.
+# The ocarina's own flow adds the lesson's song when the notes are played back (SONG_PLAY_FLOW). A lesson that gives
+# a song adds that song there, as in Song spots; one that gives anything else adds a green rupee there
+# (SONG_PLAY_OTHER), so that its item is got once, by the scene, whatever it is.
+# NOT SEEN IN PLAY: a lesson that gives something that is not a song; a song from a chest or a character.
+# SONGS_ANYWHERE: False holds the choice off (it is then as Song spots, and the launcher does not offer it: its
+# RandoNotYet, checked against this by tests/test_rando_settings.py), as REWARDS_READY does the dungeons' rewards.
+SONGS_ANYWHERE = True
+SONG_ASKED = ("song_saria", "song_sun", "song_storms", "song_minuet", "song_bolero", "song_serenade", "song_requiem", "song_nocturne")
+LESSON_ITEMS = ("Item_AgonyStone", "Item_Arrow_Fire", "Item_Arrow_Ice", "Item_Arrow_Light", "Item_Boomerang", "Item_Hammer",
+                "Item_DinFire", "Item_FaroreWind", "Item_NayruLove")
+LESSON_FAMILIES = ("Item_Hookshot", "Item_Longshot", "Item_BombBag_Small", "Item_BombBag_Medium", "Item_BombBag_Large", "Item_BulletBag_Medium",
+                   "Item_BulletBag_Large", "Item_NutBag_Medium", "Item_NutBag_Large", "Item_StickBag_Medium", "Item_StickBag_Large",
+                   "Item_Quiver_Medium", "Item_Quiver_Large", "Item_Scale_Silver", "Item_Scale_Gold", "Item_Wallet_Medium", "Item_Wallet_Large")
+SONG_PLAY_OTHER = "Obj_Rupee_Green"
+
+
+def lesson_items(counts, progressive, flagged=None):
+    """the items a lesson that is asked about by name may hold, the songs apart: LESSON_ITEMS, and LESSON_FAMILIES
+    without Progressive items, that the seed has once (counts: {item: how many}) and that `flagged` says yes to
+    (the game's list has its flags; None: not asked)"""
+    names = LESSON_ITEMS + (() if progressive else LESSON_FAMILIES)
+    return frozenset(i for i in names if counts.get(i, 0) == 1 and (flagged is None or flagged(i)))
+
+
 # ---- Dungeon rewards: the Spiritual Stones and the Medallions (rando_dungeon_rewards, --dungeon-rewards) ----
 # Each of eight dungeons ends in a scene that gives its stone or medallion, by the flow the other gifts go through
 # (GetPouchContentByActorName, the item's name a string of the scene's flow): the Deku Tree's last words, Darunia on
@@ -2743,21 +2785,41 @@ def remove_old(mod):
     return n
 
 
-def place(rng, spots, which, keys_mode, needs=None, bound=None):
+def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart=()):
     """What each chest holds. spots: {hash: (area, item, is a dungeon's chest, why it stays or None)}, in a fixed order.
     needs: {hash: what the chest asks for} for the logic, or None: no logic.
     Returns ({hash: item} for the chests that take part, how many chests stay for each reason, the spheres or None).
     With the logic, the thirteen gating items are placed so that each can be reached with the others (an assumed
     fill), counting the ones that stay in their own chests; then the rest goes where there is room.
     bound: None, or (items, hashes): those items go to those spots only, and those spots hold nothing else (the songs
-    and the lessons); or a list of such pairs, each a group of its own (the songs, and the dungeons' rewards)."""
+    and the lessons); or a list of such pairs, each a group of its own (the songs, and the dungeons' rewards).
+    only: None, or {hash: (items, more items)}: that spot holds one of those items and nothing else (Songs: Anywhere,
+    the lessons asked about by name). It is given one of `items` when one is left, else one of `more items`; the
+    logic may put a gating item of either there, and does when too few of the others are left for them all.
+    apart: spots that are not a dungeon's chests though they are in its area (the lessons)."""
+    only = only or {}
     groups = [g for g in ([bound] if isinstance(bound, tuple) else bound or []) if g]
     bound = groups or None
     bound_items = frozenset(i for items, _ in groups for i in items)
     bound_spots = frozenset(h for _, hashes in groups for h in hashes)
     group_of_item = lambda item: next((k for k, (items, _) in enumerate(groups) if item in items), None)
     group_of_spot = lambda h: next((k for k, (_, hashes) in enumerate(groups) if h in hashes), None)
-    fits = lambda item, h: group_of_item(item) == group_of_spot(h)
+    fits = lambda item, h: group_of_item(item) == group_of_spot(h) and (h not in only or item in only[h][0] or item in only[h][1])
+
+    def fill_only(spots_left, items_left):
+        """{spot: item} for the spots of `only` among spots_left, from items_left: the first kind while one is
+        left, then the other. None when one of them has nothing it may hold."""
+        out, left = {}, list(items_left)
+        for h in [h for h in spots_left if h in only]:
+            for kind in only[h]:
+                mine = sorted(set(i for i in left if i in kind))
+                if mine:
+                    break
+            else:
+                return None
+            out[h] = rng.choice(mine)
+            left.remove(out[h])
+        return out
     stays = collections.Counter()
     pool = []
     for h, (area, item, dungeon, why) in spots.items():
@@ -2776,13 +2838,14 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None):
         by_area.setdefault(spots[h][0], []).append(h)
     for area, here in by_area.items():
         own = [spots[h][1] for h in here if spots[h][1] in DUNGEON_ITEMS]
-        if bound:   # (a lesson in a dungeon's area is not one of its chests)
-            here = [h for h in here if h not in bound_spots]
+        if bound or apart:   # (a lesson in a dungeon's area is not one of its chests)
+            here = [h for h in here if h not in bound_spots and h not in apart]
         for h, item in zip(rng.sample(here, len(own)), own):
             gives[h] = item
     rest = [h for h in pool if h not in gives]
     items = [spots[h][1] for h in pool if spots[h][1] not in DUNGEON_ITEMS]
     spheres = None
+    held = None   # (what the spots of `only` hold that the logic did not put there)
     if needs is not None:
         gating = sorted(i for i in items if i in PROGRESSION)
         # (a gating item in a chest that stays is got there, as the game has it)
@@ -2791,14 +2854,24 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None):
             order = list(gating)
             rng.shuffle(order)
             placed, ok = {}, True
+            # (the spots of `only` that the items which are not gating cannot fill: so many gating items go to them)
+            short = 0
+            if only:
+                plain = [i for i in items if i not in PROGRESSION]
+                short = max(0, sum(1 for h in rest if h in only) - sum(1 for i in plain if any(i in kind for h in only for kind in only[h])))
             for k, item in enumerate(order):
                 # Link with every gating item still to be placed, and what the chests filled so far then give him
                 have = reach(order[k + 1:], fixed + [(needs[h], i) for h, i in placed.items()])
-                free = [h for h in rest if h not in placed and needs[h] <= have and (not bound or fits(item, h))]
+                free = [h for h in rest if h not in placed and needs[h] <= have and (not (bound or only) or fits(item, h))]
+                if short and any(h in only for h in free):
+                    free, short = [h for h in free if h in only], short - 1
                 if not free:
                     ok = False
                     break
                 placed[rng.choice(free)] = item
+            if ok and only:
+                held = fill_only([h for h in rest if h not in placed], [i for i in items if i not in PROGRESSION])
+                ok = held is not None
             if ok:
                 spheres = collect(fixed + [(needs[h], i) for h, i in placed.items()])
                 if {i for sphere in spheres for i in sphere} >= {i for _, i in fixed} | set(gating):
@@ -2809,6 +2882,15 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None):
         gives.update(placed)
         rest = [h for h in rest if h not in placed]
         items = [i for i in items if i not in PROGRESSION]
+    elif only:
+        held = fill_only(rest, items)
+        if held is None:
+            raise ValueError("a lesson has nothing left that it may hold")
+    if held:
+        gives.update(held)
+        rest = [h for h in rest if h not in held]
+        for item in held.values():
+            items.remove(item)
     for group_items, group_spots in groups:   # (the songs that are left, among the lessons that are left; and so each group)
         mine, theirs = [h for h in rest if h in group_spots], [i for i in items if i in group_items]
         rng.shuffle(theirs)
@@ -2846,8 +2928,8 @@ def main():
                                                                      "its shelf, 1 both take part (the chest with Major items, the shelf with Shops)")
     p.add_argument("--heart-pieces", action="store_true", help="as rando_heart_pieces=1: the Pieces of Heart lying in the world change places with "
                                                                 "the chests' items a pick-up can be, and may hold a gating item")
-    p.add_argument("--songs", type=int, choices=(0, 1, 2), help="in place of rando_songs: the twelve songs are shuffled among the twelve lessons (SONGS). "
-                                                               "2, a song in any item's place, is not made yet: as 1")
+    p.add_argument("--songs", type=int, choices=(0, 1, 2), help="in place of rando_songs: 1, the twelve songs are shuffled among the twelve lessons (SONGS). "
+                                                               "2, Anywhere: the songs are in the pool with every other item, and a lesson is a place as a gift is")
     p.add_argument("--dungeon-rewards", type=int, choices=(0, 1, 2), help="in place of rando_dungeon_rewards: the eight dungeons' stones and medallions are "
                                                                          "shuffled among their eight endings (REWARDS). 2, one in any item's place, is not made yet: as 1")
     p.add_argument("--progressive", action="store_true", help="as rando_progressive=1: the rules count an upgrade found as the next of its family")
@@ -2878,7 +2960,7 @@ def main():
         print("this seed was made with the big items shuffled: Major items is now On in the options, to keep it as it is")
     a.event_chests = a.event_chests or ini["rando_major"] != 0
     a.songs = a.songs if a.songs is not None else ini["rando_songs"]
-    a.songs = 1 if a.songs in (1, 2) else 0
+    a.songs = (a.songs if SONGS_ANYWHERE else 1) if a.songs in (1, 2) else 0
     a.dungeon_rewards = a.dungeon_rewards if a.dungeon_rewards is not None else ini["rando_dungeon_rewards"]
     a.dungeon_rewards = 1 if a.dungeon_rewards in (1, 2) and REWARDS_READY else 0
     a.heart_pieces = a.heart_pieces or ini["rando_heart_pieces"] != 0
@@ -2950,7 +3032,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2" if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 1" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -3122,7 +3204,7 @@ def main():
     # (a string seed: the same on every Python 3. The seeds made before --event-chests keep their shuffle without it)
     logic = logic_now   # (without the event chests or the songs no gating item moves: nothing to ask)
     rng = random.Random("stage2:%d:%d:%d%s%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else "",
-                                                   ":songs" if a.songs else ""))
+                                                   ":songs2" if a.songs == 2 else ":songs" if a.songs else ""))
     needs = {h: rule(s[0], s[6]) for h, s in spots.items()}
     if a.quests:   # (the rules with the gifts' two gating items named; a gift asks for what its line of GIFTS says)
         needs = {h: quest_need(gifts[h].need, gifts[h].area) if h in gifts else quest_need(n, spots[h][0]) for h, n in needs.items()}
@@ -3139,11 +3221,31 @@ def main():
     # (what a Gold Skulltula asks for, by the same settings)
     skull_asks = lambda h: step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
         quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0])))
+    # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags)
+    lesson_safe, lesson_only = frozenset(), {}
+    if a.songs == 2:
+        try:
+            folder = os.path.join(romfs, FLAG_LIST)
+            n = sorted(n for n in os.listdir(folder) if n.startswith("GameDataList.") and ".byml" in n.lower())[0]
+            flag_list = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
+        except (OSError, IndexError, ValueError) as e:
+            sys.exit("Songs: Anywhere: the game's list of flags: %s. Nothing written." % e)
+
+        def flagged(item):
+            try:
+                flag_defaults(flag_list, {word + item: False for word in SONG_WORDS if word})
+            except ValueError:
+                return False
+            return True
+
+        lesson_safe = lesson_items(collections.Counter(s[1] for s in spots.values()), a.progressive, flagged)
+        lesson_only = {gift_hash(key): (lesson_safe, frozenset(SONG_ITEMS)) for key in SONG_ASKED}
     try:
         gives, stays, spheres = place(rng, collections.OrderedDict((h, tuple(s[:4])) for h, s in spots.items()), which, keys_mode,
                                       needs if logic else None,
-                                      [group for group in ((frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs else None,
-                                                           (frozenset(REWARD_ITEMS), frozenset(endings)) if a.dungeon_rewards else None) if group] or None)
+                                      [group for group in ((frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs == 1 else None,
+                                                           (frozenset(REWARD_ITEMS), frozenset(endings)) if a.dungeon_rewards else None) if group] or None,
+                                      only=lesson_only, apart=frozenset(lessons) if a.songs == 2 else ())
     except ValueError as e:
         sys.exit("%s. Nothing written. Try Chests: All, or --no-logic." % e)
     unknown = sorted({s[0] for h, s in spots.items() if s[0] not in RULES and h not in gifts})
@@ -3164,7 +3266,8 @@ def main():
             gives, skull_drops, spheres, gated = gate_skulltulas(
                 random.Random("skulltulas gated:%d:%d:%d" % (seed, a.skulltulas, len(able))), gives, skull_drops,
                 able, needs, {h: skull_asks(h) for h in able}, fixed,
-                never=((SSC,) if a.quests else ()) + (tuple(SHOP_GATES) if a.shops else ()) + (tuple(SONG_GATES) if a.songs else ()))
+                never=((SSC,) if a.quests else ()) + (tuple(SHOP_GATES) if a.shops else ()) + (tuple(SONG_GATES) if a.songs else ()),
+                keep=frozenset(lesson_only))
             print("Gold Skulltulas: %d gating item%s now dropped by one" % (gated, "" if gated == 1 else "s"))
         for h, item in skull_drops.items():
             drops.setdefault(h, item)   # (a test's drop for the same Skulltula stays)
@@ -3185,7 +3288,8 @@ def main():
             gives, heart_drops, spheres, gated = gate_skulltulas(
                 random.Random("hearts gated:%d:%d" % (seed, len(pieces))), gives, heart_drops, list(pieces), needs,
                 {h: heart_asks(h) for h in pieces}, fixed, token=HEART,
-                never=((SSC,) if a.quests else ()) + (tuple(SHOP_GATES) if a.shops else ()) + (tuple(SONG_GATES) if a.songs else ()))
+                never=((SSC,) if a.quests else ()) + (tuple(SHOP_GATES) if a.shops else ()) + (tuple(SONG_GATES) if a.songs else ()),
+                keep=frozenset(lesson_only))
         else:
             print("Heart Pieces: nothing moves without the logic (Major items, or Songs)")
         for word in os.environ.get("RANDO_TEST_HEARTS", "").split():   # (a test: "<a piece's hash>=<an item>")
@@ -3342,24 +3446,41 @@ def main():
     song_parts = set()
     if lessons:
         now_gives = {g.item: gives[h] for h, g in lessons.items()}
-        words = song_words(now_gives)
+        # (who asks about a lesson asks for what it gives now, when that has the flags asked about: a song, or one of
+        #  the items a lesson asked about by name may hold. A lesson that gives anything else is one nothing asks about)
+        asked = {old: new for old, new in now_gives.items() if new in SONG_ITEMS or new in lesson_safe}
+        stray = sorted(g.name for h, g in lessons.items() if h in lesson_only and g.item not in asked)
+        if stray:
+            sys.exit("a lesson that is asked about by name gives what has no flag of its own: %s. Nothing written." % ", ".join(stray))
+        words = song_words(asked)
+        changes = any(old != new for old, new in now_gives.items())
         taught = set()
-        for flow in SONG_FLOWS if words else ():
+        own = {g.flow: g.item for g in lessons.values()}
+        for flow in SONG_FLOWS if changes else ():
             rel = "%s/%s.bfevfl.zs" % (GIFT_FLOWS, flow)
             try:
                 was = gift_files[rel] if rel in gift_files else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
-                now, found = gift_items(was, words, kinds=(0, 1, 4))
+                now = None
+                if a.songs == 1:   # (Song spots: one pass, as its seeds were made)
+                    now, found = gift_items(was, words, kinds=(0, 1, 4))
+                    taught |= found
+                elif flow in own and now_gives[own[flow]] != own[flow]:   # (the lesson's own gift: the call of the scene of an item got)
+                    now, found = gift_items(was, {own[flow]: now_gives[own[flow]]}, kinds=(4,))
+                    taught |= found
+                if words and a.songs != 1:   # (what the flow sets and asks about)
+                    then, found = gift_items(now if now is not None else was, words, kinds=(0, 1))
+                    now = then if then is not None else now
             except (OSError, ValueError, struct.error) as e:
                 sys.exit("a song's flow, %s: %s. Nothing written." % (flow, e))
-            taught |= found
             if now is not None:
                 gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
         missed = sorted(old for old, new in now_gives.items() if old != new and old not in taught)
         if missed:
             sys.exit("no lesson gives %s (the game's flows are not the ones the songs were listed from). Nothing written." % ", ".join(missed))
-        if words:   # (the ocarina's own flow: what it adds when a lesson's notes have been played back)
+        if changes:   # (the ocarina's own flow: what it adds when a lesson's notes have been played back)
             rel = "%s/%s.bfevfl.zs" % (GIFT_FLOWS, SONG_PLAY_FLOW)
-            adds = {(entry, old): new for old, new in now_gives.items() if old != new for entry in SONG_PLAY_ENTRIES}
+            adds = {(entry, old): new if new in SONG_ITEMS else SONG_PLAY_OTHER
+                    for old, new in now_gives.items() if old != new for entry in SONG_PLAY_ENTRIES}
             try:
                 now, found = gift_items(unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts), adds, kinds=(0,))
             except (OSError, ValueError, struct.error) as e:
@@ -3370,14 +3491,17 @@ def main():
             gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
         for rel in SONG_STONES if words else ():
             try:
-                now = song_stone(open(os.path.join(romfs, *rel.split("/")), "rb").read(), now_gives)
+                now = song_stone(open(os.path.join(romfs, *rel.split("/")), "rb").read(), asked)
             except (OSError, ValueError, struct.error, IndexError) as e:
                 sys.exit("a royal tomb's stone, %s: %s. Nothing written." % (rel, e))
             if now is not None:
                 gift_files[rel] = now
                 song_parts.add(rel)
-        print("Songs: %d lessons take part, %d now teach another song%s" % (
-            len(lessons), sum(1 for old, new in now_gives.items() if old != new),
+        print("Songs%s: %d lessons take part, %d now %s%s" % (
+            " (Anywhere)" if a.songs == 2 else "", len(lessons), sum(1 for old, new in now_gives.items() if old != new),
+            "give something else, %d of them a song; %d songs are out in the world" % (
+                sum(1 for old, new in now_gives.items() if old != new and new in SONG_ITEMS),
+                sum(1 for i in SONG_ITEMS if i not in now_gives.values())) if a.songs == 2 else "teach another song",
             "; the royal tomb's stones ask for %s" % now_gives[SUN] if song_parts else ""))
     # ---- a scrub that sells another item no longer names its own (English) ----
     lines = sorted({label for h, g in gifts.items() if g.key in SCRUB_LINES and gives[h] != g.item for label in SCRUB_LINES[g.key]})
