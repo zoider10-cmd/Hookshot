@@ -2131,7 +2131,7 @@ class LauncherForm : Form {
         new[] { "Save copies", "Kept copies of your saves: more than the game's one save of your own." },
     };
     // (env name, value when on, label, help, value when off; "" = no line, the game's default)
-    const int FixPitch = 92;   // (five switches; 80 holds six over the bottom row of buttons)
+    const int FixPitch = 96;   // (Mako 4.1's: four switches under More's row)
     static readonly string[][] Fixes = {
         // (the switch wrote no line when on and -1 when off, and the renderer takes both as 0, no wait (vk_replay.cpp: RX_VK_WAIT_GPU=<frames>):
         // it did nothing either way. It writes 1 now. Seen without a player, the Market walked into from Hyrule Field: 15 to 20 frames
@@ -2268,7 +2268,7 @@ class LauncherForm : Form {
         langSel.Changed = s => { if (!loading) SaveLanguage(); };
         widgets.Add(langSel);
         for (int i = 0; i < Fixes.Length; i++) {
-            var tg = new Toggle { Key = Fixes[i][0], Label = Fixes[i][2], HelpText = Fixes[i][3], Page = 3, R = new RectangleF(cx, 150 + i * FixPitch, cw, FixPitch - 4) };
+            var tg = new Toggle { Key = Fixes[i][0], Label = Fixes[i][2], HelpText = Fixes[i][3], Page = 3, R = new RectangleF(cx, 150 + i * FixPitch, cw, FixPitch - 6) };
             tg.Changed = t => { if (!loading) SaveEnv(); };
             fixes[tg.Key] = tg; widgets.Add(tg);
         }
@@ -4096,7 +4096,6 @@ class LauncherForm : Form {
                                MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes;
     }
 
-    [STAThread]
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int how);
     // (a name for the folder that a mutex's name can hold: no backslash, the same however the path's letters are cased)
@@ -4105,6 +4104,9 @@ class LauncherForm : Form {
         unchecked { foreach (char c in dir.TrimEnd('\\').ToLowerInvariant()) h = (h ^ c) * 0x01000193u; }
         return h.ToString("x8");
     }
+    // (on Main itself: it had come to stand on the import above, which left the launcher's thread without it, and
+    //  Mako 4.1's drop of a mod on the window, AllowDrop, then stopped the launcher as it opened)
+    [STAThread]
     static void Main(string[] args) {
         if (args.Length == 3 && args[0] == "--seed-id") {   // (tests/test_rando_settings.py: the ID of a seed and its choices, "3,0,0,...")
             var parts = args[2].Length == 0 ? new string[0] : args[2].Split(',');
