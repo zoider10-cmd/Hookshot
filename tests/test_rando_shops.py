@@ -231,6 +231,11 @@ def main():
           "the place does not sell the new actor once from the start, or another place changed: %r" % sold)
     first = read(seed.shop_goods(byml(goods), {0: ("Shop_Heart", name)}))["GoodsList"][0]
     check(first == {"Actor": REF % name, "StockNum": 1}, "what the game waited for before it showed the shelf is not left out: %r" % first)
+    # (a shelf was for sale again after the Sun's Song: seen in play. One whose item is got once names the flag that says so)
+    kept = read(seed.shop_goods(byml(goods), {0: ("Shop_Heart", name), 1: ("Shop_DekuStick", name)}, {0: "IsGet.Item_Hammer"}))["GoodsList"]
+    check(kept[0] == {"Actor": REF % name, "StockNum": 1, "Release": {"IsCheckReleaseGameData": 0, "IsCheckSoldOutGameData": 1, "SoldOutGameData": "IsGet.Item_Hammer"}} and
+          kept[1] == {"Actor": REF % name, "IsDefaultFocus": 1, "StockNum": 1} and seed.SHOP_SOLD == "IsGet.",
+          "a shelf whose item is got once does not name the flag that says it is sold out, or another shelf does: %r" % kept[:2])
     for sells, why in (({1: ("Shop_Heart", name)}, "a place that is another actor's"), ({7: ("Shop_Heart", name)}, "a place past the list")):
         try:
             seed.shop_goods(byml(goods), sells)
@@ -313,7 +318,8 @@ def main():
     check('spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]' in script and "if gives[h] != g.item and g.flow and h not in lessons:" in script,
           "the shelves are not spots among the chests', or a shelf is taken for a scene's gift")
     check('shop_files["Pack/Actor/%s.pack.zs" % actor] = new' in script and 'shop_files["RSDB/" + n] = table' in script and
-          "parts[name] = shop_goods(parts[name], sells)" in script and "new, count = shelf_actors(data, on_shelf, lifts, scales, turns)" in script and
+          "parts[name] = shop_goods(parts[name], sells, sold)" in script and
+          "if its is shop and (gives[h] in SONG_ITEMS or gives[h] in lesson_safe)}" in script and "if a.songs == 2 or a.shops:" in script and "new, count = shelf_actors(data, on_shelf, lifts, scales, turns)" in script and
           "text = shop_caption(text, name) or text" in script and "list(shop_files.items())" in script and
           'new_tables["System/Resource/" + n] = shop_table(' in script,
           "a shelf actor's pack, its rows, the goods lists, the map's shelves or the words are not written with the seed, or the size table does not know them")
