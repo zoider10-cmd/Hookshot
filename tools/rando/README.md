@@ -188,6 +188,14 @@ is. The teacher still plays the notes of the song the game has there; the scene 
   seeds are as they were, byte for byte (compared on a seed made before and after). **Not seen in play: a lesson
   that gives something that is not a song; a song from a chest or from a character; the four lessons that hold
   anything given a second time or not (nothing was found that would give them twice).**
+- **More songs out with Progressive items** (asked for: "make all songs randomized with progressive items on").
+  Two changes. The gating items a lesson may hold (the Hammer, the Boomerang) are put in the lessons by the logic
+  before any song is (`place`: the lessons the plain items cannot fill take gating items of their first kind):
+  on the settings at hand 8 songs are out in the world, where 5 were. And five more items are a lesson's
+  (`LESSON_NAMED`: the Lens of Truth, the two boots, the Mirror Shield, the Kokiri Sword), which are got once and
+  have the two flags under the pouch's name for them (`IsGet.Armor_Adult_HeavyBoot`): with them 10 to 12 of the 12
+  songs are out (three seeds tried). **They are held off (`LESSON_NAMED_READY`) until it is seen that the game sets
+  those flags when the item is given by its own name.**
 - Left as the game has them, not looked into: Kakariko's adult logic file, which names the Song of Storms' flag (an
   `ainb`, not changed in place), Navi's hints, the Scarecrow's Song. The Serenade's lesson is started by the Ice
   Cavern's big chest (`SageOfWater_MelodyGet_Water`), whatever that chest holds.

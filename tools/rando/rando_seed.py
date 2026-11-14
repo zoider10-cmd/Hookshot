@@ -2660,14 +2660,31 @@ LESSON_FAMILIES = ("Item_Hookshot", "Item_Longshot", "Item_BombBag_Small", "Item
                    "Item_BulletBag_Large", "Item_NutBag_Medium", "Item_NutBag_Large", "Item_StickBag_Medium", "Item_StickBag_Large",
                    "Item_Quiver_Medium", "Item_Quiver_Large", "Item_Scale_Silver", "Item_Scale_Gold", "Item_Wallet_Medium", "Item_Wallet_Large")
 SONG_PLAY_OTHER = "Obj_Rupee_Green"
+# More of them (asked for: "make all songs randomized with progressive items on"; with them a seed had too few items a
+# lesson may hold, and about half the songs stayed in lessons). Five items of no family are got once and have the two
+# flags, under the name the pouch has them by, not their own (LESSON_NAMED: the item, the name its flags have):
+# the Lens of Truth, the two boots, the Mirror Shield and the Kokiri Sword. With them a seed has nine or so items for
+# its eight lessons, and every song can be out in the world. A lesson that gives one asks about the flags of that
+# name (lesson_flag, song_words).
+# LESSON_NAMED_READY: False until it is seen that the game sets those flags when the item is given by its own name
+# (a lesson whose flag is never set is taught again and again); then they are not among a lesson's items.
+LESSON_NAMED = {"Item_GlassTruth": "Armor_GlassTruth", "Item_HeavyBoot": "Armor_Adult_HeavyBoot", "Item_HoverBoot": "Armor_Adult_HoverBoot",
+                "Item_Shield_Mirror": "Weapon_Shield_Mirror", "Item_Sword_Kokiri": "Weapon_Sword_Kokiri"}
+LESSON_NAMED_READY = False
 
 
-def lesson_items(counts, progressive, flagged=None):
-    """the items a lesson that is asked about by name may hold, the songs apart: LESSON_ITEMS, and LESSON_FAMILIES
-    without Progressive items, that the seed has once (counts: {item: how many}) and that `flagged` says yes to
-    (the game's list has its flags; None: not asked)"""
-    names = LESSON_ITEMS + (() if progressive else LESSON_FAMILIES)
-    return frozenset(i for i in names if counts.get(i, 0) == 1 and (flagged is None or flagged(i)))
+def lesson_flag(item):
+    """the name an item's flags have (IsGet.<name>, HavePlayedGetEvent.<name>): its own, or the pouch's for it"""
+    return LESSON_NAMED.get(item, item)
+
+
+def lesson_items(counts, progressive, flagged=None, named=None):
+    """the items a lesson that is asked about by name may hold, the songs apart: LESSON_ITEMS, LESSON_NAMED's (named:
+    in place of LESSON_NAMED_READY), and LESSON_FAMILIES without Progressive items, that the seed has once (counts:
+    {item: how many}) and that `flagged` says yes to (the game's list has the flags of that name; None: not asked)"""
+    named = LESSON_NAMED_READY if named is None else named
+    names = LESSON_ITEMS + (tuple(LESSON_NAMED) if named else ()) + (() if progressive else LESSON_FAMILIES)
+    return frozenset(i for i in names if counts.get(i, 0) == 1 and (flagged is None or flagged(lesson_flag(i))))
 
 
 # ---- Dungeon rewards: the Spiritual Stones and the Medallions (rando_dungeon_rewards, --dungeon-rewards) ----
@@ -2734,7 +2751,7 @@ def song_need(need, area, key=None):
 def song_words(now):
     """{what a flow names: what it names now} for the songs that changed places: now is {a lesson's own song: the
     song it gives}. Each song's name, its flag and its scene's flag."""
-    return {word + old: word + new for old, new in now.items() if old != new for word in SONG_WORDS}
+    return {word + old: word + lesson_flag(new) for old, new in now.items() if old != new for word in SONG_WORDS}
 
 
 def song_stone(data, now):
@@ -2936,17 +2953,18 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart
             order = list(gating)
             rng.shuffle(order)
             placed, ok = {}, True
-            # (the spots of `only` that the items which are not gating cannot fill: so many gating items go to them)
+            # (the spots of `only` that the items of their first kind which are not gating cannot fill: so many gating
+            #  items of that kind go to them, so that the second kind, the songs, is left for the world)
             short = 0
             if only:
                 plain = [i for i in items if i not in PROGRESSION]
-                short = max(0, sum(1 for h in rest if h in only) - sum(1 for i in plain if any(i in kind for h in only for kind in only[h])))
+                short = max(0, sum(1 for h in rest if h in only) - sum(1 for i in plain if any(i in only[h][0] for h in only)))
             for k, item in enumerate(order):
                 # Link with every gating item still to be placed, and what the chests filled so far then give him
                 have = reach(order[k + 1:], fixed + [(needs[h], i) for h, i in placed.items()])
                 free = [h for h in rest if h not in placed and needs[h] <= have and (not (bound or only) or fits(item, h))]
-                if short and any(h in only for h in free):
-                    free, short = [h for h in free if h in only], short - 1
+                if short and any(h in only and item in only[h][0] for h in free):
+                    free, short = [h for h in free if h in only and item in only[h][0]], short - 1
                 if not free:
                     ok = False
                     break
@@ -3117,7 +3135,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 2" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 1" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +

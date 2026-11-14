@@ -145,9 +145,39 @@ def main():
     check(not set(S.LESSON_ITEMS + S.LESSON_FAMILIES) & set(S.SONG_ITEMS) and S.SONG_PLAY_OTHER == "Obj_Rupee_Green" and
           not any(i.startswith(("TBox_", "Obj_")) for i in S.LESSON_ITEMS + S.LESSON_FAMILIES),
           "a lesson may hold a song by the items' list, or something a seed has many of")
+    # (more of them, for every song to be out with Progressive items: five items whose flags have the pouch's name for
+    #  them. Not a lesson's until it is seen that the game sets those flags: LESSON_NAMED_READY)
+    named = collections.Counter({"Item_HeavyBoot": 1, "Item_GlassTruth": 1, "Item_Shield_Mirror": 2, "Item_Hammer": 1})
+    check(S.lesson_items(named, True, named=True) == {"Item_HeavyBoot", "Item_GlassTruth", "Item_Hammer"} and
+          S.lesson_items(named, True, named=False) == {"Item_Hammer"} and
+          S.lesson_items(named, True, lambda name: name != "Armor_GlassTruth", named=True) == {"Item_HeavyBoot", "Item_Hammer"},
+          "an item whose flags have another name is a lesson's when it is not ready, or is asked about by its own name")
+    check(S.lesson_flag("Item_HeavyBoot") == "Armor_Adult_HeavyBoot" and S.lesson_flag("Item_Hammer") == "Item_Hammer" and
+          S.song_words({S.SUN: "Item_HeavyBoot"}) == {S.SUN: "Armor_Adult_HeavyBoot", "IsGet." + S.SUN: "IsGet.Armor_Adult_HeavyBoot",
+                                                      "HavePlayedGetEvent." + S.SUN: "HavePlayedGetEvent.Armor_Adult_HeavyBoot"} and
+          set(S.LESSON_NAMED) == {"Item_GlassTruth", "Item_HeavyBoot", "Item_HoverBoot", "Item_Shield_Mirror", "Item_Sword_Kokiri"} and
+          not set(S.LESSON_NAMED) & set(S.LESSON_ITEMS + S.LESSON_FAMILIES),
+          "a lesson that gives such an item is not asked about by the name its flags have")
     was = S.PROGRESSION
     S.PROGRESSION = S.PROGRESSION | S.SONG_GATES
     try:
+        # (the gating items a lesson may hold go to the lessons before a song does: the Hammer and the Boomerang here)
+        spots, needs = collections.OrderedDict(), {}
+        for k, item in enumerate(sorted(was) + ["TBox_Rupee_Blue"] * 40):
+            spots[k] = ("HyruleField", item, False, None)
+            needs[k] = S.NONE
+        lessons = {}
+        for g in S.SONGS:
+            h = S.gift_hash(g.key)
+            lessons[h] = g
+            spots[h] = (g.area, g.item, None, None)
+            needs[h] = S.NONE
+        safe = S.lesson_items(collections.Counter(s[1] for s in spots.values()), True)
+        only = {S.gift_hash(key): (safe, frozenset(S.SONG_ITEMS)) for key in S.SONG_ASKED}
+        check(safe == {S.HAM, S.BM}, "the test's seed has other items for the lessons than the Hammer and the Boomerang: %r" % sorted(safe))
+        for n in range(12):
+            gives, _, _ = S.place(random.Random(n), spots, 3, 0, needs, None, only=only, apart=frozenset(lessons))
+            check(sum(1 for h in only if gives[h] in safe) == 2, "seed %d: a gating item a lesson may hold is not in a lesson, and a song is in its place" % n)
         for extra, least in (((), 1), (("Item_AgonyStone", "Item_Arrow_Ice", "Item_Arrow_Fire"), 0)):
             spots, needs = collections.OrderedDict(), {}
             for k, item in enumerate(sorted(was) + ["TBox_Rupee_Blue"] * 40 + list(extra)):
@@ -204,7 +234,7 @@ def main():
 
     # ---- the script, the menu and the game ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_songs": 0' in script and '(" songs 2%s" % (" anywhere 1" if a.songs == 2 else "") if a.songs else "")' in script and
+    check('"rando_songs": 0' in script and '(" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "")' in script and
           "logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic" in script and '":songs2" if a.songs == 2 else ":songs" if a.songs else ""' in script,
           "the script does not read the setting, does not name it in the seed's stamp (Song spots' as it was, Anywhere apart), or leaves the logic off with it")
     check("(frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs == 1 else None," in script and "now, found = gift_items(was, words, kinds=(0, 1, 4))" in script and
