@@ -360,6 +360,8 @@ static void live_input(void) {
                 void rx_flash_dark_arm(void);   /* gpu/render/rx_core.cpp: arms RX_FLASH_DARK_DUMP (RX_FLASH_DARK_AFTER=-1) */
                 if (!strncmp(line, "!flasharm", 9)) rx_flash_dark_arm();
                 extern volatile int hos_oot_live_action;   /* host/hos_main.c: "!cheat <action>", as the Cheats page sends */
+                void hos_input_play_start(void);   /* (below) */
+                if (!strncmp(line, "!play", 5)) hos_input_play_start();   /* (HOS_INPUT_PLAY: the recorded run from now) */
                 if (!strncmp(line, "!cheat ", 7)) __atomic_store_n(&hos_oot_live_action, atoi(line + 7), __ATOMIC_RELAXED);
                 hos_log("hid: live command at %.1f s: %.*s", at / 1000.0, (int)(n > 1 ? n - 1 : 0), line);
                 continue;
@@ -789,6 +791,131 @@ static int flight_jump_shortcut(uint64_t *buttons, int mode, int menu_open, int 
     return mode > 0;
 }
 
+/* (Mako 4.1) A player's run, recorded and played back, for measured tests that do exactly what the player did.
+   HOS_INPUT_RECORD=<file>: from the first time the left stick moves (the player in the game, the menus left behind),
+   every change of what the game reads (buttons, the four stick axes, as the game gets them) is written as
+   "<ms> <buttons hex> <lx> <ly> <rx> <ry>", ms from that first move.
+   HOS_INPUT_PLAY=<file>: such a file played back, from the live command "!play" (HOS_INPUT_LIVE) or, without a live
+   file, from the first stick move as recording does; while it plays, its state is what the game reads. */
+typedef struct { int64_t ms; uint64_t buttons; int32_t stick[4]; } RecStep;
+static RecStep *play_steps;
+static int play_n = -1, play_at;
+static volatile LONG64 play_t0;   /* (0: not started) */
+static volatile LONG play_asked;    /* ("!play" read: it starts once no menu is in front for 1 s, B pressed meanwhile) */
+static void play_begin(void) {
+    if (!InterlockedCompareExchange64(&play_t0, 0, 0)) {
+        InterlockedExchange64(&play_t0, hos_now_ns());
+        hos_log("hid: playback of the recorded run starts");
+    }
+}
+void hos_input_play_start(void) {
+    if (!InterlockedExchange(&play_asked, 1)) hos_log("hid: playback asked: it starts once no menu is open");
+}
+int hos_oot_menu_open(void);   /* (oot_menu.c) */
+/* (before the start) the menus closed with B, then 1 s with none: true when the run may start now */
+static int play_wait_menus(uint64_t *buttons, int32_t stick[4]) {
+    static int64_t clear_since, b_at;
+    const int64_t now = hos_now_ns();
+    if (hos_oot_menu_open()) {
+        clear_since = 0;
+        if (!b_at || now - b_at > 1200000000LL) b_at = now, hos_log("hid: a menu is open before the recorded run: B");
+        if (now - b_at < 150000000LL) *buttons = 1ULL << B_B;
+        else *buttons = 0;
+        memset(stick, 0, 4 * sizeof *stick);
+        return 0;
+    }
+    if (!clear_since) clear_since = now;
+    if (now - clear_since < 1000000000LL) {
+        *buttons = 0;
+        memset(stick, 0, 4 * sizeof *stick);
+        return 0;
+    }
+    return 1;
+}
+static void play_load(void) {
+    play_n = 0;
+    const char *path = getenv("HOS_INPUT_PLAY");
+    if (!path) return;
+    FILE *f = fopen(path, "rb");
+    if (!f) { hos_log("hid: no recorded run at %s", path); return; }
+    int cap = 0;
+    char line[256];
+    while (fgets(line, sizeof line, f)) {
+        RecStep r;
+        long long ms;
+        unsigned long long b;
+        if (sscanf(line, "%lld %llx %d %d %d %d", &ms, &b, &r.stick[0], &r.stick[1], &r.stick[2], &r.stick[3]) != 6) continue;
+        r.ms = ms, r.buttons = b;
+        if (play_n == cap) {
+            cap = cap ? cap * 2 : 4096;
+            RecStep *n = (RecStep *)realloc(play_steps, cap * sizeof *n);
+            if (!n) break;
+            play_steps = n;
+        }
+        play_steps[play_n++] = r;
+    }
+    fclose(f);
+    hos_log("hid: recorded run %s: %d steps, %.1f s", path, play_n, play_n ? play_steps[play_n - 1].ms / 1000.0 : 0.0);
+}
+static int stick_moved(const int32_t stick[4]) {
+    return stick[0] > 8000 || stick[0] < -8000 || stick[1] > 8000 || stick[1] < -8000;
+}
+/* (after the game's reads are put together) true while a recorded run plays: buttons and stick are its */
+static int input_play(uint64_t *buttons, int32_t stick[4]) {
+    if (play_n < 0) play_load();
+    if (!play_n) return 0;
+    int64_t t0 = InterlockedCompareExchange64(&play_t0, 0, 0);
+    if (!t0) {
+        if (getenv("HOS_INPUT_LIVE")) {
+            if (!InterlockedCompareExchange(&play_asked, 0, 0)) return 0;
+            if (!play_wait_menus(buttons, stick)) return 1;
+        } else if (!stick_moved(stick)) {
+            return 0;
+        }
+        play_begin();
+        t0 = InterlockedCompareExchange64(&play_t0, 0, 0);
+    }
+    const int64_t ms = (hos_now_ns() - t0) / 1000000;
+    if (play_at >= play_n) return 0;
+    while (play_at + 1 < play_n && play_steps[play_at + 1].ms <= ms) play_at++;
+    if (play_steps[play_at].ms > ms) return 0;
+    if (play_at == play_n - 1 && ms > play_steps[play_at].ms + 200) {
+        hos_log("hid: the recorded run is over (%.1f s)", ms / 1000.0);
+        play_at = play_n;
+        return 0;
+    }
+    *buttons = play_steps[play_at].buttons;
+    memcpy(stick, play_steps[play_at].stick, 4 * sizeof *stick);
+    return 1;
+}
+static void input_record(uint64_t buttons, const int32_t stick[4]) {
+    static FILE *f;
+    static int looked;
+    static int64_t t0;
+    static uint64_t last_b;
+    static int32_t last_s[4];
+    if (!looked) {
+        looked = 1;
+        const char *path = getenv("HOS_INPUT_RECORD");
+        if (path) {
+            f = fopen(path, "wb");
+            hos_log(f ? "hid: recording the player's run into %s (from the first stick move)" : "hid: cannot write %s", path);
+        }
+    }
+    if (!f) return;
+    if (!t0) {
+        if (!stick_moved(stick)) return;
+        t0 = hos_now_ns();
+        hos_log("hid: the recording starts");
+    } else if (buttons == last_b && !memcmp(stick, last_s, sizeof last_s)) {
+        return;
+    }
+    last_b = buttons, memcpy(last_s, stick, sizeof last_s);
+    fprintf(f, "%lld %llx %d %d %d %d\n", (long long)((hos_now_ns() - t0) / 1000000), (unsigned long long)buttons, stick[0],
+            stick[1], stick[2], stick[3]);
+    fflush(f);
+}
+
 static void read_input(uint64_t *buttons, int32_t stick[4]) {
     *buttons = 0;
     memset(stick, 0, 4 * sizeof *stick);
@@ -811,7 +938,12 @@ static void read_input(uint64_t *buttons, int32_t stick[4]) {
         scripted_background = getenv("HOS_INPUT_SCRIPT_BACKGROUND") != NULL;
         if (scripted_background) hos_log("hid: scripted input runs with the game in the background (HOS_INPUT_SCRIPT_BACKGROUND)");
     }
-    if (!game_in_front() && !scripted_background) {   /* (the pads alone, when the player asked for them behind other windows) */
+    /* (Mako 4.1) behind another window the player's devices stay out, a background test's included: its own presses were
+       added above, and with HOS_INPUT_SCRIPT_BACKGROUND the pads were read too, so a pad left on the desk (or the player's,
+       in their own game) pressed B in the test's menus and broke its runs. The pads only when asked for (the menu's
+       Controller in background, HOS_INPUT_BACKGROUND) */
+    if (!game_in_front()) {   /* (the pads alone, when the player asked for them behind other windows) */
+        (void)scripted_background;
         static const char *env;
         static int looked;
         if (!looked) looked = 1, env = getenv("HOS_INPUT_BACKGROUND");
@@ -900,6 +1032,7 @@ static void npad_states(Ctx *c) {
     }
     if (connected) {
         read_input(&buttons, stick);
+        if (!input_play(&buttons, stick)) input_record(buttons, stick);
         uint64_t axes = 0;
         uint64_t flight = 0;
         int height = 0;

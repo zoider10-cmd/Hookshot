@@ -755,6 +755,12 @@ static Seen *screen_seen(uint64_t screen, int64_t now) {
     return free_one;
 }
 
+/* (Mako 4.1) the pause menu updated within the last 300 ms (nn_hid.c: a recorded run starts only without it) */
+static volatile LONG64 menu_front_ns;
+int hos_oot_menu_open(void) {
+    const int64_t t = InterlockedCompareExchange64(&menu_front_ns, 0, 0);
+    return t && hos_now_ns() - t < 300000000;
+}
 void hos_oot_menu_tick(Ctx *c, uint64_t screen) {
     if (!screen) return;
     if (trace < 0) trace = getenv("HOS_MENU_TRACE") != NULL;
@@ -804,6 +810,7 @@ void hos_oot_menu_tick(Ctx *c, uint64_t screen) {
     /* (no screen has held the mouse for 50 ms of frames, the HUD's among them in play: the game's menus have closed,
        and the window gives the camera its mouse back now, not after display.c's 300 ms) */
     static int64_t none_since;
+    if (screen == pause_screen_now()) InterlockedExchange64(&menu_front_ns, now);   /* (the pause menu only) */
     const int gone = !front && none_since && now - none_since > 50000000;
     none_since = front ? 0 : none_since ? none_since : now;
     ReleaseSRWLockExclusive(&seen_lock);
@@ -814,4 +821,5 @@ void hos_oot_menu_tick(Ctx *c, uint64_t screen) {
 #else
 void hos_oot_menu_focus(Ctx *c, uint64_t screen, uint64_t pane, uint64_t lr) { (void)c, (void)screen, (void)pane, (void)lr; }
 void hos_oot_menu_tick(Ctx *c, uint64_t screen) { (void)c, (void)screen; }
+int hos_oot_menu_open(void) { return 0; }
 #endif

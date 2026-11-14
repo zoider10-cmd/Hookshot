@@ -10,6 +10,6 @@ $exe = Join-Path $here "Mako Launcher.exe"
 $hook = Join-Path $here "report_webhook.txt"
 $extra = @(); if (Test-Path $hook) { $extra += "/resource:$hook,report_webhook.txt" } else { "note: no report_webhook.txt, Send logs is off in this build" }
 & $csc /nologo /target:winexe /optimize+ /platform:anycpu "/out:$exe" "/win32icon:$ico" "/resource:$(Join-Path $here 'mako_logo.png'),mako_logo.png" `
-    /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll @extra (Join-Path $here "Launcher.cs")
+    /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll /r:Microsoft.VisualBasic.dll /r:System.Core.dll @extra (Join-Path $here "Launcher.cs") (Join-Path $here "Mods.cs")
 if ($LASTEXITCODE -ne 0) { throw "csc failed" }
 "built $exe ($((Get-Item $exe).Length) bytes)"

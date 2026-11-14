@@ -96,11 +96,12 @@ def main():
     src = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
     check('Text = "Save copies"' in src and "new SaveCopiesForm(dir, SaveFolder())" in src,
           "the launcher has no Save copies button for the save folder the Randomizer setting names")
-    # (the three games' saves: the window's list chooses whose copies are shown, and Master Quest's page opens its own)
+    # (the three games' saves: the window's list chooses whose copies are shown. Master Quest's page opened its own;
+    #  Mako 4.1 has no such page, and the window is opened from More > Files & help)
     check('public static readonly string[] Folders = { "save", "save_rando", "save_mq" };' in src and
           "which.SelectedIndex = Math.Max(0, Array.IndexOf(SaveCopies.Folders, saveFolder));" in src and
           "this.saveFolder = SaveCopies.Folders[which.SelectedIndex]; Fill(null);" in src and
-          'new SaveCopiesForm(dir, "save_mq")' in src,
+          "() => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } };" in src,
           "the window does not choose among the normal game's, the randomizer's and Master Quest's saves")
     host = (ROOT / "host" / "oot_rando.c").read_text(encoding="utf-8")
     check('if (hos_master_quest()) return "save_mq";' in host and 'return on ? "save_rando" : "save";' in host,
@@ -119,7 +120,8 @@ def main():
         exe, game, script = Path(tmp) / "launcher_test.exe", Path(tmp) / "game", Path(tmp) / "run.ps1"
         game.mkdir()
         built = subprocess.run([str(csc), "/nologo", "/target:winexe", "/out:" + str(exe), "/r:System.Windows.Forms.dll", "/r:System.Drawing.dll",
-                                "/r:System.IO.Compression.dll", "/r:System.IO.Compression.FileSystem.dll", str(ROOT / "launcher" / "Launcher.cs")],
+                                "/r:System.IO.Compression.dll", "/r:System.IO.Compression.FileSystem.dll", "/r:Microsoft.VisualBasic.dll", "/r:System.Core.dll",
+                                str(ROOT / "launcher" / "Launcher.cs"), str(ROOT / "launcher" / "Mods.cs")],   # (Mako 4.1: the Mods tab's file)
                                capture_output=True, text=True)
         check(built.returncode == 0, "the launcher does not compile:\n" + built.stdout + built.stderr)
         script.write_text(SCRIPT, encoding="utf-8")

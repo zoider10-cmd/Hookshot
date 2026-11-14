@@ -151,5 +151,7 @@ Shader::TextureType handle_texture_type(uint32_t handle);
 void shader_stats(int64_t* translated, int64_t* failed);
 double shader_translate_ms();
 void program_released(const nvn_prog* p);
+/// (Mako stutters) nvnProgramSetShaders: its stages read and parsed on a worker, ahead of its first draw
+void program_prefetch(const nvn_prog* p);
 
 } // namespace mkwvk

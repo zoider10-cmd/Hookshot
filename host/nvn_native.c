@@ -1021,6 +1021,7 @@ static int set_shaders(nvn_prog *o, int n, const uint8_t *sd, int stride) {
         }
     }
     o->serial = new_serial();
+    rx_nvn_program_set(o);   /* (Mako stutters: parsed ahead of its first draw) */
     return 1;
 }
 NV(nvnProgramSetShaders) { RET(set_shaders((nvn_prog *)P(0), I(1), (const uint8_t *)P(2), 16)); }

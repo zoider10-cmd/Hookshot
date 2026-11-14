@@ -179,17 +179,21 @@ def main():
     src = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
     # (the save played is named under the left panel's second button; the row's own Save button said the same and is gone)
     check('Now = () => PlayChoiceForm.Modes[PlayMode()] + "  ·  " + SaveSlots.Current(dir, SaveFolder())' in src and
-          'Saves = () => "save_mq",' in src and "new SaveSlotsForm(dir, saveFolder)" in src and "Saves = SaveFolder," not in src,
-          "the launcher does not name the save played under its second button, has none on Master Quest's page, or the row's Save button is back")
+          "new SaveSlotsForm(dir, saveFolder)" in src and "Saves = SaveFolder," not in src,
+          "the launcher does not name the save played under its second button, or the row's Save button is back")
+    # (Master Quest's page had a button for its saves; Mako 4.1 has no such page: its saves are chosen in the window of
+    #  the left panel's second button, as the others are)
+    check('"save_mq"' in src and "PlayChoiceForm" in src, "Master Quest's saves are no longer chosen in the window of the second button")
     check('public const string First = "Save 1";' in src and 'return Path.Combine(dir, "user", Folder, saveFolder);' in src and
           'public const string Folder = "save_slots";' in src, "the saves that wait are not kept under the game folder's user folder, apart for each game")
     check('if (list.SelectedIndex < 0 || (string)list.SelectedItem == current || Running()) return;' in src and
           'if (Same(current, names[at])) return "That is the save being played. Choose another first.";' in src,
           "another save is chosen while the game runs, or the save played can be deleted")
     # (seen in play: the Save button lay where the Recommended tab's Apply button is, and a press on it applied the settings.
-    #  Since Mako 4.0 the whole row is left out on the Recommended tab, which has Test my PC and Apply in its place)
+    #  Since Mako 4.0 the whole row is left out on the Recommended tab, which has Test my PC and Apply in its place;
+    #  since Mako 4.1 the row is gone from every page: its buttons are on More > Files & help)
     check('Text = "Apply these", Style = Btn.Kind.Primary, R = new RectangleF(cx + 312, 612, cw - 312, 42), Page = 0,' in src and
-          'Text = "Save copies", HideOn2 = 0,' in src and
+          'HideOn2 = 0,' not in src and 'new[] { "Save copies", "Kept copies of your saves' in src and
           "bool visible = (w.Page < 0 && w.HideOn != PageNow && w.HideOn2 != PageNow) || w.Page == PageNow;" in src,
           "the Save button and the Recommended tab's Apply button are in one place again")
     # (Continue plays the game and the save played last; the button under it opens the window to choose them, then plays)
@@ -210,7 +214,8 @@ def main():
         exe, game, script = Path(tmp) / "launcher_test.exe", Path(tmp) / "game", Path(tmp) / "run.ps1"
         game.mkdir()
         built = subprocess.run([str(csc), "/nologo", "/target:winexe", "/out:" + str(exe), "/r:System.Windows.Forms.dll", "/r:System.Drawing.dll",
-                                "/r:System.IO.Compression.dll", "/r:System.IO.Compression.FileSystem.dll", str(ROOT / "launcher" / "Launcher.cs")],
+                                "/r:System.IO.Compression.dll", "/r:System.IO.Compression.FileSystem.dll", "/r:Microsoft.VisualBasic.dll", "/r:System.Core.dll",
+                                str(ROOT / "launcher" / "Launcher.cs"), str(ROOT / "launcher" / "Mods.cs")],   # (Mako 4.1: the Mods tab's file)
                                capture_output=True, text=True)
         check(built.returncode == 0, "the launcher does not compile:\n" + built.stdout + built.stderr)
         script.write_text(SCRIPT, encoding="utf-8")

@@ -428,6 +428,9 @@ void rx_nvn_texture_created(const nvn_tex *t) {
     if (vk && vk->nvn_texture_created) vk->nvn_texture_created(t);
 }
 void rx_nvn_program_released(const nvn_prog *p) { vk ? vk->nvn_program_released(p) : wgr_nvn_program_released(p); }
+void rx_nvn_program_set(const nvn_prog *p) {
+    if (vk && vk->nvn_program_set) vk->nvn_program_set(p);
+}
 void rx_nvn_read_texels(const nvn_tex *t, unsigned level, unsigned layer0, const NVNcopyRegion *r, uint8_t *dst,
                         size_t row, size_t img) {
     vk ? vk->nvn_read_texels(t, level, layer0, r, dst, row, img) : wgr_nvn_read_texels(t, level, layer0, r, dst, row, img);

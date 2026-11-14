@@ -10,6 +10,8 @@
 #include <atomic>
 #include <cstdlib>
 #include <vector>
+#include <chrono>
+#include <thread>
 
 #include "vk_work.h"   // (last: RX_VK_RECORDER=defer drains before the destructions and the invalidate below)
 
@@ -127,6 +129,47 @@ VmaPool textures_pool() {
     if (vmaCreatePool(vma, &pi, &texture_pool) != VK_SUCCESS) texture_pool = VK_NULL_HANDLE;
     logf("vk: textures from a pool of their own, %llu MB blocks (RX_VK_COMPACT)%s", (unsigned long long)(kImageBlock >> 20),
          texture_pool ? "" : ": not made");
+    // (Mako stutters) its next block made ahead, on a thread of its own: when the blocks were full, the texture that did not fit made
+    // one on the replay thread (vkAllocateMemory of 128 MB, the driver clearing it: 5-15 ms of a frame). Once less than half a block
+    // is free, a whole block's allocation makes one (or takes the empty one there is) and is freed at once; VMA keeps that empty
+    // block for the next texture: one spare block at most.
+    // RX_VK_BLOCK_AHEAD=0: as before
+    static const bool ahead_off = getenv("RX_VK_BLOCK_AHEAD") && atoi(getenv("RX_VK_BLOCK_AHEAD")) == 0;
+    if (texture_pool && !ahead_off) {
+        const uint32_t type_bits = 1u << type;
+        std::thread([type_bits] {
+            int64_t made = 0;
+            for (;;) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                // (the compaction moving the pool's images, or done less than 10 s ago (it gives emptied blocks back): not now)
+                static auto compact_seen = std::chrono::steady_clock::time_point{};
+                if (image_compact_active()) {
+                    compact_seen = std::chrono::steady_clock::now();
+                    continue;
+                }
+                if (std::chrono::steady_clock::now() - compact_seen < std::chrono::seconds(10)) continue;
+                VmaStatistics st{};
+                vmaGetPoolStatistics(vma, texture_pool, &st);
+                const uint64_t free_bytes = st.blockBytes - std::min(st.blockBytes, st.allocationBytes);
+                if (free_bytes >= kImageBlock / 2) continue;
+                VkMemoryRequirements req{};
+                req.size = kImageBlock;   // (a whole block: it fits only in an empty one, made now if there is none; one spare at most)
+                req.alignment = 65536;
+                req.memoryTypeBits = type_bits;
+                VmaAllocationCreateInfo ai{};
+                ai.pool = texture_pool;
+                if (dev.memory_budget) ai.flags = VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT;   // (never past the budget for it)
+                VmaAllocation a = VK_NULL_HANDLE;
+                if (vmaAllocateMemory(vma, &req, &ai, &a, nullptr) != VK_SUCCESS) {
+                    std::this_thread::sleep_for(std::chrono::seconds(2));   // (over budget: the blocks stay as they are)
+                    continue;
+                }
+                vmaFreeMemory(vma, a);
+                if (++made % 20 == 1) logf("vk: a texture block made ahead of need (%lld so far)", (long long)made);
+                std::this_thread::sleep_for(std::chrono::milliseconds(400));
+            }
+        }).detach();
+    }
     return texture_pool;
 }
 bool textures_pool_usage(uint64_t* block_bytes, uint64_t* free_bytes) {

@@ -940,6 +940,20 @@ VkImageView astc_level_view(Texture* tex, uint32_t level, uint32_t layer) {
 /// (hookshot) why the last upload_astc_gpu on this thread failed, for the log of a BC3 image left to be tried again
 thread_local const char* astc_fail = nullptr;
 
+std::vector<uint8_t>& upload_scratch() {
+    static thread_local std::vector<uint8_t> v;
+    return v;
+}
+std::vector<uint8_t>& upload_lin() {
+    static thread_local std::vector<uint8_t> v;
+    return v;
+}
+struct UploadTrim {   // (the kept buffers past 96 MB let go at the upload's end: a rare huge texture does not keep its size)
+    ~UploadTrim() {
+        for (std::vector<uint8_t>* v : {&upload_scratch(), &upload_lin()})
+            if (v->capacity() > (96u << 20)) std::vector<uint8_t>().swap(*v);
+    }
+};
 bool upload_astc_gpu(Texture& tex, uint64_t total, const Ranges* dirty) {
     astc_fail = nullptr;
     if (tex.type != VK_IMAGE_TYPE_2D || tex.samples != VK_SAMPLE_COUNT_1_BIT || !astc_ready()) {
@@ -963,7 +977,9 @@ bool upload_astc_gpu(Texture& tex, uint64_t total, const Ranges* dirty) {
         astc_fail = "no staging memory for its ASTC blocks";
         return false;
     }
-    std::vector<uint8_t> scratch;
+    std::vector<uint8_t>& scratch = upload_scratch();   // (Mako stutters: see upload_inner)
+    scratch.clear();
+    UploadTrim trim;
     for (size_t k = 0; k < layers.size(); k++) {
         const uint64_t at = (uint64_t)layers[k] * layer_size + tail0;
         if (at >= total) continue;
@@ -1501,7 +1517,13 @@ bool upload_inner(Texture& tex, const Ranges* dirty) {
     const uint32_t copy_layers = tex.type == VK_IMAGE_TYPE_3D ? 1 : tex.layers;
     const VkImageAspectFlags aspect = tex.aspect;
     std::vector<VkBufferImageCopy> copies;
-    std::vector<uint8_t> scratch, lin;
+    // (Mako stutters: kept from one upload to the next on this thread. Each upload made them anew: the texture's whole storage copied
+    // into a fresh allocation (fresh pages from the system, zeroed and faulted in) to lay the submit's pages over it, then given back:
+    // most of an upload's time, 5-30 ms frames when a few textures came in. Kept up to 96 MB each, let go past it)
+    std::vector<uint8_t>& scratch = upload_scratch();
+    std::vector<uint8_t>& lin = upload_lin();
+    scratch.clear(), lin.clear();
+    UploadTrim trim;
     VkBuffer buffer = VK_NULL_HANDLE;
     for (uint32_t level = 0; level < tex.levels; level++) {
         const LevelGeo g = level_geo(tex, level);

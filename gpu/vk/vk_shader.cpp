@@ -26,6 +26,8 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <condition_variable>
+#include <deque>
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
@@ -146,22 +148,67 @@ uint64_t code_key(const uint8_t* ctl, const uint8_t* area, uint32_t end) {
 }
 Code parse_code(const uint8_t* ctl, const std::vector<uint8_t>& area);
 
+// (Mako stutters) What a code parsed to, by the code's own key (its control section and bytes): the game sets the same shaders on many
+// program objects, and each new one was read and parsed again at its first draw, on the replay thread (8-28 ms frames when an
+// area's objects came into view). 2048 kept. RX_VK_NO_CODE_CACHE=1: parsed every time, as before
+std::mutex parsed_mu;
+std::unordered_map<uint64_t, Code> parsed_by_key;
+std::atomic<int64_t> st_parsed_hits{0}, st_parsed_new{0};
 Code read_code(const nvn_stage_data& sd) {
     uint8_t ctl[kControlSize];
     uint32_t end = 0;
     if (!sd.control || !sd.data || !host->gpu_read(sd.control, ctl, sizeof ctl) || !control_end(ctl, &end)) return Code{};
     std::vector<uint8_t> area(end);
     if (!host->gpu_read(sd.data, area.data(), end)) return Code{};
-    if (const char* dir = getenv("RX_VK_DUMP_STAGES")) {   // (hookshot, RX_VK_DUMP_STAGES=<folder>: control and code as the game has them)
+    static const bool no_cache = getenv("RX_VK_NO_CODE_CACHE") != nullptr;
+    uint64_t key = 0;
+    if (!no_cache) {
+        key = code_key(ctl, area.data(), end);
+        std::lock_guard lk(parsed_mu);
+        if (auto it = parsed_by_key.find(key); it != parsed_by_key.end()) {
+            st_parsed_hits++;
+            return it->second;
+        }
+    }
+    static const char* dump_dir = getenv("RX_VK_DUMP_STAGES");
+    if (const char* dir = dump_dir) {   // (hookshot, RX_VK_DUMP_STAGES=<folder>: control and code as the game has them)
         char path[512];
         snprintf(path, sizeof path, "%s/%016llx.bin", dir, (unsigned long long)code_key(ctl, area.data(), end));
         if (FILE* f = fopen(path, "wb")) fwrite(ctl, 1, sizeof ctl, f), fwrite(area.data(), 1, end, f), fclose(f);
     }
-    return parse_code(ctl, area);
+    Code c = parse_code(ctl, area);
+    if (!no_cache && c.ok) {
+        st_parsed_new++;
+        std::lock_guard lk(parsed_mu);
+        // (bounded by bytes, 160 MB, not 2048 codes then all of them dropped: an area's programs past 2048 emptied it, and the
+        // codes after were parsed again, ~40% of all lookups in a field walk. A quarter let go when full, the rest kept)
+        static const uint64_t cap = (uint64_t)(getenv("RX_VK_CODE_CACHE_MB") ? std::max(8, atoi(getenv("RX_VK_CODE_CACHE_MB"))) : 160) << 20;
+        static uint64_t held = 0;
+        auto bytes_of = [](const Code& x) { return (uint64_t)(x.code.size() * 8 + x.c1.size() + sizeof(Code) + 64); };
+        if (held + bytes_of(c) > cap) {
+            for (auto it = parsed_by_key.begin(); it != parsed_by_key.end() && held > cap / 4 * 3;) {
+                held -= std::min(held, bytes_of(it->second));
+                it = parsed_by_key.erase(it);
+            }
+            static int logged;
+            if (logged++ < 5) logf("vk: parsed codes kept by their key: %zu held, a quarter let go (%llu MB)", parsed_by_key.size(),
+                                   (unsigned long long)(held >> 20));
+        }
+        if (parsed_by_key.emplace(key, c).second) held += bytes_of(c);
+    }
+    return c;
 }
 
-/// A control section and its code, from the game's memory or the archives (the seed)
+Code parse_code_locked(const uint8_t* ctl, const std::vector<uint8_t>& area);
+/// (Mako) one parse at a time: it sets Shader::Ampere::native_matrix_multiply for its lowering, and the prefetch worker parses beside
+/// the replay thread
+std::mutex parse_mu;
 Code parse_code(const uint8_t* ctl, const std::vector<uint8_t>& area) {
+    std::lock_guard lk(parse_mu);
+    return parse_code_locked(ctl, area);
+}
+/// A control section and its code, from the game's memory or the archives (the seed)
+Code parse_code_locked(const uint8_t* ctl, const std::vector<uint8_t>& area) {
     Code c;
     uint32_t len, c1o;
     const uint32_t end = (uint32_t)area.size();
@@ -860,8 +907,46 @@ const Shader::Profile& profile_graphics(VkShaderStageFlags stage) {
     return !forced && (dev.sg32_stages & stage) ? pinned : profile();
 }
 
+// ---- (Mako stutters) programs parsed ahead: nvnProgramSetShaders hands a program over (program_prefetch), a worker reads and parses
+// its stages then, and its first draw finds them ready. RX_VK_PROGRAM_PREFETCH=0: at the first draw, as before ----
+std::mutex pf_mu;
+std::condition_variable pf_cv;
+std::deque<nvn_prog> pf_q;
+std::unordered_map<uint64_t, std::vector<Code>> pf_ready;   // serial -> its stages
+std::atomic<int64_t> st_pf_taken{0}, st_pf_missed{0};
+void prefetch_worker() {
+    for (;;) {
+        nvn_prog p;
+        {
+            std::unique_lock lk(pf_mu);
+            pf_cv.wait(lk, [] { return !pf_q.empty(); });
+            p = pf_q.front();
+            pf_q.pop_front();
+        }
+        std::vector<Code> v;
+        for (uint32_t i = 0; i < p.nstage && i < 6; i++) {
+            Code c = read_code(p.sd[i]);
+            if (c.ok) v.push_back(std::move(c));
+        }
+        std::lock_guard lk(pf_mu);
+        if (pf_ready.size() >= 4096) pf_ready.clear();   // (a bound: ones never drawn, or drawn before they were ready)
+        pf_ready[p.serial] = std::move(v);
+    }
+}
 const std::vector<Code>& codes_of(const NvnState& s) {
     auto& v = codes[s.prog.serial];
+    if (v.empty()) {
+        std::lock_guard lk(pf_mu);
+        if (auto it = pf_ready.find(s.prog.serial); it != pf_ready.end()) {
+            v = std::move(it->second);
+            pf_ready.erase(it);
+        }
+        (v.empty() ? st_pf_missed : st_pf_taken)++;
+        const int64_t n = st_pf_taken.load() + st_pf_missed.load();
+        if (n % 500 == 0)
+            logf("vk: programs parsed ahead: %lld of %lld found ready; codes parsed %lld, found parsed by their key %lld",
+                 (long long)st_pf_taken.load(), (long long)n, (long long)st_parsed_new.load(), (long long)st_parsed_hits.load());
+    }
     if (v.empty())
         for (uint32_t i = 0; i < s.prog.nstage && i < 6; i++) {
             Code c = read_code(s.prog.sd[i]);
@@ -2958,8 +3043,24 @@ double shader_translate_ms() {
 
 void program_released(const nvn_prog* p) {
     if (!p) return;
-    std::lock_guard lk(shader_mu);
-    codes.erase(p->serial);
+    {
+        std::lock_guard lk(shader_mu);
+        codes.erase(p->serial);
+    }
+    std::lock_guard lk(pf_mu);
+    pf_ready.erase(p->serial);
+}
+void program_prefetch(const nvn_prog* p) {
+    static const bool off = getenv("RX_VK_PROGRAM_PREFETCH") && atoi(getenv("RX_VK_PROGRAM_PREFETCH")) == 0;
+    if (off || !p || !p->nstage || !dev.device) return;   // (before the device: the parse reads its features)
+    static std::once_flag started;
+    std::call_once(started, [] { std::thread(prefetch_worker).detach(); });
+    {
+        std::lock_guard lk(pf_mu);
+        if (pf_q.size() >= 4096) return;   // (a burst past it: parsed at the first draw)
+        pf_q.push_back(*p);
+    }
+    pf_cv.notify_one();
 }
 
 } // namespace mkwvk

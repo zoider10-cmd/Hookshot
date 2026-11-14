@@ -123,7 +123,8 @@ def main():
         exe, game, script = Path(tmp) / "launcher_test.exe", Path(tmp) / "game", Path(tmp) / "run.ps1"
         game.mkdir()
         built = subprocess.run([str(csc), "/nologo", "/target:winexe", "/out:" + str(exe), "/r:System.Windows.Forms.dll", "/r:System.Drawing.dll",
-                                "/r:System.IO.Compression.dll", "/r:System.IO.Compression.FileSystem.dll", str(ROOT / "launcher" / "Launcher.cs")],
+                                "/r:System.IO.Compression.dll", "/r:System.IO.Compression.FileSystem.dll", "/r:Microsoft.VisualBasic.dll", "/r:System.Core.dll",
+                                str(ROOT / "launcher" / "Launcher.cs"), str(ROOT / "launcher" / "Mods.cs")],   # (Mako 4.1: the Mods tab's file)
                                capture_output=True, text=True)
         check(built.returncode == 0, "the launcher does not compile:\n" + built.stdout + built.stderr)
         script.write_text(SCRIPT, encoding="utf-8")

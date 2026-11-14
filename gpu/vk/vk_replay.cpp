@@ -4359,6 +4359,7 @@ void fill_replay_table(MkwVkRenderer& t) {
     t.nvn_set_texture_pool_size = set_texture_pool_size;
     t.nvn_texture_released = texture_released_of;
     t.nvn_program_released = program_released_locked;
+    t.nvn_program_set = program_prefetch;
     t.nvn_read_texels = read_texels;
     t.nvn_write_texels = write_texels;
     t.nvn_invalidate = invalidate;

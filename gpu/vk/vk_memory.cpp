@@ -997,8 +997,36 @@ bool tex_capture_on() {
 }
 std::vector<std::pair<uint64_t, uint64_t>> tex_cap_ranges;   // (texture storage the capture takes, merged; cap_ranges_mu)
 std::mutex shadow_mu;   // (after pools_mu, before cap_ranges_mu)
+// (Mako stutters) the shadow's 4 KB pages from 1 MB slabs, kept on a free list when they go: a sweep let 10-30 thousand of them go at
+// once, each a free to the system heap, and the frame it fell in took 40-65 ms. Never given back: the shadow is bounded (kShadowMax)
+struct PagePool {
+    std::mutex mu;
+    std::vector<uint8_t*> free_pages;
+    std::vector<std::unique_ptr<uint8_t[]>> slabs;
+    uint8_t* get() {
+        std::lock_guard lk(mu);
+        if (free_pages.empty()) {
+            slabs.emplace_back(new uint8_t[256 * 4096]);
+            for (int i = 255; i >= 0; i--) free_pages.push_back(slabs.back().get() + (size_t)i * 4096);
+        }
+        uint8_t* p = free_pages.back();
+        free_pages.pop_back();
+        return p;
+    }
+    void put(uint8_t* p) {
+        std::lock_guard lk(mu);
+        free_pages.push_back(p);
+    }
+};
+PagePool& page_pool() {
+    static PagePool* p = new PagePool();   // (never destroyed: pages may go back to it at exit)
+    return *p;
+}
+struct PageBack {
+    void operator()(uint8_t* p) const { if (p) page_pool().put(p); }
+};
 struct ShadowPage {
-    std::unique_ptr<uint8_t[]> b;
+    std::unique_ptr<uint8_t, PageBack> b;
     uint64_t seq = 0;   // (the capture that took it)
 };
 std::unordered_map<uint32_t, ShadowPage> shadow;   // guest page -> its 4 KB as the last capture taken had it
@@ -1216,7 +1244,9 @@ const uint8_t* memory_as_submitted(uint64_t guest, const uint8_t* live, uint64_t
             }
             const uint64_t a = std::max(p << 12, guest), b = std::min((p + 1) << 12, guest + n);
             st_overlaid++;
-            if (std::memcmp(scratch.data() + (a - guest), it->second.b.get() + (a - (p << 12)), b - a)) st_differed++;
+            // (Mako stutters: the compare that counted st_differed, a statistic, only with RX_VK_SHADOW_STATS=1: it read every page twice)
+            static const bool stats = getenv("RX_VK_SHADOW_STATS") != nullptr;
+            if (stats && std::memcmp(scratch.data() + (a - guest), it->second.b.get() + (a - (p << 12)), b - a)) st_differed++;
             std::memcpy(scratch.data() + (a - guest), it->second.b.get() + (a - (p << 12)), b - a);
         }
     }
@@ -1673,7 +1703,10 @@ bool take_capture(std::unique_ptr<Capture> c, uint64_t value, uint64_t completed
         // (the copies of pages no capture took in the last 256 submits go, over 32 MB of them, every 256 captures: such a page is what guest
         // memory holds (a write drops its copy), and the cap's sweep below came only at 256 MB. RX_VK_SHADOW_SWEEP_OFF=1: the cap's alone)
         static const bool sweep_off = getenv("RX_VK_SHADOW_SWEEP_OFF") != nullptr;
-        if (!sweep_off && shadow_seq % 256 == 0 && shadow_n.load(std::memory_order_relaxed) > 8192)
+        // (Mako stutters: a slice of the map at each capture, all of it over 64 captures, rather than all of it at every 256th: that one
+        // let 10-20 thousand pages go in one frame, 40-65 ms. RX_VK_SHADOW_SWEEP_ALL=1: at once, as before)
+        static const bool sweep_all = getenv("RX_VK_SHADOW_SWEEP_ALL") != nullptr;
+        if (!sweep_off && sweep_all && shadow_seq % 256 == 0 && shadow_n.load(std::memory_order_relaxed) > 8192)
             for (auto it = shadow.begin(); it != shadow.end();) {
                 if (it->second.seq + 256 >= shadow_seq) { ++it; continue; }
                 auto r = shadow_regions.find(it->first >> 9);
@@ -1681,6 +1714,23 @@ bool take_capture(std::unique_ptr<Capture> c, uint64_t value, uint64_t completed
                 it = shadow.erase(it);
                 shadow_n--;
             }
+        if (!sweep_off && !sweep_all && shadow_n.load(std::memory_order_relaxed) > 8192) {
+            static size_t next_bucket = 0;
+            static thread_local std::vector<uint32_t> old;
+            old.clear();
+            const size_t nb = shadow.bucket_count(), per = nb / 64 + 1;
+            for (size_t k = 0; k < per; k++, next_bucket++) {
+                const size_t b = next_bucket % nb;
+                for (auto it = shadow.begin(b); it != shadow.end(b); ++it)
+                    if (it->second.seq + 256 < shadow_seq) old.push_back(it->first);
+            }
+            for (uint32_t pg : old) {
+                if (!shadow.erase(pg)) continue;
+                auto r = shadow_regions.find(pg >> 9);
+                if (r != shadow_regions.end() && --r->second == 0) shadow_regions.erase(r);
+                shadow_n--;
+            }
+        }
         if (!tex_merged.empty()) {
             // (every page written since the last capture: its old copy is stale; the ones copied now replace it)
             // (hookshot: those copied now are overwritten in place below, their buffers kept: erasing every written page and
@@ -1718,7 +1768,7 @@ bool take_capture(std::unique_ptr<Capture> c, uint64_t value, uint64_t completed
                 }
                 ShadowPage& slot = shadow[p];
                 if (!slot.b) {
-                    slot.b.reset(new uint8_t[4096]);
+                    slot.b.reset(page_pool().get());
                     shadow_regions[p >> 9]++;
                     shadow_n++;
                 }

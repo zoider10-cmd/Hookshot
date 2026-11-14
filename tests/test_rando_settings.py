@@ -91,7 +91,11 @@ def sources(rows):
           "Dungeon rewards' Anywhere is made now: take it off the launcher's list of settings not available yet")
     check("a.songs = (a.songs if SONGS_ANYWHERE else 1) if a.songs in (1, 2) else 0" in rando_seed,
           "the script makes Songs' Anywhere though it is held off, or no longer reads the setting")
-    check("AddSelectors(RandoRows, 3, cx, colW, null, 47, 45, true);" in launcher and '"Game", "Randomizer", "Cosmetics", "Fixes", "FSR", "About"' in launcher,
+    check("AddSelectors(RandoRows, RandoPage, cx, colW, null, 47, 45, true);" in launcher and
+          '"Home", "Graphics", "Game", "Randomizer", "Cosmetics", "Mods", "More"' in launcher and "int[] firstPage = { 0, 1, 2, RandoPage, CosmeticPage, 7, 3 };" in launcher and
+          "public const int RandoPage = 9, CosmeticPage = 10;" in launcher and
+          # (Mako 4.1's Mods tab renames every mod's folder: the seed's and the colours' are the launcher's own, and not in its list)
+          'public static readonly string[] Own = { "rando-seed", "cosmetics" };' in (ROOT / "launcher" / "Mods.cs").read_text(encoding="utf-8"),
           "the launcher does not show its Randomizer page")
     # (more settings than the page has room for: the list scrolls, and a row is shown, lit and pressed only inside its view)
     check("if (PageNow == 3) ScrollRando(-e.Delta * 47f / 120);" in launcher and "g.SetClip(RandoView, CombineMode.Intersect);" in launcher and

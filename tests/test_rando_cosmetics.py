@@ -243,7 +243,7 @@ def mod_and_sources():
     rows = rows[:rows.index("\n    };")]
     check(re.findall(r'new object\[\] \{ "(\w+)", "([^"]*)", TunicColours, TunicValues,', rows) == [(key, label) for _, key, label, _, _, _ in t.COSMETICS],
           "the launcher's Cosmetics page and the script's tunics differ")
-    check("AddSelectors(CosmeticRows, 4, cx, colW, cosmetics, 47, 45);" in launcher and '"hookshot_cosmetics.ini"' in launcher and
+    check("AddSelectors(CosmeticRows, CosmeticPage, cx, colW, cosmetics, 47, 45);" in launcher and '"hookshot_cosmetics.ini"' in launcher and
           "void SaveCosmetics()" in launcher, "the launcher does not show or keep its Cosmetics page")
     check('Text = "Randomize all"' in launcher and "Click = OnRandomCosmetics" in launcher and "s.Set(r.Next(1, s.Items.Length), false);" in launcher,
           "the launcher's Cosmetics page has no Randomize all button, or it can pick the game's own colour")
@@ -348,8 +348,8 @@ def shields():
         check(abs(colorsys.rgb_to_hsv(*(c / 255.0 for c in got))[0] * 360.0 - 172.0) < 3.0 and
               change(tuple(c * 255.0 for c in far)) == tuple(c * 255.0 for c in far),
               "%s: its own colour is not changed, or one opposite it is" % row[2])
-    check("AddSelectors(CosmeticRows, 4, cx, colW, cosmetics, 47, 45);" in launcher and
-          "AddSelectors(ShieldRows, 4, cx, colW, cosmetics, 47, 45, false, CosmeticRows.Length);" in launcher and
+    check("AddSelectors(CosmeticRows, CosmeticPage, cx, colW, cosmetics, 47, 45);" in launcher and
+          "AddSelectors(ShieldRows, CosmeticPage, cx, colW, cosmetics, 47, 45, false, CosmeticRows.Length);" in launcher and
           "int place = first;" in launcher and "int col = place % 2, line = place / 2;" in launcher,
           "the launcher does not show the shields' looks on its Cosmetics page, after the colours")
 
