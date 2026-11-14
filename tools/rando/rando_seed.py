@@ -2521,7 +2521,7 @@ SONGS = (
 # is pushed, on in the work at hand). Off, the script takes the setting as 0 whatever the options file says, and the
 # launcher's row says "Not available yet" (RandoNotYet: 1; on: 2, Dungeons offered and Anywhere not). The two are
 # kept in step by tests/test_rando_rewards.py.
-REWARDS_READY = False
+REWARDS_READY = True
 REWARD_ITEMS = ("Item_Stone_Forest", "Item_Stone_Fire", "Item_Stone_Water",
                 "Item_Medal_Forest", "Item_Medal_Fire", "Item_Medal_Water", "Item_Medal_Shadow", "Item_Medal_Spirit")
 REWARDS = (
