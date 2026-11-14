@@ -2611,7 +2611,7 @@ SONGS = (
 # NOT SEEN IN PLAY: a lesson that gives something that is not a song; a song from a chest or a character.
 # SONGS_ANYWHERE: False holds the choice off (it is then as Song spots, and the launcher does not offer it: its
 # RandoNotYet, checked against this by tests/test_rando_settings.py), as REWARDS_READY does the dungeons' rewards.
-SONGS_ANYWHERE = True
+SONGS_ANYWHERE = False
 SONG_ASKED = ("song_saria", "song_sun", "song_storms", "song_minuet", "song_bolero", "song_serenade", "song_requiem", "song_nocturne")
 LESSON_ITEMS = ("Item_AgonyStone", "Item_Arrow_Fire", "Item_Arrow_Ice", "Item_Arrow_Light", "Item_Boomerang", "Item_Hammer",
                 "Item_DinFire", "Item_FaroreWind", "Item_NayruLove")
@@ -2649,7 +2649,7 @@ def lesson_items(counts, progressive, flagged=None):
 # is pushed, on in the work at hand). Off, the script takes the setting as 0 whatever the options file says, and the
 # launcher's row says "Not available yet" (RandoNotYet: 1; on: 2, Dungeons offered and Anywhere not). The two are
 # kept in step by tests/test_rando_rewards.py.
-REWARDS_READY = True
+REWARDS_READY = False
 REWARD_ITEMS = ("Item_Stone_Forest", "Item_Stone_Fire", "Item_Stone_Water",
                 "Item_Medal_Forest", "Item_Medal_Fire", "Item_Medal_Water", "Item_Medal_Shadow", "Item_Medal_Spirit")
 REWARDS = (
