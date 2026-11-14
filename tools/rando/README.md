@@ -712,7 +712,7 @@ buys again and again are then not for sale, and come from grass, pots and enemie
 Zora, who still give them). What such a shelf sold goes into the pool as the chests' kind of it where there is one
 (the shields: `TBox_Shield_Deku`, `TBox_Shield_Hylian`), a red rupee for a potion, a tunic, a fairy or a heart.
 
-**Sword and shield (`rando_sword_shield`, `--sword-shield`).** Off, the Kokiri Sword is in its chest and the Deku
+**Shuffle sword and shield (`rando_sword_shield`, `--sword-shield`).** Off, the Kokiri Sword is in its chest and the Deku
 Shield on the Kokiri shop's shelf, whatever the other settings say. On, the chest takes part as an event's chest does
 (with Major items) and the shelf as a shop's does (with Shops; it is not one of Every shop shelf's). Mido lets Link by
 with a sword and a shield, so with the shelf shuffled the Deku Shield is a gating item: every rule that asks for the

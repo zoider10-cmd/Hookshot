@@ -322,7 +322,7 @@ def main():
           "table = shop_rows(table, kind, item, price, actor)" in script, "a shelf has not an actor of its own, with its own price")
     check("[(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name, None, gives[h])" in script and "for h, (shop, _, _) in shelves.items() if h in gives]" in script,
           "the shelves are not among the tracker's checks")
-    # ---- Every shop shelf, and Sword and shield: which shelves take part ----
+    # ---- Every shop shelf, and Shuffle sword and shield: which shelves take part ----
     for shop in seed.SHOPS:
         every = seed.shop_slots(shop, True, True)
         check(seed.shop_slots(shop) == list(shop.slots) and every[:4] == list(shop.slots),
@@ -335,7 +335,7 @@ def main():
     check(seed.SHIELD_SHELF == ("kokiri", 6, "Shop_Weapon_Shield_Deku") and shield not in seed.shop_slots(kokiri, True, False) and
           shield in seed.shop_slots(kokiri, False, True) and len(seed.shop_slots(kokiri, False, True)) == 5 and
           not any("Shield_Deku" in actor for shop in seed.SHOPS for _, actor in shop.slots + shop.rest),
-          "the Deku Shield's shelf is not its own setting's: in with Sword and shield alone, out with Every shop shelf alone")
+          "the Deku Shield's shelf is not its own setting's: in with Shuffle sword and shield alone, out with Every shop shelf alone")
     check(seed.shelf_item("Shop_Weapon_Shield_Deku") == seed.DS == "TBox_Shield_Deku" and seed.shelf_item("Shop_Weapon_Shield_Hylian") == "TBox_Shield_Hylian" and
           seed.shelf_item("Shop_Armor_Goron") == seed.SHELF_OTHER and seed.shelf_item("Shop_Bottle_RedPotion") == seed.SHELF_OTHER,
           "a shield's shelf does not put the chests' shield in the pool, or a tunic's or a potion's something other than a red rupee")

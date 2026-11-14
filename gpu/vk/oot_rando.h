@@ -100,7 +100,7 @@
     X(SHOP_SHELVES, "Every shop shelf", "rando_shop_shelves", \
       "With Shops. Off: four shelves of each shop sell a shuffled item, and what a game buys again and again stays for sale (bombs, arrows, nuts, potions, shields, tunics). On: every shelf of the six shops does, each sold once; those supplies then come from grass, pots and enemies.", \
       "Off", "On") \
-    X(SWORD_SHIELD, "Sword and shield", "rando_sword_shield", \
+    X(SWORD_SHIELD, "Shuffle sword and shield", "rando_sword_shield", \
       "The Kokiri Sword in its chest and the Deku Shield on the Kokiri shop's shelf. Off: both stay where the game has them. On: the sword's chest takes part with Major items and the shield's shelf with Shops, and the way past Mido asks for both unless Open Deku Tree is on.", \
       "Off", "On")
 

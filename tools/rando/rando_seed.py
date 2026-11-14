@@ -3016,8 +3016,8 @@ def main():
                 continue
             maps[c.hash].add(parts[-1])
             why = stays_why(c, a.event_chests, placement)
-            if c.event == SWORD_EVENT and not a.sword_shield:   # (Sword and shield: Off)
-                why = why or "the Kokiri Sword stays in its chest (Sword and shield: Off)"
+            if c.event == SWORD_EVENT and not a.sword_shield:   # (Shuffle sword and shield: Off)
+                why = why or "the Kokiri Sword stays in its chest (Shuffle sword and shield: Off)"
             dungeon = "DefaultDungeonRoomIndex" in c.params
             if c.hash not in spots:
                 spots[c.hash] = [area, c.item, dungeon, why, c.gyaml, c.pos, c.event]
