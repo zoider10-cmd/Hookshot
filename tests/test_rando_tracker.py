@@ -131,7 +131,9 @@ def main():
           "the game's side does not take the lines the menu takes, in their order, with what each gives")
     check("if (oot_checks[i].done == 1 || strcmp(oot_checks[i].item, name)) continue;" in host_text and
           "if (best >= 0 && nearest > OOT_CHECK_NEAR) best = -1;" in host_text and "if (!oot_banc_in_folder(oot_link_map, oot_checks[i].folder)) {" in host_text and
-          "c->x[30] != 0x8112d4b8ULL && c->x[30] != 0x8112f998ULL && c->x[30] != 0x8112e19cULL && (uint32_t)c->x[4] != 9)" in host_text,
+          "c->x[30] != 0x8112d4b8ULL && c->x[30] != 0x8112f998ULL && c->x[30] != 0x8112e19cULL &&" in host_text and
+          # (but for a test's switch)
+          "((uint32_t)c->x[4] != 9 || debug_counts)) {" in host_text and 'getenv("HOS_OOT_TRACK_DEBUG")' in host_text,
           "an item given does not mark the nearest check of Link's map that gives it, or a save's load, an add inside another or the debug inventory's marks one")
     check('if (!strncmp(line, "seed ", 5) && !strcmp(line + 5, oot_checks_seed))' in host_text and 'fprintf(f, "seed %s\\n", oot_checks_seed);' in host_text and
           "if (oot_check_count < 0 || strcmp(stamp, oot_checks_seed)) oot_tracker_load(stamp);" in host_text and
@@ -221,6 +223,13 @@ def main():
           "confirm does not send the check shown to the game, or does so with the debug tools off")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     m = re.search(r"constexpr int kTrackerGoAction = (\d+);", menu)
+    # (a check that is an actor of a map is marked in the save, by the truth value the game keeps for its hash, set by the
+    #  game's own setter: so a save from before, and a new game of the seed, have their own marks)
+    check("oot_checks[oot_check_count].key = got >= 9 ? strtoull(hash, NULL, 16) : 0;" in host and
+          "if (!now && oot_gamedata_keyed_set_bool(c, oot_checks[i].key, 1)) changed++;" in host and
+          "} else if ((oot_checks[i].done == 1) != now) {" in host and "A64Fn set = a64_lookup(0x80f27130ULL);" in host and
+          "c->x[0] = mgr, c->x[1] = value ? 1 : 0, c->x[2] = key;" in host,
+          "a check with an actor's hash is not marked in the save, or not by the game's setter")
     check(m and "if (action == %s && hos_rando_on()) {" % m.group(1) in host and '"goto_check.txt"' in host and
           'fscanf(f, "%f %f %f %39s %7s"' in host, "the game does not take the menu's action, or reads the check otherwise than it is written")
     check("else if (oot_teleport(c, actor, index)) check.waiting = 1" in host and "} else if (oot_banc_in_folder(current, check.folder)) {" in host and

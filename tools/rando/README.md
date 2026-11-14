@@ -995,7 +995,24 @@ file; another seed's record is not taken. The game's side reports each check to 
 Tracker tab says how many of an area's checks are left, counts only those among the ones in logic, and says "done"
 on a check.
 
-It is one record for the game folder, not for a save: a new game of the same seed keeps it until it is forgotten
+**Marks in the save itself** (2026-11-14). Reported from play: a shelf bought was gone, and marked, in a save from
+before and in a new game of the seed. Now:
+
+- a check that is an actor of a map (a chest, a Gold Skulltula, a Piece of Heart: 213 of a seed's 300) is marked by
+  the truth value the game keeps for the actor's hash (`Bool64bitKey`), which the game was not seen to set for a
+  chest (no save looked at had one; a chest with it set stood shut as before). It is set when the check is
+  collected and read back each second (`oot_shelf_flags`);
+- a shop's shelf by its own flag, as before, which is now the save's too;
+- a character's gift (40 of 300) has no such place and stays in the folder's record below.
+
+A flag is set by the game's own setters (`f_806a2b20` by name, `f_80f27130` by an actor's hash: the manager, the
+value, the hash), which queue the write. **A value written straight into the manager's memory is not in the next
+save** (seen in a save's file), which the game's side did until then for every flag. Seen without a window: a check
+collected, the game's own save, the game started again on that save: marked; on the saves from before: not marked.
+The save's file is as github.com/Mozencaz/OotrR `save_reader.py` reads it (32 bytes, then (hash, value) pairs in
+typed sections, and last the hashes whose truth value is true).
+
+For the gifts it is one record for the game folder, not for a save: a new game of the same seed keeps it until it is forgotten
 (the Tracker tab's first row, confirm twice), a save from before a check was collected still says it is, and what
 was collected before the record began is not in it.
 

@@ -340,9 +340,11 @@ def main():
           "shown = {index: shelf_flag[h] for h, (its, index, _) in shelves.items() if its is shop}" in script and
           "more = flag_defaults(new if new is not None else was, shelf_start) if shelf_start else None" in script and
           'with open(os.path.join(mod, SHELF_FLAGS), "w", encoding="utf-8", newline="\\n") as f:' in script and
-          "static int oot_shelf_flags(Ctx *c) {" in host and "if (oot_checks[best].shelf) oot_checks[best].sold = 1;" in host and
+          "static int oot_shelf_flags(Ctx *c) {" in host and "if (oot_checks[best].shelf || oot_checks[best].key) oot_checks[best].sold = 1;" in host and
           # (the flag is the save's and says what was bought; the record is the folder's and follows it)
           "if (now && oot_gamedata_set_bool(c, oot_checks[i].shelf, 0)) changed++;" in host and "oot_checks[i].done = !now;" in host and
+          # (a flag written where it is was not in the next save: the game's own setter is called)
+          "A64Fn set = a64_lookup(0x806a2b20ULL);" in host and "c->x[0] = mgr, c->x[1] = value ? 1 : 0, c->x[2] = hash;" in host and
           "const int want = oot_checks[i].done != 1;" not in host and
           'oot_game_file(path, sizeof path, "mods/rando-seed/shelf_flags.txt")' in host and "const int changed = oot_shelf_flags(c);" in host and
           "const char *tail = oot_checks[i].shelf && oot_checks[i].done != 1 ? strchr(oot_checks[i].item, '_') : NULL;" in host and "new, count = shelf_actors(data, on_shelf, lifts, scales, turns)" in script and

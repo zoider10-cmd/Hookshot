@@ -1211,6 +1211,11 @@ static int oot_teleport(Ctx *c, uint64_t actor, unsigned index) {
 
 /* Writes a GameData bool directly: GameDataMgr+32 is the (hash, index) table (+44 its size), the bools are 24-byte
    entries at GameDataMgr+24 (+16 their count) with the value at +22, as f_8022d9c0 reads them. 1 when found. */
+/* A truth value of the list set. By the game's own setter (f_806a2b20: the manager, the value, the name's hash), which
+   puts the write in the manager's queue: the value is the game's some frames later, and it is in the next save.
+   (Until 2026-11-14 the value's byte was written where it is, +22 of the flag's 24 bytes: the game saw it at once, but
+   a save made after did not have it. Seen in a save's file: HavePlayedEvent.Dm_TimeTemple_0065 set so, then the
+   game's own save, and the file had it false.) Where the setter is not found the byte is written as before. */
 static int oot_gamedata_set_bool(Ctx *c, uint32_t hash, int value) {
     const uint64_t mgr = oot_singleton(c, OOT_GAMEDATA_SLOT);
     if (!mgr) return 0;
@@ -1223,7 +1228,15 @@ static int oot_gamedata_set_bool(Ctx *c, uint32_t hash, int value) {
         if (key != hash) continue;
         const uint32_t index = recomp_load32(c, table + slot * 8ULL + 4), count = recomp_load32(c, mgr + 16);
         if (index >= count) return 0;
-        recomp_store8(c, recomp_load64(c, mgr + 24) + index * 24ULL + 22, value ? 1 : 0);
+        A64Fn set = a64_lookup(0x806a2b20ULL);
+        if (set) {
+            const Ctx saved = *c;
+            c->x[0] = mgr, c->x[1] = value ? 1 : 0, c->x[2] = hash;
+            set(c);
+            *c = saved;
+        } else {
+            recomp_store8(c, recomp_load64(c, mgr + 24) + index * 24ULL + 22, value ? 1 : 0);
+        }
         return 1;
     }
     return 0;
@@ -1282,6 +1295,27 @@ static int64_t oot_gamedata_keyed_index(Ctx *c, uint64_t key, uint32_t *reset) {
     return -1;
 }
 
+/* The truth value the game keeps by an actor's hash: the byte at 12 of its 16 in the table (github.com/Mozencaz/OotrR
+   live_memory.py has it so, after the PracticeROM's notes). 1 and *out, or 0 when the table has no such hash. */
+static int oot_gamedata_keyed_bool(Ctx *c, uint64_t key, int *out) {
+    const int64_t i = oot_gamedata_keyed_index(c, key, NULL);
+    if (i < 0) return 0;
+    *out = recomp_load8(c, recomp_load64(c, oot_singleton(c, OOT_GAMEDATA_SLOT) + OOT_KEYED_TABLE) + (uint64_t)i * 16 + 12) != 0;
+    return 1;
+}
+/* (set by the game's own setter, f_80f27130: the manager, the value, the hash. It puts the write in a queue of the
+   manager's, as the truth values by name have one; the byte written where it is was not in the next save) */
+static int oot_gamedata_keyed_set_bool(Ctx *c, uint64_t key, int value) {
+    const uint64_t mgr = oot_singleton(c, OOT_GAMEDATA_SLOT);
+    A64Fn set = a64_lookup(0x80f27130ULL);
+    if (!set || oot_gamedata_keyed_index(c, key, NULL) < 0) return 0;
+    const Ctx saved = *c;
+    c->x[0] = mgr, c->x[1] = value ? 1 : 0, c->x[2] = key;
+    set(c);
+    *c = saved;
+    return 1;
+}
+
 /* (the randomizer's fork) What the Tracker tab says is collected: the randomizer's own record. The game's flag for a chest
    opened was looked for and not found (tools/rando/README.md says where), so the record is kept here: the pouch
    manager's add (hos_oot_pouch_add, below) sees every item given and tells oot_tracker_item, which marks the check of
@@ -1292,7 +1326,14 @@ static int64_t oot_gamedata_keyed_index(Ctx *c, uint64_t key, uint32_t *reset) {
    rando_stamp.txt), then the collected checks' places in the checks file. Another seed's record is not taken. It is
    one record for the folder, not for a save: a new game of the same seed keeps it until it is forgotten (the Tracker
    tab's first row, the action 6), and a save from before a check was collected still says it is. Checks collected
-   before there was a record are not in it. */
+   before there was a record are not in it.
+   Since 2026-11-14 that is so only of the checks with no place of their own in a save (a character's gift). A check
+   that is an actor of a map (a chest, a Gold Skulltula, a Piece of Heart: its line has the actor's hash) is marked
+   in the save itself: the game's list has a truth value for every such actor by its hash (Bool64bitKey), saved,
+   which the game was not seen to set for a chest (no save looked at had one, and a chest with it set was shut as
+   before: seen without a window in Mido's house). It is set when the check is collected, by the game's own setter,
+   and the mark of such a check is what the save loaded says (oot_shelf_flags). A shelf has its own flag. So a save
+   from before, and a new game of the seed, have their own marks. */
 #define OOT_CHECK_NEAR 60.0f
 static float oot_load_float(Ctx *c, uint64_t addr);
 static int oot_gamedata_string(Ctx *c, uint32_t hash, char *buf, size_t size);
@@ -1304,7 +1345,8 @@ static struct {
     signed char done;
     uint64_t piece;   /* (a Piece of Heart lying in the world: its actor's hash; 0: another kind of check) */
     uint32_t shelf;   /* (a shop's shelf: the hash of the flag it waits for, "still for sale"; 0: another kind of check) */
-    signed char sold; /* (a shelf bought just now: its flag is to be put out, oot_shelf_flags) */
+    signed char sold; /* (a shelf bought, or a check with a key collected, just now: its flag is to be set, oot_shelf_flags) */
+    uint64_t key;     /* (an actor of a map: its hash, by which the save keeps a truth value; 0: none) */
 } oot_checks[OOT_TRACKER_MAX];
 static int oot_check_count = -1;
 static char oot_checks_seed[200];   /* (the stamp the checks and the record are of) */
@@ -1367,7 +1409,9 @@ static void oot_tracker_load(const char *stamp) {
         snprintf(oot_checks[oot_check_count].item, sizeof oot_checks[0].item, "%s", got >= 10 ? item : "");
         /* (tools/rando/rando_seed.py names such a check "Piece of Heart", and no other kind begins so) */
         oot_checks[oot_check_count].piece = got >= 9 && !strncmp(kind, "Piece of Heart", 14) ? strtoull(hash, NULL, 16) : 0;
+        oot_checks[oot_check_count].key = got >= 9 ? strtoull(hash, NULL, 16) : 0;   /* ("-": 0) */
         oot_checks[oot_check_count].shelf = 0;
+        oot_checks[oot_check_count].sold = 0;
         oot_checks[oot_check_count++].done = 0;
     }
     if (f) fclose(f);
@@ -1413,13 +1457,24 @@ static int oot_shelf_flags(Ctx *c) {
     AcquireSRWLockExclusive(&oot_checks_lock);
     for (int i = 0; i < oot_check_count; i++) {
         int now = 0;
-        if (!oot_checks[i].shelf || !oot_gamedata_bool(c, oot_checks[i].shelf, &now)) continue;
-        if (oot_checks[i].sold) {
-            oot_checks[i].sold = 0;
-            if (now && oot_gamedata_set_bool(c, oot_checks[i].shelf, 0)) changed++;
-        } else if ((oot_checks[i].done == 1) != !now) {
-            oot_checks[i].done = !now;
-            marks++;
+        if (oot_checks[i].shelf) {
+            if (!oot_gamedata_bool(c, oot_checks[i].shelf, &now)) continue;
+            if (oot_checks[i].sold) {
+                oot_checks[i].sold = 0;
+                if (now && oot_gamedata_set_bool(c, oot_checks[i].shelf, 0)) changed++;
+            } else if ((oot_checks[i].done == 1) != !now) {
+                oot_checks[i].done = !now;
+                marks++;
+            }
+        } else if (oot_checks[i].key) {   /* (an actor of a map: the save's truth value by its hash, true once collected) */
+            if (!oot_gamedata_keyed_bool(c, oot_checks[i].key, &now)) continue;
+            if (oot_checks[i].sold) {
+                oot_checks[i].sold = 0;
+                if (!now && oot_gamedata_keyed_set_bool(c, oot_checks[i].key, 1)) changed++;
+            } else if ((oot_checks[i].done == 1) != now) {
+                oot_checks[i].done = now;
+                marks++;
+            }
         }
     }
     if (marks) oot_tracker_save();
@@ -1463,7 +1518,7 @@ static void oot_tracker_item(const char *name) {
     }
     if (best >= 0) {
         oot_checks[best].done = 1;
-        if (oot_checks[best].shelf) oot_checks[best].sold = 1;
+        if (oot_checks[best].shelf || oot_checks[best].key) oot_checks[best].sold = 1;
         oot_tracker_save();
         if (nearest < 1e29f) hos_log("rando: tracker: %s got: check %d is collected (%.1f m from Link)", name, best, nearest);
         else hos_log("rando: tracker: %s got: check %d is collected (the one left that gives it)", name, best);
@@ -1693,6 +1748,27 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
             watch = *end == ',' ? end + 1 : end;
         }
         first = 0;
+    }
+    {   /* (a test's: HOS_OOT_KEYED="<hash in hex>,..." says each second from the 60th what the truth values kept by
+           those actors' hashes are, when one changed; HOS_OOT_KEYED_SET="<second>" sets them all true at that second) */
+        static int turn;
+        static char last[64];
+        const char *keys = getenv("HOS_OOT_KEYED"), *at = getenv("HOS_OOT_KEYED_SET");
+        if (keys && ++turn >= 60) {
+            char now_is[64] = "";
+            int n = 0;
+            while (*keys && n < 60) {
+                char *end;
+                const uint64_t key = strtoull(keys, &end, 16);
+                int v = 0;
+                if (end == keys) break;
+                if (at && turn == atoi(at)) oot_gamedata_keyed_set_bool(c, key, 1);
+                now_is[n++] = oot_gamedata_keyed_bool(c, key, &v) ? (v ? '1' : '0') : '?';
+                keys = *end ? end + 1 : end;
+            }
+            now_is[n] = 0;
+            if (strcmp(now_is, last)) hos_log("test: keyed, second %d: %s", turn, now_is), strcpy(last, now_is);
+        }
     }
     {   /* (a test's: HOS_OOT_SETENUM="<hash in hex>=<a value's hash in hex>,..." sets those values of the list's Data.Enum
            once, some seconds into the game, and says what each was: a quest's step) */
@@ -2328,7 +2404,10 @@ int hos_oot_pouch_add(Ctx *c) {
     }
     /* (an item given: the tracker's record. Not the pouch as a save is loaded (from 0x8112d4b8), an add inside another (a bag
        filled, a bundle's own: from 0x8112f998 and 0x8112e19c), nor the debug inventory's (x4 9)) */
-    if ((int32_t)c->x[3] > 0 && c->x[30] != 0x8112d4b8ULL && c->x[30] != 0x8112f998ULL && c->x[30] != 0x8112e19cULL && (uint32_t)c->x[4] != 9) {
+    static int debug_counts = -1;   /* (a test's: HOS_OOT_TRACK_DEBUG=1 has the debug inventory's adds marked too) */
+    if (debug_counts < 0) { const char *e = getenv("HOS_OOT_TRACK_DEBUG"); debug_counts = e && *e == '1'; }
+    if ((int32_t)c->x[3] > 0 && c->x[30] != 0x8112d4b8ULL && c->x[30] != 0x8112f998ULL && c->x[30] != 0x8112e19cULL &&
+        ((uint32_t)c->x[4] != 9 || debug_counts)) {
         /* (Heart Pieces: a piece lying in the world that the seed made another item gives that item) */
         char gives[64];
         if ((!strcmp(name, OOT_PIECE) || !strcmp(name, OOT_PIECE_VALLEY)) && c->x[30] != 0x828d50acULL &&
