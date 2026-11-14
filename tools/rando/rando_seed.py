@@ -384,6 +384,10 @@ SHOP_GATES = frozenset((WM, WL))
 SHOP_WALLET_GIFTS = ("skulltula_house_10", "skulltula_house_30")
 SHOP_PRICE_MAX = 750
 SHOP_CHILD, SHOP_CHILD_MORE = 200, 0.15
+# How low the Low prices are: the power an even roll is raised to. It was 3, the cube: one shelf in eight cost 1 rupee
+# (seen in play: seven of a seed's 48 shelves, four of them Gold Skulltula tokens, and asked about). 2, the square,
+# is gentler (its owner's word, 2026-11-13): 1 rupee on one shelf in 25, six in ten within the child's wallet.
+SHOP_LOW_POWER = 2
 WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,))))
 
 
@@ -403,10 +407,13 @@ WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,
 # The Lens of Truth took the longest. Its model is made where it is worn, before young Link's eyes: its box is 0.92
 # to 1.04 m up, 22 cm wide, and faces forward. It is 11 cm tall: put down by its box at its own size it stood behind
 # its shelf's price board, which is as tall, and was not seen (the tries before this took that for a model that does
-# not show, and turned it, which swung it off its shelf). At 1.5 times its size its middle is 1.06 m a unit of size
-# over its origin (measured on the pictures of two sizes), so its shelf's actor is 1.4 m lower (SHELF_LIFT): the two
-# lenses stand over the board, facing the shop. Seen so in the Kokiri shop, the Bazaar and the Goron shop.
-SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": -1.4, "Item_Range_Bow": 0.15, "Item_Sword_Kokiri": 0.15}
+# not show, and turned it, which swung it off its shelf). So its shelf's actor is 0.67 m lower (SHELF_LIFT), its
+# lenses a hand over the board, facing the shop, at its own size. It was 1.5 times its size for a while, and the
+# shop's arrows round the shelf looked at were then far under it (reported from play): they go by the model's box as
+# the list of actors has it, which is the model's own size, so a model far from its origin is not made larger here.
+# At its own size the arrows are round it. Seen so in the Kokiri shop, the Bazaar and the Goron shop.
+SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": -0.67, "Item_Range_Bow": 0.15, "Item_Sword_Kokiri": 0.15, "Item_Shield_Mirror": 0.35, "TBox_Shield_Hylian": 0.35,
+              "TBox_Shield_Deku": 0.3}
 
 
 def shelf_lift(item, floor):
@@ -450,7 +457,7 @@ def model_box(data, item):
 # Scale in the map file. An item's own number, where its box does not say it: the Small Key, tall and thin, stood
 # over its shelf's whole height.
 SHELF_LONG = 0.9
-SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_GlassTruth": 1.5,
+SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_GlassTruth": 1.0,
                "Item_Gauntlet_Gold": 1.0, "Item_Gauntlet_Silver": 1.0, "Item_Gauntlet_Goron": 1.0}
 # (the Fairy Bow's model is long front to back, 1.36 m along its own Z: on the Kokiri shop's shelf it lay pointing at
 # the viewer, its end alone to be seen behind the price board (its owner's picture, 2026-11-13). A quarter turn about
@@ -463,7 +470,13 @@ SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_
 # seen on two of them. Not seen with it in the Bazaar or the Goron shop, where the bow lies across with that turn.
 # The Megaton Hammer with it stood on end, taller than its shelf's space, and is left lying; the Deku Stick bundle
 # leans as the game's own stick does, with the turn or without, and is left.)
-SHELF_TURN = {"Item_Range_Bow": (0.0, 1.57, 1.57), "Item_Sword_Kokiri": (0.0, 1.57, 1.57)}
+# (the three shields lay flat on their faces (reported from play: the Mirror Shield). A quarter turn about X stands the
+# Mirror Shield and the Deku Shield up, their faces to the shop; the same turn showed the Hylian Shield's face upside
+# down and the other way its back, so it has the other quarter turn and a half turn about the upright. Each seen so
+# on shelves of the Kokiri shop, the Bazaar and the Goron shop, whose own angles differ, raised to stand over the
+# price board.)
+SHELF_TURN = {"Item_Range_Bow": (0.0, 1.57, 1.57), "Item_Sword_Kokiri": (0.0, 1.57, 1.57), "Item_Shield_Mirror": (1.57, 0.0, 0.0),
+              "TBox_Shield_Deku": (1.57, 0.0, 0.0), "TBox_Shield_Hylian": (-1.57, 3.14, 0.0)}
 # An item whose model is made where it is worn, not at its own origin (the gauntlets: 1.17 m up): its shelf's actor is
 # put that much lower (shelf_fit). The gauntlets keep their size: their box is the pair's, 1.6 m from one to the other.
 SHELF_WORN = 0.5
@@ -526,14 +539,14 @@ def shop_actor(name):
 
 
 def shop_price(rng, mode):
-    """A shelf's price, 1 to SHOP_PRICE_MAX. mode 1: most of them low (the cube of an even roll: about seven in ten
-    within the child's wallet, one in eight past the Adult's), in fives from 10 up; 2: any price as likely as
+    """A shelf's price, 1 to SHOP_PRICE_MAX. mode 1: most of them low (an even roll to the power SHOP_LOW_POWER: about
+    six in ten within the child's wallet, one in seven past the Adult's), in fives from 10 up; 2: any price as likely as
     another, but for the child's wallet's, which come up a little more often (about four in ten). In both, SHOP_CHILD_MORE
     of the prices are rolled within the child's wallet alone."""
     most = SHOP_CHILD if rng.random() < SHOP_CHILD_MORE else SHOP_PRICE_MAX
     if mode == 2:
         return rng.randint(1, most)
-    price = 1 + int((most - 1) * rng.random() ** 3)
+    price = 1 + int((most - 1) * rng.random() ** SHOP_LOW_POWER)
     return price if price < 10 else min(SHOP_PRICE_MAX, 5 * round(price / 5))
 
 

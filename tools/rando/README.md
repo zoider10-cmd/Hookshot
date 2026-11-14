@@ -685,7 +685,9 @@ the same goods list, and both sell the shuffled items.
 
 With the randomizer on, what Link carries a counted item in comes full when it is got, whatever gives it (a chest, a
 shop, a gift, a Gold Skulltula): a Bomb Bag its bombs, a quiver or the bow its arrows, a Bullet Bag or the Slingshot
-its seeds, a Deku Stick bag its sticks, a Deku Nut bag its nuts. The game does this itself for a bigger bag, and for
+its seeds, a Deku Stick bag its sticks, a Deku Nut bag its nuts, and a wallet its rupees (the game leaves a wallet
+found as full as the one before it: rupees are added as the chests' gold rupee, 200 at a time, and stop at what the
+wallet holds; seen without a window, the Giant's Wallet from 24 to 1000). The game does this itself for a bigger bag, and for
 the first one of bombs, arrows and seeds; the first Deku Stick bag and Deku Nut bag came empty (a nut bag bought with
 no nuts held showed nothing in the Items screen, and was taken for a thing that did nothing). The game's side
 (`host/hos_main.c`, `oot_fill_note` and the player's update) adds what the bag holds, ten at a time, until the count
@@ -748,8 +750,11 @@ many a bundle holds ("x 10": `Shop_Board_Bundle_*`, an actor of its own) is put 
 sells a shuffled item. Seen in runs without a window in the Kokiri shop, the Bazaar and the Goron shop, 30 items;
 the Potion Shop, the Bombchu Shop and the Zora shop were not opened in those runs. **The Lens of Truth** is made
 where it is worn, 0.92 m over its origin, and is 11 cm tall: lowered to its shelf at its own size it stood behind the
-price board and was taken for a model that does not show. At 1.5 times its size and 1.4 m lower its two lenses stand
-over the board, facing the shop (seen in the three shops). **The Fairy Bow** is long front to back and lay pointing at
+price board and was taken for a model that does not show. Lowered 0.67 m its two lenses are a hand over the board,
+facing the shop (seen in the three shops), at its own size: made larger, the shop's arrows round the shelf looked at
+were far under it (they go by the model's box at its own size). **The three shields** lay flat on their faces: each
+has a turn that stands it up, its face to the shop (the Hylian Shield's is another than the other two's), seen in
+the three shops. **The Kokiri Sword** has the bow's turn and stands on the Kokiri shop's shelves. **The Fairy Bow** is long front to back and lay pointing at
 the viewer: it has a quarter turn about the upright and one about Z, and shows its curve and string in the Bazaar and
 the Goron shop; on the Kokiri shop's shelf it stands on end. A bottle lies low behind its price board. A seed made before this keeps its shelves as they were.
 
@@ -767,7 +772,8 @@ Cavern". Seen in play: shut at night before King Dodongo. Not looked at: the kee
 quest ends the same way once Dungeon rewards are shuffled.
 
 A shelf's price is always rolled by the seed, 1 to 750 rupees (`shop_price`; it was 1000): `1`, Low prices, most of
-them low (about seven in ten within the child's wallet); `2`, Any price, each as likely as another but for the
+them low (about six in ten within the child's wallet, by the square of an even roll: with the cube one shelf in
+eight cost 1 rupee); `2`, Any price, each as likely as another but for the
 child's wallet's, which come up a little more often (about four in ten, where an even roll gives a little over a
 quarter). Link pays what his wallet holds: 200 as a child, 500 with the Adult's Wallet, 1000 with the Giant's (its
 owner's numbers). So with Shops the
