@@ -245,7 +245,7 @@ def main():
     high = {"Actors": [{"Gyaml": "Shop_Heart", "Translate": [1.0, 2.0, 3.0]}, {"Gyaml": "Shop_DekuStick", "Translate": [4.0, 5.0, 6.0], "Dynamic": {"ShopItemIndex": 7}}]}
     lifted = read(seed.shelf_actors(byml(high), {("Shop_Heart", 0): name, ("Shop_DekuStick", 7): "Shop_Rando_Other"}, {name: 0.25})[0])["Actors"]
     check(lifted[0]["Translate"] == [1.0, 2.25, 3.0] and lifted[1]["Translate"] == [4.0, 5.0, 6.0], "a shelf whose item asks for it is not put higher, or another is")
-    check("Item_Gauntlet_Gold" not in seed.SHELF_LIFT and seed.SHELF_SCALE["Item_Gauntlet_Gold"] == 1.0 and set(seed.SHELF_TURN) == {"Item_Range_Bow"},
+    check("Item_Gauntlet_Gold" not in seed.SHELF_LIFT and seed.SHELF_SCALE["Item_Gauntlet_Gold"] == 1.0 and set(seed.SHELF_TURN) == {"Item_Range_Bow", "Item_Sword_Kokiri"},
           "the gauntlets have a height of their own again (their box is right without the pose), or are made smaller, or another item is turned")
     info = byml([{"ModelAabbMin": {"X": -0.2, "Y": -0.193, "Z": 0.0}, "__RowId": "Item_Token_Gold"}, {"ModelAabbMin": {"X": 0.0, "Y": 1.171, "Z": 0.0}, "__RowId": "Item_Gauntlet_Gold"},
                  {"__RowId": "Item_Bare"}])

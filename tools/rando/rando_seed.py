@@ -406,7 +406,7 @@ WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,
 # not show, and turned it, which swung it off its shelf). At 1.5 times its size its middle is 1.06 m a unit of size
 # over its origin (measured on the pictures of two sizes), so its shelf's actor is 1.4 m lower (SHELF_LIFT): the two
 # lenses stand over the board, facing the shop. Seen so in the Kokiri shop, the Bazaar and the Goron shop.
-SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": -1.4, "Item_Range_Bow": 0.15}
+SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": -1.4, "Item_Range_Bow": 0.15, "Item_Sword_Kokiri": 0.15}
 
 
 def shelf_lift(item, floor):
@@ -458,7 +458,12 @@ SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_
 # string to the viewer: seen so on a shelf of the Bazaar and one of the Goron shop, whose own angles differ (of four
 # turns tried on each, the one that showed it the same in both). The hammer, the sword and the stick bundle are long
 # the same way and lie as they did: seen, and left.)
-SHELF_TURN = {"Item_Range_Bow": (0.0, 1.57, 1.57)}
+# (the Kokiri Sword is long the same way, 0.65 m: on the Kokiri shop's shelf a small dark shape behind the price board
+# (its owner's picture, 2026-11-13). With the bow's turn it stands on that shop's shelves, blade up, plain to see:
+# seen on two of them. Not seen with it in the Bazaar or the Goron shop, where the bow lies across with that turn.
+# The Megaton Hammer with it stood on end, taller than its shelf's space, and is left lying; the Deku Stick bundle
+# leans as the game's own stick does, with the turn or without, and is left.)
+SHELF_TURN = {"Item_Range_Bow": (0.0, 1.57, 1.57), "Item_Sword_Kokiri": (0.0, 1.57, 1.57)}
 # An item whose model is made where it is worn, not at its own origin (the gauntlets: 1.17 m up): its shelf's actor is
 # put that much lower (shelf_fit). The gauntlets keep their size: their box is the pair's, 1.6 m from one to the other.
 SHELF_WORN = 0.5
