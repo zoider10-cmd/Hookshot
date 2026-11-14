@@ -681,6 +681,19 @@ Not the Happy Mask Shop, and not the shelves a game buys from again and again or
 tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
 the same goods list, and both sell the shuffled items.
 
+## A bag found is a full bag
+
+With the randomizer on, what Link carries a counted item in comes full when it is got, whatever gives it (a chest, a
+shop, a gift, a Gold Skulltula): a Bomb Bag its bombs, a quiver or the bow its arrows, a Bullet Bag or the Slingshot
+its seeds, a Deku Stick bag its sticks, a Deku Nut bag its nuts. The game does this itself for a bigger bag, and for
+the first one of bombs, arrows and seeds; the first Deku Stick bag and Deku Nut bag came empty (a nut bag bought with
+no nuts held showed nothing in the Items screen, and was taken for a thing that did nothing). The game's side
+(`host/hos_main.c`, `oot_fill_note` and the player's update) adds what the bag holds, ten at a time, until the count
+stops going up: the pouch keeps what the bag holds and no more. An add is counted an update after it is made, so
+each is looked at before the next. Seen without a window (the test switch `HOS_OOT_GIVE="<item>,<item>,..."`, which
+puts items in the pouch one a second): the first stick bag 10, the bigger one 20, a nut bag 30, the Bomb Bags 20
+and 30. `tests/test_rando_progressive.py` checks the table and the steps.
+
 ## Dungeon rewards
 
 The Dungeon rewards setting (`rando_dungeon_rewards`, `--dungeon-rewards`): the three Spiritual Stones and five of the

@@ -82,9 +82,29 @@ def main():
     for word in ("Item_BombBag_Small", "Item_Quiver_Large", "Item_BulletBag_Large", "Item_Longshot", "Item_Wallet_Large", "Item_StickBag_Large",
                  "Item_NutBag_Large", "Item_FairyBless_MPDouble"):
         check(word in flat, "the game's families have no %s" % word)
-    check("if ((int32_t)c->x[3] <= 0 || !hos_rando_progressive()) return 0;" in block and "if (level >= tiers) return 0;" in block and
+    check("if ((int32_t)c->x[3] <= 0) return 0;" in block and "if (!hos_rando_progressive()) {" in block and "if (level >= tiers) {" in block and
+          block.index("if ((int32_t)c->x[3] <= 0) return 0;") < block.index("if (!hos_rando_progressive()) {") < block.index("for (unsigned f = 0;") and
           "for (int t = tiers - 1; t >= 0 && !level; t--)" in block,
           "a content taken away, or one found with the setting off, is changed; or Link's place in a family is not the highest he carries")
+    # ---- a bag found is a full bag: the holder given (after the progressive step) is noted, and what it holds is added
+    #      a few updates later until the count stops going up ----
+    fills = host[host.index("static const char *const oot_fills[][2] = {"):host.index("enum { OOT_FILLS")]
+    pairs = dict(re.findall(r'\{"(\w+)", "(\w+)"\}', fills))
+    check(pairs == {"Item_BombBag_": "Item_Bomb", "Item_Quiver_": "Item_Arrow_Normal", "Item_Range_Bow": "Item_Arrow_Normal",
+                    "Weapon_Range_Bow": "Item_Arrow_Normal", "Item_BulletBag_": "Item_DekuSeed", "Item_Range_SlingShot": "Item_DekuSeed",
+                    "Weapon_Range_SlingShot": "Item_DekuSeed", "Item_StickBag_": "Item_DekuStick", "Item_NutBag_": "Item_DekuNut"},
+          "what each holder holds is not the five kinds (bombs, arrows, seeds, sticks, nuts): %r" % pairs)
+    check(block.count("oot_fill_note(") == 4 and "oot_fill_note(give);" in block and
+          block.index("if (!hos_rando_on()) return 0;") < block.index("oot_fill_note("),
+          "the holder given is not noted at each way out of the add, or is with the randomizer off")
+    update = host[host.index("static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components) {"):]
+    update = update[:update.index("if (__atomic_load_n(&oot_piece_back")]
+    # (an add is counted an update after it is made: each is looked at before the next, a few updates apart)
+    check("if ((oot_fill_last[k] < 0 || now > oot_fill_last[k]) && oot_fill_adds[k] < OOT_FILL_STEPS &&" in update and
+          "oot_pouch_change(c, holds, OOT_FILL_STEP) >= 0) {" in update and
+          "__atomic_store_n(&oot_fill_wait[k], OOT_FILL_APART, __ATOMIC_RELEASE);" in update and
+          "oot_fill_last[k] = -1, oot_fill_adds[k] = 0;" in host,
+          "what a holder holds is not added until the count stops going up, the adds are not apart, or they have no end")
     name = host[host.index("static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {"):host.index("int hos_oot_pouch_add(Ctx *c) {")]
     check("c->x[1] = block + 16;" in name and "memcpy(A64_PTR(block + 96), give, strlen(give) + 1);" in name and "oot_pouch_name(c, view, give);" in block and
           "recomp_store8(c, text" not in block and "recomp_store8(c, text" not in name,

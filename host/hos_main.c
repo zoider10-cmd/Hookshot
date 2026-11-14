@@ -1283,6 +1283,35 @@ static void oot_tracker_item(const char *name) {
 #define OOT_PIECE_VALLEY "Obj_GerudoValley_Heart_Piece"
 #define OOT_PIECE_WAIT 600   /* (the player's updates a piece counted late is waited for: some seconds) */
 static int oot_piece_back;   /* (a piece to take back out of the pouch: the updates it is still waited for) */
+/* (the randomizer's fork) A bag found is a full bag. What Link carries a counted item in (a Bomb Bag, a quiver or the
+   bow, a Bullet Bag or the Slingshot, a Deku Stick bag, a Deku Nut bag) came empty when a seed gave it: a Deku Nut bag
+   bought with no nuts held showed nothing in the Items screen, and was taken for a thing that did nothing (its owner's
+   report, 2026-11-13, and their word: fill it, a bigger quiver or Bomb Bag too). So when one is put in the pouch
+   (hos_oot_pouch_add notes which, the one given after the progressive step), what it holds is added until the count
+   stops going up: the pouch keeps what the bag holds and no more. The adds are a few updates later, when the bag is in
+   the pouch, and a few updates apart: an add is counted an update after it is made (seen: the count read at once was
+   the one before), so each is looked at before the next (the player's update, oot_update_player_cheats). Seen without
+   a window: the game fills a bigger bag itself, and the first one too for bombs, arrows and seeds; the first Deku
+   Stick bag and Deku Nut bag came empty and are filled by this. With the randomizer on only. */
+enum { OOT_FILL_WAIT = 12, OOT_FILL_STEP = 10, OOT_FILL_STEPS = 12, OOT_FILL_APART = 4 };
+static const char *const oot_fills[][2] = {   /* what a holder's name starts with, and what it holds */
+    {"Item_BombBag_", "Item_Bomb"}, {"Item_Quiver_", "Item_Arrow_Normal"}, {"Item_Range_Bow", "Item_Arrow_Normal"},
+    {"Weapon_Range_Bow", "Item_Arrow_Normal"}, {"Item_BulletBag_", "Item_DekuSeed"}, {"Item_Range_SlingShot", "Item_DekuSeed"},
+    {"Weapon_Range_SlingShot", "Item_DekuSeed"}, {"Item_StickBag_", "Item_DekuStick"}, {"Item_NutBag_", "Item_DekuNut"},
+};
+enum { OOT_FILLS = sizeof oot_fills / sizeof oot_fills[0] };
+static int oot_fill_wait[OOT_FILLS];   /* (a holder got: the updates until what it holds is added, or looked at again) */
+static int oot_fill_last[OOT_FILLS];   /* (the count before the last add; -1: none made yet) */
+static int oot_fill_adds[OOT_FILLS];   /* (the adds made) */
+static void oot_fill_note(const char *item) {
+    for (int k = 0; k < (int)OOT_FILLS; k++)
+        if (!strncmp(item, oot_fills[k][0], strlen(oot_fills[k][0]))) {
+            oot_fill_last[k] = -1, oot_fill_adds[k] = 0;
+            __atomic_store_n(&oot_fill_wait[k], OOT_FILL_WAIT, __ATOMIC_RELEASE);
+            hos_log("rando: %s got: its %s will be filled", item, oot_fills[k][1]);
+            return;
+        }
+}
 static int oot_piece_gives(char *out, size_t size) {
     int best = -1;
     float nearest = OOT_PIECE_NEAR;
@@ -1335,6 +1364,28 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
                         oot_gamedata_set_bool(c, hash, value) ? "done" : "NOT DONE");
                 set = end + 2;
                 if (*set == ',') set++;
+            }
+        }
+    }
+    {   /* (a test's: HOS_OOT_GIVE="<item>,<item>,..." puts those in the pouch, one a second from the tenth second on, as
+           a scene's gift is put there, and says how many Link then has: to try what follows an item without playing up
+           to it (a Deku Nut bag is in no row of the Debug tab's inventory) */
+        static int turn;
+        const char *give = getenv("HOS_OOT_GIVE");
+        if (give && ++turn >= 10) {
+            int k = turn - 10;
+            while (k > 0 && *give) {
+                give += strcspn(give, ",");
+                if (*give == ',') give++;
+                k--;
+            }
+            char item[64];
+            const size_t length = strcspn(give, ",");
+            if (length && length < sizeof item) {
+                memcpy(item, give, length);
+                item[length] = 0;
+                const int result = oot_pouch_change(c, item, 1);
+                hos_log("test: %s given (event status %d): Link has %d", item, result, oot_pouch_count(c, item));
             }
         }
     }
@@ -1556,6 +1607,21 @@ static void oot_skip_cutscene(Ctx *c) {
 static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components) {
     int rx_option(int id, int otherwise);
     oot_skip_cutscene(c);
+    for (int k = 0; k < (int)OOT_FILLS; k++) {   /* (a bag found is a full bag: oot_fill_note) */
+        if (__atomic_load_n(&oot_fill_wait[k], __ATOMIC_ACQUIRE) <= 0) continue;
+        if (__atomic_sub_fetch(&oot_fill_wait[k], 1, __ATOMIC_RELEASE) > 0) continue;
+        const char *holds = oot_fills[k][1];
+        const int now = oot_pouch_count(c, holds);
+        /* (until the count stops going up: the bag is full. The first add is made whatever the count; each after it
+           when the one before raised it) */
+        if ((oot_fill_last[k] < 0 || now > oot_fill_last[k]) && oot_fill_adds[k] < OOT_FILL_STEPS &&
+            oot_pouch_change(c, holds, OOT_FILL_STEP) >= 0) {
+            oot_fill_last[k] = now, oot_fill_adds[k]++;
+            __atomic_store_n(&oot_fill_wait[k], OOT_FILL_APART, __ATOMIC_RELEASE);
+            continue;
+        }
+        hos_log("rando: %s filled: Link has %d (%d adds)", holds, now, oot_fill_adds[k]);
+    }
     if (__atomic_load_n(&oot_piece_back, __ATOMIC_ACQUIRE) > 0) {   /* (Heart Pieces: hos_oot_pouch_add) */
         const int left = __atomic_sub_fetch(&oot_piece_back, 1, __ATOMIC_RELEASE);
         if (!(left % 4) && oot_pouch_count(c, OOT_PIECE) > 0) {
@@ -1932,7 +1998,11 @@ int hos_oot_pouch_add(Ctx *c) {
         }
         oot_tracker_item(name);
     }
-    if ((int32_t)c->x[3] <= 0 || !hos_rando_progressive()) return 0;
+    if ((int32_t)c->x[3] <= 0) return 0;
+    if (!hos_rando_progressive()) {
+        oot_fill_note(name);   /* (a bag found is a full bag) */
+        return 0;
+    }
     for (unsigned f = 0; f < sizeof families / sizeof families[0]; f++) {
         int spelling = -1, tiers = 0;
         for (int t = 0; t < 3; t++) {
@@ -1946,13 +2016,18 @@ int hos_oot_pouch_add(Ctx *c) {
         for (int t = tiers - 1; t >= 0 && !level; t--)
             for (int a = 0; a < 2; a++)
                 if (families[f][t][a] && oot_pouch_count(c, families[f][t][a]) > 0) level = t + 1;
-        if (level >= tiers) return 0;   /* (he has them all: the one found is given as it is) */
+        if (level >= tiers) {   /* (he has them all: the one found is given as it is) */
+            oot_fill_note(name);
+            return 0;
+        }
         const char *give = families[f][level][spelling] ? families[f][level][spelling] : families[f][level][0];
         hos_log("rando: progressive: %s found, Link has %d of its %d: %s given", name, level, tiers, give);
+        oot_fill_note(give);
         if (!strcmp(give, name)) return 0;
         oot_pouch_name(c, view, give);
         return 0;
     }
+    oot_fill_note(name);   /* (not an upgrade of a family: a holder all the same, or nothing) */
     return 0;
 #else
     (void)c;
