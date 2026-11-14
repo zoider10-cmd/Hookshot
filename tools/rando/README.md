@@ -713,7 +713,9 @@ own shelf actors that the seed sells nowhere (`SHELF_FLAG_SHOP`).
 - The tracker did not mark some shelves bought: the pouch has an item by another name than the seed (the Lens of
   Truth was `Armor_Child_GlassTruth`, a purple rupee `Obj_Rupee_Purple`). A shelf near Link whose item's name without
   its first word is the end of the name given is now the one (`oot_tracker_item`).
-- **Not seen yet: a shelf bought and gone after its map is loaded again, in play.** The record is the folder's, not a
+- Seen in play (2026-11-14, a test seed, the Kokiri shop): the Sun's Song, a purple rupee and a Piece of Heart
+  bought, each shelf marked by the tracker and its flag put out, and all three gone after the Sun's Song was played.
+  Not seen: after the game is closed and opened, and the other shops. The record is the folder's, not a
   save's (as the tracker's is): another save of the same seed has the same shelves gone until the record is
   forgotten (the Tracker tab's first row).
 - A seed made before this has no `shelf_flags.txt` and is as it was.
