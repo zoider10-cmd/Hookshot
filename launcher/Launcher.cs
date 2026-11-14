@@ -1893,7 +1893,7 @@ class LauncherForm : Form {
     // Dungeon keys' Anywhere are made as the choice before. tools/rando/rando_seed.py is what places a seed. Songs'
     // Anywhere is made: its line is here again, { "rando_songs", 2 }, while the script's SONGS_ANYWHERE is False)
     internal static readonly Dictionary<string, int> RandoNotYet = new Dictionary<string, int> {
-        { "rando_dungeon_rewards", 2 }, { "rando_keys", 2 } };
+        { "rando_dungeon_rewards", 1 }, { "rando_songs", 2 }, { "rando_keys", 2 } };
     // (rows that are no longer a choice and are not shown: the frogs of Zora's River take part whenever Quest rewards is
     // on. The row stays in RandoRows, its place being its place in a seed's ID, gpu/vk/oot_rando.h)
     internal static readonly HashSet<string> RandoHidden = new HashSet<string> { "rando_frogs" };
