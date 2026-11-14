@@ -640,6 +640,38 @@ def shop_rows(data, kind, item, price, name=None):
     return byml_build((tree[0], rows), version)
 
 
+# ---- Bombchus: a limit of their own ----
+# The game counts Bombchus against the Bomb Bag: their row of the list of pouch actors (RSDB/PouchActorInfo) names
+# the bombs' limit (MaxNumGameData "Bomb", the flag PouchContentMaxNum.Bomb, 0 until a bag is got) and the small bag
+# as what they are carried in. So Bombchus found before a Bomb Bag were lost: a chest of five gave none, the Items
+# screen "0/0" (reported from play, the save without a bag). The game has another kind of limit, one of the item's
+# own (FixedMaxNum: the Magic Beans' 10, the Gold Skulltula tokens' 100). Every seed gives the Bombchus that
+# (BOMBCHU_LIMIT) and takes the bag's two fields away: seen without a window on a save with its Bomb Bag taken out,
+# three Bombchus given one by one were 1, 2, 3, a bundle of five made 8, and bombs given the same way stayed 0 (the
+# bag is still what bombs ask for: the rules' gating item is as it was). The same change to the file of the
+# Bombchu's own pack did nothing: the list is what the game reads. Not seen: a Bombchu used without a bag.
+BOMBCHU, BOMBCHU_LIMIT = "Item_Bombchu", 50
+POUCH_TABLE = "PouchActorInfo"
+
+
+def chu_limit(data, limit=BOMBCHU_LIMIT):
+    """the list of pouch actors with the Bombchus' limit their own: the new bytes (the same bytes back when it is so
+    already). A list without their row, or whose row is not as the game's, is an error."""
+    tree, version = byml_parse(data)
+    rows = [r for r in tree[1] if r[1].get("__RowId", ("", ""))[1] == BOMBCHU]
+    if len(rows) != 1:
+        raise ValueError("the list of pouch actors has %d rows of %s" % (len(rows), BOMBCHU))
+    row = rows[0][1]
+    if "FixedMaxNum" in row and "MaxNumGameData" not in row and "SmallBagActor" not in row:
+        return data
+    if row.get("MaxNumGameData") != ("string", "Bomb") or "SmallBagActor" not in row or "FixedMaxNum" in row:
+        raise ValueError("the Bombchus' row is not counted against the Bomb Bag as this was written for")
+    kept = [(k, v) for k, v in row.items() if k not in ("MaxNumGameData", "SmallBagActor")] + [("FixedMaxNum", (0xD1, struct.pack("<i", limit)))]
+    row.clear()
+    row.update(sorted(kept))
+    return byml_build(tree, version)
+
+
 def shop_goods(data, sells):
     """A keeper's goods list with the places of `sells` ({place: (the game's own shelf actor there, the new one)})
     selling the new actor, one in stock, from the start (what the game waits for before it shows a shelf, and what
@@ -3471,6 +3503,20 @@ def main():
         print("Shops (%s): %d shelves of %d shops take part, each sold once; %d within the child's wallet, %d ask for the Adult's, %d for the Giant's" % (
             "any price" if a.shops == 2 else "most prices low", len(shelves), len(SHOPS),
             *(sum(1 for p in shelf_prices.values() if wallet_need(p) == need) for _, need in WALLETS)))
+
+    # ---- Bombchus: a limit of their own, in every seed (the list of pouch actors, with the shops' rows when there are) ----
+    try:
+        folder = os.path.join(romfs, "RSDB")
+        n = next((n for n in sorted(os.listdir(folder)) if n.startswith(POUCH_TABLE + ".") and ".byml" in n.lower()), None)
+        if n is None:
+            raise ValueError("the game has no list %s" % POUCH_TABLE)
+        rel = "RSDB/" + n
+        table = chu_limit(shop_files[rel] if rel in shop_files else unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts))
+        shop_files[rel] = table
+        shop_sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(table)
+    except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
+        sys.exit("the Bombchus' limit: %s. Nothing written." % e)
+    print("Bombchus can be carried without a Bomb Bag: %d at most" % BOMBCHU_LIMIT)
 
     def shop_table(tbl):
         """the size table with the shops' files: the new packs and their own files added, the keepers' packs' goods

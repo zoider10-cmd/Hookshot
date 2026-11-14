@@ -359,6 +359,26 @@ def main():
     # (named in the stamp only when set: a seed made before the settings keeps its stamp, and is not made again)
     check('(" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "")' in script,
           "the two settings are not in the seed's stamp, or are named when off")
+    # ---- Bombchus: a limit of their own, not the Bomb Bag's (found before a bag they were lost: seen in play) ----
+    pouch = byml([{"__RowId": "Item_Bomb", "MaxNumGameData": "Bomb", "SmallBagActor": "Work/Actor/Item_BombBag_Small.engine__actor__ActorParam.gyml"},
+                  {"__RowId": "Item_Bombchu", "MaxNumGameData": "Bomb", "PouchStockable": True, "SmallBagActor": "Work/Actor/Item_BombBag_Small.engine__actor__ActorParam.gyml"},
+                  {"__RowId": "Item_MagicBean", "FixedMaxNum": 10}])
+    now = seed.chu_limit(pouch)
+    rows = {r["__RowId"]: r for r in read(now)}
+    check(rows["Item_Bombchu"] == {"__RowId": "Item_Bombchu", "FixedMaxNum": seed.BOMBCHU_LIMIT, "PouchStockable": True} and seed.BOMBCHU_LIMIT == 50,
+          "the Bombchus' row is not given a limit of its own, or still names the Bomb Bag: %r" % (rows["Item_Bombchu"],))
+    check(rows["Item_Bomb"]["MaxNumGameData"] == "Bomb" and "SmallBagActor" in rows["Item_Bomb"] and rows["Item_MagicBean"] == {"__RowId": "Item_MagicBean", "FixedMaxNum": 10},
+          "the bombs no longer ask for the Bomb Bag (the rules' gating item), or another row changed")
+    check(seed.chu_limit(now) == now, "a list already changed is changed again")
+    for bad in (byml([{"__RowId": "Item_Bomb"}]), byml([{"__RowId": "Item_Bombchu", "MaxNumGameData": "Other", "SmallBagActor": "x"}])):
+        try:
+            seed.chu_limit(bad)
+            check(False, "a list that is not as the game's is changed all the same")
+        except ValueError:
+            pass
+    check("table = chu_limit(shop_files[rel] if rel in shop_files else unpack(open(os.path.join(folder, n), \"rb\").read(), zs, dicts))" in script and
+          script.index("# ---- Bombchus: a limit of their own, in every seed") > script.index("print(\"Shops (%s): %d shelves of %d shops take part"),
+          "the Bombchus' limit is not written in every seed, over the shops' own rows of the same list")
     # ---- the Bombchu Shop: young Link's, at night, once Dodongo's Cavern is done (the door's own condition) ----
     chu = next(shop for shop in seed.SHOPS if shop.key == "bombchu")
     check(chu.ages == "C" and chu.need == seed.DODONGO_DONE == seed.RULES["DodongoCavern"][0] and seed.BB in chu.need,

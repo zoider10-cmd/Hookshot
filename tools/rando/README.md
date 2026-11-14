@@ -681,6 +681,17 @@ Not the Happy Mask Shop, and not the shelves a game buys from again and again or
 tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
 the same goods list, and both sell the shuffled items.
 
+## Bombchus without a Bomb Bag
+
+The game counts Bombchus against the Bomb Bag: found before one they were lost (a chest of five gave none, the Items
+screen "0/0"; reported from play). Their row of the game's list of pouch actors (`RSDB/PouchActorInfo`) names the
+bombs' limit and the small bag; the game has another kind of limit, one of the item's own (`FixedMaxNum`: the Magic
+Beans' 10, the tokens' 100). Every seed gives the Bombchus that, 50 (`chu_limit`, `BOMBCHU_LIMIT`), and takes the
+bag's two fields away. Bombs still ask for the bag, so the rules are as they were. Seen without a window, on a save
+with its Bomb Bag taken out: Bombchus given one by one were 1, 2, 3, a bundle of five made 8, and bombs given the
+same way stayed 0. The same change in the Bombchu's own pack did nothing: the list is what the game reads. **Not
+seen: a Bombchu used without a bag.** A seed made before this keeps the game's own way.
+
 ## A bag found is a full bag
 
 With the randomizer on, what Link carries a counted item in comes full when it is got, whatever gives it (a chest, a
