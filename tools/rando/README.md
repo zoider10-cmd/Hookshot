@@ -696,6 +696,35 @@ Not the Happy Mask Shop, and not the shelves a game buys from again and again or
 tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
 the same goods list, and both sell the shuffled items.
 
+## Open Door of Time
+
+`rando_open_door` (`--open-door`; the launcher's and the menu's "Open Door of Time"). Two parts.
+
+- **The door.** The Temple of Time's inner door is a gate of the Market's logic (`Logic/Market_Common_f252`: open when
+  the flag `Market_Child_TimeTempleDoor_Opened` is set, or the quest `DoorOfTime` is at its step `Step06`). A new game
+  starts with the flag set (`OPEN_DOOR`, in the list of flags), and the game's side sets it for a save that has it put
+  out.
+- **The sword.** Its logic (`Market_Child_Prefab_e700`) asks for the story's own drawing only when the quest is at
+  `Step06`, and for the plain way through time only once that is past; before, the button at the sword does nothing
+  (seen: the prompt is there, Grab, or Draw with `HavePlayedEvent.Dm_TimeTemple_0030` set, and neither answers; nor
+  with the quest `AllSage` put a step on). The story's drawing ends the whole quest (`SageRoom_MeetRauru`: Complete),
+  which is Zelda's too (the meeting, Impa's lesson, the Ocarina of Time). So the story is left as it is, and the
+  game's side asks for the plain way itself (`oot_time_door` in `host/hos_main.c`): when A is pressed beside the
+  sword, in the Market's map of either age, and half a second later nothing of the game's is playing, it asks for the
+  game's own flow by name, `Market_Child_Field_ChildToAdult` or `Market_Adult_Field_AdultToChild`. The Master Sword is
+  put in the pouch the first time (the plain way does not give it; the story's drawing does).
+- Seen without a window, on a save of an early game (the quest at `Step02`): the door's flag set, Link in the sword's
+  chamber, A at the sword made him an adult with the Master Sword in hand and Sheik at the pedestal; A again made him
+  a child, the sword in its stone; and again an adult.
+- **Not seen: in play with a window; what an adult's world does before the story has come to it (Sheik, the temples'
+  own quests, the story's own drawing when its step comes after all this).** The story's drawing, with the Sage of
+  Light and the Light Medallion, still needs the three stones and the Song of Time played at the altar.
+- The rules do not count on it: an adult's place asks for what it did (`ADULT`). They are meant to ask for too much,
+  and what an adult's rule leaves unsaid because `ADULT` has it is not known place by place.
+- How a quest's step is kept: a value of the list of flags that is one of a set of names (`Data.Enum`), the hash of the
+  step's name; in the running game `GameDataMgr+0x258`, 56 bytes each (`oot_gamedata_enum`; the test switch
+  `HOS_OOT_SETENUM="<hash>=<a step's hash>"`). `HOS_OOT_OPEN_DOOR=1` is the setting on for a test.
+
 ## A shelf that sold its item stays sold
 
 Each shelf that sells a shuffled item waits for a flag of its own that says "still for sale". The goods list's entry

@@ -1005,6 +1005,11 @@ static void read_input(uint64_t *buttons, int32_t stick[4]) {
 static void vibration_send(uint64_t handle, uint64_t value);
 volatile int64_t hos_hid_last_read;
 
+/* The buttons the game was last given for the first pad, after everything of the host's own: is A held
+   (hos_main.c oot_time_door: the Master Sword with the Door of Time open) */
+static uint64_t pad_buttons_given;
+int hos_pad_a_held(void) { return (__atomic_load_n(&pad_buttons_given, __ATOMIC_RELAXED) >> B_A) & 1; }
+
 /* GetNpadStates(State* out, int count, unsigned int const& npadId): the latest state first */
 static void npad_states(Ctx *c) {
     uint64_t out = ARG(0);
@@ -1061,6 +1066,7 @@ static void npad_states(Ctx *c) {
     if (connected) buttons = hos_title_input(buttons);
     uint64_t hos_frame_step_buttons(uint64_t buttons);   /* nn_vi.c: the frame step of the wheel and quick menus */
     if (connected) buttons = hos_frame_step_buttons(buttons);
+    if (connected) __atomic_store_n(&pad_buttons_given, buttons, __ATOMIC_RELAXED);
     int64_t s = ++sampling;
     for (int i = 0; i < count; i++) {
         uint64_t e = out + (uint64_t)i * STATE_SIZE;

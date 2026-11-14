@@ -1024,6 +1024,92 @@ static struct {
     unsigned destination;
 } teleport;
 
+/* An event of the game's asked for by its name, with Link the one who starts it: the request oot_teleport makes,
+   without a map to go to. 1 when it was sent. */
+static int oot_event_request(Ctx *c, uint64_t actor, const char *event) {
+    const uint64_t events = oot_singleton(c, OOT_EVENTMGR_SLOT);
+    A64Fn make_arg = a64_lookup(0x80d99f10ULL), request = a64_lookup(0x80d9a820ULL);
+    A64Fn set_link = a64_lookup(0x802dc440ULL), release_link = a64_lookup(0x8022b6f0ULL);
+    if (!events || !make_arg || !request || !set_link || !release_link) return 0;
+    const Ctx saved = *c;
+    const uint64_t arg = (c->x[31] - OOT_EVENT_ARG_SIZE - 0x100) & ~0xfULL;
+    c->x[31] = arg;
+    c->x[0] = arg;
+    make_arg(c);
+    const uint64_t buf = recomp_load64(c, arg + 6800);
+    const uint32_t cap = recomp_load32(c, arg + 6808);
+    const int ok = buf && strlen(event) + 1 <= cap;
+    if (ok) {
+        memcpy(A64_PTR(buf), event, strlen(event) + 1);
+        c->x[31] = arg;
+        c->x[0] = arg + 0x1950, c->x[1] = actor, c->x[2] = 0;
+        set_link(c);
+        c->x[31] = arg;
+        c->x[0] = events, c->x[1] = arg;
+        request(c);
+    }
+    for (unsigned i = 0; i < 2; i++) {   /* (the arg's two actor links, as oot_teleport gives them back) */
+        const uint64_t link = arg + (i ? 0x1950 : 0x1968);
+        recomp_store64(c, link, 0x84994b20ULL);
+        c->x[31] = arg;
+        c->x[0] = link;
+        release_link(c);
+    }
+    *c = saved;
+    return ok;
+}
+
+/* (the randomizer's fork) Open Door of Time: the Master Sword takes Link through time from a new game's start.
+   The sword's own logic asks for its events only at and after the story's step for them (the quest DoorOfTime at
+   Step06: tools/rando/rando_seed.py OPEN_DOOR has what was found): before, the button at the sword does nothing.
+   So when A is pressed beside the sword, in the Market's map of either age, and half a second later nothing of the
+   game's is playing, the game's own plain way through time is asked for here: Market_Child_Field_ChildToAdult, or
+   Market_Adult_Field_AdultToChild. Where the game answers the button itself (the story's drawing, the plain way once
+   the story is past it, a talk) its event is playing by then and nothing is asked for.
+   The door's flag is set here too for a save that has it put out (a save from before the setting was on). */
+static float oot_link_place[3];   /* (where Link is: oot_tracker_refresh, below) */
+static int oot_pouch_count(Ctx *c, const char *name);
+static int oot_pouch_change(Ctx *c, const char *name, int by);
+#define OOT_SWORD_X 137.6f
+#define OOT_SWORD_Z (-34.0f)
+#define OOT_SWORD_NEAR 1.8f
+#define OOT_DOOR_FLAG 0x727c2cbdu   /* Market_Child_TimeTempleDoor_Opened */
+static void oot_time_door(Ctx *c, int64_t now, uint64_t actor) {
+    int hos_rando_open_door(void);   /* host/oot_rando.c */
+    int hos_pad_a_held(void);        /* host/nn_hid.c */
+    static int held;
+    static int64_t ask_at, flag_at;
+    if (!hos_rando_open_door()) return;
+    if (now >= flag_at) {   /* (each second) */
+        int open = 1;
+        flag_at = now + 1000000000LL;
+        if (oot_gamedata_bool(c, OOT_DOOR_FLAG, &open) && !open && oot_gamedata_set_bool(c, OOT_DOOR_FLAG, 1))
+            hos_log("rando: the Door of Time's flag was put out in this save: it is set (Open Door of Time)");
+    }
+    const int a = hos_pad_a_held(), pressed = a && !held;
+    held = a;
+    const float dx = oot_link_place[0] - OOT_SWORD_X, dz = oot_link_place[2] - OOT_SWORD_Z;
+    char banc[80];
+    const int beside = dx * dx + dz * dz <= OOT_SWORD_NEAR * OOT_SWORD_NEAR && oot_gamedata_string(c, 0x1d6189dau, banc, sizeof banc) &&
+                       !strncmp(banc, "Market_", 7);   /* Sequence_CurrentBanc */
+    if (!beside) {
+        ask_at = 0;
+        return;
+    }
+    if (pressed && !ask_at && !oot_event_playing(c)) ask_at = now + 500000000LL;
+    if (!ask_at || now < ask_at) return;
+    ask_at = 0;
+    int loading = 0, child = 1;
+    if (oot_event_playing(c) || (oot_gamedata_bool(c, 0xef2b60c2u, &loading) && loading)) return;   /* (the game answered: Sequence_IsLoadingBanc) */
+    oot_gamedata_bool(c, 0xcea220d3u, &child);   /* Sequence_IsChildhood */
+    const char *event = child ? "Market_Child_Field_ChildToAdult" : "Market_Adult_Field_AdultToChild";
+    /* (the plain way through time does not give the sword: the story's drawing does, Dm_TimeTemple_0030. Seen
+       without a window: an adult made so had none. So Link is given it here the first time) */
+    if (child && oot_pouch_count(c, "Weapon_Sword_Master") == 0)
+        hos_log("rando: Open Door of Time: the Master Sword is given (event status %d)", oot_pouch_change(c, "Weapon_Sword_Master", 1));
+    hos_log("rando: Open Door of Time: %s asked for at the Master Sword (%s)", event, oot_event_request(c, actor, event) ? "sent" : "NOT SENT");
+}
+
 static int oot_teleport(Ctx *c, uint64_t actor, unsigned index) {
     if (index >= sizeof oot_destinations / sizeof oot_destinations[0]) return 0;
     const int64_t now = hos_now_ns();
@@ -1132,6 +1218,32 @@ static int oot_gamedata_set_bool(Ctx *c, uint32_t hash, int value) {
         const uint32_t index = recomp_load32(c, table + slot * 8ULL + 4), count = recomp_load32(c, mgr + 16);
         if (index >= count) return 0;
         recomp_store8(c, recomp_load64(c, mgr + 24) + index * 24ULL + 22, value ? 1 : 0);
+        return 1;
+    }
+    return 0;
+}
+
+/* A whole value of the list of flags that is one of a set of names (Data.Enum: a quest's step is one, the hash of the
+   step's name), read and written directly: GameDataMgr+0x258 are the entries, 56 bytes each with the value at +0x1c
+   and again at +0x20, and +0x260 their (hash, index) table (+0x26c its size), as the bools' are at +24 and +32 (found
+   in the manager's memory written to a file: the quests AllSage and DoorOfTime, by their steps' hashes). 1 when found. */
+static int oot_gamedata_enum(Ctx *c, uint32_t hash, uint32_t *value, int set) {
+    const uint64_t mgr = oot_singleton(c, OOT_GAMEDATA_SLOT);
+    if (!mgr) return 0;
+    const uint64_t table = recomp_load64(c, mgr + 0x260);
+    const uint32_t size = recomp_load32(c, mgr + 0x26c);
+    if (!table || !size) return 0;
+    for (uint32_t probe = 0, slot = hash % size; probe < size; probe++, slot = (slot + 1) % size) {
+        const uint32_t key = recomp_load32(c, table + slot * 8ULL);
+        if (!key) return 0;
+        if (key != hash) continue;
+        const uint32_t index = recomp_load32(c, table + slot * 8ULL + 4), count = recomp_load32(c, mgr + 0x250);
+        if (index >= count) return 0;
+        const uint64_t entry = recomp_load64(c, mgr + 0x258) + index * 56ULL;
+        if (set) {
+            recomp_store32(c, entry + 0x1c, *value);
+            recomp_store32(c, entry + 0x20, *value);
+        } else *value = recomp_load32(c, entry + 0x1c);
         return 1;
     }
     return 0;
@@ -1548,6 +1660,24 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
         }
     }
 #endif
+    {   /* (a test's: HOS_OOT_SETENUM="<hash in hex>=<a value's hash in hex>,..." sets those values of the list's Data.Enum
+           once, some seconds into the game, and says what each was: a quest's step) */
+        static int turn;
+        const char *set = getenv("HOS_OOT_SETENUM");
+        if (set && ++turn == 8) {
+            while (*set) {
+                char *end;
+                const uint32_t hash = (uint32_t)strtoul(set, &end, 16);
+                if (*end != '=') break;
+                uint32_t value = (uint32_t)strtoul(end + 1, &end, 16), was = 0;
+                const int found = oot_gamedata_enum(c, hash, &was, 0);
+                hos_log("test: enum %08x was %08x%s: set to %08x (%s)", hash, was, found ? "" : " (not found)", value,
+                        oot_gamedata_enum(c, hash, &value, 1) ? "done" : "NOT DONE");
+                set = end;
+                if (*set == ',') set++;
+            }
+        }
+    }
     {   /* (a test's: HOS_OOT_GIVE="<item>,<item>,..." puts those in the pouch, one a second from the tenth second on, as
            a scene's gift is put there, and says how many Link then has: to try what follows an item without playing up
            to it (a Deku Nut bag is in no row of the Debug tab's inventory) */
@@ -1847,6 +1977,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     oot_teleport_followup(c);
     oot_inventory_refresh(c, now);
     oot_tracker_refresh(c, now, actor);
+    oot_time_door(c, now, actor);
     oot_player_speed(c, components);
     if (action >= OOT_CHEAT_ITEM_ACTION && action < OOT_CHEAT_ITEM_ACTION + 256 * (int)OOT_ITEM_COUNT) {
         oot_inventory_edit(c, action);

@@ -31,6 +31,13 @@ int hos_rando_on(void) { return rando_active; }
 
 /* Progressive items: on with the randomizer (hos_main.c hos_oot_pouch_add) */
 int hos_rando_progressive(void) { return rando_active && rando.v[OOT_RANDO_PROGRESSIVE] != 0; }
+/* Open Door of Time: on with the randomizer (hos_main.c oot_time_door) */
+/* (a test's: HOS_OOT_OPEN_DOOR=1 is the setting on, whatever the options say) */
+int hos_rando_open_door(void) {
+    static int test = -1;
+    if (test < 0) { const char *e = getenv("HOS_OOT_OPEN_DOOR"); test = e && *e == '1'; }
+    return rando_active && (test || rando.v[OOT_RANDO_OPEN_DOOR] != 0);
+}
 /* Skip cutscenes: on with the randomizer (hos_main.c oot_skip_cutscene) */
 int hos_rando_skip_cutscenes(void) { return rando_active && rando.v[OOT_RANDO_SKIP_CUTSCENES] != 0; }
 

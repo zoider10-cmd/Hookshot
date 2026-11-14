@@ -86,6 +86,23 @@ OPEN = {
     "deku": {"KokiriForest_Npc_Kokiri_Mido_Child_Blocker": False},
     "forest": {"KokiriForest_Npc_Kokiri_007_Child_Blocker_00": False},
 }
+# The Door of Time (rando_open_door, --open-door): the Temple of Time's inner door is a gate of the Market's logic
+# (Logic/Market_Common_f252: isOpen is the flag Market_Child_TimeTempleDoor_Opened OR the quest DoorOfTime at its
+# step Step06), and the flag is what the story's scene of the door opening sets (DoorOfTime_OpenDoor). So a new game
+# that starts with the flag set has the door open: seen without a window, with the flag set in a save of an early
+# game, Link stood in the sword's chamber and the sword offered to be grasped.
+# The sword is another matter. Its logic (Market_Child_Prefab_e700) asks for the story's own drawing only when the
+# quest is at Step06, and for the plain way through time (the flow Market_Child_Field_ChildToAdult) only once that
+# is past: before, the button does nothing (seen). The story's drawing ends the whole quest (SageRoom_MeetRauru:
+# Complete), and the quest is Zelda's too (the meeting, Impa's lesson, the Ocarina of Time): drawn early, those would
+# be lost. So the game's side asks for the plain way itself when the button is pressed at the sword and nothing of
+# the game's answers (host/hos_main.c oot_time_door), in both directions, and the story is left as it is: its own
+# drawing, with the Sage of Light, still comes at Step06. Seen without a window: asked for by name in that early
+# save, the flow made Link an adult at the pedestal.
+# The rules do not count on it: an adult's place asks for what it did (ADULT, the three stones' items). They are
+# meant to ask for too much, and what an adult's rule leaves unsaid because ADULT has it (bombs, the Boomerang) is
+# not known place by place.
+OPEN_DOOR = {"Market_Child_TimeTempleDoor_Opened": True}
 FLAG_LIST = "GameData"   # (the folder of the romfs: GameDataList.Product.<n>.byml.zs in it)
 # The clock of Hyrule Field. Until the owl's first cutscene there, the field's sky stays the day's whatever the time is
 # set to: no day turns to night, and the Sun's Song's night is day again at once (seen in play). What ends it is the
@@ -2306,7 +2323,7 @@ def settings(game):
     got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
            "rando_skip_intro": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0,
            "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
-           "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0}
+           "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0, "rando_open_door": 0}
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -2955,6 +2972,8 @@ def main():
     p.add_argument("--no-logic", action="store_true", help="with --event-chests: the big items anywhere, whether the seed can be finished or not")
     p.add_argument("--open-deku", action="store_true", help="as rando_open_deku=1: in a new game the way to the Deku Tree is open without a sword and a shield")
     p.add_argument("--open-forest", action="store_true", help="as rando_open_forest=1: in a new game the forest can be left before the Deku Tree is done")
+    p.add_argument("--open-door", action="store_true", help="as rando_open_door=1: in a new game the Door of Time is open (OPEN_DOOR); the game's side lets the "
+                                                             "Master Sword take Link through time from then on")
     p.add_argument("--skip-intro", action="store_true", help="as rando_skip_intro=1: a new game starts in Link's house, without the two opening cutscenes")
     p.add_argument("--skulltulas", type=int, choices=(0, 1, 2, 3), help="in place of rando_skulltulas: the Gold Skulltulas whose tokens change places "
                                                                         "with the chests' rupees and supplies. 1 dungeons, 2 overworld, 3 all")
@@ -3010,6 +3029,7 @@ def main():
     # (the options file's rando_open_deku and rando_open_forest too, so that the launcher's run at Play keeps them)
     a.open_deku = a.open_deku or ini["rando_open_deku"] != 0
     a.open_forest = a.open_forest or ini["rando_open_forest"] != 0
+    a.open_door = a.open_door or ini["rando_open_door"] != 0
     a.skip_intro = a.skip_intro or ini["rando_skip_intro"] != 0
     a.start_rupees = a.start_rupees or ini["rando_start_rupees"] != 0
     a.scrubs = a.scrubs or ini["rando_scrubs"] != 0
@@ -3072,7 +3092,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 1" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 1" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
@@ -3394,7 +3414,7 @@ def main():
         for n in lists:
             try:
                 was = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
-                new = flag_defaults(was, dict(flags, **FIELD_CLOCK))
+                new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **(OPEN_DOOR if a.open_door else {})))
                 if shelf_flag:   # (the same file: the shelves' flags; a flag the game has not is an error)
                     flag_defaults(new if new is not None else was, {name: False for name in shelf_flag.values()})
                     more = flag_defaults(new if new is not None else was, shelf_start) if shelf_start else None
@@ -3409,6 +3429,8 @@ def main():
         if a.start_rupees:
             print("a new game starts with %d rupees" % START_RUPEES)
         print("Hyrule Field's day and night run from a new game's start (the Sun's Song works before the owl is met)")
+        if a.open_door:
+            print("the Door of Time is open in a new game (the Master Sword's way through time is the game's side's)")
     if flags:
         print("open ways in a new game: %s (%d flag%s start put out)" % (
             " and ".join(n for n, on in (("the Deku Tree's", a.open_deku), ("the forest's way out", a.open_forest)) if on), len(flags), "" if len(flags) == 1 else "s"))

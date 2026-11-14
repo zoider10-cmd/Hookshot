@@ -185,8 +185,23 @@ def sources():
           "the options file's lines do not turn the changes on")
     check("list(changed.items()) + list(new_tables.items()) + list(flag_files.items())" in script,
           "the list of flags and the opening are not written with the seed's files, or not in its list of them")
-    check('(" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" intro skipped" if a.skip_intro else "")' in script,
+    check('(" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 1" if a.open_door else "") + (" intro skipped" if a.skip_intro else "")' in script,
           "the mod's stamp does not say which of them it holds: the launcher's run at Play would leave an old one")
+    # ---- Open Door of Time: the door's flag starts set, and the game's side is what lets the sword take Link through time ----
+    host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
+    check(seed.OPEN_DOOR == {"Market_Child_TimeTempleDoor_Opened": True} and '"rando_open_door": 0' in script and
+          'a.open_door = a.open_door or ini["rando_open_door"] != 0' in script and
+          "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **(OPEN_DOOR if a.open_door else {})))" in script and
+          'X(OPEN_DOOR, "Open Door of Time", "rando_open_door",' in header,
+          "the Door of Time's flag does not start set with the setting, or the setting is not read")
+    check("#define OOT_DOOR_FLAG 0x%08xu" % seed.murmur3(b"Market_Child_TimeTempleDoor_Opened") in host and
+          'const char *event = child ? "Market_Child_Field_ChildToAdult" : "Market_Adult_Field_AdultToChild";' in host and
+          "if (pressed && !ask_at && !oot_event_playing(c)) ask_at = now + 500000000LL;" in host and
+          "if (oot_event_playing(c) || (oot_gamedata_bool(c, 0xef2b60c2u, &loading) && loading)) return;" in host and
+          'if (child && oot_pouch_count(c, "Weapon_Sword_Master") == 0)' in host and "oot_time_door(c, now, actor);" in host and
+          "int hos_pad_a_held(void) {" in (ROOT / "host" / "nn_hid.c").read_text(encoding="utf-8"),
+          "the game's side does not ask for the way through time at the Master Sword when the game itself does not answer, "
+          "asks over an event of the game's, or does not give the sword")
 
 
 def main():
@@ -199,7 +214,7 @@ def main():
     #  Found with a save made before the owl: with HyruleField_ArriveEntrance set, a night asked for stayed)
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    check(seed.FIELD_CLOCK == {"HyruleField_ArriveEntrance": True} and "new = flag_defaults(was, dict(flags, **FIELD_CLOCK))" in script and
+    check(seed.FIELD_CLOCK == {"HyruleField_ArriveEntrance": True} and "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **(OPEN_DOOR if a.open_door else {})))" in script and
           "if True:   # (every seed: Hyrule Field's clock, FIELD_CLOCK" in script,
           "a seed's new game does not start with the flag that ends Hyrule Field's held day, or only with other settings on")
     check(seed.FIXES_VERSION >= 5 and "field_clock(" not in script, "a seed made before the field's clock ran is not made again, or the step tried first is still passed over")
