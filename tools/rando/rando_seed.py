@@ -88,9 +88,13 @@ OPEN = {
 }
 # The Door of Time (rando_open_door, --open-door): the Temple of Time's inner door is a gate of the Market's logic
 # (Logic/Market_Common_f252: isOpen is the flag Market_Child_TimeTempleDoor_Opened OR the quest DoorOfTime at its
-# step Step06), and the flag is what the story's scene of the door opening sets (DoorOfTime_OpenDoor). So a new game
-# that starts with the flag set has the door open: seen without a window, with the flag set in a save of an early
-# game, Link stood in the sword's chamber and the sword offered to be grasped.
+# step Step06), and the flag is what the story's scene of the door opening sets (DoorOfTime_OpenDoor). A new game
+# starts with the flag set. THAT DID NOT OPEN IT: reported from play, 2026-11-14, a new game with the setting on and
+# the flag set (the game's log), the door shut. (What was seen without a window before was Link put in the sword's
+# chamber by the debug tools, past the door: the door itself was never looked at.) So the door is also taken out of
+# the way in the map files (door_away): its actor, of the child's Market and of the adult's, is put far under the
+# map, as the shops' bundle boards are, not taken out of the file, so that the logic that names it still finds it.
+# NOT SEEN YET: the game was being played.
 # The sword is another matter. Its logic (Market_Child_Prefab_e700) asks for the story's own drawing only when the
 # quest is at Step06, and for the plain way through time (the flow Market_Child_Field_ChildToAdult) only once that
 # is past: before, the button does nothing (seen). The story's drawing ends the whole quest (SageRoom_MeetRauru:
@@ -124,12 +128,29 @@ OPEN = {
 # The overworld's places of an adult's alone keep bombs and the four songs: where each is and what it needs is not
 # known. Too much, never too little. A place a child has too is as it was.
 OPEN_DOOR = {"Market_Child_TimeTempleDoor_Opened": True}
+DOOR_ACTOR, DOOR_AREA, DOOR_AWAY = "Obj_TimeTemple_Door_A_01", "Market", 2000.0
 DOOR_ADULT_AREAS = frozenset(("ForestTemple", "FireTemple", "IceCavern", "WaterTemple", "ShadowTemple", "GerudoTrainingGround"))
 DOOR_SCALE = frozenset(("ZoraFountain", "IceCavern"))
 DOOR_NO_BOMBS = frozenset(("ForestTemple", "IceCavern"))
 _ZL, _SARIA, _TIME, _STORMS = ("Item_Melody_" + n for n in ("ZeldaLullaby", "SariaSong", "TimeSong", "StormSong"))   # (ZL and the rest, named below)
 DOOR_SONGS = {"ForestTemple": frozenset((_SARIA, _TIME)), "FireTemple": frozenset((_TIME,)), "IceCavern": frozenset((_ZL,)),
               "WaterTemple": frozenset((_ZL, _TIME)), "ShadowTemple": frozenset((_TIME,)), "GerudoTrainingGround": frozenset((_TIME,))}
+
+
+def door_away(data):
+    """A map file with the Door of Time put far under the map (DOOR_AWAY): (the file written anew, or None when it has
+    no such door; how many). Its other fields are as they were."""
+    tree, version = byml_parse(data)
+    actors = tree[1].get("Actors")
+    n = 0
+    for actor in actors[1] if actors and actors[0] == "array" else ():
+        at = actor[1].get("Translate")
+        if (actor[1].get("Gyaml", ("", ""))[1] != DOOR_ACTOR or not at or at[0] != "array" or len(at[1]) != 3 or
+                not isinstance(at[1][1][1], bytes) or len(at[1][1][1]) != 4):
+            continue
+        at[1][1] = (at[1][1][0], struct.pack("<f", struct.unpack("<f", at[1][1][1])[0] - DOOR_AWAY))
+        n += 1
+    return (byml_build(tree, version) if n else None), n
 
 
 def door_need(need, adult_only, open_forest=False, area=None):
@@ -3157,7 +3178,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 3" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 4" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
@@ -3773,6 +3794,29 @@ def main():
         print("Shops (%s): %d shelves of %d shops take part, each sold once; %d within the child's wallet, %d ask for the Adult's, %d for the Giant's" % (
             "any price" if a.shops == 2 else "most prices low", len(shelves), len(SHOPS),
             *(sum(1 for p in shelf_prices.values() if wallet_need(p) == need) for _, need in WALLETS)))
+
+    # ---- Open Door of Time: the door out of the way, in the child's Market and the adult's ----
+    if a.open_door:
+        doors = 0
+        folder_map = os.path.join(romfs, "Banc", DOOR_AREA)
+        try:
+            for n in sorted(os.listdir(folder_map)):
+                rel = "Banc/%s/%s" % (DOOR_AREA, n)
+                if ".bcett.byml" not in n.lower():
+                    continue
+                data = changed[rel] if rel in changed else unpack(open(os.path.join(folder_map, n), "rb").read(), zs, dicts)
+                if DOOR_ACTOR.encode() not in data:
+                    continue
+                new, count = door_away(data)
+                if new is not None:
+                    changed[rel] = new
+                    sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
+                    doors += count
+        except (OSError, ValueError, struct.error, IndexError) as e:
+            sys.exit("the Door of Time: %s. Nothing written." % e)
+        if not doors:
+            sys.exit("the Door of Time: the Market's map files have no such door. Nothing written.")
+        print("the Door of Time is out of the way in %d map file%s of the Market" % (doors, "" if doors == 1 else "s"))
 
     # ---- Bombchus: a limit of their own, in every seed (the list of pouch actors, with the shops' rows when there are) ----
     try:

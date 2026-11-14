@@ -708,10 +708,13 @@ the same goods list, and both sell the shuffled items.
 
 `rando_open_door` (`--open-door`; the launcher's and the menu's "Open Door of Time"). Two parts.
 
-- **The door.** The Temple of Time's inner door is a gate of the Market's logic (`Logic/Market_Common_f252`: open when
-  the flag `Market_Child_TimeTempleDoor_Opened` is set, or the quest `DoorOfTime` is at its step `Step06`). A new game
+- **The door.** The Temple of Time's inner door is a gate of the Market's logic (`Logic/Market_Common_f252`, which
+  names the flag `Market_Child_TimeTempleDoor_Opened` and the quest `DoorOfTime` at its step `Step06`). A new game
   starts with the flag set (`OPEN_DOOR`, in the list of flags), and the game's side sets it for a save that has it put
-  out.
+  out. **That did not open it** (reported from play, 2026-11-14: a new game with the setting on, the flag set by the
+  game's log, the door shut; what was seen without a window before was Link put past the door by the debug tools, and
+  the door itself was never looked at). So the seed also puts the door's actor far under the map in the child's
+  Market and the adult's (`door_away`, as the shops' bundle boards are). **Not seen yet.**
 - **The sword.** Its logic (`Market_Child_Prefab_e700`) asks for the story's own drawing only when the quest is at
   `Step06`, and for the plain way through time only once that is past; before, the button at the sword does nothing
   (seen: the prompt is there, Grab, or Draw with `HavePlayedEvent.Dm_TimeTemple_0030` set, and neither answers; nor
