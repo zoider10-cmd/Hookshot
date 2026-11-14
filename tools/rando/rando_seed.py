@@ -74,7 +74,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 6   # (6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 8   # (8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -130,6 +130,17 @@ OPEN = {
 # known. Too much, never too little. A place a child has too is as it was.
 OPEN_DOOR = {"Market_Child_TimeTempleDoor_Opened": True}
 DOOR_ACTOR, DOOR_AREA, DOOR_AWAY = "Obj_TimeTemple_Door_A_01", "Market", 2000.0
+# Sheik. Reported from play, 2026-11-14: an adult cannot go back, "he stops you until you beat the forest temple".
+# Seen without a window: he stands at the sword's stone (Npc_Hylia_Sheik_Adult of the adult's Market, 1.4 m from the
+# sword), so the button there is his talk, and the game's side asks for nothing when the game answers the button
+# (host/hos_main.c oot_time_door). The game keeps him there until the Forest Temple is done (his schedule's
+# SageOfForest_IsCompleted_Exp; the sword's own logic of the adult's Market waits for the same), and then has him
+# teach the Prelude of Light. So he is put to the side of the room (DOOR_SHEIK_ASIDE, along the map's Z): still
+# there for his talk and for his lesson, which is an event with places of its own. Where he stands is not his own
+# place in the file but the places his schedule sends him to, the actors his links name (AnchorAction1 and 2, before
+# the sword): with his own place moved alone he stood at the stone as before (seen without a window). So he and the
+# places he is linked to are all put aside.
+DOOR_SHEIK, DOOR_SHEIK_ASIDE, DOOR_SHEIK_SPOT = "Npc_Hylia_Sheik_Adult", 5.0, "AnchorAction"
 DOOR_ADULT_AREAS = frozenset(("ForestTemple", "FireTemple", "IceCavern", "WaterTemple", "ShadowTemple", "GerudoTrainingGround"))
 DOOR_SCALE = frozenset(("ZoraFountain", "IceCavern"))
 DOOR_NO_BOMBS = frozenset(("ForestTemple", "IceCavern"))
@@ -139,19 +150,30 @@ DOOR_SONGS = {"ForestTemple": frozenset((_SARIA, _TIME)), "FireTemple": frozense
 
 
 def door_away(data):
-    """A map file with the Door of Time put far under the map (DOOR_AWAY): (the file written anew, or None when it has
-    no such door; how many). Its other fields are as they were."""
+    """A map file with the Door of Time put far under the map (DOOR_AWAY) and Sheik to the side of the sword's room
+    (DOOR_SHEIK_ASIDE): (the file written anew, or None when it has neither; how many doors; how many Sheiks). Its
+    other fields are as they were."""
     tree, version = byml_parse(data)
     actors = tree[1].get("Actors")
-    n = 0
-    for actor in actors[1] if actors and actors[0] == "array" else ():
+    actors = actors[1] if actors and actors[0] == "array" else ()
+    doors = sheiks = 0
+    spots = set()   # (the places Sheik's links name: their hashes)
+    for actor in actors:
+        links = actor[1].get("Links")
+        if actor[1].get("Gyaml", ("", ""))[1] == DOOR_SHEIK and links and links[0] == "array":
+            spots.update(link[1]["Dst"][1] for link in links[1] if "Dst" in link[1])
+    for actor in actors:
         at = actor[1].get("Translate")
-        if (actor[1].get("Gyaml", ("", ""))[1] != DOOR_ACTOR or not at or at[0] != "array" or len(at[1]) != 3 or
-                not isinstance(at[1][1][1], bytes) or len(at[1][1][1]) != 4):
+        name = actor[1].get("Gyaml", ("", ""))[1]
+        spot = name.startswith(DOOR_SHEIK_SPOT) and actor[1].get("Hash", ("", None))[1] in spots
+        if (not (name in (DOOR_ACTOR, DOOR_SHEIK) or spot) or not at or at[0] != "array" or len(at[1]) != 3 or
+                any(not isinstance(v[1], bytes) or len(v[1]) != 4 for v in at[1])):
             continue
-        at[1][1] = (at[1][1][0], struct.pack("<f", struct.unpack("<f", at[1][1][1])[0] - DOOR_AWAY))
-        n += 1
-    return (byml_build(tree, version) if n else None), n
+        axis, by = (1, -DOOR_AWAY) if name == DOOR_ACTOR else (2, DOOR_SHEIK_ASIDE)
+        at[1][axis] = (at[1][axis][0], struct.pack("<f", struct.unpack("<f", at[1][axis][1])[0] + by))
+        doors += name == DOOR_ACTOR
+        sheiks += name == DOOR_SHEIK
+    return (byml_build(tree, version) if doors or sheiks else None), doors, sheiks
 
 
 def door_need(need, adult_only, open_forest=False, area=None):
@@ -277,7 +299,7 @@ RULES = {
 #   Dampe's Piece of Heart           is dropped from the hole as an actor of its own, then picked up
 BR, SSC = "Item_Gauntlet_Goron", "Item_Scale_Silver"
 QUEST_GATES = frozenset((BR, SSC))
-CHILD_BOMBS = CHILD | {BB, BR}
+CHILD_BOMBS = CHILD | {BB}   # (with the bracelet too, until a bomb was lifted without it: bomb_lift)
 GROWN = ADULT | QUEST_GATES
 Gift = collections.namedtuple("Gift", "key flow olds item area name need when entry", defaults=(None,))
 # key: its name in the seed (never changed: a gift's place in the shuffle). flow: the scene's flow. olds: the items
@@ -754,7 +776,11 @@ POUCH_TABLE = "PouchActorInfo"
 # another matter: its own logic names the bracelet (Obj_BombFlower_Fruit.root.ainb: Armor_Child_Gauntlet_Goron), so
 # Dodongo's Cavern, whose way in is a bomb flower's, still asks for it (quest_need). NOT SEEN IN PLAY YET.
 BOMB_LIFT = "Component/LiftableParam/Item_Bomb.game__component__LiftableParam.bgyml"
-BOMB_PACKS = ("Item_Bomb", "Npc_Hylia_ImperialSoldier_Bomb")
+# (three packs of bomb flowers hold a copy of the bomb's file too, beside the flower's own, which keeps its grade:
+#  another randomizer of this game changes all five, "whichever is loaded first" (github.com/Mozencaz/OotrR,
+#  qol_patches.py, MIT). Looked at here: each has the bomb's file with the bracelet's grade)
+BOMB_PACKS = ("Item_Bomb", "Npc_Hylia_ImperialSoldier_Bomb", "Obj_BombFlower_A_01", "Obj_BombFlower_A_04",
+              "Obj_BombFlower_Fruit_For_Break_Obj_DeathMtTrail_BrokenRock_A_01")
 BOMB_GRADE, BOMB_GRADE_WAS = "None", "Low"
 
 
@@ -772,8 +798,12 @@ def bomb_lift(data):
         raise ValueError("the bomb's lifting grade is not the Goron's Bracelet's, as this was written for")
     if grade[1] == free:
         return data
-    tree[1]["LiftGrade"] = (grade[0], free)
-    parts[BOMB_LIFT] = byml_build(tree, version)
+    # (the file written anew by byml_build was 176 bytes longer and the game fell reading it, at its start: seen
+    #  without a window, 2026-11-14. So the grade's four bytes are changed where they are: a hash's node, 0xD3)
+    raw, node = parts[BOMB_LIFT], bytes((0xD3,)) + was
+    if raw.count(node) != 1:
+        raise ValueError("the bomb's lifting grade is not once in its file")
+    parts[BOMB_LIFT] = raw.replace(node, bytes((0xD3,)) + free)
     return sarc_write(parts)
 
 
@@ -3231,7 +3261,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 4" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 6" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
@@ -3850,7 +3880,7 @@ def main():
 
     # ---- Open Door of Time: the door out of the way, in the child's Market and the adult's ----
     if a.open_door:
-        doors = 0
+        doors = sheiks = 0
         folder_map = os.path.join(romfs, "Banc", DOOR_AREA)
         try:
             for n in sorted(os.listdir(folder_map)):
@@ -3858,18 +3888,21 @@ def main():
                 if ".bcett.byml" not in n.lower():
                     continue
                 data = changed[rel] if rel in changed else unpack(open(os.path.join(folder_map, n), "rb").read(), zs, dicts)
-                if DOOR_ACTOR.encode() not in data:
+                if DOOR_ACTOR.encode() not in data and DOOR_SHEIK.encode() not in data:
                     continue
-                new, count = door_away(data)
+                new, count, aside = door_away(data)
                 if new is not None:
                     changed[rel] = new
                     sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
                     doors += count
+                    sheiks += aside
         except (OSError, ValueError, struct.error, IndexError) as e:
             sys.exit("the Door of Time: %s. Nothing written." % e)
         if not doors:
             sys.exit("the Door of Time: the Market's map files have no such door. Nothing written.")
-        print("the Door of Time is out of the way in %d map file%s of the Market" % (doors, "" if doors == 1 else "s"))
+        if not sheiks:
+            sys.exit("the Door of Time: the Market's map files have no Sheik by the sword. Nothing written.")
+        print("the Door of Time is out of the way in %d map file%s of the Market, and Sheik to the side of the sword" % (doors, "" if doors == 1 else "s"))
 
     # ---- Bombchus: a limit of their own, in every seed (the list of pouch actors, with the shops' rows when there are) ----
     try:

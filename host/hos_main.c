@@ -1298,6 +1298,7 @@ static struct {
     signed char done;
     uint64_t piece;   /* (a Piece of Heart lying in the world: its actor's hash; 0: another kind of check) */
     uint32_t shelf;   /* (a shop's shelf: the hash of the flag it waits for, "still for sale"; 0: another kind of check) */
+    signed char sold; /* (a shelf bought just now: its flag is to be put out, oot_shelf_flags) */
 } oot_checks[OOT_TRACKER_MAX];
 static int oot_check_count = -1;
 static char oot_checks_seed[200];   /* (the stamp the checks and the record are of) */
@@ -1396,20 +1397,28 @@ static void oot_tracker_load(const char *stamp) {
 
 /* A shop's shelf that sold its item is for sale again when its map is loaded again (the shelf's actor keeps what it
    sold, and nothing saved: tools/rando/README.md). So each shelf of a seed waits for a flag of its own, "still for
-   sale" (the goods list's Release), and this keeps every such flag as the record says: true while the shelf's check
-   is not collected, false once it is. Each second: a shelf just bought is put out at once, and a save from before
-   the flags were is put right when it is loaded. Returns how many were changed. */
+   sale" (the goods list's Release). The flag is the save's, and it is what says a shelf was bought: a shelf bought
+   just now (oot_tracker_item) has its flag put out here, once, and at every other time the record of a shelf is put
+   as the flag says. (Until 2026-11-14 the flags were kept as the record said, and the record is the folder's, not a
+   save's: reported from play, a quiver bought was not for sale again in a save from before it was bought, nor in a
+   new game of the same seed.) Each second. Returns how many flags or marks were changed. */
 static int oot_shelf_flags(Ctx *c) {
-    int changed = 0;
-    AcquireSRWLockShared(&oot_checks_lock);
+    int changed = 0, marks = 0;
+    AcquireSRWLockExclusive(&oot_checks_lock);
     for (int i = 0; i < oot_check_count; i++) {
         int now = 0;
-        const int want = oot_checks[i].done != 1;
-        if (!oot_checks[i].shelf || !oot_gamedata_bool(c, oot_checks[i].shelf, &now) || now == want) continue;
-        if (oot_gamedata_set_bool(c, oot_checks[i].shelf, want)) changed++;
+        if (!oot_checks[i].shelf || !oot_gamedata_bool(c, oot_checks[i].shelf, &now)) continue;
+        if (oot_checks[i].sold) {
+            oot_checks[i].sold = 0;
+            if (now && oot_gamedata_set_bool(c, oot_checks[i].shelf, 0)) changed++;
+        } else if ((oot_checks[i].done == 1) != !now) {
+            oot_checks[i].done = !now;
+            marks++;
+        }
     }
-    ReleaseSRWLockShared(&oot_checks_lock);
-    return changed;
+    if (marks) oot_tracker_save();
+    ReleaseSRWLockExclusive(&oot_checks_lock);
+    return changed + marks;
 }
 
 /* An item given (hos_oot_pouch_add): the check that gives it is collected */
@@ -1448,6 +1457,7 @@ static void oot_tracker_item(const char *name) {
     }
     if (best >= 0) {
         oot_checks[best].done = 1;
+        if (oot_checks[best].shelf) oot_checks[best].sold = 1;
         oot_tracker_save();
         if (nearest < 1e29f) hos_log("rando: tracker: %s got: check %d is collected (%.1f m from Link)", name, best, nearest);
         else hos_log("rando: tracker: %s got: check %d is collected (the one left that gives it)", name, best);
@@ -1548,7 +1558,7 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
     rx_option_set(OOT_TRACKER_ON, 1);   /* (the Tracker tab reads the seed only then: vk_menu.cpp tracker_load) */
     {
         const int changed = oot_shelf_flags(c);
-        if (changed) hos_log("rando: tracker: %d shop shelves' flags put as the record says", changed);
+        if (changed) hos_log("rando: tracker: %d shop shelves put out, or marked as the save says", changed);
     }
     {   /* (a test's: HOS_OOT_SETFLAG="<hash in hex>=<0 or 1>,..." sets those truth values of the game's list once, some
            seconds into the game, and says what each was: to try a scene's steps one at a time) */

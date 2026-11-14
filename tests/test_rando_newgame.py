@@ -186,7 +186,7 @@ def sources():
           "the options file's lines do not turn the changes on")
     check("list(changed.items()) + list(new_tables.items()) + list(flag_files.items())" in script,
           "the list of flags and the opening are not written with the seed's files, or not in its list of them")
-    check('(" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 4" if a.open_door else "") + (" intro skipped" if a.skip_intro else "")' in script,
+    check('(" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 6" if a.open_door else "") + (" intro skipped" if a.skip_intro else "")' in script,
           "the mod's stamp does not say which of them it holds: the launcher's run at Play would leave an old one")
     # ---- Open Door of Time: the door's flag starts set, and the game's side is what lets the sword take Link through time ----
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
@@ -231,13 +231,19 @@ def sources():
         return seed.byml_build(("dict", collections.OrderedDict((("Actors", ("array", [
             ("dict", collections.OrderedDict((("Gyaml", ("string", name)), ("Translate", ("array", [(0xD2, struct.pack("<f", v)) for v in (118.4, 104.9, -34.0)])))))
             for name in actors])),))), 7)
-    moved, count = seed.door_away(door_file("Obj_TimeTemple_SpiritStoneBase_A_01", seed.DOOR_ACTOR))
+    moved, count, aside = seed.door_away(door_file("Obj_TimeTemple_SpiritStoneBase_A_01", seed.DOOR_ACTOR, seed.DOOR_SHEIK))
     rows = seed.byml_parse(moved)[0][1]["Actors"][1]
     height = lambda row: struct.unpack("<f", row[1]["Translate"][1][1][1])[0]
     check(count == 1 and abs(height(rows[1]) - (104.9 - seed.DOOR_AWAY)) < 0.01 and abs(height(rows[0]) - 104.9) < 0.01 and
-          seed.door_away(door_file("Obj_TimeTemple_SpiritStoneBase_A_01")) == (None, 0) and seed.DOOR_ACTOR == "Obj_TimeTemple_Door_A_01",
+          seed.door_away(door_file("Obj_TimeTemple_SpiritStoneBase_A_01")) == (None, 0, 0) and seed.DOOR_ACTOR == "Obj_TimeTemple_Door_A_01",
           "the Door of Time is not put out of the way, another actor is, or a file without it is written anew")
-    check("new, count = door_away(data)" in script and "the Door of Time: the Market's map files have no such door. Nothing written." in script,
+    # (Sheik stood at the sword's stone and his talk took the button: reported from play. He is put to the side)
+    side = lambda row: struct.unpack("<f", row[1]["Translate"][1][2][1])[0]
+    check(aside == 1 and abs(side(rows[2]) - (-34.0 + seed.DOOR_SHEIK_ASIDE)) < 0.01 and abs(height(rows[2]) - 104.9) < 0.01 and
+          abs(side(rows[1]) + 34.0) < 0.01 and seed.DOOR_SHEIK == "Npc_Hylia_Sheik_Adult" and seed.DOOR_SHEIK_ASIDE >= 4 and
+          "the Door of Time: the Market's map files have no Sheik by the sword. Nothing written." in script,
+          "Sheik is not put to the side of the sword's room, is put under the map, or the door is put aside with him")
+    check("new, count, aside = door_away(data)" in script and "the Door of Time: the Market's map files have no such door. Nothing written." in script,
           "the seed does not put the door out of the way with the setting, or says nothing when it finds none")
     check("#define OOT_DOOR_FLAG 0x%08xu" % seed.murmur3(b"Market_Child_TimeTempleDoor_Opened") in host and
           'const char *event = child ? "Market_Child_Field_ChildToAdult" : "Market_Adult_Field_AdultToChild";' in host and

@@ -57,7 +57,8 @@ def main():
     for g in seed.GIFTS:
         check(g.item in g.olds and g.olds, "%s puts %s in the pool, which its flow does not name for it" % (g.key, g.item))
         check(isinstance(g.need, frozenset) and g.need <= seed.PROGRESSION | seed.QUEST_GATES, "%s asks for something that is no gating item" % g.key)
-        check(not (seed.BB in g.need and seed.BR not in g.need), "%s asks for bombs without the bracelet" % g.key)
+        # (bombs asked for the bracelet until every seed let Link lift a bomb without it: bomb_lift)
+        check(g.need != seed.CHILD | {seed.BB, seed.BR}, "%s asks for the bracelet with a child's bombs still" % g.key)
         check(not (g.need >= seed.ADULT and seed.SSC not in g.need), "%s is an adult's and does not ask for the Silver Scale" % g.key)
     by_flow = collections.Counter((g.flow, old) for g in seed.GIFTS for old in g.olds)
     check(max(by_flow.values()) == 1, "an item of one flow is two gifts': %r" % [k for k, n in by_flow.items() if n > 1])
