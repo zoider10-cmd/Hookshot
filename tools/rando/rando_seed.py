@@ -128,7 +128,13 @@ OPEN = {
 #     Water Temple the Lullaby (its water) and the Song of Time. None needs the Song of Storms.
 # The overworld's places of an adult's alone keep bombs and the four songs: where each is and what it needs is not
 # known. Too much, never too little. A place a child has too is as it was.
-OPEN_DOOR = {"Market_Child_TimeTempleDoor_Opened": True}
+# The adult's Market had no minimap (reported from play, 2026-11-14): its location's area (LocationArea "Market" of
+# Market_Adult_Static) is there only once the story's scene of an adult leaving the temple has played
+# (HavePlayedEvent.Dm_TimeTemple_0065), and that scene waits for the story's own step (the quest AllSage at Step01),
+# which the plain way through time does not reach. So the flag starts true too. Seen without a window: an adult in
+# the Market's square without the flag has no minimap, and with it has one. (The game's side sets both in a save
+# from before: host/hos_main.c oot_time_door.)
+OPEN_DOOR = {"Market_Child_TimeTempleDoor_Opened": True, "HavePlayedEvent.Dm_TimeTemple_0065": True}
 DOOR_ACTOR, DOOR_AREA, DOOR_AWAY = "Obj_TimeTemple_Door_A_01", "Market", 2000.0
 # Sheik. Reported from play, 2026-11-14: an adult cannot go back, "he stops you until you beat the forest temple".
 # Seen without a window: he stands at the sword's stone (Npc_Hylia_Sheik_Adult of the adult's Market, 1.4 m from the
@@ -3261,7 +3267,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 6" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 7" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +

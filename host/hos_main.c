@@ -1074,6 +1074,9 @@ static int oot_pouch_change(Ctx *c, const char *name, int by);
 #define OOT_SWORD_Z (-34.0f)
 #define OOT_SWORD_NEAR 1.8f
 #define OOT_DOOR_FLAG 0x727c2cbdu   /* Market_Child_TimeTempleDoor_Opened */
+/* (the adult's Market has its location, and so its minimap, only once the scene of an adult leaving the temple has
+   played, which the plain way through time never reaches: tools/rando/rando_seed.py OPEN_DOOR. Set like the door's) */
+#define OOT_LEFT_TEMPLE_FLAG 0xc1b29b0au   /* HavePlayedEvent.Dm_TimeTemple_0065 */
 static void oot_time_door(Ctx *c, int64_t now, uint64_t actor) {
     int hos_rando_open_door(void);   /* host/oot_rando.c */
     int hos_pad_a_held(void);        /* host/nn_hid.c */
@@ -1085,6 +1088,9 @@ static void oot_time_door(Ctx *c, int64_t now, uint64_t actor) {
         flag_at = now + 1000000000LL;
         if (oot_gamedata_bool(c, OOT_DOOR_FLAG, &open) && !open && oot_gamedata_set_bool(c, OOT_DOOR_FLAG, 1))
             hos_log("rando: the Door of Time's flag was put out in this save: it is set (Open Door of Time)");
+        open = 1;
+        if (oot_gamedata_bool(c, OOT_LEFT_TEMPLE_FLAG, &open) && !open && oot_gamedata_set_bool(c, OOT_LEFT_TEMPLE_FLAG, 1))
+            hos_log("rando: the adult's Market had no location in this save: its flag is set (Open Door of Time)");
     }
     const int a = hos_pad_a_held(), pressed = a && !held;
     held = a;
