@@ -719,8 +719,12 @@ the same goods list, and both sell the shuffled items.
 - **Not seen: in play with a window; what an adult's world does before the story has come to it (Sheik, the temples'
   own quests, the story's own drawing when its step comes after all this).** The story's drawing, with the Sage of
   Light and the Light Medallion, still needs the three stones and the Song of Time played at the altar.
-- The rules do not count on it: an adult's place asks for what it did (`ADULT`). They are meant to ask for too much,
-  and what an adult's rule leaves unsaid because `ADULT` has it is not known place by place.
+- The rules (`door_need`): `ADULT` stands for all it takes to pull the sword and nearly every rule has it, so only
+  what it takes to be an adult is taken off, and only from a place an adult alone has (its map files are the
+  adult's, or its dungeon is in `DOOR_ADULT_AREAS`) whose rule has all of `ADULT`: the Boomerang; the Silver Scale
+  that Quest rewards adds for the same stone; and with Open forest exit the Kokiri Sword, the Slingshot and the Deku
+  Shield. Bombs stay, and what Songs adds for an adult stays: the rules do not say which rooms need them. On the live
+  settings (with Open forest exit) 84 of 296 places ask for less.
 - How a quest's step is kept: a value of the list of flags that is one of a set of names (`Data.Enum`), the hash of the
   step's name; in the running game `GameDataMgr+0x258`, 56 bytes each (`oot_gamedata_enum`; the test switch
   `HOS_OOT_SETENUM="<hash>=<a step's hash>"`). `HOS_OOT_OPEN_DOOR=1` is the setting on for a test.

@@ -99,10 +99,34 @@ OPEN = {
 # the game's answers (host/hos_main.c oot_time_door), in both directions, and the story is left as it is: its own
 # drawing, with the Sage of Light, still comes at Step06. Seen without a window: asked for by name in that early
 # save, the flow made Link an adult at the pedestal.
-# The rules do not count on it: an adult's place asks for what it did (ADULT, the three stones' items). They are
-# meant to ask for too much, and what an adult's rule leaves unsaid because ADULT has it (bombs, the Boomerang) is
-# not known place by place.
+# The rules with it (door_need). "ADULT" stands for all it takes to pull the Master Sword, the three stones' items,
+# and nearly every rule has it, a child's place as an adult's: so only what it takes to BE an adult is taken off,
+# and only from a place that only an adult has (its map files are the adult's, or its dungeon is one a child cannot
+# enter: DOOR_ADULT_AREAS) and whose rule has the whole of ADULT:
+#   - the Boomerang, an adult's only as the Zora's Sapphire's price (a child's item: an adult cannot throw it);
+#   - the Silver Scale that Quest rewards adds wherever an adult is, for Ruto's Letter and so for the same stone
+#     (not where the rule has the Golden Scale: Progressive items then asks for the Silver one of its own right);
+#   - with Open forest exit, the Kokiri Sword, the Slingshot and the Deku Shield, which are the way out of the forest
+#     and a child's: the forest is left without them, and the Master Sword is given at its stone.
+# Bombs stay: an adult's places need them in many rooms and the rules do not say which. What Songs adds for an adult
+# stays too (the Lullaby, Saria's Song, the Song of Time, the Song of Storms): the Lullaby and the Song of Time are
+# an adult's own in the Water Temple and where the blue blocks are, and the rules do not say where.
+# Too much, never too little. A place a child has too is as it was.
 OPEN_DOOR = {"Market_Child_TimeTempleDoor_Opened": True}
+DOOR_ADULT_AREAS = frozenset(("ForestTemple", "FireTemple", "IceCavern", "WaterTemple", "ShadowTemple", "GerudoTrainingGround"))
+
+
+def door_need(need, adult_only, open_forest=False):
+    """what a place asks for with the Door of Time open (see above): `need` as the other settings made it;
+    adult_only: only an adult has the place; open_forest: Open forest exit is on too"""
+    if not adult_only or not need >= ADULT:
+        return need
+    free = {BM}
+    if "Item_Scale_Gold" not in need:
+        free.add(SSC)
+    if open_forest:
+        free.update((S, SL, DS))
+    return frozenset(need - free)
 FLAG_LIST = "GameData"   # (the folder of the romfs: GameDataList.Product.<n>.byml.zs in it)
 # The clock of Hyrule Field. Until the owl's first cutscene there, the field's sky stays the day's whatever the time is
 # set to: no day turns to night, and the Sun's Song's night is day again at once (seen in play). What ends it is the
@@ -3092,7 +3116,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 1" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 2" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 1" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
@@ -3285,9 +3309,16 @@ def main():
         PROGRESSION = PROGRESSION | SHIELD_GATES
     step = (lambda need: progressive_need(gear(need), PROGRESSION)) if a.progressive else gear
     needs = {h: step(n) for h, n in needs.items()}
+    # (Open Door of Time: what it takes to be an adult is not asked of an adult's own places, door_need)
+    grown = lambda h, area: area in DOOR_ADULT_AREAS or check_ages(maps[h]) == "A" if h in maps else area in DOOR_ADULT_AREAS
+    if a.open_door:
+        needs = {h: door_need(n, shelves[h][0].ages == "A" if h in shelves else
+                              GIFT_PLACES.get(gifts[h].key, ("CA",))[0] == "A" if h in gifts else grown(h, spots[h][0]), a.open_forest)
+                 for h, n in needs.items()}
+    door = (lambda need, h, area: door_need(need, grown(h, area), a.open_forest)) if a.open_door else (lambda need, h, area: need)
     # (what a Gold Skulltula asks for, by the same settings)
-    skull_asks = lambda h: step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
-        quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0])))
+    skull_asks = lambda h: door(step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
+        quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0]))), h, skulls[h][0])
     # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags)
     lesson_safe, lesson_only = frozenset(), {}
     if a.songs == 2:
@@ -3346,8 +3377,8 @@ def main():
 
     # ---- Heart Pieces: the pieces lying in the world and the chests' items a pick-up can be change places ----
     heart_drops = {}   # a piece's hash -> the item it gives now
-    heart_asks = lambda h: step((lambda n: song_need(n, pieces[h][0]) if a.songs else n)(
-        (lambda n: quest_need(n, pieces[h][0]) if a.quests else n)(heart_rule(h, pieces[h][0]))))
+    heart_asks = lambda h: door(step((lambda n: song_need(n, pieces[h][0]) if a.songs else n)(
+        (lambda n: quest_need(n, pieces[h][0]) if a.quests else n)(heart_rule(h, pieces[h][0])))), h, pieces[h][0])
     if a.heart_pieces and pieces:
         if logic:   # (some of the gating items to the pieces, where the rules still let the game be finished)
             fixed = [(needs[h], spots[h][1]) for h in spots if h not in gives and spots[h][1] in PROGRESSION] + [

@@ -185,7 +185,7 @@ def sources():
           "the options file's lines do not turn the changes on")
     check("list(changed.items()) + list(new_tables.items()) + list(flag_files.items())" in script,
           "the list of flags and the opening are not written with the seed's files, or not in its list of them")
-    check('(" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 1" if a.open_door else "") + (" intro skipped" if a.skip_intro else "")' in script,
+    check('(" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 2" if a.open_door else "") + (" intro skipped" if a.skip_intro else "")' in script,
           "the mod's stamp does not say which of them it holds: the launcher's run at Play would leave an old one")
     # ---- Open Door of Time: the door's flag starts set, and the game's side is what lets the sword take Link through time ----
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
@@ -194,6 +194,21 @@ def sources():
           "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **(OPEN_DOOR if a.open_door else {})))" in script and
           'X(OPEN_DOOR, "Open Door of Time", "rando_open_door",' in header,
           "the Door of Time's flag does not start set with the setting, or the setting is not read")
+    # (the rules: only what it takes to be an adult is taken off, only from a place that is an adult's alone)
+    S = seed
+    grown = S.ADULT | {S.BOW, S.SSC, S.BR, S.DS}
+    check(S.door_need(grown, True) == grown - {S.BM, S.SSC} and S.door_need(grown, True, True) == frozenset({S.BB, S.BOW, S.BR}) and
+          S.door_need(grown, False, True) == grown and S.BB in S.door_need(S.ADULT, True, True),
+          "an adult's own place still asks for the Boomerang or the stones' scale, a place a child has too is changed, or bombs are no longer asked for")
+    check(S.door_need(S.CHILD | {S.BB}, True, True) == S.CHILD | {S.BB} and
+          S.SSC in S.door_need(grown | {"Item_Scale_Gold"}, True) and S.BM not in S.door_need(grown | {"Item_Scale_Gold"}, True),
+          "a rule that is not an adult's is changed, or the Silver Scale is taken off a rule that has the Golden one")
+    check(not S.DOOR_ADULT_AREAS & {"SpiritTemple", "DesertColossus", "KokiriForest", "InsideJabuJabuBelly", "DodongoCavern", "InsideTheDekuTree", "BottomOfTheWell"} and
+          S.DOOR_ADULT_AREAS <= set(S.RULES),
+          "a dungeon a child enters is taken for an adult's alone")
+    check("needs = {h: door_need(n, shelves[h][0].ages == \"A\" if h in shelves else" in script and
+          "skull_asks = lambda h: door(step(" in script and "heart_asks = lambda h: door(step(" in script,
+          "the Door of Time's rules are not the chests', the gifts', the Gold Skulltulas' and the Pieces of Heart's")
     check("#define OOT_DOOR_FLAG 0x%08xu" % seed.murmur3(b"Market_Child_TimeTempleDoor_Opened") in host and
           'const char *event = child ? "Market_Child_Field_ChildToAdult" : "Market_Adult_Field_AdultToChild";' in host and
           "if (pressed && !ask_at && !oot_event_playing(c)) ask_at = now + 500000000LL;" in host and

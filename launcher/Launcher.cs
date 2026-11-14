@@ -2051,7 +2051,7 @@ class LauncherForm : Form {
         new object[] { "rando_sword_shield", "Shuffle sword and shield", new[] { "Off", "On" }, new[] { 0, 1 },
             "The Kokiri Sword in its chest and the Deku Shield on the Kokiri shop's shelf. Off: both stay where the game has them. On: the sword's chest takes part with Major items and the shield's shelf with Shops, and the way past Mido asks for both unless Open Deku Tree is on." },
         new object[] { "rando_open_door", "Open Door of Time", new[] { "Off", "On" }, new[] { 0, 1 },
-            "The Temple of Time's inner door is open from a new game's start, and the Master Sword takes Link forward and back in time whenever he draws it or puts it back. The story's own scene there (the Sage of Light) still comes when the three stones and the Song of Time are done. The seed's logic does not count on it: an adult's places are asked for as before." },
+            "The Temple of Time's inner door is open from a new game's start, and the Master Sword takes Link forward and back in time whenever he draws it or puts it back. The story's own scene there (the Sage of Light) still comes when the three stones and the Song of Time are done. The seed's logic counts on it a little: places only an adult can reach no longer ask for the Boomerang, nor (with Open forest exit) for the Kokiri Sword and Slingshot; they still ask for bombs." },
     };
     // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and
