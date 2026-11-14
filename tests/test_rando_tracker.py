@@ -70,7 +70,7 @@ def main():
                               ("Market", (), "C", seed.NONE), ("Market", (1.0, 1.0, 1.0), "", seed.NONE)],
                              [("KokiriForest", (5.0, 6.0, 7.0), "CA", frozenset((seed.S, "Item_NotOfTheRules")))])
     check(lines[0].startswith("#") and lines[1:] == [
-        "Kokiri Forest|Chest|KokiriForest|A|-30.0 1.0 2.0|KS,SL,BB,BM,HM,GB,SS", "Kokiri Forest|Chest|KokiriForest|C|-27.0 67.6 65.2|-",
+        "Kokiri Forest|Chest|KokiriForest|A|-30.0 1.0 2.0|KS,SL,BB,BM,HM,SS", "Kokiri Forest|Chest|KokiriForest|C|-27.0 67.6 65.2|-",
         "Kokiri Forest|Gold Skulltula|KokiriForest|CA|5.0 6.0 7.0|KS", "Zora's River|Chest|ZoraRiver|CA|1.0 2.0 3.0|KS,SL,BB,BM"],
         "the checks' lines are not the area's name, the kind, the folder, the ages, the place and what the rules ask for, by area: %r" % lines[1:])
     # ---- the gifts and the scrubs' sales among them ----

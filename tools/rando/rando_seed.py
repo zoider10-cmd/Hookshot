@@ -74,7 +74,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 5   # (1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 6   # (6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -221,6 +221,7 @@ S, SL, BB, BM = "Item_Sword_Kokiri", "Item_Range_SlingShot", "Item_BombBag_Small
 LENS, BOW, HAM, IRON = "Item_GlassTruth", "Item_Range_Bow", "Item_Hammer", "Item_HeavyBoot"
 HOVER, LONG, SG, MS, GG = "Item_HoverBoot", "Item_Longshot", "Item_Gauntlet_Silver", "Item_Shield_Mirror", "Item_Gauntlet_Gold"
 PROGRESSION = frozenset((S, SL, BB, BM, LENS, BOW, HAM, IRON, HOVER, LONG, SG, MS, GG))
+THIRTEEN = PROGRESSION   # (the thirteen, as they are here: main adds a seed's other gating items to PROGRESSION)
 NONE = frozenset()
 # Found in play: bombs cannot be used before Darunia gives the Goron's Bracelet (the original game has no such tie).
 # No rule asks for bombs alone: each that names BB also names the sword and the Slingshot, with which Link is out of
@@ -541,8 +542,10 @@ def model_box(data, item):
 # Scale in the map file. An item's own number, where its box does not say it: the Small Key, tall and thin, stood
 # over its shelf's whole height.
 SHELF_LONG = 0.9
+# (the Goron's Bracelet is very small on a shelf: its owner asked for it a little bigger, 2026-11-14, with a picture of
+#  the Potion Shop. Half as large again, as it is where it lies to be picked up (PICKUP_SCALES). NOT SEEN YET)
 SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_GlassTruth": 1.0,
-               "Item_Gauntlet_Gold": 1.0, "Item_Gauntlet_Silver": 1.0, "Item_Gauntlet_Goron": 1.0}
+               "Item_Gauntlet_Gold": 1.0, "Item_Gauntlet_Silver": 1.0, "Item_Gauntlet_Goron": 1.5}
 # (the Fairy Bow's model is long front to back, 1.36 m along its own Z: on the Kokiri shop's shelf it lay pointing at
 # the viewer, its end alone to be seen behind the price board (its owner's picture, 2026-11-13). A quarter turn about
 # the upright laid it across, flat: a thin line. With a quarter turn about Z too it lies across with its curve and
@@ -739,6 +742,39 @@ def shop_rows(data, kind, item, price, name=None):
 # Bombchu's own pack did nothing: the list is what the game reads. Not seen: a Bombchu used without a bag.
 BOMBCHU, BOMBCHU_LIMIT = "Item_Bombchu", 50
 POUCH_TABLE = "PouchActorInfo"
+
+
+# ---- Bombs without the Goron's Bracelet ----
+# Found in play, long ago: bombs cannot be used before Darunia gives the bracelet (the original game has no such tie),
+# and the rules asked for the bracelet wherever they asked for bombs. Why (looked for when its owner asked for bombs
+# without it, 2026-11-14): what Link can lift has a grade. The bracelet and the two gauntlets each give one
+# (ExpansionAbilityActor's LiftableGrade: Low, Middle, High), and what is lifted asks for one (LiftableParam's
+# LiftGrade): a cucco, Ruto and a Bombchu ask for None, and a bomb for Low, the bracelet's. So every seed makes the
+# bomb ask for None (bomb_lift), in each pack that has the bomb's file with a grade (BOMB_PACKS). A bomb flower is
+# another matter: its own logic names the bracelet (Obj_BombFlower_Fruit.root.ainb: Armor_Child_Gauntlet_Goron), so
+# Dodongo's Cavern, whose way in is a bomb flower's, still asks for it (quest_need). NOT SEEN IN PLAY YET.
+BOMB_LIFT = "Component/LiftableParam/Item_Bomb.game__component__LiftableParam.bgyml"
+BOMB_PACKS = ("Item_Bomb", "Npc_Hylia_ImperialSoldier_Bomb")
+BOMB_GRADE, BOMB_GRADE_WAS = "None", "Low"
+
+
+def bomb_lift(data):
+    """An actor's pack with the bomb asking for no lifting grade: the new bytes (the same bytes when it asks for none
+    already). A pack without the bomb's file, or whose grade is not the one this was written for,
+    is an error."""
+    parts = sarc_read(data)
+    if BOMB_LIFT not in parts:
+        raise ValueError("the pack has no %s" % BOMB_LIFT)
+    tree, version = byml_parse(parts[BOMB_LIFT])
+    grade = tree[1].get("LiftGrade")
+    free, was = (struct.pack("<I", murmur3(n.encode())) for n in (BOMB_GRADE, BOMB_GRADE_WAS))
+    if not grade or grade[1] not in (free, was):
+        raise ValueError("the bomb's lifting grade is not the Goron's Bracelet's, as this was written for")
+    if grade[1] == free:
+        return data
+    tree[1]["LiftGrade"] = (grade[0], free)
+    parts[BOMB_LIFT] = byml_build(tree, version)
+    return sarc_write(parts)
 
 
 def chu_limit(data, limit=BOMBCHU_LIMIT):
@@ -1050,9 +1086,11 @@ def gift_hash(key):
 
 def quest_need(need, area):
     """what a chest or a Gold Skulltula asks for (by the rules made before Quest rewards) with the gifts' two gating
-    items named: the bracelet wherever bombs are, and in Dodongo's Cavern; the Silver Scale wherever an adult is"""
+    items named: the bracelet in Dodongo's Cavern, whose way in is a bomb flower's, and where a rule asks for
+    everything; the Silver Scale wherever an adult is. Bombs no longer ask for the bracelet: every seed lets Link
+    lift a bomb without it (bomb_lift)."""
     need = set(need)
-    if BB in need or area == "DodongoCavern":
+    if area == "DodongoCavern" or need >= THIRTEEN:
         need.add(BR)
     if need >= ADULT:
         need.add(SSC)
@@ -3846,6 +3884,18 @@ def main():
     except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
         sys.exit("the Bombchus' limit: %s. Nothing written." % e)
     print("Bombchus can be carried without a Bomb Bag: %d at most" % BOMBCHU_LIMIT)
+
+    # ---- bombs without the Goron's Bracelet, in every seed ----
+    try:
+        for name in BOMB_PACKS:
+            rel = "Pack/Actor/%s.pack.zs" % name
+            was = pack_files[rel] if rel in pack_files else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
+            new = bomb_lift(was)
+            pack_files[rel] = new
+            pack_sizes["Pack/Actor/%s.pack" % name] = len(new)
+    except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
+        sys.exit("the bombs' lifting grade: %s. Nothing written." % e)
+    print("bombs can be lifted without the Goron's Bracelet (%d packs)" % len(BOMB_PACKS))
 
     def shop_table(tbl):
         """the size table with the shops' files: the new packs and their own files added, the keepers' packs' goods

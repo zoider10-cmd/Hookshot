@@ -85,9 +85,10 @@ def main():
 
     # ---- the rules ----
     check(seed.quest_need(seed.CHILD, "KokiriForest") == seed.CHILD, "a child's chest without bombs asks for more")
-    check(seed.quest_need(seed.CHILD | {seed.BB}, "ZoraRiver") == seed.CHILD | {seed.BB, seed.BR}, "bombs do not ask for the bracelet")
+    # (bombs asked for the bracelet until every seed let Link lift a bomb without it: bomb_lift)
+    check(seed.quest_need(seed.CHILD | {seed.BB}, "ZoraRiver") == seed.CHILD | {seed.BB}, "bombs still ask for the bracelet")
     check(seed.quest_need(seed.CHILD, "DodongoCavern") == seed.CHILD | {seed.BR}, "Dodongo's Cavern does not ask for the bracelet")
-    check(seed.quest_need(seed.ADULT | {seed.HAM}, "GoronCity") == seed.ADULT | {seed.HAM, seed.BR, seed.SSC}, "an adult's chest does not ask for both")
+    check(seed.quest_need(seed.ADULT | {seed.HAM}, "GoronCity") == seed.ADULT | {seed.HAM, seed.SSC}, "an adult's chest does not ask for the scale, or asks for the bracelet")
     check(seed.quest_need(seed.PROGRESSION, "Nowhere") == seed.PROGRESSION | seed.QUEST_GATES, "a chest that asks for everything does not ask for the two")
 
     # ---- a gift among the chests ----
