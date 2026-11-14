@@ -1294,10 +1294,15 @@ static int oot_piece_back;   /* (a piece to take back out of the pouch: the upda
    a window: the game fills a bigger bag itself, and the first one too for bombs, arrows and seeds; the first Deku
    Stick bag and Deku Nut bag came empty and are filled by this. With the randomizer on only. */
 enum { OOT_FILL_WAIT = 12, OOT_FILL_STEP = 10, OOT_FILL_STEPS = 12, OOT_FILL_APART = 4 };
+#define OOT_FILL_RUPEES "TBox_Rupee_Gold"
 static const char *const oot_fills[][2] = {   /* what a holder's name starts with, and what it holds */
     {"Item_BombBag_", "Item_Bomb"}, {"Item_Quiver_", "Item_Arrow_Normal"}, {"Item_Range_Bow", "Item_Arrow_Normal"},
     {"Weapon_Range_Bow", "Item_Arrow_Normal"}, {"Item_BulletBag_", "Item_DekuSeed"}, {"Item_Range_SlingShot", "Item_DekuSeed"},
     {"Weapon_Range_SlingShot", "Item_DekuSeed"}, {"Item_StickBag_", "Item_DekuStick"}, {"Item_NutBag_", "Item_DekuNut"},
+    /* (and a wallet its rupees, asked for after the bags: the game leaves a wallet found as full as the one before it.
+       Rupees are added as the chests' gold rupee, 200 of them, and the count of that content is the rupees Link has:
+       seen without a window, 24, 224, 424 after each. One at a time, OOT_FILL_RUPEES: ten would be 2000) */
+    {"Item_Wallet_", OOT_FILL_RUPEES},
 };
 enum { OOT_FILLS = sizeof oot_fills / sizeof oot_fills[0] };
 static int oot_fill_wait[OOT_FILLS];   /* (a holder got: the updates until what it holds is added, or looked at again) */
@@ -1615,7 +1620,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
         /* (until the count stops going up: the bag is full. The first add is made whatever the count; each after it
            when the one before raised it) */
         if ((oot_fill_last[k] < 0 || now > oot_fill_last[k]) && oot_fill_adds[k] < OOT_FILL_STEPS &&
-            oot_pouch_change(c, holds, OOT_FILL_STEP) >= 0) {
+            oot_pouch_change(c, holds, strcmp(holds, OOT_FILL_RUPEES) ? OOT_FILL_STEP : 1) >= 0) {
             oot_fill_last[k] = now, oot_fill_adds[k]++;
             __atomic_store_n(&oot_fill_wait[k], OOT_FILL_APART, __ATOMIC_RELEASE);
             continue;

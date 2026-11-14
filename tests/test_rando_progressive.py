@@ -90,6 +90,9 @@ def main():
     #      a few updates later until the count stops going up ----
     fills = host[host.index("static const char *const oot_fills[][2] = {"):host.index("enum { OOT_FILLS")]
     pairs = dict(re.findall(r'\{"(\w+)", "(\w+)"\}', fills))
+    check('{"Item_Wallet_", OOT_FILL_RUPEES},' in fills and '#define OOT_FILL_RUPEES "TBox_Rupee_Gold"' in host and
+          "oot_pouch_change(c, holds, strcmp(holds, OOT_FILL_RUPEES) ? OOT_FILL_STEP : 1) >= 0) {" in host,
+          "a wallet found is not filled with rupees, or ten gold rupees at a time")
     check(pairs == {"Item_BombBag_": "Item_Bomb", "Item_Quiver_": "Item_Arrow_Normal", "Item_Range_Bow": "Item_Arrow_Normal",
                     "Weapon_Range_Bow": "Item_Arrow_Normal", "Item_BulletBag_": "Item_DekuSeed", "Item_Range_SlingShot": "Item_DekuSeed",
                     "Weapon_Range_SlingShot": "Item_DekuSeed", "Item_StickBag_": "Item_DekuStick", "Item_NutBag_": "Item_DekuNut"},
@@ -101,7 +104,7 @@ def main():
     update = update[:update.index("if (__atomic_load_n(&oot_piece_back")]
     # (an add is counted an update after it is made: each is looked at before the next, a few updates apart)
     check("if ((oot_fill_last[k] < 0 || now > oot_fill_last[k]) && oot_fill_adds[k] < OOT_FILL_STEPS &&" in update and
-          "oot_pouch_change(c, holds, OOT_FILL_STEP) >= 0) {" in update and
+          "oot_pouch_change(c, holds, strcmp(holds, OOT_FILL_RUPEES) ? OOT_FILL_STEP : 1) >= 0) {" in update and
           "__atomic_store_n(&oot_fill_wait[k], OOT_FILL_APART, __ATOMIC_RELEASE);" in update and
           "oot_fill_last[k] = -1, oot_fill_adds[k] = 0;" in host,
           "what a holder holds is not added until the count stops going up, the adds are not apart, or they have no end")
