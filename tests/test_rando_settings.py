@@ -98,7 +98,7 @@ def sources(rows):
           'public static readonly string[] Own = { "rando-seed", "cosmetics" };' in (ROOT / "launcher" / "Mods.cs").read_text(encoding="utf-8"),
           "the launcher does not show its Randomizer page")
     # (more settings than the page has room for: the list scrolls, and a row is shown, lit and pressed only inside its view)
-    check("if (PageNow == 3) ScrollRando(-e.Delta * 47f / 120);" in launcher and "g.SetClip(RandoView, CombineMode.Intersect);" in launcher and
+    check("if (PageNow == RandoPage) ScrollRando(-e.Delta * 47f / 120);" in launcher and "g.SetClip(RandoView, CombineMode.Intersect);" in launcher and
           "w.Hit(p) && InView(w, p)) return w;" in launcher and "foreach (var w in widgets) if (w.Scrolls) w.R.Y = w.HomeY - randoScroll;" in launcher,
           "the Randomizer page's list does not scroll by the wheel, is drawn over the seed's buttons, or a row scrolled out of view can be pressed")
     check('lines[i] = k + "=" + randoSeed;' in launcher and 'lines.RemoveAll(l => l.StartsWith("rando_import="))' in launcher,
