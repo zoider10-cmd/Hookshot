@@ -1137,6 +1137,33 @@ static int oot_gamedata_set_bool(Ctx *c, uint32_t hash, int value) {
     return 0;
 }
 
+/* What the game knows by an actor's hash (the list of flags' Bool64bitKey: a chest, a shelf that sells out): found in
+   the running game by looking for known hashes in its memory. GameDataMgr+0xc58 is how many there are, +0xc60 their
+   table, sorted by the hash, of 16 bytes each (the hash, then its reset type in the low half of the next word), and
+   +0xc70 what follows the table. The place of a hash in the table, or -1. */
+#define OOT_KEYED_COUNT 0xc58
+#define OOT_KEYED_TABLE 0xc60
+#define OOT_KEYED_VALUES 0xc70
+static int64_t oot_gamedata_keyed_index(Ctx *c, uint64_t key, uint32_t *reset) {
+    const uint64_t mgr = oot_singleton(c, OOT_GAMEDATA_SLOT);
+    if (!mgr) return -1;
+    const uint32_t count = recomp_load32(c, mgr + OOT_KEYED_COUNT);
+    const uint64_t table = recomp_load64(c, mgr + OOT_KEYED_TABLE);
+    if (!table || !count || count > 0x100000) return -1;
+    uint32_t low = 0, high = count;
+    while (low < high) {
+        const uint32_t mid = low + (high - low) / 2;
+        const uint64_t at = recomp_load64(c, table + mid * 16ULL);
+        if (at == key) {
+            if (reset) *reset = recomp_load32(c, table + mid * 16ULL + 8);
+            return mid;
+        }
+        if (at < key) low = mid + 1;
+        else high = mid;
+    }
+    return -1;
+}
+
 /* (the randomizer's fork) What the Tracker tab says is collected: the randomizer's own record. The game's flag for a chest
    opened was looked for and not found (tools/rando/README.md says where), so the record is kept here: the pouch
    manager's add (hos_oot_pouch_add, below) sees every item given and tells oot_tracker_item, which marks the check of
@@ -1372,6 +1399,97 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
             }
         }
     }
+#ifdef _WIN32
+    {   /* (a test's: HOS_OOT_FIND64="<64-bit value in hex>,..." looks for those values in all of the game's memory at
+           the seconds of HOS_OOT_FIND64_AT="<second>,..." (20 without it), and says where each is and what is beside
+           it, with the flags' manager's own words: to find where the game keeps what it knows by an actor's hash) */
+        static int turn;
+        const char *find = getenv("HOS_OOT_FIND64");
+        if (find && *find) {
+            const char *at = getenv("HOS_OOT_FIND64_AT");
+            turn++;
+            int now_is = at ? 0 : turn == 20;
+            for (const char *p = at; p && *p;) {
+                char *end;
+                if ((int)strtol(p, &end, 10) == turn) now_is = 1;
+                if (end == p) break;
+                p = *end == ',' ? end + 1 : end;
+            }
+            if (now_is) {
+                uint64_t keys[16];
+                int n = 0, hits[16] = {0};
+                for (const char *p = find; *p && n < 16;) {
+                    char *end;
+                    keys[n] = strtoull(p, &end, 16);
+                    if (end == p) break;
+                    n++;
+                    p = *end == ',' ? end + 1 : end;
+                }
+                const uint64_t mgr = oot_singleton(c, OOT_GAMEDATA_SLOT);
+                hos_log("test: find64 at second %d: the flags' manager is at %#llx", turn, (unsigned long long)mgr);
+                for (unsigned row = 0; mgr && row < 0x4c0 / 32; row++)
+                    hos_log("test: mgr+%03x: %016llx %016llx %016llx %016llx", row * 32,
+                            (unsigned long long)recomp_load64(c, mgr + row * 32), (unsigned long long)recomp_load64(c, mgr + row * 32 + 8),
+                            (unsigned long long)recomp_load64(c, mgr + row * 32 + 16), (unsigned long long)recomp_load64(c, mgr + row * 32 + 24));
+                for (uint64_t a = 0x1000; a < HOS_GUEST_SPACE && !(n == 1 && !keys[0]);) {   /* ("0": no search) */
+                    MEMORY_BASIC_INFORMATION m;
+                    if (!VirtualQuery(GP(a), &m, sizeof m)) break;
+                    const uint64_t base = (uint64_t)((uint8_t *)m.BaseAddress - (uint8_t *)GP(0));
+                    const uint64_t end = base + m.RegionSize;
+                    const int readable = m.State == MEM_COMMIT && !(m.Protect & (PAGE_GUARD | PAGE_NOACCESS)) &&
+                                         (m.Protect & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY));
+                    if (readable && base >= 0x84000000ULL)   /* (past the game's code) */
+                        for (uint64_t g = base > a ? base : a; g + 8 <= end; g += 4) {
+                            uint64_t v;
+                            memcpy(&v, GP(g), 8);
+                            for (int k = 0; k < n; k++)
+                                if (v == keys[k] && hits[k]++ < 24) {
+                                    uint64_t w[6] = {0};
+                                    if (g >= base + 16 && g + 32 <= end) memcpy(w, GP(g - 16), sizeof w);
+                                    hos_log("test: find64 %016llx at %#llx: %016llx %016llx [%016llx] %016llx %016llx %016llx",
+                                            (unsigned long long)keys[k], (unsigned long long)g, (unsigned long long)w[0], (unsigned long long)w[1],
+                                            (unsigned long long)w[2], (unsigned long long)w[3], (unsigned long long)w[4], (unsigned long long)w[5]);
+                                }
+                        }
+                    a = end > a ? end : a + 0x1000;
+                }
+                {   /* (HOS_OOT_KEYED_DUMP="<file>": the keyed table and the manager's words about it, as they are) */
+                    const char *path = getenv("HOS_OOT_KEYED_DUMP");
+                    char name[600];
+                    if (path) snprintf(name, sizeof name, "%s.%d", path, turn);
+                    FILE *f = path && mgr ? fopen(name, "wb") : NULL;
+                    if (f) {
+                        /* (everything the manager keeps is in one stretch of memory, from the manager itself to past
+                           the keyed table: seen in its own words) */
+                        const uint64_t last = recomp_load64(c, mgr + OOT_KEYED_VALUES) + 0x4000;
+                        uint64_t done = 0;
+                        for (uint64_t a = mgr & ~0xfffULL; a < last && last - mgr < (64ULL << 20); a += 0x1000) {
+                            MEMORY_BASIC_INFORMATION m;
+                            static const uint8_t none[0x1000];
+                            const int ok = VirtualQuery(GP(a), &m, sizeof m) && m.State == MEM_COMMIT && !(m.Protect & (PAGE_GUARD | PAGE_NOACCESS));
+                            fwrite(ok ? (const uint8_t *)GP(a) : none, 1, 0x1000, f);
+                            done += 0x1000;
+                        }
+                        fclose(f);
+                        hos_log("test: the manager's memory written, %llu bytes from %#llx", (unsigned long long)done, (unsigned long long)(mgr & ~0xfffULL));
+                    }
+                }
+                for (int k = 0; k < n; k++) {
+                    uint32_t reset = 0;
+                    const int64_t i = oot_gamedata_keyed_index(c, keys[k], &reset);
+                    const uint64_t values = mgr ? recomp_load64(c, mgr + OOT_KEYED_VALUES) : 0;
+                    hos_log("test: find64 %016llx: %d places; place %lld of the keyed table, reset %u; after the table: word %08x (bit %d), byte %02x (bit %d), byte of its own %02x",
+                            (unsigned long long)keys[k], hits[k], (long long)i, reset,
+                            i >= 0 && values ? recomp_load32(c, values + (i >> 5) * 4) : 0,
+                            i >= 0 && values ? (int)(recomp_load32(c, values + (i >> 5) * 4) >> (i & 31) & 1) : -1,
+                            i >= 0 && values ? (unsigned)recomp_load8(c, values + (i >> 3)) : 0,
+                            i >= 0 && values ? (int)(recomp_load8(c, values + (i >> 3)) >> (i & 7) & 1) : -1,
+                            i >= 0 && values ? (unsigned)recomp_load8(c, values + i) : 0);
+                }
+            }
+        }
+    }
+#endif
     {   /* (a test's: HOS_OOT_GIVE="<item>,<item>,..." puts those in the pouch, one a second from the tenth second on, as
            a scene's gift is put there, and says how many Link then has: to try what follows an item without playing up
            to it (a Deku Nut bag is in no row of the Debug tab's inventory) */

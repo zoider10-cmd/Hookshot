@@ -696,6 +696,39 @@ Not the Happy Mask Shop, and not the shelves a game buys from again and again or
 tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
 the same goods list, and both sell the shuffled items.
 
+## A shelf that is for sale again (not fixed)
+
+A shelf that sold its one item was for sale again after the Sun's Song was played (reported from play, 2026-11-14, the
+Kokiri shop: a song and a purple rupee; both stayed sold when the shop was left and come back to). What was found:
+
+- **What a shelf has sold is the shelf's actor's own.** Bought without a window in the Kokiri shop, with the game's
+  flags' memory written before and after (the test switches below): nothing changed but the rupees, the name of the
+  last item got, an index and two flags that are not saved. The shop is part of the forest's map, so the shelf lives
+  while the forest is loaded and is made anew, full, when the map is loaded again: the Sun's Song does that, and so
+  does closing the game.
+- **The game's record by an actor's hash** (the list of flags' `Bool64bitKey`; in the running game a table sorted by
+  the hash at `GameDataMgr+0xc60`, 16 bytes each: the hash, its reset type, and the value in the byte at +12;
+  `oot_gamedata_keyed_index` in `host/hos_main.c`). A Gold Skulltula killed is there. The shelves the game sells out
+  of have a record each (the masks, the bottles' wares, the Bombchus, the tunics) of a kind that is reset
+  (`ResetTypeValue` 25; a chest's is 24); the shelves that sell without end have none (every shelf of the Kokiri
+  shop and the Bazaar). A shuffled shelf did not write its record at the sale. Not known: whether one is written
+  when the map is left.
+- **Tried and taken out.** (1) A goods list's `Release.SoldOutGameData` with `IsGet.<item>`: it means "not for sale
+  until this flag is true" (the label Sold out showed before the song was bought, which could be bought all the
+  same). (2) Each shuffled shelf given the hash of one of the 126 records of the reset kind that no actor has, made
+  one that is kept: with only the actor's `Hash` changed the game stopped as the forest loaded (the same hash is the
+  actor's physics placement's, `Phive.Placement.ID`); with every place changed it ran, and the sale was not in the
+  record.
+- **Leads.** A map's actor has a condition to be there at all (`Presence`: `FlagName`, `IsNegation`; the Kokiri
+  shop's shelves use it for their two sets, before and after `Meet_DekuTree_IsAfter_Step02_Exp`), so a shelf could
+  be gone once a flag is set; the game's side can set a named flag (`oot_gamedata_set_bool`) when the tracker marks
+  the shelf. Or the game's side gives nothing, and the price back, for a shelf already collected.
+- Also seen: a shelf that sells rupees cannot be bought from with a full wallet ("your bag's full").
+
+Test switches of the game's side (Windows): `HOS_OOT_FIND64="<hex>,..."` looks for 64-bit values in all of the game's
+memory at the seconds of `HOS_OOT_FIND64_AT` and says where each is, and its place in the keyed table (`"0"`: no
+search); `HOS_OOT_KEYED_DUMP="<file>"` writes the flags' manager's memory then, to `<file>.<second>`.
+
 ## Bombchus without a Bomb Bag
 
 The game counts Bombchus against the Bomb Bag: found before one they were lost (a chest of five gave none, the Items
