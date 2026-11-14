@@ -148,6 +148,7 @@ def main():
     # (more of them, for every song to be out with Progressive items: five items whose flags have the pouch's name for
     #  them. Not a lesson's until it is seen that the game sets those flags: LESSON_NAMED_READY)
     named = collections.Counter({"Item_HeavyBoot": 1, "Item_GlassTruth": 1, "Item_Shield_Mirror": 2, "Item_Hammer": 1})
+    check(S.LESSON_NAMED_READY is True, "the items whose flags have the pouch's name are held off again: the game was seen to set those flags")
     check(S.lesson_items(named, True, named=True) == {"Item_HeavyBoot", "Item_GlassTruth", "Item_Hammer"} and
           S.lesson_items(named, True, named=False) == {"Item_Hammer"} and
           S.lesson_items(named, True, lambda name: name != "Armor_GlassTruth", named=True) == {"Item_HeavyBoot", "Item_Hammer"},
@@ -172,7 +173,7 @@ def main():
             lessons[h] = g
             spots[h] = (g.area, g.item, None, None)
             needs[h] = S.NONE
-        safe = S.lesson_items(collections.Counter(s[1] for s in spots.values()), True)
+        safe = S.lesson_items(collections.Counter(s[1] for s in spots.values()), True, named=False)
         only = {S.gift_hash(key): (safe, frozenset(S.SONG_ITEMS)) for key in S.SONG_ASKED}
         check(safe == {S.HAM, S.BM}, "the test's seed has other items for the lessons than the Hammer and the Boomerang: %r" % sorted(safe))
         for n in range(12):
@@ -201,7 +202,8 @@ def main():
                 check(got >= S.SONG_GATES | was, "seed %d: a gating item cannot be got: %r" % (n, sorted((S.SONG_GATES | was) - got)))
                 # (the items that are not songs go to those lessons before a song does)
                 plain = [i for i in safe if i not in S.PROGRESSION]
-                check(sum(1 for h in only if gives[h] in plain) == min(len(plain), len(only)), "seed %d: a lesson holds a song while an item it may hold is left" % n)
+                held = {gives[h] for h in only}
+                check(not (held & set(S.SONG_ITEMS) and set(plain) - held), "seed %d: a lesson holds a song while an item it may hold is left" % n)
                 out += sum(1 for h in gives if h not in lessons and gives[h] in S.SONG_ITEMS)
             check(out >= 20 * 4 and (least or out > 20 * 5), "the songs are not out in the world (%d in 20 seeds)" % out)
         # (without the logic too, and a seed without enough for the lessons is an error rather than a lesson left open)

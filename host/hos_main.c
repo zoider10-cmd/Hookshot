@@ -1660,6 +1660,24 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
         }
     }
 #endif
+    if (getenv("HOS_OOT_WHERE"))   /* (a test's: HOS_OOT_WHERE=1 says where Link is each second) */
+        hos_log("test: Link is at %.2f %.2f %.2f", oot_link_place[0], oot_link_place[1], oot_link_place[2]);
+    {   /* (a test's: HOS_OOT_WATCHFLAG="<hash in hex>,..." says each of those truth values of the game's list when it
+           is first read and each time it changes: to see which flag an item given sets) */
+        static int was[32], first = 1;
+        const char *watch = getenv("HOS_OOT_WATCHFLAG");
+        for (int k = 0; watch && *watch && k < 32; k++) {
+            char *end;
+            const uint32_t hash = (uint32_t)strtoul(watch, &end, 16);
+            if (end == watch) break;
+            int value = -1;
+            if (!oot_gamedata_bool(c, hash, &value)) value = -1;
+            if (first || value != was[k]) hos_log("test: flag %08x is %d", hash, value);
+            was[k] = value;
+            watch = *end == ',' ? end + 1 : end;
+        }
+        first = 0;
+    }
     {   /* (a test's: HOS_OOT_SETENUM="<hash in hex>=<a value's hash in hex>,..." sets those values of the list's Data.Enum
            once, some seconds into the game, and says what each was: a quest's step) */
         static int turn;

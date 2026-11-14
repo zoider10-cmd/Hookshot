@@ -194,8 +194,8 @@ is. The teacher still plays the notes of the song the game has there; the scene 
   on the settings at hand 8 songs are out in the world, where 5 were. And five more items are a lesson's
   (`LESSON_NAMED`: the Lens of Truth, the two boots, the Mirror Shield, the Kokiri Sword), which are got once and
   have the two flags under the pouch's name for them (`IsGet.Armor_Adult_HeavyBoot`): with them 10 to 12 of the 12
-  songs are out (three seeds tried). **They are held off (`LESSON_NAMED_READY`) until it is seen that the game sets
-  those flags when the item is given by its own name.**
+  songs are out (three seeds tried). Seen without a window (`HOS_OOT_GIVE`, `HOS_OOT_WATCHFLAG`): each of them,
+  given by its own name, set its `IsGet` flag at once, so they are a lesson's (`LESSON_NAMED_READY`).
 - Left as the game has them, not looked into: Kakariko's adult logic file, which names the Song of Storms' flag (an
   `ainb`, not changed in place), Navi's hints, the Scarecrow's Song. The Serenade's lesson is started by the Ice
   Cavern's big chest (`SageOfWater_MelodyGet_Water`), whatever that chest holds.
@@ -714,7 +714,8 @@ the same goods list, and both sell the shuffled items.
   out. **That did not open it** (reported from play, 2026-11-14: a new game with the setting on, the flag set by the
   game's log, the door shut; what was seen without a window before was Link put past the door by the debug tools, and
   the door itself was never looked at). So the seed also puts the door's actor far under the map in the child's
-  Market and the adult's (`door_away`, as the shops' bundle boards are). **Not seen yet.**
+  Market and the adult's (`door_away`, as the shops' bundle boards are). Seen without a window: from the doorway,
+  the door filling the view without this, and with it the sword's chamber open. Not seen: Link walking through.
 - **The sword.** Its logic (`Market_Child_Prefab_e700`) asks for the story's own drawing only when the quest is at
   `Step06`, and for the plain way through time only once that is past; before, the button at the sword does nothing
   (seen: the prompt is there, Grab, or Draw with `HavePlayedEvent.Dm_TimeTemple_0030` set, and neither answers; nor

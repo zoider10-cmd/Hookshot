@@ -94,7 +94,8 @@ OPEN = {
 # chamber by the debug tools, past the door: the door itself was never looked at.) So the door is also taken out of
 # the way in the map files (door_away): its actor, of the child's Market and of the adult's, is put far under the
 # map, as the shops' bundle boards are, not taken out of the file, so that the logic that names it still finds it.
-# NOT SEEN YET: the game was being played.
+# Seen without a window: Link put in the doorway by the debug tools, the door filling the view on a seed without
+# this, and with it the doorway open on the sword's chamber. Not seen: Link walking through it.
 # The sword is another matter. Its logic (Market_Child_Prefab_e700) asks for the story's own drawing only when the
 # quest is at Step06, and for the plain way through time (the flow Market_Child_Field_ChildToAdult) only once that
 # is past: before, the button does nothing (seen). The story's drawing ends the whole quest (SageRoom_MeetRauru:
@@ -559,7 +560,8 @@ SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_
 # on shelves of the Kokiri shop, the Bazaar and the Goron shop, whose own angles differ, raised to stand over the
 # price board.)
 # (the Fairy Slingshot lay flat and low, half behind its price board: reported from play, 2026-11-14, the Kokiri shop.
-#  It is given the bow's turn and lift, NOT SEEN YET: the game was being played)
+#  It is given the bow's turn and lift: seen without a window on the Kokiri shop's four shelves, standing as a Y
+#  over its price board)
 SHELF_TURN = {"Item_Range_Bow": (0.0, 1.57, 1.57), "Item_Range_SlingShot": (0.0, 1.57, 1.57), "Item_Sword_Kokiri": (0.0, 1.57, 1.57), "Item_Shield_Mirror": (1.57, 0.0, 0.0),
               "TBox_Shield_Deku": (1.57, 0.0, 0.0), "TBox_Shield_Hylian": (-1.57, 3.14, 0.0)}
 # An item whose model is made where it is worn, not at its own origin (the gauntlets: 1.17 m up): its shelf's actor is
@@ -2710,11 +2712,15 @@ SONG_PLAY_OTHER = "Obj_Rupee_Green"
 # the Lens of Truth, the two boots, the Mirror Shield and the Kokiri Sword. With them a seed has nine or so items for
 # its eight lessons, and every song can be out in the world. A lesson that gives one asks about the flags of that
 # name (lesson_flag, song_words).
-# LESSON_NAMED_READY: False until it is seen that the game sets those flags when the item is given by its own name
-# (a lesson whose flag is never set is taught again and again); then they are not among a lesson's items.
+# LESSON_NAMED_READY: False held them off until it was seen that the game sets those flags when the item is given by
+# its own name (a lesson whose flag is never set is taught again and again). Seen without a window, 2026-11-14
+# (HOS_OOT_GIVE, HOS_OOT_WATCHFLAG): the Megaton Hammer, the Iron Boots, the Hover Boots, the Lens of Truth, the
+# Mirror Shield, the Stone of Agony, the Ice Arrows and the Boomerang, given one by one, each set its IsGet flag at
+# once (the boots', the lens's and the shield's by the pouch's names); the Kokiri Sword's was set already, the save
+# having one. The flags of the scene, HavePlayedGetEvent, were not set by that giving: a scene sets them.
 LESSON_NAMED = {"Item_GlassTruth": "Armor_GlassTruth", "Item_HeavyBoot": "Armor_Adult_HeavyBoot", "Item_HoverBoot": "Armor_Adult_HoverBoot",
                 "Item_Shield_Mirror": "Weapon_Shield_Mirror", "Item_Sword_Kokiri": "Weapon_Sword_Kokiri"}
-LESSON_NAMED_READY = False
+LESSON_NAMED_READY = True
 
 
 def lesson_flag(item):
@@ -2999,16 +3005,25 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart
             placed, ok = {}, True
             # (the spots of `only` that the items of their first kind which are not gating cannot fill: so many gating
             #  items of that kind go to them, so that the second kind, the songs, is left for the world)
-            short = 0
+            short = songs_in = 0
             if only:
                 plain = [i for i in items if i not in PROGRESSION]
-                short = max(0, sum(1 for h in rest if h in only) - sum(1 for i in plain if any(i in only[h][0] for h in only)))
+                first = lambda i: any(i in kinds[0] for kinds in only.values())
+                spots_only = sum(1 for h in rest if h in only)
+                short = max(0, spots_only - sum(1 for i in plain if first(i)))
+                # (and the ones that neither their first kind nor the second kind's plain items can fill: so many gating
+                #  items of the second kind, songs, go to them after all)
+                songs_in = max(0, spots_only - sum(1 for i in items if first(i)) - sum(1 for i in plain if not first(i) and any(i in kinds[1] for kinds in only.values())))
             for k, item in enumerate(order):
                 # Link with every gating item still to be placed, and what the chests filled so far then give him
                 have = reach(order[k + 1:], fixed + [(needs[h], i) for h, i in placed.items()])
                 free = [h for h in rest if h not in placed and needs[h] <= have and (not (bound or only) or fits(item, h))]
                 if short and any(h in only and item in only[h][0] for h in free):
                     free, short = [h for h in free if h in only and item in only[h][0]], short - 1
+                elif only and not first(item) and songs_in and any(h in only for h in free):
+                    free, songs_in = [h for h in free if h in only], songs_in - 1
+                elif only and not first(item) and any(h not in only for h in free):
+                    free = [h for h in free if h not in only]   # (an item of their second kind, a song: out in the world where it can be)
                 if not free:
                     ok = False
                     break
