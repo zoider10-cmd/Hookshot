@@ -46,7 +46,7 @@ def main():
     # ---- the seed's side: written with the seed, taken away with it ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
     check('with open(os.path.join(mod, TRACKER), "w", encoding="utf-8", newline="\\n") as f:' in script and
-          'for rel in rels + ["spoiler.txt", TRACKER, CHECKS, "rando_stamp.txt", "rando_manifest.txt"]:' in script and seed.TRACKER == "tracker.txt",
+          'for rel in rels + ["spoiler.txt", TRACKER, CHECKS, SHELF_FLAGS, "rando_stamp.txt", "rando_manifest.txt"]:' in script and seed.TRACKER == "tracker.txt",
           "the tracker's file is not written with the seed, or stays when the seed is taken away")
     # ---- the menu's side ----
     menu = (ROOT / "gpu" / "vk" / "vk_menu.cpp").read_text(encoding="utf-8")

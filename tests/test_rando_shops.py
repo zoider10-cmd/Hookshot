@@ -231,6 +231,28 @@ def main():
           "the place does not sell the new actor once from the start, or another place changed: %r" % sold)
     first = read(seed.shop_goods(byml(goods), {0: ("Shop_Heart", name)}))["GoodsList"][0]
     check(first == {"Actor": REF % name, "StockNum": 1}, "what the game waited for before it showed the shelf is not left out: %r" % first)
+    # ---- a shelf that sold its item stays sold: it waits for a flag of its own, which the game's side keeps ----
+    # (reported from play: a shelf was for sale again after the Sun's Song. Seen without a window: a shelf whose flag
+    #  is false is not there, and the shop is as it was)
+    kept = read(seed.shop_goods(byml(goods), {0: ("Shop_Heart", name), 1: ("Shop_DekuStick", name)}, {0: "IsGet.Pouch_Amiibo"}))["GoodsList"]
+    check(kept[0] == {"Actor": REF % name, "StockNum": 1, "Release": {"IsCheckReleaseGameData": 1, "ReleaseGameData": "IsGet.Pouch_Amiibo"}} and
+          kept[1] == {"Actor": REF % name, "IsDefaultFocus": 1, "StockNum": 1},
+          "a shelf does not wait for its flag, or one without a flag waits for something: %r" % kept[:2])
+    for every, shield, count in ((False, False, 24), (False, True, 25), (True, True, 48), (True, False, 47)):
+        flags = seed.shelf_flags(count, every, shield)
+        check(len(flags) == count == len(set(flags)) and all(f.startswith(seed.SHELF_FLAG_WORDS) for f in flags),
+              "the shelves' flags are not one each (%d shelves, every %r, the shield's %r)" % (count, every, shield))
+        # (a flag of a shelf actor the seed still sells is the game's to set: not one of them)
+        still = {actor for shop in seed.SHOPS for index, actor in list(shop.slots) + list(shop.rest) + ([seed.SHIELD_SHELF[1:]] if shop.key == "kokiri" else [])
+                 if (index, actor) not in seed.shop_slots(shop, every, shield)}
+        check(not any(f.split(".", 1)[1] in still for f in flags), "a shelf waits for the flag of an actor the seed still sells: %r" % sorted(still))
+    check(seed.shelf_flags(3)[0] == "HavePlayedGetEvent.Armor_Child_Mask_Amiibo0" and seed.shelf_flags(48, True, True)[-1].startswith("IsGet."),
+          "the flags are not the never got actors' first, the scene's flag before the item's")
+    try:
+        seed.shelf_flags(200, True, True)
+        check(False, "more shelves than flags is not an error")
+    except ValueError:
+        pass
     for sells, why in (({1: ("Shop_Heart", name)}, "a place that is another actor's"), ({7: ("Shop_Heart", name)}, "a place past the list")):
         try:
             seed.shop_goods(byml(goods), sells)
@@ -308,12 +330,19 @@ def main():
 
     # ---- the script ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
+    host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     check('"rando_shops": 0' in script and '(" shops %d prices 5" % a.shops if a.shops else "")' in script and 'a.shops = a.shops if 0 <= a.shops <= 2 else 0' in script,
           "the script does not read the setting, or does not name it in the seed's stamp")
     check('spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]' in script and "if gives[h] != g.item and g.flow and h not in lessons:" in script,
           "the shelves are not spots among the chests', or a shelf is taken for a scene's gift")
     check('shop_files["Pack/Actor/%s.pack.zs" % actor] = new' in script and 'shop_files["RSDB/" + n] = table' in script and
-          "parts[name] = shop_goods(parts[name], sells)" in script and "new, count = shelf_actors(data, on_shelf, lifts, scales, turns)" in script and
+          "parts[name] = shop_goods(parts[name], sells, shown)" in script and
+          "shown = {index: shelf_flag[h] for h, (its, index, _) in shelves.items() if its is shop}" in script and
+          "more = flag_defaults(new if new is not None else was, shelf_start) if shelf_start else None" in script and
+          'with open(os.path.join(mod, SHELF_FLAGS), "w", encoding="utf-8", newline="\\n") as f:' in script and
+          "static int oot_shelf_flags(Ctx *c) {" in host and "const int want = oot_checks[i].done != 1;" in host and
+          'oot_game_file(path, sizeof path, "mods/rando-seed/shelf_flags.txt")' in host and "const int changed = oot_shelf_flags(c);" in host and
+          "const char *tail = oot_checks[i].shelf && oot_checks[i].done != 1 ? strchr(oot_checks[i].item, '_') : NULL;" in host and "new, count = shelf_actors(data, on_shelf, lifts, scales, turns)" in script and
           "text = shop_caption(text, name) or text" in script and "list(shop_files.items())" in script and
           'new_tables["System/Resource/" + n] = shop_table(' in script,
           "a shelf actor's pack, its rows, the goods lists, the map's shelves or the words are not written with the seed, or the size table does not know them")

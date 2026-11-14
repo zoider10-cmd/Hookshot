@@ -672,10 +672,48 @@ def chu_limit(data, limit=BOMBCHU_LIMIT):
     return byml_build(tree, version)
 
 
-def shop_goods(data, sells):
+# ---- A shelf that sold its item stays sold ----
+# A shelf that sold its one item was for sale again when its map was loaded again (reported from play, 2026-11-14:
+# after the Sun's Song; tools/rando/README.md, "A shelf that is for sale again", has what was found). What a shelf
+# sold is the shelf's actor's own, and nothing saved. The game has a way to keep a shelf back, which a goods list's
+# entry names: Release, a flag the game waits for before it shows the shelf (the Kokiri shop's fuller stock waits
+# for Meet_DekuTree_IsAfter_Step02_Exp). So each shelf that sells a shuffled item waits for a flag of its own that
+# says "still for sale" (shelf_flags): it starts a new game true (flag_defaults), and the game's side puts it out
+# when the tracker marks the shelf collected and keeps it as the tracker's record says (host/hos_main.c
+# oot_shelf_flags, by <mod>/shelf_flags.txt: a shelf's name in the checks file, and its flag's hash).
+# The flags are ones the game has and a randomizer game has no use for: the two a pouch actor has (the scene of an
+# item got was played, HavePlayedGetEvent.<actor>; the item was got, IsGet.<actor>) of actors that are never got:
+# SHELF_FLAG_NEVER (the amiibo's masks and the like), and the game's own shelf actors that this seed sells nowhere
+# (SHELF_FLAG_SHOP: a shelf's own actor, when no shelf of the seed still sells it). The first kind before the second.
+SHELF_FLAGS = "shelf_flags.txt"
+SHELF_FLAG_WORDS = ("HavePlayedGetEvent.", "IsGet.")
+SHELF_FLAG_NEVER = ("Armor_Child_Mask_Amiibo0", "Armor_Child_Mask_Amiibo1", "Pouch_Amiibo", "Armor_Mask_Base", "Weapon_Shield_DarkLinkShield")
+SHELF_FLAG_SHOP = ("Shop_ArrowBundle_01", "Shop_ArrowBundle_02", "Shop_ArrowBundle_03", "Shop_BombBundle_01", "Shop_BombBundle_02", "Shop_BombBundle_03",
+                   "Shop_BombBundle_04", "Shop_BombchuBundle_01", "Shop_BombchuBundle_02", "Shop_BombchuBundle_03", "Shop_BombchuBundle_04",
+                   "Shop_BombchuBundle_05", "Shop_BombchuBundle_06", "Shop_BombchuBundle_07", "Shop_BombchuBundle_08", "Shop_DekuNutBundle_01",
+                   "Shop_DekuNutBundle_02", "Shop_DekuSeedBundle_01", "Shop_DekuSeedBundle_02", "Shop_DekuStickBundle_Medium")
+
+
+def shelf_flags(count, every=False, shield=False):
+    """the flags of `count` shelves that sell a shuffled item, in the shelves' order: names of the game's flags that
+    this seed has no use for (see above). every and shield: as shop_slots'. ValueError: more shelves than flags."""
+    sold = set()   # (the game's own shelf actors that the seed still sells somewhere)
+    for shop in SHOPS:
+        taken = set(shop_slots(shop, every, shield))
+        sold.update(actor for slot in list(shop.slots) + list(shop.rest) + ([SHIELD_SHELF[1:]] if shop.key == SHIELD_SHELF[0] else [])
+                    for actor in [slot[1]] if tuple(slot) not in taken)
+    actors = list(SHELF_FLAG_NEVER) + [n for n in SHELF_FLAG_SHOP if n not in sold]
+    names = [word + actor for word in SHELF_FLAG_WORDS for actor in actors]
+    if count > len(names):
+        raise ValueError("%d shelves and %d flags to keep them sold by" % (count, len(names)))
+    return names[:count]
+
+
+def shop_goods(data, sells, shown=None):
     """A keeper's goods list with the places of `sells` ({place: (the game's own shelf actor there, the new one)})
     selling the new actor, one in stock, from the start (what the game waits for before it shows a shelf, and what
-    it takes off its price, are left out). ValueError: a place whose actor is not the one named."""
+    it takes off its price, are left out). shown: {place: the flag the shelf waits for} (shelf_flags), for the
+    places that have one. ValueError: a place whose actor is not the one named."""
     tree, version = byml_parse(data)
     goods = tree[1].get("GoodsList")
     if not goods or goods[0] != "array":
@@ -687,6 +725,9 @@ def shop_goods(data, sells):
         entry = collections.OrderedDict((k, v) for k, v in goods[1][index][1].items() if k not in ("Release", "PriceOffset", "ConditionalPriceOffsetList"))
         entry["Actor"] = ("string", ACTOR_REF % new)
         entry["StockNum"] = (stock, struct.pack("<I", 1))
+        if shown and index in shown:
+            entry["Release"] = ("dict", collections.OrderedDict((("IsCheckReleaseGameData", (0xD0, struct.pack("<I", 1))),
+                                                                 ("ReleaseGameData", ("string", shown[index])))))
         goods[1][index] = ("dict", collections.OrderedDict(sorted(entry.items())))
     return byml_build(tree, version)
 
@@ -2770,7 +2811,7 @@ def remove_old(mod):
     n = 0
     with open(listing, encoding="utf-8") as f:
         rels = [line.strip() for line in f if line.strip()]
-    for rel in rels + ["spoiler.txt", TRACKER, CHECKS, "rando_stamp.txt", "rando_manifest.txt"]:
+    for rel in rels + ["spoiler.txt", TRACKER, CHECKS, SHELF_FLAGS, "rando_stamp.txt", "rando_manifest.txt"]:
         path = os.path.normpath(os.path.join(mod, rel))
         if not path.startswith(os.path.normpath(mod) + os.sep) or not os.path.isfile(path):   # (only inside the mod's folder)
             continue
@@ -3201,6 +3242,12 @@ def main():
                          "%s: shelf %d, %d rupee%s" % (shop.name, k + 1, price, "" if price == 1 else "s"), shop.need | wallet_need(price), "shops", None)
                 gifts[gift_hash(g.key)], shelves[gift_hash(g.key)], shelf_prices[gift_hash(g.key)] = g, (shop, index, actor), price
                 spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]
+    # (the flag each shelf waits for, "still for sale": a test, RANDO_TEST_SHELF_FLAGS=0, leaves them to start false)
+    try:
+        shelf_flag = dict(zip(shelves, shelf_flags(len(shelves), a.shop_shelves, shield_shelf)))
+    except ValueError as e:
+        sys.exit("the shops: %s. Nothing written." % e)
+    shelf_start = {} if os.environ.get("RANDO_TEST_SHELF_FLAGS") == "0" else {name: True for name in shelf_flag.values()}
     # (a string seed: the same on every Python 3. The seeds made before --event-chests keep their shuffle without it)
     logic = logic_now   # (without the event chests or the songs no gating item moves: nothing to ask)
     rng = random.Random("stage2:%d:%d:%d%s%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else "",
@@ -3348,6 +3395,10 @@ def main():
             try:
                 was = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
                 new = flag_defaults(was, dict(flags, **FIELD_CLOCK))
+                if shelf_flag:   # (the same file: the shelves' flags; a flag the game has not is an error)
+                    flag_defaults(new if new is not None else was, {name: False for name in shelf_flag.values()})
+                    more = flag_defaults(new if new is not None else was, shelf_start) if shelf_start else None
+                    new = more if more is not None else new
                 if a.start_rupees:   # (the same file: the rupees after the flags)
                     more = flag_defaults(new if new is not None else was, {RUPEES: START_RUPEES}, kind="Int")
                     new = more if more is not None else new
@@ -3577,13 +3628,14 @@ def main():
             packs = sorted(n[:-len(".pack.zs")] for n in os.listdir(os.path.join(romfs, "Pack", "Actor")) if "Shop" in n and n.startswith("Npc_") and n.endswith(".pack.zs"))
             for shop in SHOPS:   # (the goods lists, in every pack that has a copy, and the shelves of the map files)
                 sells = {index: (actor, shop_actor("%s_%d" % (shop.key, index))) for index, actor in shop_slots(shop, a.shop_shelves, shield_shelf)}
+                shown = {index: shelf_flag[h] for h, (its, index, _) in shelves.items() if its is shop}
                 for param in shop.params:
                     name, found = SHOP_PARAM % param, 0
                     for keeper in packs:
                         parts = sarc_read(pack(keeper))
                         if name not in parts:
                             continue
-                        parts[name] = shop_goods(parts[name], sells)
+                        parts[name] = shop_goods(parts[name], sells, shown)
                         new = sarc_write(parts)
                         pack_files["Pack/Actor/%s.pack.zs" % keeper] = new
                         pack_sizes["Pack/Actor/%s.pack" % keeper] = len(new)
@@ -3737,6 +3789,10 @@ def main():
                                        for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES] +
                                       [(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name, None, gives[h])
                                        for h, (shop, _, _) in shelves.items() if h in gives])) + "\n")
+    if shelf_flag:   # (for the game's side: a shelf's name as the checks file has it, its flag's hash, the flag)
+        with open(os.path.join(mod, SHELF_FLAGS), "w", encoding="utf-8", newline="\n") as f:
+            f.write("".join("%s|%08x|%s\n" % ((gifts[h].name[:1].upper() + gifts[h].name[1:]).replace("|", "/")[:CHECK_NAME],
+                                               murmur3(name.encode()), name) for h, name in shelf_flag.items()))
     with open(os.path.join(mod, "rando_manifest.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(sorted(written)) + "\n")
     with open(stamp_path, "w", encoding="utf-8") as f:   # (last: a run that stopped half way is made again)

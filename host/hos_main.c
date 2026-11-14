@@ -1185,6 +1185,7 @@ static struct {
     float place[3];
     signed char done;
     uint64_t piece;   /* (a Piece of Heart lying in the world: its actor's hash; 0: another kind of check) */
+    uint32_t shelf;   /* (a shop's shelf: the hash of the flag it waits for, "still for sale"; 0: another kind of check) */
 } oot_checks[OOT_TRACKER_MAX];
 static int oot_check_count = -1;
 static char oot_checks_seed[200];   /* (the stamp the checks and the record are of) */
@@ -1232,11 +1233,13 @@ static int oot_tracker_stamp(char *out, size_t size) {
 /* (the lock held) the seed's checks with what each gives, and the record of that seed */
 static void oot_tracker_load(const char *stamp) {
     char path[MAX_PATH + 48], line[400];
+    static char kinds[OOT_TRACKER_MAX + 1][80];   /* (each check's name, to find the shelves by) */
     oot_check_count = 0;
     snprintf(oot_checks_seed, sizeof oot_checks_seed, "%s", stamp);
     FILE *f = oot_game_file(path, sizeof path, "mods/rando-seed/checks.txt") ? fopen(path, "r") : NULL;
     while (f && oot_check_count < OOT_TRACKER_MAX && fgets(line, sizeof line, f)) {
-        char area[48], kind[80], ages[4], needs[96] = "", hash[32] = "", item[64] = "";
+        char area[48], ages[4], needs[96] = "", hash[32] = "", item[64] = "";
+        char *kind = kinds[oot_check_count];
         if (line[0] == '#') continue;   /* (the lines the menu takes, in its order: gpu/vk/vk_menu.cpp tracker_load) */
         const int got = sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%95[A-Z,-]|%31[0-9a-fA-F-]|%63[A-Za-z0-9_]", area, kind,
                                oot_checks[oot_check_count].folder, ages, &oot_checks[oot_check_count].place[0],
@@ -1245,9 +1248,26 @@ static void oot_tracker_load(const char *stamp) {
         snprintf(oot_checks[oot_check_count].item, sizeof oot_checks[0].item, "%s", got >= 10 ? item : "");
         /* (tools/rando/rando_seed.py names such a check "Piece of Heart", and no other kind begins so) */
         oot_checks[oot_check_count].piece = got >= 9 && !strncmp(kind, "Piece of Heart", 14) ? strtoull(hash, NULL, 16) : 0;
+        oot_checks[oot_check_count].shelf = 0;
         oot_checks[oot_check_count++].done = 0;
     }
     if (f) fclose(f);
+    /* (the shelves' flags: <a shelf's name in the checks file>|<its flag's hash>|<the flag>, tools/rando/rando_seed.py
+       shelf_flags. A seed made before there were any has no such file, and its shelves are as they were) */
+    int shelves = 0;
+    f = oot_game_file(path, sizeof path, "mods/rando-seed/shelf_flags.txt") ? fopen(path, "r") : NULL;
+    while (f && fgets(line, sizeof line, f)) {
+        char name[80];
+        unsigned flag = 0;
+        if (sscanf(line, "%79[^|]|%x", name, &flag) != 2 || !flag) continue;
+        for (int i = 0; i < oot_check_count; i++)
+            if (!strcmp(kinds[i], name)) {
+                oot_checks[i].shelf = flag, shelves++;
+                break;
+            }
+    }
+    if (f) fclose(f);
+    if (shelves) hos_log("rando: tracker: %d shop shelves wait for a flag of their own", shelves);
     int collected = 0;
     f = oot_game_file(path, sizeof path, "rando/collected.txt") ? fopen(path, "r") : NULL;
     if (f && fgets(line, sizeof line, f)) {
@@ -1260,6 +1280,24 @@ static void oot_tracker_load(const char *stamp) {
     }
     if (f) fclose(f);
     hos_log("rando: tracker: %d checks of the seed, %d of them collected by the record", oot_check_count, collected);
+}
+
+/* A shop's shelf that sold its item is for sale again when its map is loaded again (the shelf's actor keeps what it
+   sold, and nothing saved: tools/rando/README.md). So each shelf of a seed waits for a flag of its own, "still for
+   sale" (the goods list's Release), and this keeps every such flag as the record says: true while the shelf's check
+   is not collected, false once it is. Each second: a shelf just bought is put out at once, and a save from before
+   the flags were is put right when it is loaded. Returns how many were changed. */
+static int oot_shelf_flags(Ctx *c) {
+    int changed = 0;
+    AcquireSRWLockShared(&oot_checks_lock);
+    for (int i = 0; i < oot_check_count; i++) {
+        int now = 0;
+        const int want = oot_checks[i].done != 1;
+        if (!oot_checks[i].shelf || !oot_gamedata_bool(c, oot_checks[i].shelf, &now) || now == want) continue;
+        if (oot_gamedata_set_bool(c, oot_checks[i].shelf, want)) changed++;
+    }
+    ReleaseSRWLockShared(&oot_checks_lock);
+    return changed;
 }
 
 /* An item given (hos_oot_pouch_add): the check that gives it is collected */
@@ -1280,6 +1318,22 @@ static void oot_tracker_item(const char *name) {
     }
     if (best >= 0 && nearest > OOT_CHECK_NEAR) best = -1;
     if (best < 0 && others == 1 && nearest > 1e29f) best = elsewhere;   /* (the one check left that gives it, in another map's file) */
+    if (best < 0) {
+        /* (a shop's shelf gives its item by the name the pouch has it by, which is not always the seed's: seen without
+           a window, the Lens of Truth bought was Armor_Child_GlassTruth and a purple rupee Obj_Rupee_Purple, and
+           neither shelf was marked. So a shelf near Link whose item's name without its first word (Item_, TBox_,
+           Obj_) is the end of the name given is the one) */
+        const size_t length = strlen(name);
+        for (int i = 0; i < oot_check_count && best < 0; i++) {
+            const char *tail = oot_checks[i].shelf && oot_checks[i].done != 1 ? strchr(oot_checks[i].item, '_') : NULL;
+            const size_t n = tail ? strlen(tail) : 0;   /* (with its "_": a whole word's end) */
+            if (n < 2 || n > length || strcmp(name + length - n, tail) || !oot_banc_in_folder(oot_link_map, oot_checks[i].folder)) continue;
+            const float dx = oot_checks[i].place[0] - oot_link_place[0], dy = oot_checks[i].place[1] - oot_link_place[1],
+                        dz = oot_checks[i].place[2] - oot_link_place[2];
+            const float away = sqrtf(dx * dx + dy * dy + dz * dz);
+            if (away <= OOT_CHECK_NEAR) best = i, nearest = away;
+        }
+    }
     if (best >= 0) {
         oot_checks[best].done = 1;
         oot_tracker_save();
@@ -1380,6 +1434,10 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
     next = now + 1000000000LL;
     if (!hos_rando_on()) return;
     rx_option_set(OOT_TRACKER_ON, 1);   /* (the Tracker tab reads the seed only then: vk_menu.cpp tracker_load) */
+    {
+        const int changed = oot_shelf_flags(c);
+        if (changed) hos_log("rando: tracker: %d shop shelves' flags put as the record says", changed);
+    }
     {   /* (a test's: HOS_OOT_SETFLAG="<hash in hex>=<0 or 1>,..." sets those truth values of the game's list once, some
            seconds into the game, and says what each was: to try a scene's steps one at a time) */
         static int turn;

@@ -696,7 +696,29 @@ Not the Happy Mask Shop, and not the shelves a game buys from again and again or
 tunics, bombs, arrows, the first nuts and stick, potions, the fairy). A child's and an adult's shop of one kind have
 the same goods list, and both sell the shuffled items.
 
-## A shelf that is for sale again (not fixed)
+## A shelf that sold its item stays sold
+
+Each shelf that sells a shuffled item waits for a flag of its own that says "still for sale". The goods list's entry
+names it (`Release`: the game shows a shelf only when its flag is true; `shop_goods`' `shown`), a new game starts
+with it true (`flag_defaults`), and the game's side keeps it as the tracker's record says: true while the shelf's
+check is not collected, false once it is (`oot_shelf_flags` in `host/hos_main.c`, each second, by
+`<mod>/shelf_flags.txt`: a shelf's name in the checks file, its flag's hash, the flag). The flags are ones the game
+has and a randomizer game has no use for (`shelf_flags`): the two a pouch actor has (`HavePlayedGetEvent.<actor>`,
+`IsGet.<actor>`) of actors that are never got (`SHELF_FLAG_NEVER`: the amiibo's masks and the like) and of the game's
+own shelf actors that the seed sells nowhere (`SHELF_FLAG_SHOP`).
+
+- Seen without a window: with the flags false every shelf of the Kokiri shop was gone and the shop was as it was
+  (talked to, browsed); with a save from before the flags, 44 were put true as it loaded and the shelves were there,
+  the two the record had collected were not.
+- The tracker did not mark some shelves bought: the pouch has an item by another name than the seed (the Lens of
+  Truth was `Armor_Child_GlassTruth`, a purple rupee `Obj_Rupee_Purple`). A shelf near Link whose item's name without
+  its first word is the end of the name given is now the one (`oot_tracker_item`).
+- **Not seen yet: a shelf bought and gone after its map is loaded again, in play.** The record is the folder's, not a
+  save's (as the tracker's is): another save of the same seed has the same shelves gone until the record is
+  forgotten (the Tracker tab's first row).
+- A seed made before this has no `shelf_flags.txt` and is as it was.
+
+## A shelf that is for sale again (what was found)
 
 A shelf that sold its one item was for sale again after the Sun's Song was played (reported from play, 2026-11-14, the
 Kokiri shop: a song and a purple rupee; both stayed sold when the shop was left and come back to). What was found:
@@ -719,10 +741,9 @@ Kokiri shop: a song and a purple rupee; both stayed sold when the shop was left 
   one that is kept: with only the actor's `Hash` changed the game stopped as the forest loaded (the same hash is the
   actor's physics placement's, `Phive.Placement.ID`); with every place changed it ran, and the sale was not in the
   record.
-- **Leads.** A map's actor has a condition to be there at all (`Presence`: `FlagName`, `IsNegation`; the Kokiri
-  shop's shelves use it for their two sets, before and after `Meet_DekuTree_IsAfter_Step02_Exp`), so a shelf could
-  be gone once a flag is set; the game's side can set a named flag (`oot_gamedata_set_bool`) when the tracker marks
-  the shelf. Or the game's side gives nothing, and the price back, for a shelf already collected.
+- **What it led to** is the section above. (A map's actor also has a condition to be there at all, `Presence`:
+  `FlagName`, `IsNegation`; the Kokiri shop's shelves use it for their two sets, before and after
+  `Meet_DekuTree_IsAfter_Step02_Exp`. Not used: the goods list's `Release` is enough.)
 - Also seen: a shelf that sells rupees cannot be bought from with a full wallet ("your bag's full").
 
 Test switches of the game's side (Windows): `HOS_OOT_FIND64="<hex>,..."` looks for 64-bit values in all of the game's
