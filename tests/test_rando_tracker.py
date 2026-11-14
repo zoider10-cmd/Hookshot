@@ -119,7 +119,7 @@ def main():
                         "Market|The gallery|Market|C|7.0 8.0 9.5|-"], "a line does not end with the item it gives, after its hash or a dash: %r" % given[1:])
     check('named("Chest", h, spots[h][0], spots[h][5], spots[h][1]), h, gives[h],' in script and
           'named("Gold Skulltula", h, skulls[h][0], skulls[h][1]), h, skull_drops.get(h) or drops.get(h) or TOKEN)' in script and
-          "needs[h], g.name, None, gives[h])" in script and "needs[h], gifts[h].name, None, gives[h])" in script,
+          "needs[h], g.name, gift_key[h], gives[h])" in script and "needs[h], gifts[h].name, None, gives[h])" in script,
           "what the chests, the Gold Skulltulas, the gifts and the shelves give is not written with the checks")
     items = (ROOT / "gpu" / "vk" / "oot_cheat_items.h").read_text(encoding="utf-8")
     m = re.search(r"#define OOT_TRACKER_MAX (\d+)", items)
@@ -207,7 +207,10 @@ def main():
           seed.check_ages({"A_Child_Static", "A_Adult_Static"}) == "CA" and seed.check_ages({"FireTemple_Static.bcett.byml.zs"}) == "CA" and
           seed.check_ages(set()) == "", "the ages whose map has a check are not read from its files' names")
     check('with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\\n") as f:' in script and seed.CHECKS == "checks.txt" and
-          '" checks 9" +' in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
+          '" checks 10" +' in script and
+          # (a gift's mark is kept by a chest's second value of the save: gift_keys)
+          seed.gift_keys([7, 3], [0x10, 0x30, 0x20]) == {3: 0x12, 7: 0x22} and
+          "g.name, gift_key[h], gives[h])" in script and "gift_key = gift_keys(" in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
     m = re.search(r"constexpr int kTrackerChecks = (\d+);", menu)
     check(m and int(m.group(1)) == seed.CHECK_ROWS, "the menu does not keep as many checks as the script may write")
     check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%95[A-Z,-]|%31[^|]|%63[^|]|%f %f %f"' in menu and "char area[48], kind[80], folder[40], ages[4];" in menu and seed.CHECK_NAME == 79 and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")

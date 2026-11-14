@@ -2952,6 +2952,24 @@ def check_name(kind, item, about, pos, exits=(), parts=()):
     return name + (", by the %s exit" % AREA_NAMES.get(near[0][1], spaced(near[0][1])) if near else "")
 
 
+# A character's gift has no actor of a map, and so no truth value of its own in a save for the tracker's mark
+# (host/hos_main.c: a check with an actor's hash is marked by the value the game keeps for that hash). The game keeps
+# a second value for every actor that drops something, by its hash ^ 2 (a chest has one), and was not seen to set a
+# chest's: without a window, a chest of Mido's house opened, its second value stayed false, and a chest with it set
+# stood shut as before. So each gift borrows the second value of a chest (gift_keys), and its line of the checks
+# file has that in the hash's place: the game's side marks it there as it does a chest.
+GIFT_KEY = 2
+
+
+def gift_keys(gifts, chests):
+    """{a gift's hash: the key its mark is kept by}: the chests' hashes ^ GIFT_KEY, in order, for the gifts in order.
+    ValueError: more gifts than chests."""
+    gifts, chests = sorted(gifts), sorted(chests)
+    if len(gifts) > len(chests):
+        raise ValueError("%d gifts and %d chests to keep their marks by" % (len(gifts), len(chests)))
+    return {g: c ^ GIFT_KEY for g, c in zip(gifts, chests)}
+
+
 def check_lines(chests, skulls, gifts=()):
     """The checks file's lines. chests, skulls and gifts: [(area (the Banc folder), position, ages, what its rule asks
     for, its name, its actor's hash)]; a chest or a Gold Skulltula without a name is "Chest" or "Gold Skulltula". The
@@ -3268,7 +3286,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 7" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 9" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 10" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -4019,6 +4037,7 @@ def main():
                                         collections.Counter(g.area for g in gifts.values()))) + "\n")
     with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\n") as f:   # (for the Tracker tab's Go there)
         skull_need = skull_asks
+        gift_key = gift_keys([h for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES], list(spots))
         named = lambda kind, h, area, pos, item="": check_name(kind, item, about.get(h, {}), pos, exits[area], sub_areas[area])
         f.write("\n".join(check_lines([(spots[h][0], spots[h][5], check_ages(maps[h]), needs[h], named("Chest", h, spots[h][0], spots[h][5], spots[h][1]), h, gives[h],
                                         chest_front(spots[h][5], about[h]["turned"]) if len(spots[h][5]) == 3 and "turned" in about.get(h, {}) else None)
@@ -4027,7 +4046,7 @@ def main():
                                        for h in took] +
                                       [(pieces[h][0], pieces[h][1], check_ages(maps[h]), heart_asks(h), named("Piece of Heart", h, pieces[h][0], pieces[h][1]), h,
                                         heart_drops.get(h, HEART)) for h in pieces],
-                                      [(g.area, GIFT_PLACES[g.key][1], GIFT_PLACES[g.key][0], needs[h], g.name, None, gives[h])
+                                      [(g.area, GIFT_PLACES[g.key][1], GIFT_PLACES[g.key][0], needs[h], g.name, gift_key[h], gives[h])
                                        for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES] +
                                       [(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name, None, gives[h])
                                        for h, (shop, _, _) in shelves.items() if h in gives])) + "\n")

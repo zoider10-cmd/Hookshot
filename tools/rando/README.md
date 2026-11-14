@@ -1003,7 +1003,11 @@ before and in a new game of the seed. Now:
   chest (no save looked at had one; a chest with it set stood shut as before). It is set when the check is
   collected and read back each second (`oot_shelf_flags`);
 - a shop's shelf by its own flag, as before, which is now the save's too;
-- a character's gift (40 of 300) has no such place and stays in the folder's record below.
+- a character's gift (40 of 300) has no actor, and borrows the second value the game keeps for a chest (its hash
+  ^ 2, as for every actor that drops something), which the game was not seen to set: a chest opened without a
+  window left it false, and a chest with it set stood shut. The seed gives each gift one (`gift_keys`) in the hash's
+  place of its line. Seen without a window as for a chest: the Skull Kid's gift collected, saved, marked after a
+  restart, not marked in the saves from before.
 
 A flag is set by the game's own setters (`f_806a2b20` by name, `f_80f27130` by an actor's hash: the manager, the
 value, the hash), which queue the write. **A value written straight into the manager's memory is not in the next
@@ -1012,7 +1016,7 @@ collected, the game's own save, the game started again on that save: marked; on 
 The save's file is as github.com/Mozencaz/OotrR `save_reader.py` reads it (32 bytes, then (hash, value) pairs in
 typed sections, and last the hashes whose truth value is true).
 
-For the gifts it is one record for the game folder, not for a save: a new game of the same seed keeps it until it is forgotten
+A seed made before this (its gifts' lines have no key) keeps its gifts in one record for the game folder, not for a save: a new game of the same seed keeps it until it is forgotten
 (the Tracker tab's first row, confirm twice), a save from before a check was collected still says it is, and what
 was collected before the record began is not in it.
 

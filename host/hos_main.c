@@ -1327,7 +1327,8 @@ static int oot_gamedata_keyed_set_bool(Ctx *c, uint64_t key, int value) {
    one record for the folder, not for a save: a new game of the same seed keeps it until it is forgotten (the Tracker
    tab's first row, the action 6), and a save from before a check was collected still says it is. Checks collected
    before there was a record are not in it.
-   Since 2026-11-14 that is so only of the checks with no place of their own in a save (a character's gift). A check
+   Since 2026-11-14 that is so only of a seed made before (a gift's line without a key): a gift's line has the key of
+   a chest's second value, which nothing else uses (tools/rando/rando_seed.py gift_keys), and is marked as a chest is. A check
    that is an actor of a map (a chest, a Gold Skulltula, a Piece of Heart: its line has the actor's hash) is marked
    in the save itself: the game's list has a truth value for every such actor by its hash (Bool64bitKey), saved,
    which the game was not seen to set for a chest (no save looked at had one, and a chest with it set was shut as
