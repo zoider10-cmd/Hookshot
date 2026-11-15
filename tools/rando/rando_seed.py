@@ -77,7 +77,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 21   # (21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 22   # (22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -223,6 +223,11 @@ FIELD_CLOCK = {"HyruleField_ArriveEntrance": True}
 # this one alone brought the HUD at the next load of the area, and the 98 others did not. It is a plain truth value,
 # false in a new game. The game's side sets it for a save that has it put out (host/hos_main.c).
 DPAD_HUD = {"#7be57cb0": True}
+# The minimap, the same way (2026-11-15: in play it came only after the owl's scenes in Hyrule Field). Another flag no
+# file names, found from the same two saves by halving the 98 values left, without a window and on the owner's "All
+# Items unlocked" save (a new game's start): 2e315eb6 alone brought the minimap at the next load of an area; the last
+# other one, 2e59a755, did not. A seed's new game starts with it set, and the game's side sets it for an older save.
+MINIMAP = {"#2e315eb6": True}
 # Link's door. A new game's Link is in his house, the door shut until he walks up to it: the scene at the door
 # (Dm_Kokiri_0045, the event at it) plays Link's waking (Dm_Kokiri_0050) and sets the door's flag and the scene's own,
 # and asks the door's flag first (open: nothing plays). The house's logic (Land_Kokiri_House_A_Prefab) opens the door
@@ -4106,7 +4111,7 @@ def main():
         for n in lists:
             try:
                 was = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
-                new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **(OPEN_DOOR if a.open_door else {}), **(LINK_DOOR if a.skip_intro else {})))
+                new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **MINIMAP, **(OPEN_DOOR if a.open_door else {}), **(LINK_DOOR if a.skip_intro else {})))
                 if shelf_flag:   # (the same file: the shelves' flags; a flag the game has not is an error)
                     flag_defaults(new if new is not None else was, {name: False for name in shelf_flag.values()})
                     more = flag_defaults(new if new is not None else was, shelf_start) if shelf_start else None
@@ -4121,7 +4126,7 @@ def main():
         if a.start_rupees:
             print("a new game starts with %d rupees" % START_RUPEES)
         print("Hyrule Field's day and night run from a new game's start (the Sun's Song works before the owl is met)")
-        print("the d-pad's HUD (Navi and the boots) is there from a new game's start")
+        print("the d-pad's HUD (Navi and the boots) and the minimap are there from a new game's start")
         if a.open_door:
             print("the Door of Time is open in a new game (the Master Sword's way through time is the game's side's)")
     if flags:

@@ -2029,6 +2029,16 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
             if (said++ < 4) hos_log("rando: the d-pad's HUD was not shown yet (flag 7be57cb0 put out): the flag is set%s", done ? "" : ", NOT FOUND");
         }
     }
+    {   /* (the randomizer's fork) The minimap, the same way: a new game had none of it until the owl's scenes in Hyrule
+           Field. Its flag too is known by its hash alone (tools/rando/rando_seed.py MINIMAP); set here for a save that
+           has it put out, once a second while it is not. It comes at the next load of an area. */
+        int shown = 1;
+        if (oot_gamedata_bool(c, 0x2e315eb6u, &shown) && !shown) {
+            const int done = oot_gamedata_set_bool(c, 0x2e315eb6u, 1);
+            static int said;
+            if (said++ < 4) hos_log("rando: the minimap was not shown yet (flag 2e315eb6 put out): the flag is set%s", done ? "" : ", NOT FOUND");
+        }
+    }
     char map[80];
     oot_gamedata_string(c, 0x1d6189dau, map, sizeof map);   /* Sequence_CurrentBanc */
     AcquireSRWLockExclusive(&oot_checks_lock);
