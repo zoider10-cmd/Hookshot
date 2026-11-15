@@ -1987,6 +1987,18 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
                                     done ? "" : ", NOT FOUND");
         }
     }
+    {   /* (the randomizer's fork) The d-pad's HUD (Navi and the boots, by the hearts): a new game has none of it until the
+           first scene in the Deku Tree. What shows it is a flag no file of the game names, known by its hash alone
+           (tools/rando/rando_seed.py DPAD_HUD has how it was found). A seed's new game starts with it set; a save made
+           before that has it put out, so it is set here, once a second while it is not. The HUD comes at the next
+           load of an area. */
+        int shown = 1;
+        if (oot_gamedata_bool(c, 0x7be57cb0u, &shown) && !shown) {
+            const int done = oot_gamedata_set_bool(c, 0x7be57cb0u, 1);
+            static int said;
+            if (said++ < 4) hos_log("rando: the d-pad's HUD was not shown yet (flag 7be57cb0 put out): the flag is set%s", done ? "" : ", NOT FOUND");
+        }
+    }
     char map[80];
     oot_gamedata_string(c, 0x1d6189dau, map, sizeof map);   /* Sequence_CurrentBanc */
     AcquireSRWLockExclusive(&oot_checks_lock);

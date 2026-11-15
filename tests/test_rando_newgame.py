@@ -193,7 +193,7 @@ def sources():
     check(seed.OPEN_DOOR == {"Market_Child_TimeTempleDoor_Opened": True, "HavePlayedEvent.Dm_TimeTemple_0065": True} and
           "#define OOT_LEFT_TEMPLE_FLAG 0x%08xu" % seed.murmur3(b"HavePlayedEvent.Dm_TimeTemple_0065") in host and '"rando_open_door": 0' in script and
           'a.open_door = a.open_door or ini["rando_open_door"] != 0' in script and
-          "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **(OPEN_DOOR if a.open_door else {})))" in script and
+          "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **(OPEN_DOOR if a.open_door else {})))" in script and
           'X(OPEN_DOOR, "Open Door of Time", "rando_open_door",' in header,
           "the Door of Time's flag does not start set with the setting, or the setting is not read")
     # (the rules: only what it takes to be an adult is taken off, only from a place that is an adult's alone)
@@ -266,7 +266,7 @@ def main():
     #  Found with a save made before the owl: with HyruleField_ArriveEntrance set, a night asked for stayed)
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    check(seed.FIELD_CLOCK == {"HyruleField_ArriveEntrance": True} and "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **(OPEN_DOOR if a.open_door else {})))" in script and
+    check(seed.FIELD_CLOCK == {"HyruleField_ArriveEntrance": True} and "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **(OPEN_DOOR if a.open_door else {})))" in script and
           "if True:   # (every seed: Hyrule Field's clock, FIELD_CLOCK" in script,
           "a seed's new game does not start with the flag that ends Hyrule Field's held day, or only with other settings on")
     check(seed.FIXES_VERSION >= 5 and "field_clock(" not in script, "a seed made before the field's clock ran is not made again, or the step tried first is still passed over")
@@ -274,6 +274,16 @@ def main():
           host.index("if (!hos_rando_on()) return;", host.index("static void oot_tracker_refresh(")) < host.index("oot_gamedata_bool(c, 0x804aec99u, &reached)") and
           "0x316c53a3u" not in host,
           "the game's side does not set the flag for a save that has it put out, or does so outside the randomizer")
+    # ---- the d-pad's HUD: a new game starts with the flag that shows it (known by its hash alone), and the game's side
+    #      sets it for a save that has it put out ----
+    # (asked for: the HUD of Navi and the boots was not there until the first scene in the Deku Tree. Found by halving
+    #  the 99 truth values a new game's save and a Deku Tree save differ in, without a window: this one alone shows it)
+    check(seed.DPAD_HUD == {"#7be57cb0": True} and seed.flag_hash("#7be57cb0") == 0x7be57cb0 and
+          seed.flag_hash("HyruleField_ArriveEntrance") == 0x804aec99 and seed.FIXES_VERSION >= 10,
+          "a seed's new game does not start with the d-pad's HUD's flag, or a flag known by its hash is not read as one")
+    check("if (oot_gamedata_bool(c, 0x7be57cb0u, &shown) && !shown) {" in host and "oot_gamedata_set_bool(c, 0x7be57cb0u, 1);" in host and
+          host.index("if (!hos_rando_on()) return;", host.index("static void oot_tracker_refresh(")) < host.index("oot_gamedata_bool(c, 0x7be57cb0u, &shown)"),
+          "the game's side does not set the d-pad's HUD's flag for a save that has it put out, or does so outside the randomizer")
     print("PASS: a new game's open ways and its opening")
 
 

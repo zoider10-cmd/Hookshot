@@ -74,7 +74,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 9   # (9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 10   # (10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -212,6 +212,14 @@ FLAG_LIST = "GameData"   # (the folder of the romfs: GameDataList.Product.<n>.by
 # chooses the field's time table of palettes (WorldParam HyruleField_Child: ConditionEnvTimePalette) and is not what
 # holds the day: with its step passed over the song failed as before.
 FIELD_CLOCK = {"HyruleField_ArriveEntrance": True}
+# The HUD of the d-pad's items (Navi and the boots, by the hearts). A new game has none of it until the first scene in
+# the Deku Tree; with a seed's items found long before that, the owner asked for it from the start. What shows it is a
+# flag of the list that no event, AI or logic file names: only its hash is known (no string of the game's files or its
+# code hashes to it), so it is given as "#<hash>" (flag_hash). Found from two saves, one from a new game's start and one
+# in the Deku Tree: of the 99 truth values they differ in, each set on the first in turn, by halves, without a window,
+# this one alone brought the HUD at the next load of the area, and the 98 others did not. It is a plain truth value,
+# false in a new game. The game's side sets it for a save that has it put out (host/hos_main.c).
+DPAD_HUD = {"#7be57cb0": True}
 # Starting rupees: the list's whole number PlayerStatus.CurrentRupee is what Link has, 0 in a new game. With the
 # setting on a new game starts with START_RUPEES of them (flag_defaults, kind "Int"). A game already begun keeps
 # what its save says.
@@ -2131,6 +2139,11 @@ def murmur3(data, seed=0):
     return h ^ h >> 16
 
 
+def flag_hash(name):
+    """A flag's hash: its name's MurmurHash3, or, for a flag whose name is not known, "#<the hash in hex>"."""
+    return int(name[1:], 16) if name.startswith("#") else murmur3(name.encode())
+
+
 def flag_defaults(data, flags, kind="Bool"):
     """The game's list of flags (GameDataList: a BYML as the map files are, but big-endian, "BY") with the value each
     flag of `flags` ({name: truth value}) starts a new game with: the new bytes, or None when they already start so.
@@ -2165,7 +2178,7 @@ def flag_defaults(data, flags, kind="Bool"):
     node, bools, _ = fields(at).get(kind, (0, 0, 0)) if node == 0xC1 else (0, 0, 0)
     if node != 0xC0 or data[bools] != 0xC0:
         raise ValueError("the list has no Data.%s" % kind)
-    want = {murmur3(name.encode()): name for name in flags}
+    want = {flag_hash(name): name for name in flags}
     if len(want) != len(flags):
         raise ValueError("two of the flags have one hash")
     n = count(bools)
@@ -3614,7 +3627,7 @@ def main():
             len(drops) - len(skull_drops), "" if len(drops) - len(skull_drops) == 1 else "s"))
     # ---- the open ways: the game's list of flags, with theirs starting put out ----
     flag_files = {}
-    if True:   # (every seed: Hyrule Field's clock, FIELD_CLOCK, with the open ways' flags and the rupees)
+    if True:   # (every seed: Hyrule Field's clock, FIELD_CLOCK, and the d-pad's HUD, DPAD_HUD, with the open ways' flags and the rupees)
         folder = os.path.join(romfs, FLAG_LIST)
         lists = sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if n.startswith("GameDataList.") and ".byml" in n.lower())
         if not lists:
@@ -3622,7 +3635,7 @@ def main():
         for n in lists:
             try:
                 was = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
-                new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **(OPEN_DOOR if a.open_door else {})))
+                new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **(OPEN_DOOR if a.open_door else {})))
                 if shelf_flag:   # (the same file: the shelves' flags; a flag the game has not is an error)
                     flag_defaults(new if new is not None else was, {name: False for name in shelf_flag.values()})
                     more = flag_defaults(new if new is not None else was, shelf_start) if shelf_start else None
@@ -3637,6 +3650,7 @@ def main():
         if a.start_rupees:
             print("a new game starts with %d rupees" % START_RUPEES)
         print("Hyrule Field's day and night run from a new game's start (the Sun's Song works before the owl is met)")
+        print("the d-pad's HUD (Navi and the boots) is there from a new game's start")
         if a.open_door:
             print("the Door of Time is open in a new game (the Master Sword's way through time is the game's side's)")
     if flags:
