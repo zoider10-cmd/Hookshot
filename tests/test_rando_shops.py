@@ -419,6 +419,31 @@ def main():
     check(chu.ages == "C" and chu.need == seed.DODONGO_DONE == seed.RULES["DodongoCavern"][0] and seed.BB in chu.need,
           "the Bombchu Shop's shelves do not ask for what Dodongo's Cavern asks for, or are an adult's")
     check("night" in chu.name and "Dodongo" in chu.name, "the Bombchu Shop's name does not tell the tracker when its door opens")
+    # ---- the Bombchu Shop's door open at night from the start: its two AND nodes made OR, nothing else ----
+    names = [b"OperateAND", b"HoldGameDataGetBoolExpSimple", b"HoldWmGetTimeDiv", b"Obj_Door", b"OperateAND", b"OperateOR",
+             b"ActorLogicSimpleActor", b"OperateInvertBool"]
+    pool_at = 0x74 + 0x3C * 8
+    strings, places = b"", []
+    for n in names + [b"Get_StoneOfFire_IsCompleted_Exp"]:
+        places.append(len(strings)); strings += n + bytes(1)
+    fake = bytearray(pool_at) + strings
+    fake[:4] = b"AIB "
+    struct.pack_into("<I", fake, 4, 0x408); struct.pack_into("<I", fake, 0x10, 8); struct.pack_into("<I", fake, 0x24, pool_at)
+    hashes = {b"OperateAND": 0x2eed4fe3, b"OperateOR": 0x24e01179}
+    for i, n in enumerate(names):
+        struct.pack_into("<II", fake, 0x74 + 0x3C * i + 8, places[i], hashes.get(n, i))
+    opened = seed.bombchu_door_open(bytes(fake))
+    name_of = lambda d, i: d[pool_at + struct.unpack_from("<I", d, 0x74 + 0x3C * i + 8)[0]:].split(bytes(1))[0]
+    check(len(opened) == len(fake) and [name_of(opened, i) for i in range(8)] == [b"OperateOR"] + names[1:4] + [b"OperateOR"] + names[5:] and
+          all(struct.unpack_from("<I", opened, 0x74 + 0x3C * i + 12)[0] == 0x24e01179 for i in (0, 4)) and
+          sum(a != b for a, b in zip(opened, fake)) <= 16,
+          "the Bombchu Shop's door is not opened by its two AND nodes made OR, or more than that is changed")
+    try:
+        seed.bombchu_door_open(bytes(fake[:0x74 + 0x3C * 4]) + bytes(len(fake) - 0x74 - 0x3C * 4))
+        check(False, "a file that is not the door's logic is changed as if it were")
+    except ValueError:
+        pass
+    check('flag_files[BOMBCHU_DOOR_LOGIC] = bombchu_door_open(' in script, "the Bombchu Shop's door is not opened in every seed")
     print("PASS: Shops")
 
 

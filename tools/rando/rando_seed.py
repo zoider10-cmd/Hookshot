@@ -74,7 +74,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 19   # (19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 20   # (20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -487,6 +487,15 @@ SCRUBS = (
 # the quest's step, not an item, is the gate, and bombs found early do not open it. Seen in play: shut at night
 # before King Dodongo. Its name says so for the tracker.
 DODONGO_DONE = CHILD | {BB}
+# The door opened at night from a new game's start (asked for by the game's owner, 2026-11-13 and 2026-11-15). The
+# door's logic (BOMBCHU_DOOR_LOGIC, an AI file of 8 nodes) has two OperateAND nodes, the quest AND the night: node 0
+# feeds the door's EnableOpen, node 4 its EnableDo. Each is made an OperateOR (its name's place in the file's strings
+# and the name's hash taken from the file's own OperateOR, node 5: a node's kind is its name, and AND and OR take the
+# same inputs): the door is open at night, and by day once the quest is done. The shop's inside, the keeper with it,
+# is made when the door opens (the file's PrefabAllCreate; the keeper's own schedule asks for nothing: seen when Link
+# was put inside, the shelves were there and the keeper was not). The file keeps its size. The shelves' rule is left
+# as it was (DODONGO_DONE: asking for too much, and the same items for a seed made before).
+BOMBCHU_DOOR_LOGIC = "Logic/Market_Child_Prefab_0c76.logic.module.ainb"
 # Which shelves (rando_shop_shelves, --shop-shelves). Off: the four of each shop above (slots). On: its other four
 # too (rest), every shelf of a keeper's goods list, each sold once: the shields, the tunics, the potions and the bombs,
 # arrows, nuts and sticks a game buys again and again are then not for sale, and come from grass, pots and enemies
@@ -2299,6 +2308,23 @@ def opening_skip(data):
     out = bytearray(data)
     struct.pack_into("<H", out, entries + 0x1c, 14)        # (the first entry point starts after the narration)
     struct.pack_into("<H", out, event(23) + 0x0a, 19)      # (the wait goes on to what follows Navi's cutscene)
+    return bytes(out)
+
+
+def bombchu_door_open(data):
+    """The Bombchu Shop's door logic (BOMBCHU_DOOR_LOGIC, above) with its two AND nodes made OR nodes: the new bytes,
+    of the same size. ValueError: the file is not the one this was written for."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u32 = lambda at: struct.unpack_from("<I", data, at)[0]
+    if data[:4] != b"AIB " or u32(4) != 0x408 or u32(0x10) != 8:
+        raise ValueError("not the AI file of 8 nodes this was written for")
+    pool = u32(0x24)
+    name = lambda i: data[pool + u32(0x74 + 0x3C * i + 8):].split(bytes(1))[0]
+    if [name(i) for i in (0, 4, 5)] != [b"OperateAND", b"OperateAND", b"OperateOR"] or b"Get_StoneOfFire_IsCompleted_Exp" not in data:
+        raise ValueError("the door's nodes are not the ones this was written for")
+    out = bytearray(data)
+    for i in (0, 4):
+        out[0x74 + 0x3C * i + 8:0x74 + 0x3C * i + 16] = data[0x74 + 0x3C * 5 + 8:0x74 + 0x3C * 5 + 16]   # (the name's place and its hash)
     return bytes(out)
 
 
@@ -4335,6 +4361,11 @@ def main():
         except (OSError, ValueError, struct.error) as e:
             sys.exit("%s: %s. Nothing written." % (OPENING, e))
         print("a new game starts without its two opening cutscenes")
+    try:   # (every seed: the Bombchu Shop's door open at night from the start, BOMBCHU_DOOR_LOGIC)
+        flag_files[BOMBCHU_DOOR_LOGIC] = bombchu_door_open(unpack(open(os.path.join(romfs, *BOMBCHU_DOOR_LOGIC.split("/")), "rb").read(), zs, dicts))
+    except (OSError, ValueError, struct.error) as e:
+        sys.exit("%s: %s. Nothing written." % (BOMBCHU_DOOR_LOGIC, e))
+    print("the Bombchu Shop's door opens at night from a new game's start")
     # (the Kokiri Sword's chest with another item in it: without the cutscene of the sword put on Link's back)
     if any(spots[h][6] == SWORD_EVENT and item != S for h, item in gives.items()):
         try:
