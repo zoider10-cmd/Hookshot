@@ -74,7 +74,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 16   # (16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 17   # (17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -275,7 +275,12 @@ SCENE_SHOWS_SUB = ("Common_Camera_Pln",)   # (sub-flows of these flows only set 
 # playing (EventPlayerPlayOcarinaFree): the lesson goes to "You learned..." (asked for by the game's owner, 2026-11-15).
 SCENE_LESSON = (("Dm_SY_Ocarina", "LearningOcarinaPlayExample"), ("Dm_SY_Ocarina", "LearningOcarinaFollowExample"),
                 ("Dm_SY_Ocarina", "LearningOcarinaPlayAuto"), ("Dm_SY_Ocarina", "LearningOcarinaPlayAutoForSeek"))
-SCENE_KEEP = ("Dm_MelodyGet_Sun",)   # (the Royal Family's Tomb: its gift is a scene of its own, Dm_MelodyGet_Sun_03, after the tomb's play)
+SCENE_KEEP = ("Dm_MelodyGet_Sun",)
+# A lesson also calls entry points of the story's flows: Sheik's words before the Requiem and the Prelude are in AllSage
+# (MelodyOfSpirit_01/_02, MelodyOfShine: a switch on the Shadow Temple's quest step, then the talk), the windmill man's
+# after the Song of Storms in his own flow. Seen in play: Sheik's three lines before "You learned...", at the Colossus.
+# Those entry points are quieted too, only what they come to (quiet_scene's entries); the flows they are in are not.
+SCENE_LESSON_SKIP_CALLS = ("GetPouchContent", "Dm_SY_Ocarina", "Common_Camera_Pln")   # (the Royal Family's Tomb: its gift is a scene of its own, Dm_MelodyGet_Sun_03, after the tomb's play)
 SCENE_NOTHING = ("EventDemoProductSupportComment", "EventDoNothing")
 SCENE_CHOICE = ("EventQueryTalkChoice2", "EventQueryTalkChoice3", "EventQueryTalkChoice4")
 SCENE_KEEP_IF = ("EventWaitForKeyInput", "EventOpenDoCommand",
@@ -2357,11 +2362,13 @@ def scene_steps(data):
     return steps, firsts, used
 
 
-def quiet_scene(data):
+def quiet_scene(data, entries=None):
     """A scene (a BFEVFL file of one flowchart: a Dm_ flow the game plays as a flowchart) with what only shows
     something passed over (SCENE_SHOWS, above): the new bytes, of the same size, and how many talks were taken out;
-    (None, 0) when nothing is to be taken out. What the scene does to the game is left. ValueError: a branch or an
-    entry point would be left with nothing and the scene has no step that does nothing (SCENE_NOTHING)."""
+    (None, 0) when nothing is to be taken out. What the scene does to the game is left. entries: the names of entry
+    points, and only what they come to is looked at (the story's flows a lesson calls). ValueError: a branch or an
+    entry point would be left with nothing and the scene has no step that does nothing (SCENE_NOTHING), or an entry
+    point of `entries` is not the flow's."""
     steps, firsts, _ = scene_steps(data)
     u16 = lambda at: struct.unpack_from("<H", data, at)[0]
     END = 0xFFFF
@@ -2386,6 +2393,22 @@ def quiet_scene(data):
     shows = lambda s: (s["kind"] == 0 and s["what"] in SCENE_SHOWS and not s["choices"]) or (
         s["kind"] == 4 and (s["what"] in SCENE_SHOWS_SUB or (s["what"], s["entry"]) in SCENE_LESSON))
     passed, answer = set(i for i, s in enumerate(steps) if shows(s)), {}
+    if entries is not None:   # (only what these entry points come to: a story's flow a lesson calls, SCENE_LESSON_CALLS)
+        u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+        chart = u64(u64(0x28))
+        names = u64(chart + 0x38)
+        text = lambda ptr: bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if 0 < ptr < len(data) - 2 else ""
+        stack = [u16(place) for k, place in enumerate(firsts) if names and text(u64(names + 8 + 16 * (k + 1) + 8)) in entries]
+        if len(stack) != len(set(entries)):
+            raise ValueError("the flow has not every entry point of %s" % ", ".join(sorted(entries)))
+        reach = set()
+        while stack:
+            i = stack.pop()
+            if i == END or i >= len(steps) or i in reach:
+                continue
+            reach.add(i)
+            stack += nexts(steps[i])
+        passed &= reach
     joined = {}   # (a step in a branch of a fork -> the fork's join: where a branch that ends goes on)
     for f, s in enumerate(steps):
         if s["kind"] == 2:
@@ -4314,6 +4337,7 @@ def main():
     scene_files = {}
     if a.skip_cutscenes:
         folder, talks, kept = os.path.join(romfs, *SCENE_FLOWS.split("/")), 0, []
+        called = collections.defaultdict(set)   # (a story's flow a lesson calls -> its entry points: SCENE_LESSON_SKIP_CALLS)
         for n in sorted(os.listdir(folder)):
             stem = n.split(".")[0]
             if not n.startswith("Dm_") or n.startswith("Dm_SY_") or stem.endswith(("_Effect", "_Env")) or not n.endswith(".bfevfl.zs"):
@@ -4330,6 +4354,10 @@ def main():
                     kept.append(stem)
                     continue
                 now, taken = quiet_scene(was)
+                if stem.startswith("Dm_MelodyGet_"):
+                    for s in scene_steps(was)[0]:
+                        if s["kind"] == 4 and s["what"] and s["what"] not in SCENE_LESSON_SKIP_CALLS and not s["what"].startswith("Dm_"):
+                            called[s["what"]].add(s["entry"])
             except (OSError, ValueError, struct.error) as e:
                 sys.exit("a scene's flow, %s: %s. Nothing written." % (rel, e))
             if now is not None:
@@ -4337,6 +4365,21 @@ def main():
                 talks += taken
         print("Skip cutscenes: %d talks taken out of %d scene files; the scenes where Link answers or plays are as they were (%d: %s)" % (
             talks, len(scene_files) + sum(1 for r in gift_files if r.startswith(SCENE_FLOWS + "/Dm_")), len(set(kept)), ", ".join(sorted(set(kept)))))
+        for flow, entries in sorted(called.items()):   # (the story's flows a lesson calls: only those entry points)
+            for n in [flow + ".bfevfl.zs", flow + FLOW_TWIN + ".bfevfl.zs"]:
+                if not os.path.isfile(os.path.join(folder, n)):
+                    continue
+                rel = SCENE_FLOWS + "/" + n
+                files = gift_files if rel in gift_files else scene_files
+                try:
+                    was = files[rel] if rel in files else unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
+                    now, taken = quiet_scene(was, entries)
+                except (OSError, ValueError, struct.error) as e:
+                    sys.exit("a flow a lesson calls, %s: %s. Nothing written." % (rel, e))
+                if now is not None:
+                    files[rel] = now
+                    talks += taken
+                    print("Skip cutscenes: %s, called by a lesson: %d talks taken out of %s" % (flow, taken, ", ".join(sorted(entries))))
         videos = set()
         for n in sorted(os.listdir(folder)):
             if not n.endswith(".bfevfl.zs"):
