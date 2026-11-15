@@ -74,7 +74,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 20   # (20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 21   # (21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -496,6 +496,14 @@ DODONGO_DONE = CHILD | {BB}
 # was put inside, the shelves were there and the keeper was not). The file keeps its size. The shelves' rule is left
 # as it was (DODONGO_DONE: asking for too much, and the same items for a seed made before).
 BOMBCHU_DOOR_LOGIC = "Logic/Market_Child_Prefab_0c76.logic.module.ainb"
+# The door so opened, the shop was empty and its "Closed" sign stayed (seen in play): the child's Market map makes
+# three actors by the same quest (their Presence: FlagName Get_StoneOfFire_IsCompleted_Exp), the keeper and the shop's
+# music when it is done, the sign (Land_HrlCity_ShopSign_A_01, IsNegation) while it is not. bombchu_presence takes the
+# keeper's and the music's Presence away (they are there from the start; the door keeps the shop shut by day) and the
+# sign out of the map.
+BOMBCHU_QUEST = "Get_StoneOfFire_IsCompleted_Exp"
+BOMBCHU_ACTORS = ("Npc_Hylia_021_Shop_Child", "BGM_Shop_Market_Bombchu")
+BOMBCHU_SIGN = "Land_HrlCity_ShopSign_A_01"
 # Which shelves (rando_shop_shelves, --shop-shelves). Off: the four of each shop above (slots). On: its other four
 # too (rest), every shelf of a keeper's goods list, each sold once: the shields, the tunics, the potions and the bombs,
 # arrows, nuts and sticks a game buys again and again are then not for sale, and come from grass, pots and enemies
@@ -2309,6 +2317,33 @@ def opening_skip(data):
     struct.pack_into("<H", out, entries + 0x1c, 14)        # (the first entry point starts after the narration)
     struct.pack_into("<H", out, event(23) + 0x0a, 19)      # (the wait goes on to what follows Navi's cutscene)
     return bytes(out)
+
+
+def bombchu_presence(data):
+    """A map file of the child's Market with the Bombchu Shop's keeper and music there from the start and its "Closed"
+    sign gone (BOMBCHU_ACTORS, BOMBCHU_SIGN, above): (the file written anew, or None when it has none of them; how
+    many actors were changed or taken out)."""
+    tree, version = byml_parse(data)
+    actors = tree[1].get("Actors")
+    if not actors or actors[0] != "array":
+        return None, 0
+    keep, done = [], 0
+    for actor in actors[1]:
+        rows = actor[1]
+        name = rows.get("Gyaml", ("", ""))[1]
+        presence = rows.get("Presence")
+        quest = presence and presence[0] == "dict" and presence[1].get("FlagName", ("", ""))[1] == BOMBCHU_QUEST
+        if quest and name == BOMBCHU_SIGN:
+            done += 1
+            continue   # (the sign: out)
+        if quest and name in BOMBCHU_ACTORS:
+            del rows["Presence"]
+            done += 1
+        keep.append(actor)
+    if not done:
+        return None, 0
+    tree[1]["Actors"] = ("array", keep)
+    return byml_build(tree, version), done
 
 
 def bombchu_door_open(data):
@@ -4275,6 +4310,28 @@ def main():
         if not sheiks:
             sys.exit("the Door of Time: the Market's map files have no Sheik by the sword. Nothing written.")
         print("the Door of Time is out of the way in %d map file%s of the Market, and Sheik to the side of the sword" % (doors, "" if doors == 1 else "s"))
+
+    # ---- the Bombchu Shop: its keeper, music and sign by the quest no longer (every seed, BOMBCHU_ACTORS) ----
+    try:
+        chu_done = 0
+        folder_map = os.path.join(romfs, "Banc", "Market")
+        for n in sorted(os.listdir(folder_map)):
+            rel = "Banc/Market/" + n
+            if not n.startswith("Market_Child_") or ".bcett.byml" not in n.lower():
+                continue
+            data = changed[rel] if rel in changed else unpack(open(os.path.join(folder_map, n), "rb").read(), zs, dicts)
+            if BOMBCHU_QUEST.encode() not in data:
+                continue
+            new, count = bombchu_presence(data)
+            if new is not None:
+                changed[rel] = new
+                sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
+                chu_done += count
+    except (OSError, ValueError, struct.error, IndexError) as e:
+        sys.exit("the Bombchu Shop: %s. Nothing written." % e)
+    if chu_done != 3:
+        sys.exit("the Bombchu Shop: %d of its keeper, music and sign found in the child's Market, not 3. Nothing written." % chu_done)
+    print("the Bombchu Shop's keeper is there from the start, and its sign gone")
 
     # ---- Bombchus: a limit of their own, in every seed (the list of pouch actors, with the shops' rows when there are) ----
     try:

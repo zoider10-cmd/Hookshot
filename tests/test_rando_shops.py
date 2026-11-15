@@ -444,6 +444,10 @@ def main():
     except ValueError:
         pass
     check('flag_files[BOMBCHU_DOOR_LOGIC] = bombchu_door_open(' in script, "the Bombchu Shop's door is not opened in every seed")
+    # (the keeper, the music and the sign the child's Market makes by the quest: seen in play, the door open and no keeper)
+    check(seed.BOMBCHU_ACTORS == ("Npc_Hylia_021_Shop_Child", "BGM_Shop_Market_Bombchu") and seed.BOMBCHU_SIGN == "Land_HrlCity_ShopSign_A_01" and
+          "new, count = bombchu_presence(data)" in script and "if chu_done != 3:" in script,
+          "the Bombchu Shop's keeper is not there from the start, or its sign stays")
     print("PASS: Shops")
 
 
