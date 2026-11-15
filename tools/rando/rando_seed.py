@@ -74,7 +74,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 8   # (8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 9   # (9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -525,7 +525,7 @@ WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,
 # shop's arrows round the shelf looked at were then far under it (reported from play): they go by the model's box as
 # the list of actors has it, which is the model's own size, so a model far from its origin is not made larger here.
 # At its own size the arrows are round it. Seen so in the Kokiri shop, the Bazaar and the Goron shop.
-SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": -0.67, "Item_Range_Bow": 0.15, "Item_Range_SlingShot": 0.15, "Item_Sword_Kokiri": 0.15, "Item_Shield_Mirror": 0.35, "TBox_Shield_Hylian": 0.35,
+SHELF_LIFT = {"Item_Arrow_Fire": 0.1, "Item_Arrow_Ice": 0.1, "Item_Arrow_Light": 0.1, "Item_DekuStickBundle_Small": 0.0, "Item_GlassTruth": -0.67, "Item_Range_Bow": 0.15, "Item_Range_SlingShot": 0.15, "TBox_ArrowBundle_Small": 0.2, "Item_Sword_Kokiri": 0.15, "Item_Shield_Mirror": 0.35, "TBox_Shield_Hylian": 0.35,
               "TBox_Shield_Deku": 0.3}
 
 
@@ -573,7 +573,7 @@ SHELF_LONG = 0.9
 # (the Goron's Bracelet is very small on a shelf: its owner asked for it a little bigger, 2026-11-14, with a picture of
 #  the Potion Shop. Half as large again, as it is where it lies to be picked up (PICKUP_SCALES). NOT SEEN YET)
 SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_GlassTruth": 1.0,
-               "Item_Gauntlet_Gold": 1.0, "Item_Gauntlet_Silver": 1.0, "Item_Gauntlet_Goron": 1.5}
+               "Item_Gauntlet_Gold": 1.0, "Item_Gauntlet_Silver": 1.0, "Item_Gauntlet_Goron": 1.5, "TBox_ArrowBundle_Small": 0.8}
 # (the Fairy Bow's model is long front to back, 1.36 m along its own Z: on the Kokiri shop's shelf it lay pointing at
 # the viewer, its end alone to be seen behind the price board (its owner's picture, 2026-11-13). A quarter turn about
 # the upright laid it across, flat: a thin line. With a quarter turn about Z too it lies across with its curve and
@@ -593,11 +593,19 @@ SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_
 # (the Fairy Slingshot lay flat and low, half behind its price board: reported from play, 2026-11-14, the Kokiri shop.
 #  It is given the bow's turn and lift: seen without a window on the Kokiri shop's four shelves, standing as a Y
 #  over its price board)
-SHELF_TURN = {"Item_Range_Bow": (0.0, 1.57, 1.57), "Item_Range_SlingShot": (0.0, 1.57, 1.57), "Item_Sword_Kokiri": (0.0, 1.57, 1.57), "Item_Shield_Mirror": (1.57, 0.0, 0.0),
+# (the smallest bundle of arrows, "Five Arrows", is two arrows crossed, lying flat and pointing at the viewer: on the
+#  Kokiri shop's shelf they lay at the shelf's foot, half behind the price board (its owner's picture, 2026-11-14;
+#  the two larger bundles have a ring and stand over the board). A quarter turn about the upright lays them across,
+#  feathers and heads to the viewer; lifted over the board and a little smaller, the arrows being as long as the
+#  shelf is wide. Seen without a window on the Kokiri shop's shelves, among four turns tried)
+SHELF_TURN = {"TBox_ArrowBundle_Small": (0.0, 1.57, 0.0), "Item_Range_Bow": (0.0, 1.57, 1.57), "Item_Range_SlingShot": (0.0, 1.57, 1.57), "Item_Sword_Kokiri": (0.0, 1.57, 1.57), "Item_Shield_Mirror": (1.57, 0.0, 0.0),
               "TBox_Shield_Deku": (1.57, 0.0, 0.0), "TBox_Shield_Hylian": (-1.57, 3.14, 0.0)}
 # An item whose model is made where it is worn, not at its own origin (the gauntlets: 1.17 m up): its shelf's actor is
 # put that much lower (shelf_fit). The gauntlets keep their size: their box is the pair's, 1.6 m from one to the other.
 SHELF_WORN = 0.5
+# (the Goron's Bracelet, small and low: on a shelf of the Kokiri shop with a price board only its top showed over the
+#  board (seen without a window, 2026-11-14). It is put this much higher than its box says)
+SHELF_MORE = {"Item_Gauntlet_Goron": 0.15}
 
 
 def shelf_fit(item, box):
@@ -614,8 +622,8 @@ def shelf_fit(item, box):
     if item in SHELF_LIFT:
         return SHELF_LIFT[item], scale
     if floor is not None and floor > SHELF_WORN:
-        return round(-floor * scale, 2), scale
-    return round(shelf_lift(item, floor) * scale, 2), scale
+        return round(-floor * scale + SHELF_MORE.get(item, 0.0), 2), scale
+    return round(shelf_lift(item, floor) * scale + SHELF_MORE.get(item, 0.0), 2), scale
 
 
 # A shelf of bundles has a board beside it with how many are in one ("x 10": Shop_Board_Bundle_05, _10, _20, ...),
