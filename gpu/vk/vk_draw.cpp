@@ -3162,7 +3162,58 @@ struct HandleHit {
     bool sampling;    // (its use reads the texture's contents)
     uint64_t tex_epoch;   // (the texture epoch it was last touched in)
 };
-TLS_OBJECT(handle_hits, std::unordered_map<uint64_t, HandleHit>)
+/// (hookshot, after Project ReLink's idea: its replay spent ~5% outdoors in std::unordered_map here) The resolved handles
+/// in one flat open-addressing table: every texture binding of every draw looks a key up, and a node map's hash, bucket
+/// and node pointer chase cost more than the lookup's work. Linear probing over a power-of-two array, kept at most half
+/// full; nothing is erased one by one (the replay clears it whole), so no tombstones
+struct HandleTable {
+    struct Slot {
+        uint64_t key;
+        HandleHit hit;
+    };
+    std::vector<Slot> slots;
+    std::vector<uint8_t> used;
+    size_t count = 0;
+    static size_t mix(uint64_t k) {   // (the key's low bits are the slot number: spread the view type, use and format in)
+        k ^= k >> 29;
+        k *= 0xbf58476d1ce4e5b9ull;
+        k ^= k >> 32;
+        return (size_t)k;
+    }
+    HandleHit* find(uint64_t key) {
+        if (!count) return nullptr;
+        const size_t m = slots.size() - 1;
+        for (size_t i = mix(key) & m;; i = (i + 1) & m) {
+            if (!used[i]) return nullptr;
+            if (slots[i].key == key) return &slots[i].hit;
+        }
+    }
+    HandleHit& operator[](uint64_t key) {
+        if ((count + 1) * 2 > slots.size()) grow();
+        const size_t m = slots.size() - 1;
+        size_t i = mix(key) & m;
+        for (; used[i]; i = (i + 1) & m)
+            if (slots[i].key == key) return slots[i].hit;
+        used[i] = 1, slots[i].key = key, slots[i].hit = HandleHit{}, count++;
+        return slots[i].hit;
+    }
+    void grow() {
+        std::vector<Slot> old = std::move(slots);
+        std::vector<uint8_t> old_used = std::move(used);
+        const size_t n = old.empty() ? 1024 : old.size() * 2;
+        slots.assign(n, Slot{});
+        used.assign(n, 0);
+        count = 0;
+        for (size_t j = 0; j < old.size(); j++)
+            if (old_used[j]) (*this)[old[j].key] = old[j].hit;
+    }
+    size_t size() const { return count; }
+    void clear() {
+        std::fill(used.begin(), used.end(), (uint8_t)0);
+        count = 0;
+    }
+};
+TLS_OBJECT(handle_hits, HandleTable)
 // (hookshot) RX_VK_TRACE_TEX=<w>x<h>,...: each draw sampling a texture of that size is logged with its state, every 30th frame, 600 lines: a
 // model that does not show is found by its textures, and whether the game draws it, and how, read from the line
 thread_local const Texture* trace_tex_hit = nullptr;
@@ -3206,27 +3257,27 @@ VkImageView texture_view_of(uint32_t handle, VkImageViewType want, ViewUse use, 
     const uint64_t key = (uint64_t)(handle & 0xFFFFF) | (uint64_t)want << 20 | (uint64_t)use << 28 | (uint64_t)storage_as << 32;
     static const bool log_hits = env_on("RX_VK_LOG_HITS");
     static int64_t st_hit, st_new, st_ver, st_gen, st_n;
-    const auto it = handle_hits().find(key);
+    HandleHit* const hit = handle_hits().find(key);
     if (log_hits) {   // (the counters were a second search of this map on every binding, with the log off)
         if (++st_n % 200000 == 0)
             logf("vk: handle hits %lld, new %lld, slot re-registered %lld, a texture destroyed %lld", (long long)st_hit,
                  (long long)st_new, (long long)st_ver, (long long)st_gen);
-        if (it == handle_hits().end()) st_new++;
-        else if (it->second.version != version) st_ver++;
-        else if (it->second.destroy_gen != dgen) st_gen++;
+        if (!hit) st_new++;
+        else if (hit->version != version) st_ver++;
+        else if (hit->destroy_gen != dgen) st_gen++;
         else st_hit++;
     }
-    if (it != handle_hits().end() && it->second.version == version && it->second.destroy_gen == dgen) {
-        if (it->second.tex && it->second.tex_epoch != texture_epoch()) {   // (once a submission: its age and contents)
-            if (!texture_touch_quick(it->second.tex, it->second.sampling)) {
+    if (hit && hit->version == version && hit->destroy_gen == dgen) {
+        if (hit->tex && hit->tex_epoch != texture_epoch()) {   // (once a submission: its age and contents)
+            if (!texture_touch_quick(hit->tex, hit->sampling)) {
                 ParLock lk;
-                texture_touch(it->second.tex, it->second.sampling);
+                texture_touch(hit->tex, hit->sampling);
             }
-            it->second.tex_epoch = texture_epoch();
+            hit->tex_epoch = texture_epoch();
         }
-        if (tex_out) *tex_out = it->second.tex;
-        if (level_out) *level_out = it->second.level;
-        return it->second.view;
+        if (tex_out) *tex_out = hit->tex;
+        if (level_out) *level_out = hit->level;
+        return hit->view;
     }
     ParLock lk;
     nvn_tex t;
