@@ -353,7 +353,7 @@ def main():
           'new_tables["System/Resource/" + n] = shop_table(' in script,
           "a shelf actor's pack, its rows, the goods lists, the map's shelves or the words are not written with the seed, or the size table does not know them")
     check('roll = random.Random("shop prices:%d:%d" % (seed, a.shops))' in script and "price = shop_price(roll, a.shops)" in script and
-          "shop.need | wallet_need(price), \"shops\", None)" in script and "PROGRESSION = PROGRESSION | SHOP_GATES" in script and
+          "shop_need(shop, placement, a.open_forest) | wallet_need(price), \"shops\", None)" in script and "PROGRESSION = PROGRESSION | SHOP_GATES" in script and
           "if g.key in SHOP_WALLET_GIFTS and gift_hash(g.key) not in gifts:" in script and "(tuple(SHOP_GATES) if a.shops else ())" in script,
           "the prices are not rolled by the seed, a shelf does not ask for its price's wallet, or the wallets are not shuffled as gating items kept from the Skulltulas")
     check('on_sale = collections.OrderedDict((shop_actor("%s_%d" % (shop.key, index)), (gives[h], shelf_prices[h]))' in script and
@@ -419,6 +419,14 @@ def main():
     check(chu.ages == "C" and chu.need == seed.DODONGO_DONE == seed.RULES["DodongoCavern"][0] and seed.BB in chu.need,
           "the Bombchu Shop's shelves do not ask for what Dodongo's Cavern asks for, or are an adult's")
     check("night" in chu.name and "Dodongo" in chu.name, "the Bombchu Shop's name does not tell the tracker when its door opens")
+    # (placement 4, asked for by the game's owner: with Open forest exit the Market's shops ask for nothing, a shelf
+    #  under the child's wallet can be had from the start; the Bombchu Shop asks for a child, its door open at night)
+    by = {shop.key: shop for shop in seed.SHOPS}
+    check(seed.PLACEMENT >= 4 and all(seed.shop_need(by[k], 4, True) == seed.NONE for k in ("general", "medicine", "bombchu", "kokiri")) and
+          seed.shop_need(by["bombchu"], 4, False) == seed.CHILD and seed.shop_need(by["goron"], 4, True) == by["goron"].need and
+          seed.shop_need(by["zora"], 4, True) == by["zora"].need and all(seed.shop_need(shop, 3, True) == shop.need for shop in seed.SHOPS) and
+          seed.wallet_need(199) == seed.NONE and "shop_need(shop, placement, a.open_forest) | wallet_need(price)" in script,
+          "a Market shop's shelf under the child's wallet cannot be had from the start with Open forest exit, or a seed made before changes")
     # ---- the Bombchu Shop's door open at night from the start: its two AND nodes made OR, nothing else ----
     names = [b"OperateAND", b"HoldGameDataGetBoolExpSimple", b"HoldWmGetTimeDiv", b"Obj_Door", b"OperateAND", b"OperateOR",
              b"ActorLogicSimpleActor", b"OperateInvertBool"]

@@ -59,7 +59,8 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 3   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES
+PLACEMENT = 4   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+                # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need)
 # (a chest with one of these parameters is left as it is: see the top of this file)
 KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__CheckActor", "Drop__DropActor_Substitute",
            "DropViewActor", "IsEnableRepeatOpen", "SpawnType")
@@ -520,6 +521,23 @@ DS = "TBox_Shield_Deku"
 SHIELD_GATES = frozenset((DS,))
 SHIELD_SHELF = ("kokiri", 6, "Shop_Weapon_Shield_Deku")
 Shop = collections.namedtuple("Shop", "key params areas name need place ages slots rest")
+
+
+def shop_need(shop, placement, open_forest):
+    """What a shop's shelves ask for (before their prices' wallets), by the seed's placement (PLACEMENT) and Open forest
+    exit. From placement 4 (asked for by the game's owner, 2026-11-15: with Shops, a shelf under the child's wallet
+    should have a chance to be had from the start): the Bombchu Shop asks for a child only, its door opening at night
+    from the start (BOMBCHU_DOOR_LOGIC); and with Open forest exit the Market's shops (the Bazaar, the Potion Shop, the
+    Bombchu Shop) ask for nothing, a child walking there from the start (CHILD is the forest's way out: the sword and
+    the Slingshot, the Deku Tree done). The Goron shop and the Zora shop keep theirs: a child reaches Goron City past
+    Kakariko's gate and asks for bombs there, and the Zora shop is an adult's here."""
+    need = shop.need
+    if placement >= 4:
+        if shop.key == "bombchu":
+            need = CHILD
+        if open_forest and shop.areas[0] == "Market":
+            need = frozenset(need - CHILD)
+    return need
 SHOPS = (
     Shop("kokiri", ("Npc_Kokiri_001_Shop_Child", "Npc_Kokiri_001_Shop_Child_ShortStock"), ("KokiriForest",), "the Kokiri shop", NONE,
          (-1.9, 110.7, -22.6), "CA", ((0, "Shop_Heart"), (1, "Shop_DekuSeedBundle_02"), (3, "Shop_DekuNutBundle_02"), (5, "Shop_DekuStickBundle_Medium")),
@@ -3834,7 +3852,8 @@ def main():
             for k, (index, actor) in enumerate(shop_slots(shop, a.shop_shelves, shield_shelf)):
                 price = shop_price(roll, a.shops)
                 g = Gift("shop_%s_%d" % (shop.key, index), "", (), shelf_item(actor), shop.areas[0],
-                         "%s: shelf %d, %d rupee%s" % (shop.name, k + 1, price, "" if price == 1 else "s"), shop.need | wallet_need(price), "shops", None)
+                         "%s: shelf %d, %d rupee%s" % (shop.name if placement < 4 or shop.key != "bombchu" else "the Bombchu Shop (at night)", k + 1, price, "" if price == 1 else "s"),
+                         shop_need(shop, placement, a.open_forest) | wallet_need(price), "shops", None)
                 gifts[gift_hash(g.key)], shelves[gift_hash(g.key)], shelf_prices[gift_hash(g.key)] = g, (shop, index, actor), price
                 spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]
     # (the flag each shelf waits for, "still for sale": a test, RANDO_TEST_SHELF_FLAGS=0, leaves them to start false)
