@@ -83,6 +83,19 @@ inline bool hold_keeps(uint64_t unused) { return unused < kHoldUnused; }
 /// over 85% for 5%, over 87% for 0-1%, peaks of 87-88%, no more uploads
 inline constexpr uint64_t kReservePoints = 5;
 inline constexpr uint64_t kReserveUnused = 1800;
+
+/// A texture's presents unused, as many as they would have been at 60 fps (fps: the presents a second lately), for the hold's and
+/// the reserve's waits above, which are ten and thirty seconds at 60 fps. Counted as presents they stretch with the frame rate: at
+/// 3.5 fps (a UHD Graphics laptop, i3-1115G4) three and nine minutes, and the hold let go of next to nothing (1,776 MB of textures
+/// against a budget of 1,299 MB, 0 to 13 of them retired a pass). At 60 fps or more, or with no rate known, as counted; under
+/// kMinFps as at kMinFps, so that a load's stall does not age every texture at once. The eviction's own wait stays in presents,
+/// and the rendered textures' keep has a floor in presents (keep_rendered::at_rate): the game samples some of those every so
+/// many of its frames, whatever the frame rate
+inline constexpr double kMinFps = 2.0;
+inline uint64_t age_at_60(uint64_t unused, double fps) {
+    if (!(fps > 0) || fps >= 60) return unused;
+    return (uint64_t)((double)unused * 60.0 / std::max(fps, kMinFps));
+}
 inline uint64_t reserve_pct(uint64_t pct) { return pct > kReservePoints ? pct - kReservePoints : 0; }
 
 /// What the rules that are not the hold's (the budget's size, the 90% rule, the driver's limit at 97%) ask an eviction to go down

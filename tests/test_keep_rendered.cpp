@@ -25,6 +25,14 @@ int main() {
     // (the old rule, RX_VK_KEEP_RENDERED_OVER=1: only past it, so never on AMD)
     expect(presents(true, allowed, allowed, true) == 3600, "old rule at the clamp: a minute");
     expect(presents(true, allowed + MB, allowed, true) == 600, "old rule past it: 600");
+    // (under 60 fps: the same seconds, 120 presents at least; at 60 fps or more, or no rate known, as counted)
+    using keep_rendered::at_rate;
+    expect(at_rate(3600, 60.0) == 3600 && at_rate(3600, 144.0) == 3600 && at_rate(600, 0.0) == 600, "60 fps or more: as counted");
+    expect(at_rate(3600, 30.0) == 1800 && at_rate(600, 30.0) == 300, "30 fps: the same seconds");
+    expect(at_rate(3600, 3.5) == 210, "a minute at 3.5 fps: 210 presents, not 3600 (17 minutes)");
+    expect(at_rate(600, 3.5) == 120, "ten seconds at 3.5 fps: the 120-present floor, not 35");
+    expect(at_rate(3600, 0.5) == 120, "a load's stall counts as 2 fps");
+    expect(at_rate(60, 3.5) == 60, "the floor is never more than the wait itself");
     if (failures) return EXIT_FAILURE;
     std::printf("keep rendered: all checks passed\n");
     return EXIT_SUCCESS;

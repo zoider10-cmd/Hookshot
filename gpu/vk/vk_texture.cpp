@@ -4323,6 +4323,19 @@ void texture_frame(uint64_t completed) {
     if (frame_no % 10) return;
     uint64_t used = 0, allowed = 0, block_free = 0;
     const bool known = vram_usage(&used, &allowed, &block_free);
+    // (longshot) the presents a second over the last ten seconds or so, for the eviction's waits in seconds (the hold's,
+    // vram_compact::age_at_60; the rendered textures' keep, keep_rendered::at_rate): a mark at each of these looks, the oldest kept
+    // the newest one ten seconds old. RX_VK_EVICT_BY_PRESENTS=1: those waits in presents whatever the frame rate, as before
+    double present_rate = 0;
+    {
+        static const bool by_presents = env_on("RX_VK_EVICT_BY_PRESENTS");
+        static std::deque<std::pair<std::chrono::steady_clock::time_point, uint64_t>> marks;
+        const auto now = std::chrono::steady_clock::now();
+        marks.push_back({now, frame_no});
+        while (marks.size() > 2 && now - marks[1].first >= std::chrono::seconds(10)) marks.pop_front();
+        const double span = std::chrono::duration<double>(now - marks.front().first).count();
+        if (!by_presents && span >= 2) present_rate = (double)(frame_no - marks.front().second) / span;
+    }
     if (!own)   // (RX_VK_VRAM_MB, else 70% of what the driver allows the process at the first look)
         own = getenv("RX_VK_VRAM_MB") ? (uint64_t)atoi(getenv("RX_VK_VRAM_MB")) << 20
               : known                ? std::min<uint64_t>(allowed / 100 * (allowed <= (8704ull << 20) ? 45 : 70), 6144ull << 20)
@@ -4761,15 +4774,19 @@ void texture_frame(uint64_t completed) {
         // back to that course. Without it a course change kept 1.4 GB arrays and VRAM ran over)
         // (600 presents near what the driver allows, at the budget's 97%: past it the driver pages VRAM to system memory.
         // AMD's driver reports the use at most at what it allows, so "over it" never held there: keep_rendered.h.
-        // RX_VK_KEEP_RENDERED_OVER=1: only past what it allows, as before)
+        // RX_VK_KEEP_RENDERED_OVER=1: only past what it allows, as before. Under 60 fps as many presents as it is seconds at
+        // 60, 120 at least: keep_rendered::at_rate)
         static const bool keep_over_only = env_on("RX_VK_KEEP_RENDERED_OVER");
-        const uint64_t keep_rendered = keep_rendered::presents(known, used, allowed, keep_over_only);
+        const uint64_t keep_rendered =
+            keep_rendered::at_rate(keep_rendered::presents(known, used, allowed, keep_over_only), present_rate);
         const bool overwritten = shifted || drawn_over(tex);   // (above)
         // (hookshot, RX_VK_COMPACT: the hold's pass, above. A live texture stays once the excess over its line is covered: the
         // reserve's line for one long unused, the hold's own for one unused ten seconds, and what the other rules ask (the 90%
-        // rule, the budget's size, the driver's limit) for one unused as long as an eviction asks with the compaction off)
+        // rule, the budget's size, the driver's limit) for one unused as long as an eviction asks with the compaction off. Its
+        // age as at 60 fps: vram_compact::age_at_60)
         if (by_hold && !overwritten) {
-            const uint64_t to = vram_compact::hold_target(frame_no - last, need_unused, rule_to, hold_to, evict_to);
+            const uint64_t to = vram_compact::hold_target(vram_compact::age_at_60(frame_no - last, present_rate), need_unused,
+                                                          rule_to, hold_to, evict_to);
             if (to == UINT64_MAX || vram_compact::hold_met(total_bytes, hold_live, hold_dead, to)) continue;
         }
         if (finalized_kept && keep_finalized(tex)) {   // (above. Oldest first: beyond the cap the least recently used go)
