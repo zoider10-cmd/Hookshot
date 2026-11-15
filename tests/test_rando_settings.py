@@ -141,7 +141,7 @@ def sources(rows):
     #  over the step that starts each of the story's. Seen in the owner's play: the goddesses' story played whole)
     check('SCENE_VIDEOS = ("Dm_HrlCastle_0045",' in script and "now, left_out = pass_videos(was, SCENE_VIDEOS)" in script and
           all('"%s"' % v not in script.split("SCENE_VIDEOS = (")[1].split(")")[0] for v in ("Dm_Kokiri_0000", "Dm_Title_0005", "Dm_StaffCredit_0000", "Dm_MelodyGet_Sun_01")) and
-          "elif kind in (1, 5):" in script and "return lead_past(data, steps, firsts, passed, answer), talks" in script,
+          "elif kind in (1, 5):" in script and 'struct.pack_into("<H", out, s["at"] + 0x0a, len(left))' in script and "return lead_past(data, steps, firsts, passed, answer), talks" in script,
           "the story's videos are not left out with Skip cutscenes, or the title's, the credits', the narration or the tomb's are")
     check("Saria's first words, the owl's" in launcher and "Saria's first words, the owl's" in read("gpu", "vk", "oot_rando.h"),
           "the setting's words do not say that the talk scenes lose their talk")

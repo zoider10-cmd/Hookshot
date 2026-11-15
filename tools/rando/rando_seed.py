@@ -74,7 +74,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 15   # (15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 16   # (16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -2450,7 +2450,10 @@ def lead_past(data, steps, firsts, passed, answer):
     """A flow (scene_steps') with the steps of `passed` passed over: every way into one leads to what follows it (a
     question of `answer`, its switch's place -> the answer taken, to that answer). A branch of a fork or an entry point
     left with nothing goes to a step of the flow's own that does nothing (SCENE_NOTHING), or else to one of the steps
-    passed over that does not wait, made to end there. The new bytes, of the same size. ValueError: there is neither."""
+    passed over that does not wait, made to end there. A fork keeps the branches left with something, first, and its
+    count is made theirs: one step in two branches running at once kept a join from ever going on (seen in play: Impa's
+    lesson ended before its gift, its fork 107's branches all one comment). The new bytes, of the same size.
+    ValueError: there is neither."""
     u16 = lambda at: struct.unpack_from("<H", data, at)[0]
     END = 0xFFFF
 
@@ -2472,13 +2475,16 @@ def lead_past(data, steps, firsts, passed, answer):
             struct.pack_into("<H", out, place, onward(u16(place)))
         if "join" in s:
             struct.pack_into("<H", out, s["join"], onward(u16(s["join"])))
-        for place in s.get("forks", []):
-            to = onward(u16(place))
-            if to == END:
+        if s.get("forks"):   # (a fork keeps the branches that are left, first, and counts them: no step in two branches)
+            ways = [onward(u16(place)) for place in s["forks"]]
+            left = [to for to in ways if to != END]
+            if not left:
                 if not nothing:
-                    raise ValueError("a branch would be left with nothing, and the scene has no step that does nothing")
-                to = nothing[0]
-            struct.pack_into("<H", out, place, to)
+                    raise ValueError("a fork would be left with nothing, and the scene has no step that does nothing")
+                left = nothing[:1]
+            for place, to in zip(s["forks"], left + [END] * (len(ways) - len(left))):
+                struct.pack_into("<H", out, place, to)
+            struct.pack_into("<H", out, s["at"] + 0x0a, len(left))
     for place in firsts:
         to = onward(u16(place))
         if to == END:
