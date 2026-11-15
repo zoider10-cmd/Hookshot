@@ -1230,6 +1230,12 @@ static void oot_time_door(Ctx *c, int64_t now, uint64_t actor) {
     hos_log("rando: Open Door of Time: %s asked for at the Master Sword (%s)", event, oot_event_request(c, actor, event) ? "sent" : "NOT SENT");
 }
 
+/* (the age switch: the age it has just set, for the teleport that follows it at once; -1: read Link's. The flag is set
+   through the game's setter, which queues the write, so read back at once it was still the old age: the switch
+   reloaded the same age's map, which put the age back, and Link was only taken to the start of the area. Reported in
+   play, 2026-11-15) */
+static int oot_teleport_child = -1;
+
 static int oot_teleport(Ctx *c, uint64_t actor, unsigned index) {
     teleport.why = "no such destination", teleport.banc = NULL;
     if (index >= sizeof oot_destinations / sizeof oot_destinations[0]) return 0;
@@ -1258,7 +1264,8 @@ static int oot_teleport(Ctx *c, uint64_t actor, unsigned index) {
         teleport.why = "a map is loading";
         return 0;
     }
-    if (!oot_gamedata_bool(c, 0xcea220d3u, &child)) hos_log("cheats: Sequence_IsChildhood not found, using child maps");
+    if (oot_teleport_child >= 0) child = oot_teleport_child;
+    else if (!oot_gamedata_bool(c, 0xcea220d3u, &child)) hos_log("cheats: Sequence_IsChildhood not found, using child maps");
     const OotDestination *d = &oot_destinations[index];
     const char *banc = child ? d->child_banc : d->adult_banc;
     const char *start = child ? d->child_start : d->adult_start;
@@ -2047,7 +2054,10 @@ static int oot_toggle_age(Ctx *c, uint64_t actor) {
     }
     hos_log("cheats: age toggle: %s -> %s, reloading via destination %u (current map \"%s\")",
             child ? "child" : "adult", child ? "adult" : "child", target, current);
-    if (!oot_teleport(c, actor, target)) {
+    oot_teleport_child = !child;   /* (the age just set: the setter's write is queued, oot_teleport_child) */
+    const int sent = oot_teleport(c, actor, target);
+    oot_teleport_child = -1;
+    if (!sent) {
         oot_gamedata_set_bool(c, 0xcea220d3u, child);
         hos_log("cheats: age toggle undone, the map change was not requested");
         return 0;
