@@ -176,7 +176,11 @@ def main():
     check("tracker_show = (tracker_show + kTrackerShows + (press[3] ? -1 : 1)) % kTrackerShows;" in menu and
           "for (int r = 1; r < kTrackerRows; r++) tracker_pick[r] = 0;" in menu and
           "if (row == kTrackerShowRow && tracker_check_count) return kTrackerShowWords[tracker_show];" in menu and
-          "constexpr int kTrackerShowRow = 1;" in menu and "constexpr int kTrackerFirstArea = 2;" in menu and
+          "constexpr int kTrackerShowRow = 1;" in menu and "constexpr int kTrackerHomeRow = 2;" in menu and
+          "constexpr int kTrackerFirstArea = 3;" in menu and
+          # (Return home, the tab's third row: the randomizer's own way out, confirmed twice, with the debug tools off too)
+          'snprintf(tracker_name[kTrackerHomeRow], sizeof tracker_name[0], "Return home");' in menu and
+          "cheat_action.store(kTrackerHomeAction);" in menu and "constexpr int kTrackerHomeAction = 7;" in menu and
           'snprintf(tracker_name[kTrackerShowRow], sizeof tracker_name[0], "Show");' in menu and
           '{"All checks", "Left to collect", "Left and in logic"}' in menu,
           "the first row's Left and Right do not choose what the tab shows, a row stays stepped to a check that is another now, or the row does not say what is shown")

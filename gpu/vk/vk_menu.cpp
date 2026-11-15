@@ -137,7 +137,16 @@ const char kTrackerShowHelp[] =
     "Which checks the tab lists: all of them, only the ones left to collect, or only the ones left that are in logic now. An "
     "area with nothing to list is left out.";
 constexpr int kTrackerShowRow = 1;    // (the tab's second row: what it lists)
-constexpr int kTrackerFirstArea = 2;  // (the first of the areas' rows, after the whole game's and that one)
+// (the tab's third row, Return home: confirmed twice, Link is taken to the Kokiri Forest as a child and to the Market as
+// an adult, the action kTrackerHomeAction to the game's side. Asked for 2026-11-14: the Requiem of Spirit played with no
+// other way back leaves a child in the desert, and no rule of a seed can keep a song from being played. It is the
+// randomizer's own, not a debug tool: there with the debug tools off)
+constexpr int kTrackerHomeRow = 2;
+constexpr int kTrackerFirstArea = 3;  // (the first of the areas' rows, after the whole game's and those two)
+const char kTrackerHomeHelp[] =
+    "Takes Link home: to the Kokiri Forest as a child, to the Market as an adult. For when there is no way back from where "
+    "he is, a warp song played with no other to leave by. Confirm twice.";
+ULONGLONG tracker_home_asked = 0;         // (when the row was confirmed once; within kTrackerForgetMs the next one goes)
 // The checks one by one: tools/rando/rando_seed.py writes <game folder>\mods\rando-seed\checks.txt beside the tracker's
 // file, a line "<area>|<kind>|<folder>|<ages>|<x> <y> <z>" for each chest and Gold Skulltula of the seed (tracker_load
 // reads it too). A row steps through the checks of its area, the ones whose <area> is the row's name (tracker_pick: 0 the
@@ -147,6 +156,7 @@ constexpr int kTrackerFirstArea = 2;  // (the first of the areas' rows, after th
 constexpr int kTrackerChecks = 320;
 constexpr int kTrackerGoAction = 5;
 constexpr int kTrackerForgetAction = 6;   // (the first row, confirmed twice: the record of what is collected is forgotten)
+constexpr int kTrackerHomeAction = 7;     // (the third row, confirmed twice: host/hos_main.c takes Link home)
 ULONGLONG tracker_forget_asked = 0;       // (when the first row was confirmed once; within kTrackerForgetMs the next one forgets)
 constexpr ULONGLONG kTrackerForgetMs = 4000;
 struct TrackerCheck {
@@ -249,6 +259,8 @@ std::string tracker_says(int row) {
     if (!k) {   // (its own words, how many of its checks are left and how many of those are in logic: the first row is the whole game's)
         if (!row && tracker_forget_asked && GetTickCount64() - tracker_forget_asked < kTrackerForgetMs)
             return "Press again to forget what is collected";
+        if (row == kTrackerHomeRow && tracker_check_count)
+            return tracker_home_asked && GetTickCount64() - tracker_home_asked < kTrackerForgetMs ? "Press again to go home" : "Kokiri Forest, or the Market";
         int in = 0, known = 0, left = 0, told = 0, all = 0;
         for (int i = 0; i < tracker_check_count; i++) {
             if (row && strcmp(tracker_checks[i].area, tracker_name[row])) continue;
@@ -2273,12 +2285,14 @@ void tracker_load() {
         n = 1;
     }
     const bool seed = on && n > 0 && strcmp(tracker_name[0], "No seed");
-    if (seed) {   // (the second row is the tab's own: what it lists. The areas follow it)
-        n = std::min(n + 1, kTrackerRows);
-        for (int i = n - 1; i > kTrackerShowRow; i--)
-            memcpy(tracker_name[i], tracker_name[i - 1], sizeof tracker_name[i]), memcpy(tracker_value[i], tracker_value[i - 1], sizeof tracker_value[i]);
+    if (seed) {   // (the second and third rows are the tab's own: what it lists, and the way home. The areas follow them)
+        n = std::min(n + 2, kTrackerRows);
+        for (int i = n - 1; i > kTrackerHomeRow; i--)
+            memcpy(tracker_name[i], tracker_name[i - 2], sizeof tracker_name[i]), memcpy(tracker_value[i], tracker_value[i - 2], sizeof tracker_value[i]);
         snprintf(tracker_name[kTrackerShowRow], sizeof tracker_name[0], "Show");
         tracker_value[kTrackerShowRow][0] = 0;
+        snprintf(tracker_name[kTrackerHomeRow], sizeof tracker_name[0], "Return home");
+        tracker_value[kTrackerHomeRow][0] = 0;
     }
     tracker_count = n;
     int checks = 0;
@@ -3892,6 +3906,7 @@ void draw_options(ui::Ctx& c) {
         if (selr.tracker >= kTrackerFirstArea && tracker_row_checks(selr.tracker)) prompt_list[prompts_n++] = {ui::kLeftRight, "Checks"};
         if (selr.tracker == kTrackerShowRow && tracker_check_count) prompt_list[prompts_n++] = {ui::kLeftRight, "Change"};
         if (!selr.tracker && tracker_check_count) prompt_list[prompts_n++] = {ui::kConfirm, "Forget"};   // (the whole game's row: the record forgotten)
+        if (selr.tracker == kTrackerHomeRow && tracker_check_count) prompt_list[prompts_n++] = {ui::kConfirm, "Go home"};
         if (tracker_pick[selr.tracker] && cheats_on()) prompt_list[prompts_n++] = {ui::kConfirm, "Go there"};
         prompt_list[prompts_n++] = {ui::kTabs, "Tabs"}, prompt_list[prompts_n++] = {ui::kBack, "Close"};
     } else {
@@ -3917,7 +3932,8 @@ void draw_options(ui::Ctx& c) {
     const bool after = restart_changed(selr);
     // (the Tracker tab: an area's row shows its checks where the help is; the tab's second row has words of its own)
     const bool area_panel = selr.tracker >= kTrackerFirstArea && tracker_check_count > 0 && tracker_row_checks(selr.tracker, true) > 0;
-    const char* row_help = selr.tracker == kTrackerShowRow && tracker_check_count ? kTrackerShowHelp : selr.help;
+    const char* row_help = selr.tracker == kTrackerShowRow && tracker_check_count ? kTrackerShowHelp :
+                           selr.tracker == kTrackerHomeRow && tracker_check_count ? kTrackerHomeHelp : selr.help;
     if (narrow) {   // (the help over the column's foot, the rows above it: at most half the room, the rows get the rest)
         const float help_h = std::min(22 * s + 32 * s + help_tall + (after ? 30 * s : 0) + (pending_line.empty() ? 0 : 52 * s) + 22 * s,
                                       (bottom - hh) * 0.5f);
@@ -5515,6 +5531,19 @@ void tracker_press(int row, const bool* press, bool& changed) {
         if (press[3] || press[4] || press[7]) {
             tracker_show = (tracker_show + kTrackerShows + (press[3] ? -1 : 1)) % kTrackerShows;
             for (int r = 1; r < kTrackerRows; r++) tracker_pick[r] = 0;   // (the rows' own words again: their checks are other ones now)
+            changed = true;
+        }
+        return;
+    }
+    if (row == kTrackerHomeRow && tracker_check_count) {   // (Return home: confirm, and again within a moment, and the menu closes)
+        if (press[7]) {
+            const ULONGLONG now = GetTickCount64();
+            if (tracker_home_asked && now - tracker_home_asked < kTrackerForgetMs) {
+                cheat_action.store(kTrackerHomeAction);
+                tracker_home_asked = 0;
+                logf("menu: tracker: return home");
+                open_now = false;   // (back to the game: a map change starts with an event)
+            } else tracker_home_asked = now;
             changed = true;
         }
         return;

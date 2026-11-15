@@ -2422,6 +2422,21 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
         oot_edit_pouch(c, action);
     } else if (action == 6) {   /* (the Tracker tab's first row: forget what is collected) */
         if (hos_rando_on()) oot_tracker_forget();
+    } else if (action == 7) {   /* (the Tracker tab's Return home: a child to the Kokiri Forest, an adult to the Market. The
+                                   randomizer's own way out of a place with no way back, the Colossus by the Requiem alone:
+                                   not a debug tool, so with the debug tools off too) */
+        if (hos_rando_on()) {
+            int child = 1;
+            oot_gamedata_bool(c, 0xcea220d3u, &child);   /* Sequence_IsChildhood */
+            const char *home = child ? "KokiriForest_Child" : "Market_Adult";
+            unsigned index = 0;
+            const unsigned count = sizeof oot_destinations / sizeof oot_destinations[0];
+            for (; index < count; index++) {
+                const char *banc = child ? oot_destinations[index].child_banc : oot_destinations[index].adult_banc;
+                if (banc && !strcmp(banc, home)) break;
+            }
+            hos_log("rando: return home: %s (%s)", home, index == count ? "the teleport has no such map" : oot_teleport(c, actor, index) ? "sent" : "NOT SENT");
+        }
     } else if (action >= 100 && action < 124) {
         oot_set_time(c, action - 100);
     }
