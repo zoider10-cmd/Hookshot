@@ -237,7 +237,7 @@ def main():
           "} else if ((oot_checks[i].done == 1) != now) {" in host and "A64Fn set = a64_lookup(0x80f27130ULL);" in host and
           "c->x[0] = mgr, c->x[1] = value ? 1 : 0, c->x[2] = key;" in host,
           "a check with an actor's hash is not marked in the save, or not by the game's setter")
-    check(m and "if (action == %s && hos_rando_on()) {" % m.group(1) in host and '"goto_check.txt"' in host and
+    check(m and "if ((action == %s && hos_rando_on()) || boss >= 0) {" % m.group(1) in host and '"goto_check.txt"' in host and
           'fscanf(f, "%f %f %f %39s %7s"' in host, "the game does not take the menu's action, or reads the check otherwise than it is written")
     check("else if (oot_teleport(c, actor, index)) check.waiting = 1" in host and "} else if (oot_banc_in_folder(current, check.folder)) {" in host and
           "!strchr(check.ages, child ? 'C' : 'A')" in host and

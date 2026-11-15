@@ -135,7 +135,8 @@ def main():
     check("int tabs_shown() { return tracker_on.load(std::memory_order_relaxed) ? TAB_COUNT : TAB_TRACKER; }" in menu and
           "for (int i = 0; i < tabs; i++) {" in menu and "else if (tab_right) cur_tab = (cur_tab + 1) % tabs, changed = true;" in menu,
           "the Tracker tab is in the menu's strip in the normal game or in Master Quest")
-    check("if (action == 5 && hos_rando_on()) {" in host_main and "if (hos_rando_on()) oot_tracker_forget();" in host_main and
+    check("if ((action == 5 && hos_rando_on()) || boss >= 0) {" in host_main and
+          "boss = action - OOT_TELEPORT_ACTION - (int)OOT_DESTINATIONS;" in host_main and "if (hos_rando_on()) oot_tracker_forget();" in host_main and
           'FILE *f = hos_rando_on() && oot_place_file(path, sizeof path, "goto.txt") ? fopen(path, "r") : NULL;' in host_main,
           "the randomizer's go-to tools work in the normal game or in Master Quest")
     print("PASS: the randomizer's saves")
