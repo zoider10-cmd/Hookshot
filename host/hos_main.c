@@ -1711,13 +1711,25 @@ static const char *const oot_fills[][2] = {   /* what a holder's name starts wit
     {"Item_Wallet_", OOT_FILL_RUPEES},
 };
 enum { OOT_FILLS = sizeof oot_fills / sizeof oot_fills[0] };
+/* A bow or a Slingshot got with nothing to carry its ammunition in. Seen in the logs of a game, 2026-11-14 (its
+   owner asked for the bow and the Slingshot to come full): a bow bought from a shelf, and a Slingshot, had ten of
+   theirs added and Link then had none ("filled: Link has 0 (1 adds)"). The game gives the first quiver and the first
+   Bullet Bag in the scenes of its own bow and Slingshot, not with the items; another randomizer of this game gives
+   both at a new game's start for the same reason (github.com/Mozencaz/OotrR randomizer_core.py BASE_REQUIRED). So
+   when what a holder holds is to be filled and Link has none of the things that carry it, the smallest is given
+   first, once, and the fill is made after it. NOT SEEN YET: the game was being played. */
+static const char *const oot_fill_bags[][4] = {   /* what is held; the smallest thing that carries it; the larger ones */
+    {"Item_Arrow_Normal", "Item_Quiver_Small", "Item_Quiver_Medium", "Item_Quiver_Large"},
+    {"Item_DekuSeed", "Item_BulletBag_Small", "Item_BulletBag_Medium", "Item_BulletBag_Large"},
+};
+static int oot_fill_bagged[OOT_FILLS];   /* (the smallest carrier was looked for, since the holder was got) */
 static int oot_fill_wait[OOT_FILLS];   /* (a holder got: the updates until what it holds is added, or looked at again) */
 static int oot_fill_last[OOT_FILLS];   /* (the count before the last add; -1: none made yet) */
 static int oot_fill_adds[OOT_FILLS];   /* (the adds made) */
 static void oot_fill_note(const char *item) {
     for (int k = 0; k < (int)OOT_FILLS; k++)
         if (!strncmp(item, oot_fills[k][0], strlen(oot_fills[k][0]))) {
-            oot_fill_last[k] = -1, oot_fill_adds[k] = 0;
+            oot_fill_last[k] = -1, oot_fill_adds[k] = 0, oot_fill_bagged[k] = 0;
             __atomic_store_n(&oot_fill_wait[k], OOT_FILL_WAIT, __ATOMIC_RELEASE);
             hos_log("rando: %s got: its %s will be filled", item, oot_fills[k][1]);
             return;
@@ -2302,6 +2314,22 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
         if (__atomic_load_n(&oot_fill_wait[k], __ATOMIC_ACQUIRE) <= 0) continue;
         if (__atomic_sub_fetch(&oot_fill_wait[k], 1, __ATOMIC_RELEASE) > 0) continue;
         const char *holds = oot_fills[k][1];
+        if (!oot_fill_bagged[k]) {   /* (a bow or a Slingshot with nothing to carry its ammunition in: oot_fill_bags) */
+            oot_fill_bagged[k] = 1;
+            int given = 0;
+            for (unsigned b = 0; b < sizeof oot_fill_bags / sizeof oot_fill_bags[0] && !given; b++) {
+                if (strcmp(holds, oot_fill_bags[b][0])) continue;
+                int has = 0;
+                for (int t = 1; t < 4; t++) has += oot_pouch_count(c, oot_fill_bags[b][t]) > 0;
+                if (has) break;
+                given = oot_pouch_change(c, oot_fill_bags[b][1], 1) >= 0;
+                hos_log("rando: Link has nothing to carry %s in: %s is %s", holds, oot_fill_bags[b][1], given ? "given" : "NOT GIVEN");
+            }
+            if (given) {   /* (the fill after the carrier is in the pouch) */
+                __atomic_store_n(&oot_fill_wait[k], OOT_FILL_WAIT, __ATOMIC_RELEASE);
+                continue;
+            }
+        }
         const int now = oot_pouch_count(c, holds);
         /* (until the count stops going up: the bag is full. The first add is made whatever the count; each after it
            when the one before raised it) */

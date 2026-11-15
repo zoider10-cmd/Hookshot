@@ -91,6 +91,11 @@ def main():
     #      a few updates later until the count stops going up ----
     fills = host[host.index("static const char *const oot_fills[][2] = {"):host.index("enum { OOT_FILLS")]
     pairs = dict(re.findall(r'\{"(\w+)", "(\w+)"\}', fills))
+    # (a bow or a Slingshot got with nothing to carry its ammunition in: the smallest quiver or Bullet Bag first, once)
+    check('{"Item_Arrow_Normal", "Item_Quiver_Small", "Item_Quiver_Medium", "Item_Quiver_Large"},' in host and
+          '{"Item_DekuSeed", "Item_BulletBag_Small", "Item_BulletBag_Medium", "Item_BulletBag_Large"},' in host and
+          "given = oot_pouch_change(c, oot_fill_bags[b][1], 1) >= 0;" in host and "oot_fill_bagged[k] = 0;" in host,
+          "a bow or a Slingshot got with no quiver or Bullet Bag is not given the smallest first")
     check('{"Item_Wallet_", OOT_FILL_RUPEES},' in fills and '#define OOT_FILL_RUPEES "TBox_Rupee_Gold"' in host and
           "oot_pouch_change(c, holds, strcmp(holds, OOT_FILL_RUPEES) ? OOT_FILL_STEP : 1) >= 0) {" in host,
           "a wallet found is not filled with rupees, or ten gold rupees at a time")
@@ -107,7 +112,7 @@ def main():
     check("if ((oot_fill_last[k] < 0 || now > oot_fill_last[k]) && oot_fill_adds[k] < OOT_FILL_STEPS &&" in update and
           "oot_pouch_change(c, holds, strcmp(holds, OOT_FILL_RUPEES) ? OOT_FILL_STEP : 1) >= 0) {" in update and
           "__atomic_store_n(&oot_fill_wait[k], OOT_FILL_APART, __ATOMIC_RELEASE);" in update and
-          "oot_fill_last[k] = -1, oot_fill_adds[k] = 0;" in host,
+          "oot_fill_last[k] = -1, oot_fill_adds[k] = 0, oot_fill_bagged[k] = 0;" in host,
           "what a holder holds is not added until the count stops going up, the adds are not apart, or they have no end")
     name = host[host.index("static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {"):host.index("int hos_oot_pouch_add(Ctx *c) {")]
     check("c->x[1] = block + 16;" in name and "memcpy(A64_PTR(block + 96), give, strlen(give) + 1);" in name and "oot_pouch_name(c, view, give);" in block and
