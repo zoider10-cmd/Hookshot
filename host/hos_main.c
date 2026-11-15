@@ -2274,6 +2274,11 @@ static int oot_place_file(char *out, size_t size, const char *name) {
    EventSettingComponentLists with a SkipSetting), nor of the title's and the credits'.
    HOS_OOT_SKIP_EVENTS=1 is the setting on, 2 only logs each event and the player it plays. */
 #define OOT_TIMELINE_PLAYER 0x84c82d58ULL
+/* (a video's player, "RecordMovieTimelineEvent": the goddesses' story in Zelda's courtyard, Dm_HrlCastle_0045, and the
+   other videos of Event/Movie. Seen in the owner's log of 2026-11-15 as "not a cutscene (class 84c82c88)": it played.
+   The skip asked of it does nothing (tried without a window: the video played its 40 seconds, and the buttons did
+   nothing either), so it is only named in the log; the seed passes over the step that starts it, SCENE_VIDEOS) */
+#define OOT_MOVIE_PLAYER 0x84c82c88ULL
 int hos_rando_skip_cutscenes(void);   /* host/oot_rando.c */
 static int oot_cutscene_kept(const char *name) {
     static const char *const kept[] = {"Dm_Title", "Dm_StaffCredit", "Dm_Kokiri_0000", "Dm_SY_"};
@@ -2298,7 +2303,8 @@ static void oot_skip_cutscene(Ctx *c) {
     const uint32_t count = recomp_load32(c, event + 3760), at = recomp_load32(c, event + 3864);
     const uint64_t player = list && at < count ? recomp_load64(c, list + 8ULL * at) : 0;
     if (!player) return;
-    const int cutscene = recomp_load64(c, player) == OOT_TIMELINE_PLAYER;
+    const uint64_t kind = recomp_load64(c, player);
+    const int cutscene = kind == OOT_TIMELINE_PLAYER;
     const int is_new = event != was_event || player != was_player;
     if (!cutscene && !is_new) {
         return;
@@ -2313,6 +2319,7 @@ static void oot_skip_cutscene(Ctx *c) {
        and what is not skipped, without HOS_OOT_SKIP_EVENTS) */
     if (is_new) {
         if (cutscene) hos_log("rando: event: player %u of %u, \"%s\": a cutscene", at, count, name);
+        else if (kind == OOT_MOVIE_PLAYER) hos_log("rando: event: player %u of %u, \"%s\": a video (not skipped here: the seed leaves it out)", at, count, name);
         else hos_log("rando: event: player %u of %u, \"%s\": not a cutscene (class %llx)", at, count, name,
                      (unsigned long long)recomp_load64(c, player));
     }

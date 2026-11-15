@@ -119,7 +119,7 @@ def sources(rows):
     check("int hos_rando_skip_cutscenes(void) { return rando_active && rando.v[OOT_RANDO_SKIP_CUTSCENES] != 0; }" in side and
           '"rando_skip_cutscenes"' in launcher and 'X(SKIP_CUTSCENES, "Skip cutscenes", "rando_skip_cutscenes",' in read("gpu", "vk", "oot_rando.h"),
           "Skip cutscenes is not a setting of the menu, the launcher and the game")
-    check("const int cutscene = recomp_load64(c, player) == OOT_TIMELINE_PLAYER;" in host and
+    check("const int cutscene = kind == OOT_TIMELINE_PLAYER;" in host and "#define OOT_MOVIE_PLAYER 0x84c82c88ULL" in host and
           "if (env == 2 || !cutscene || oot_cutscene_kept(name)) return;" in host and "    oot_skip_cutscene(c);" in host,
           "the skip is asked of a player that is not a cutscene (a flowchart skipped ends its event before its steps have run), or is not asked at all")
     check('static const char *const kept[] = {"Dm_Title", "Dm_StaffCredit", "Dm_Kokiri_0000", "Dm_SY_"};' in host,
@@ -130,12 +130,18 @@ def sources(rows):
           "now, taken = quiet_scene(was)" in script and "if struct.unpack_from(\"<H\", was, 0x20)[0] != 1:" in script and
           '"rando_skip_cutscenes": 0' in script and "list(shop_files.items()) + list(scene_files.items())" in script,
           "Skip cutscenes does not take the talks out of the scenes the game plays as flowcharts, or a seed made with it is not told apart")
-    check('    "EventTalk", "EventWait",' in script and 'SCENE_NOTHING = ("EventDemoProductSupportComment", "EventDoNothing")' in script and
-          '"Dm_SY_Ocarina"' in script and '"Dm_FairyFountain_"' in script and 'SCENE_CHOICE = "EventQueryTalkChoice2"' in script and
+    check('    "EventTalk", "EventTalkIgnoreSameTalkAS", "EventWait",' in script and 'SCENE_NOTHING = ("EventDemoProductSupportComment", "EventDoNothing")' in script and
+          '"Dm_SY_Ocarina"' in script and '"Dm_FairyFountain_"' in script and 'SCENE_CHOICE = ("EventQueryTalkChoice2", "EventQueryTalkChoice3", "EventQueryTalkChoice4")' in script and
           all('"%s"' % w not in script.split("SCENE_SHOWS = frozenset((")[1].split("))")[0] for w in (
               "EventTriggerSetGameDataBool", "EventTriggerSetGameDataInt", "EventTriggerAddOrRemovePouchContent", "EventTransition", "EventEventFadeOut",
               "EventEventFadeIn", "EventPlayerWarpToTargetPosAndRot", "EventWarpToTargetPosAndRot", "EventExecuteProgressChallengeStep", "EventTrigger_SetTime")),
           "a scene's step that changes the game is taken out with its talks, or the scenes where Link answers or plays are not kept")
+    # (the videos: a player of their own that the game's skip does nothing to, seen without a window; the seed passes
+    #  over the step that starts each of the story's. Seen in the owner's play: the goddesses' story played whole)
+    check('SCENE_VIDEOS = ("Dm_HrlCastle_0045",' in script and "now, left_out = pass_videos(was, SCENE_VIDEOS)" in script and
+          all('"%s"' % v not in script.split("SCENE_VIDEOS = (")[1].split(")")[0] for v in ("Dm_Kokiri_0000", "Dm_Title_0005", "Dm_StaffCredit_0000", "Dm_MelodyGet_Sun_01")) and
+          "elif kind in (1, 5):" in script and "return lead_past(data, steps, firsts, passed, answer), talks" in script,
+          "the story's videos are not left out with Skip cutscenes, or the title's, the credits', the narration or the tomb's are")
     check("Saria's first words, the owl's" in launcher and "Saria's first words, the owl's" in read("gpu", "vk", "oot_rando.h"),
           "the setting's words do not say that the talk scenes lose their talk")
     check("oot_rando_read(f, r, &bad)" in side and '"hookshot_options.ini"' in side and "const OotRando *hos_rando(void)" in side,

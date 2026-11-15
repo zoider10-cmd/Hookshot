@@ -232,12 +232,24 @@ timelines (a flow file of one timeline), which the skip above passes over; 226 a
 `Dm_LostWood_0000`, `Dm_ZoraRiver_0000`...), the Deku Tree's, Rauru's. The seed takes their presentation out
 (`quiet_scene`, `SCENE_SHOWS`): each step that only shows something (a talk, a wait, a camera move, an animation, a
 look, Navi's moves) is passed over, every way into it leads to what follows it, and what the scene does stays (flags,
-items, quest steps, the time, fades, warps, other events). A question goes only when all of its answers but one come
-back to it (the owl's "hear it again?"); the other is taken. A branch of a fork or an entry point left with nothing goes
+items, quest steps, the time, fades, warps, other events). A question goes when all of its answers but one come back to
+it (the owl's "hear it again?", Zelda's "Is there anything else?") or when its answers all come to the same step once
+the presentation is passed over (Zelda's "You came from the forest...", whose "Yes" and "No" each have a line); a
+question in a branch of a fork is the one its join's next step asks, and a fork left with nothing is passed over to its
+join. A branch of a fork or an entry point left with nothing goes
 to a step of the scene's own that does nothing (the makers' comments, `SCENE_NOTHING`), or else to one of the steps
 passed over that does not wait, made to end there. Kept as they are (`SCENE_KEEP_IF`): the song lessons, the Great
 Fairies, Lon Lon Ranch's horse scenes, Zelda's letter scene with its questions. Both files of a scene are changed (the
-`.110.` one too), and a gift's scene as the gift made it. A first seed: 543 talks out of 69 scene files.
+`.110.` one too), and a gift's scene as the gift made it. A seed: 599 talks out of 70 scene files.
+The videos (`Event/Movie/*.webm`, a player of a class of their own, `84c82c88`) are not reached by the game's skip (asked
+of one without a window, the goddesses' story played its 40 seconds; the buttons did nothing either), so the seed
+passes over the step that starts each of the story's (`SCENE_VIDEOS`, `pass_videos`: Zelda's courtyard, the three
+escapes from a dungeon, Saria's and the Temple of Time's sage scenes); the title's, the credits', the narration, the
+ending and the Royal Family's Tomb's stay. Step kinds 5 (a switch of another kind, its cases as a switch's) and 6 (a
+step that names where it goes by a hash) are read for this. Seen in play (2026-11-15): Saria's first words, the owl,
+Talon woken with the Cucco; Zelda's meeting played its question, the goddesses' video and its talk then. Seen without a
+window after the change (her meeting started by the teleport's event, `HOS_OOT_TELEPORT_EVENT`): no talk, no question,
+no video, to "You were entrusted with Zelda's letter!", which waits for A as every item scene does.
 Seen without a window: the owl's Hyrule Field event (the save "Before Owl") showed the owl and went on in under five
 seconds, with no talk, and the game loaded the changed `Dm_HrlField_0010`. Not seen: Saria's first words (Link must come
 down from his house in a new game), and every other scene. Talk that is not a `Dm_` scene (what a character says when
