@@ -74,7 +74,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 14   # (14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 15   # (15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -246,8 +246,8 @@ PLAIN_EVENTS = ("KokiriForest_TreasureBox_NaviChatOff",)
 # to it (the owl's "Do you want to hear it again?", Zelda's "Is there anything else?" of three answers): the other
 # answer is taken; any other question stays, with its talk. A branch of a fork, or an entry point, left with nothing goes to one of the scene's own steps that does nothing
 # (SCENE_NOTHING, the comments its makers left), so every scene so changed must have one. The scenes are the Dm_
-# flowcharts with a talk, less those where the player plays or pays (SCENE_KEEP_IF: the song lessons, the Great
-# Fairies, the games).
+# flowcharts with a talk, less those where the player pays or plays a game (SCENE_KEEP_IF: the Great Fairies, Lon
+# Lon's horse, the games) and the Royal Family's Tomb (SCENE_KEEP). The song lessons are taken too (SCENE_LESSON).
 SCENE_FLOWS = "Event/EventFlow"
 # The videos (Event/Movie, a player of their own: the game's skip, asked of one, did nothing, and nor did the buttons;
 # seen without a window). Seen in the owner's play: the goddesses' story in Zelda's courtyard played whole. Each is
@@ -265,12 +265,21 @@ SCENE_SHOWS = frozenset((
     "EventTriggerRequestLookAtTheFront", "EventTriggerPlayerRequestLookAtTheFrontLock", "EventNaviRequestLookAtTheFront",
     "EventPlayerTurnAndLook", "EventPlayerTurnAndLookNow", "EventNPCTurnToTarget", "EventTriggerChangeEmotion",
     "EventTriggerEmitNpcOrPlayerVoice", "EventSoundStartSound", "EventNaviRequestBallonMessage",
-    "EventTriggerRequestCameraShake", "EventNodeEffectEmit", "EventCloseMessageDialog"))
+    "EventTriggerRequestCameraShake", "EventNodeEffectEmit", "EventCloseMessageDialog", "EventPlayerPlayOcarinaFree"))
 SCENE_SHOWS_SUB = ("Common_Camera_Pln",)   # (sub-flows of these flows only set the camera's focus)
+# A song lesson (Dm_MelodyGet_...): the teacher plays the song, Link plays it back, the ocarina plays it by itself (the
+# ocarina's own flow, these entries), then the lesson's gift step gives what the lesson gives (GetPouchContent, its item
+# made the shuffle's as a gift's is). The auto-play adds the song too (made the lesson's item, SONG_PLAY_FLOW), but every
+# lesson but the Royal Family's Tomb's has its own gift step, and none asks how the playing went (looked at: their
+# questions are of the pouch, flags, places). So in a lesson the three are passed over with the talk, and Link's free
+# playing (EventPlayerPlayOcarinaFree): the lesson goes to "You learned..." (asked for by the game's owner, 2026-11-15).
+SCENE_LESSON = (("Dm_SY_Ocarina", "LearningOcarinaPlayExample"), ("Dm_SY_Ocarina", "LearningOcarinaFollowExample"),
+                ("Dm_SY_Ocarina", "LearningOcarinaPlayAuto"), ("Dm_SY_Ocarina", "LearningOcarinaPlayAutoForSeek"))
+SCENE_KEEP = ("Dm_MelodyGet_Sun",)   # (the Royal Family's Tomb: its gift is a scene of its own, Dm_MelodyGet_Sun_03, after the tomb's play)
 SCENE_NOTHING = ("EventDemoProductSupportComment", "EventDoNothing")
 SCENE_CHOICE = ("EventQueryTalkChoice2", "EventQueryTalkChoice3", "EventQueryTalkChoice4")
-SCENE_KEEP_IF = ("Dm_SY_Ocarina", "EventWaitForKeyInput", "EventOpenDoCommand",
-                 "RupeeDisplay", "EventTriggerSkipAcceptStart", "EventRequestQuit", "Dm_FairyFountain_", "EventPlayerPlayOcarinaFree",
+SCENE_KEEP_IF = ("EventWaitForKeyInput", "EventOpenDoCommand",
+                 "RupeeDisplay", "EventTriggerSkipAcceptStart", "EventRequestQuit", "Dm_FairyFountain_",
                  "EventTriggerRequestRideMe", "MiniGame")
 # The Kokiri Sword's chest starts an event of its own (GetSword, of the flow below): the chest is opened
 # (Dm_SY_Treasurebox, as every chest's), then Link puts the sword on his back (Dm_Kokiri_0063), then Navi speaks if
@@ -2337,6 +2346,7 @@ def scene_steps(data):
         elif kind == 4:
             s["next"] = e + 0x0a
             s["what"] = text(u64(e + 0x18))
+            s["entry"] = text(u64(e + 0x20))
         elif kind == 6:   # (a step that names where to go by a hash, not by a step's place: AllSage's)
             pass
         else:
@@ -2373,7 +2383,8 @@ def quiet_scene(data):
     # (the steps passed over: what only shows; a fork left with nothing in any branch, to its join; a question, with its
     #  switch, whose answers but one come back to it, or whose answers all come to the same step once what only shows
     #  is passed over (Zelda's "You came from the forest...": "Yes" and "No" each have a line, then the scene goes on))
-    shows = lambda s: (s["kind"] == 0 and s["what"] in SCENE_SHOWS and not s["choices"]) or (s["kind"] == 4 and s["what"] in SCENE_SHOWS_SUB)
+    shows = lambda s: (s["kind"] == 0 and s["what"] in SCENE_SHOWS and not s["choices"]) or (
+        s["kind"] == 4 and (s["what"] in SCENE_SHOWS_SUB or (s["what"], s["entry"]) in SCENE_LESSON))
     passed, answer = set(i for i, s in enumerate(steps) if shows(s)), {}
     joined = {}   # (a step in a branch of a fork -> the fork's join: where a branch that ends goes on)
     for f, s in enumerate(steps):
@@ -4309,7 +4320,7 @@ def main():
                 _, _, used = scene_steps(was)
                 if "EventTalk" not in used:
                     continue
-                if any(k in w for k in SCENE_KEEP_IF for w in used | {stem}):
+                if stem in SCENE_KEEP or any(k in w for k in SCENE_KEEP_IF for w in used | {stem}):
                     kept.append(stem)
                     continue
                 now, taken = quiet_scene(was)

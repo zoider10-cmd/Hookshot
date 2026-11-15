@@ -95,7 +95,7 @@
       "An upgrade found gives the next one Link has not: bomb bags, the bow and quivers, the slingshot and bullet bags, Hookshot and Longshot, strength, scales, wallets, stick and nut bags, magic. A chest still shows the item it was shuffled as.", \
       "Off", "On") \
     X(SKIP_CUTSCENES, "Skip cutscenes", "rando_skip_cutscenes", \
-      "Cutscenes are passed over as soon as they start, with the game's own skip: Saria's goodbye, the Deku Tree's story and the like. The scenes made of talk (Saria's first words, the owl's) lose their talk, camera moves and waits and keep what they do. Chests, item scenes, song lessons and the Great Fairies still play. Not the title, the opening narration or the credits.", \
+      "Cutscenes are passed over as soon as they start, with the game's own skip: Saria's goodbye, the Deku Tree's story and the like. The scenes made of talk (Saria's first words, the owl's) lose their talk, camera moves and waits and keep what they do. Song lessons go straight to the song. Chests, item scenes, the Great Fairies and the Royal Family's Tomb still play. Not the title, the opening narration or the credits.", \
       "Off", "On") \
     X(SHOP_SHELVES, "Every shop shelf", "rando_shop_shelves", \
       "With Shops. Off: four shelves of each shop sell a shuffled item, and what a game buys again and again stays for sale (bombs, arrows, nuts, potions, shields, tunics). On: every shelf of the six shops does, each sold once; those supplies then come from grass, pots and enemies.", \

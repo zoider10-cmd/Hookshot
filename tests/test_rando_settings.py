@@ -131,7 +131,8 @@ def sources(rows):
           '"rando_skip_cutscenes": 0' in script and "list(shop_files.items()) + list(scene_files.items())" in script,
           "Skip cutscenes does not take the talks out of the scenes the game plays as flowcharts, or a seed made with it is not told apart")
     check('    "EventTalk", "EventTalkIgnoreSameTalkAS", "EventWait",' in script and 'SCENE_NOTHING = ("EventDemoProductSupportComment", "EventDoNothing")' in script and
-          '"Dm_SY_Ocarina"' in script and '"Dm_FairyFountain_"' in script and 'SCENE_CHOICE = ("EventQueryTalkChoice2", "EventQueryTalkChoice3", "EventQueryTalkChoice4")' in script and
+          '("Dm_SY_Ocarina", "LearningOcarinaFollowExample")' in script and 'SCENE_KEEP = ("Dm_MelodyGet_Sun",)' in script and
+          "if stem in SCENE_KEEP or any(" in script and '"Dm_FairyFountain_"' in script and 'SCENE_CHOICE = ("EventQueryTalkChoice2", "EventQueryTalkChoice3", "EventQueryTalkChoice4")' in script and
           all('"%s"' % w not in script.split("SCENE_SHOWS = frozenset((")[1].split("))")[0] for w in (
               "EventTriggerSetGameDataBool", "EventTriggerSetGameDataInt", "EventTriggerAddOrRemovePouchContent", "EventTransition", "EventEventFadeOut",
               "EventEventFadeIn", "EventPlayerWarpToTargetPosAndRot", "EventWarpToTargetPosAndRot", "EventExecuteProgressChallengeStep", "EventTrigger_SetTime")),

@@ -238,8 +238,13 @@ the presentation is passed over (Zelda's "You came from the forest...", whose "Y
 question in a branch of a fork is the one its join's next step asks, and a fork left with nothing is passed over to its
 join. A branch of a fork or an entry point left with nothing goes
 to a step of the scene's own that does nothing (the makers' comments, `SCENE_NOTHING`), or else to one of the steps
-passed over that does not wait, made to end there. Kept as they are (`SCENE_KEEP_IF`): the song lessons, the Great
-Fairies, Lon Lon Ranch's horse scenes, Zelda's letter scene with its questions. Both files of a scene are changed (the
+passed over that does not wait, made to end there. Kept as they are (`SCENE_KEEP_IF`, `SCENE_KEEP`): the Great
+Fairies, Lon Lon Ranch's horse scenes, the Royal Family's Tomb. The song lessons (asked for, 2026-11-15) go to their
+gift: the ocarina's own flow plays the example, waits for Link to play it back and plays it by itself
+(`Dm_SY_Ocarina`'s learning entries, `SCENE_LESSON`), and its auto-play adds the song too; but every lesson but the
+tomb's has its own gift step (`GetPouchContent`, made the shuffle's item), and none asks how the playing went. So those
+calls are passed over with the talk, and the lesson goes to "You learned...". The tomb's gift is a scene of its own
+after the tomb's play, `Dm_MelodyGet_Sun_03`. Both files of a scene are changed (the
 `.110.` one too), and a gift's scene as the gift made it. A seed: 599 talks out of 70 scene files.
 The videos (`Event/Movie/*.webm`, a player of a class of their own, `84c82c88`) are not reached by the game's skip (asked
 of one without a window, the goddesses' story played its 40 seconds; the buttons did nothing either), so the seed
