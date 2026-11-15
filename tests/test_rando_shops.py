@@ -424,7 +424,7 @@ def main():
     by = {shop.key: shop for shop in seed.SHOPS}
     check(seed.PLACEMENT >= 4 and all(seed.shop_need(by[k], 4, True) == seed.NONE for k in ("general", "medicine", "bombchu", "kokiri")) and
           seed.shop_need(by["bombchu"], 4, False) == seed.CHILD and seed.shop_need(by["goron"], 4, True) == by["goron"].need and
-          seed.shop_need(by["zora"], 4, True) == by["zora"].need and all(seed.shop_need(shop, 3, True) == shop.need for shop in seed.SHOPS) and
+          seed.shop_need(by["zora"], 4, True) == seed.CHILD_BOMBS == next(g for g in seed.GIFTS if g.key == "diving").need and all(seed.shop_need(shop, 3, True) == shop.need for shop in seed.SHOPS) and
           seed.wallet_need(199) == seed.NONE and "shop_need(shop, placement, a.open_forest) | wallet_need(price)" in script,
           "a Market shop's shelf under the child's wallet cannot be had from the start with Open forest exit, or a seed made before changes")
     # ---- the Bombchu Shop's door open at night from the start: its two AND nodes made OR, nothing else ----

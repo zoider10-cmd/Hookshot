@@ -529,12 +529,16 @@ def shop_need(shop, placement, open_forest):
     should have a chance to be had from the start): the Bombchu Shop asks for a child only, its door opening at night
     from the start (BOMBCHU_DOOR_LOGIC); and with Open forest exit the Market's shops (the Bazaar, the Potion Shop, the
     Bombchu Shop) ask for nothing, a child walking there from the start (CHILD is the forest's way out: the sword and
-    the Slingshot, the Deku Tree done). The Goron shop and the Zora shop keep theirs: a child reaches Goron City past
-    Kakariko's gate and asks for bombs there, and the Zora shop is an adult's here."""
+    the Slingshot, the Deku Tree done). The Zora shop asks for what a child's way into Zora's Domain asks for, as the
+    Zoras' diving game does (CHILD_BOMBS; Zelda's Lullaby with it where the songs are named, SONG_AREAS): it was an
+    adult's, and the owner's word is that a child has it as soon as he reaches Zora's Domain. The Goron shop keeps
+    its own: a child reaches Goron City past Kakariko's gate and asks for bombs there."""
     need = shop.need
     if placement >= 4:
         if shop.key == "bombchu":
             need = CHILD
+        if shop.key == "zora":
+            need = CHILD_BOMBS
         if open_forest and shop.areas[0] == "Market":
             need = frozenset(need - CHILD)
     return need
