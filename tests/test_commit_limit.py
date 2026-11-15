@@ -3,8 +3,9 @@ run held private commit at the VRAM blocks plus ~21 GB the whole way, and a 16 G
 limit at 33.9 GB of its own. A guest commit then failed while an area loaded and the game's next write there crashed it.
 
 Checked here:
-- the textures' budget has a commit rule: below RX_VK_COMMIT_RESERVE_MB of headroom (GlobalMemoryStatusEx's ullAvailPageFile,
-  Windows only) the shortfall comes off the budget and the rule's budget, as the driver's limit's excess does;
+- the textures' budget has a commit rule: below RX_VK_COMMIT_RESERVE_MB of headroom (GlobalMemoryStatusEx's ullAvailPageFile
+  and what the page files can still grow by, tests/test_commit_room.py; Windows only) the shortfall comes off the budget and
+  the rule's budget, as the driver's limit's excess does;
 - hos_commit and the first-touch handler wait at the commit limit (1455) and commit again before they give up, and they log a
   failure the same way (commit_refused: the out-of-memory notice).
 - the first-touch handler tries a page another thread committed again on Windows only (#ifdef _WIN32): on Linux every fault in

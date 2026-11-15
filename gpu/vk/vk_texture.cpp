@@ -53,6 +53,7 @@
 #include "astc_bc_policy.h"
 #include "drawn_writeback.h"
 #include "vram_compact.h"
+#include "commit_room.h"
 #include "evict_reason.h"
 #include "keep_rendered.h"
 #include "target_overlap.h"
@@ -299,14 +300,55 @@ static uint64_t commit_reserve() {
                                                                 : 2560ull << 20;
     return v;
 }
+#if defined(_WIN32)
+// (what Windows' page files can still grow by: commit_room.h. NtQuerySystemInformation's SystemPageFileInformationEx gives each
+// file's size and its maximum, which for a file Windows manages is the one Windows chose; read again after a second. 0 where it
+// cannot be read: then the room is what is left under the limit now, as before)
+static uint64_t page_file_growth() {
+    static uint64_t value;
+    static ULONGLONG at;
+    const ULONGLONG now = GetTickCount64();
+    if (at && now - at < 1000) return value;
+    at = now ? now : 1, value = 0;
+    using Query = LONG(WINAPI*)(int, void*, ULONG, ULONG*);
+    static const Query query = (Query)(void*)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQuerySystemInformation");
+    alignas(16) static unsigned char buf[16384];   // (a record is 40 bytes and its name; Windows has at most 16 page files)
+    ULONG len = 0;
+    if (!query || query(0x90, buf, sizeof buf, &len) < 0 || len > sizeof buf) return 0;
+    SYSTEM_INFO si{};
+    GetSystemInfo(&si);
+    commit_room::PageFile files[16];
+    const size_t n = commit_room::page_files(buf, len, si.dwPageSize, files, 16);
+    value = commit_room::growth(files, n, [](char drive) -> uint64_t {
+        const wchar_t root[] = {(wchar_t)drive, L':', L'\\', 0};
+        ULARGE_INTEGER free_bytes{};
+        return GetDiskFreeSpaceExW(root, nullptr, nullptr, &free_bytes) ? free_bytes.QuadPart : 0;
+    });
+    return value;
+}
+#endif
 // (what Windows lets the process commit before its limit, RAM plus the page file: GlobalMemoryStatusEx's ullAvailPageFile, the
-// limit less the whole system's commit. false where it cannot be read)
+// limit as it is now less the whole system's commit, and below the reserve what the page files can still grow by: a page file
+// Windows manages grows as the commit nears the limit, and the limit with it. RX_VK_COMMIT_GROWTH=0: the limit as it is now
+// alone, as before. false where it cannot be read)
 static bool commit_headroom(uint64_t* free_bytes) {
 #if defined(_WIN32)
     MEMORYSTATUSEX m{};
     m.dwLength = sizeof m;
     if (!GlobalMemoryStatusEx(&m)) return false;
-    *free_bytes = m.ullAvailPageFile;
+    static const bool counted = !getenv("RX_VK_COMMIT_GROWTH") || atoi(getenv("RX_VK_COMMIT_GROWTH")) != 0;
+    uint64_t grow = 0;
+    if (commit_room::wants_growth(m.ullAvailPageFile, commit_reserve(), counted)) {
+        grow = page_file_growth();
+        static uint64_t said_at;
+        if (grow && (!said_at || frame_no - said_at >= 3600)) {
+            said_at = frame_no;
+            logf("vk: commit: %llu MB left under Windows' limit as it is now, and the page files can grow by %llu MB more: counted "
+                 "as room (RX_VK_COMMIT_GROWTH=0: not counted)", (unsigned long long)(m.ullAvailPageFile >> 20),
+                 (unsigned long long)(grow >> 20));
+        }
+    }
+    *free_bytes = commit_room::headroom(m.ullAvailPageFile, grow);
     return true;
 #else
     (void)free_bytes;
