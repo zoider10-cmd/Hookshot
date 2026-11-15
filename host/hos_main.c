@@ -2300,8 +2300,7 @@ static void oot_skip_cutscene(Ctx *c) {
     if (!player) return;
     const int cutscene = recomp_load64(c, player) == OOT_TIMELINE_PLAYER;
     const int is_new = event != was_event || player != was_player;
-    if (!cutscene && !(is_new && env == 2)) {
-        was_event = event, was_player = player;
+    if (!cutscene && !is_new) {
         return;
     }
     char name[64] = "";
@@ -2310,7 +2309,13 @@ static void oot_skip_cutscene(Ctx *c) {
         name[n] = (char)recomp_load8(c, text + n), name[n + 1] = 0;
         if (!name[n]) break;
     }
-    if (is_new && env == 2) hos_log("rando: event: player %u of %u, \"%s\"%s", at, count, name, cutscene ? ": a cutscene" : "");
+    /* (every player an event starts is logged, with its class when it is not a cutscene's: a log then lists what plays
+       and what is not skipped, without HOS_OOT_SKIP_EVENTS) */
+    if (is_new) {
+        if (cutscene) hos_log("rando: event: player %u of %u, \"%s\": a cutscene", at, count, name);
+        else hos_log("rando: event: player %u of %u, \"%s\": not a cutscene (class %llx)", at, count, name,
+                     (unsigned long long)recomp_load64(c, player));
+    }
     was_event = event, was_player = player;
     if (env == 2 || !cutscene || oot_cutscene_kept(name)) return;
     const int64_t now = hos_now_ns();

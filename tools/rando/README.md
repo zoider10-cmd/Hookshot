@@ -221,7 +221,9 @@ skip ended the event before its steps had run, and the event started over and ov
 `Dm_Kokiri_0150` was passed over in about two seconds, the talk after it played and the Fairy Ocarina was given. A
 chest's scene and talk are flowcharts and play as ever. Kept: the title's, the credits', the opening narration (Skip
 opening passes that one over) and the game's system scenes (`Dm_SY_`). Not tried yet: every other cutscene, the
-bosses' and the songs' among them. `HOS_OOT_SKIP_EVENTS=2` logs each event and the player it plays, without skipping.
+bosses' and the songs' among them. With Skip cutscenes on, the log names every player an event starts (`rando: event:
+player 0 of 2, "Dm_Kokiri_0050": a cutscene`, or `...: not a cutscene (class <hex>)` for a flowchart or another kind), so
+what is skipped and what plays can be read from one run. `HOS_OOT_SKIP_EVENTS=2` logs the same without skipping.
 
 **Starting rupees** (`rando_start_rupees`, `--start-rupees`): a new game starts with 200 rupees, a full child's wallet in
 this game. Link's rupees are a whole number of the game's list of starting values (`GameData/GameDataList`,
