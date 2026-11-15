@@ -96,6 +96,9 @@ def main():
           '{"Item_DekuSeed", "Item_BulletBag_Small", "Item_BulletBag_Medium", "Item_BulletBag_Large"},' in host and
           "given = oot_pouch_change(c, oot_fill_bags[b][1], 1) >= 0;" in host and "oot_fill_bagged[k] = 0;" in host,
           "a bow or a Slingshot got with no quiver or Bullet Bag is not given the smallest first")
+    # (a bag the game gives with what goes in it is not filled: three nuts bought were twenty)
+    check("oot_fill_quiet = c->x[30] == 0x828d50acULL && (uint32_t)c->x[4] == 2 && !(c->x[7] & 1);" in host and
+          "if (oot_fill_quiet) {" in host, "a bag the game gives with its contents is filled all the same")
     check('{"Item_Wallet_", OOT_FILL_RUPEES},' in fills and '#define OOT_FILL_RUPEES "TBox_Rupee_Gold"' in host and
           "oot_pouch_change(c, holds, strcmp(holds, OOT_FILL_RUPEES) ? OOT_FILL_STEP : 1) >= 0) {" in host,
           "a wallet found is not filled with rupees, or ten gold rupees at a time")

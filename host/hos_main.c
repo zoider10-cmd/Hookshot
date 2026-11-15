@@ -1726,9 +1726,18 @@ static int oot_fill_bagged[OOT_FILLS];   /* (the smallest carrier was looked for
 static int oot_fill_wait[OOT_FILLS];   /* (a holder got: the updates until what it holds is added, or looked at again) */
 static int oot_fill_last[OOT_FILLS];   /* (the count before the last add; -1: none made yet) */
 static int oot_fill_adds[OOT_FILLS];   /* (the adds made) */
+/* (a bag the game itself gives with what goes in it, when Link has none: three Deku Nuts bought with no bag came with
+   the bag, and the fill then made them twenty. Reported from play, 2026-11-14, and seen in that game's log: the bag
+   added from 0x828d50ac with x4 2 and x7 0, as the Bomb Bag given with a chest's bombs is. Such a bag is not filled:
+   hos_oot_pouch_add sets this for the add it is in) */
+static int oot_fill_quiet;
 static void oot_fill_note(const char *item) {
     for (int k = 0; k < (int)OOT_FILLS; k++)
         if (!strncmp(item, oot_fills[k][0], strlen(oot_fills[k][0]))) {
+            if (oot_fill_quiet) {
+                hos_log("rando: %s is the game's own, given with what goes in it: not filled", item);
+                return;
+            }
             oot_fill_last[k] = -1, oot_fill_adds[k] = 0, oot_fill_bagged[k] = 0;
             __atomic_store_n(&oot_fill_wait[k], OOT_FILL_WAIT, __ATOMIC_RELEASE);
             hos_log("rando: %s got: its %s will be filled", item, oot_fills[k][1]);
@@ -2710,6 +2719,7 @@ int hos_oot_pouch_add(Ctx *c) {
     hos_log("rando: pouch add %s x%d (lr %#llx, x2 %#llx x4 %#llx x5 %#llx x6 %#llx x7 %#llx)", name, (int)(int32_t)c->x[3],
             (unsigned long long)c->x[30], (unsigned long long)c->x[2], (unsigned long long)c->x[4], (unsigned long long)c->x[5],
             (unsigned long long)c->x[6], (unsigned long long)c->x[7]);
+    oot_fill_quiet = c->x[30] == 0x828d50acULL && (uint32_t)c->x[4] == 2 && !(c->x[7] & 1);   /* (the game's own bag: oot_fill_note) */
     if (!strcmp(name, "Item_BombBag_Small") && c->x[30] == 0x828d50acULL && (uint32_t)c->x[4] == 2 && !(c->x[7] & 1)) {
         hos_log("rando: the Bomb Bag the game gives with bombs is not given");
         return 1;
