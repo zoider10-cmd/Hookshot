@@ -1892,13 +1892,25 @@ constexpr const char* teleport_names[] = {
     "Bottom of the Well",
     "Ice Cavern",
     "Gerudo Training Ground",
-    "Ganon's Castle"};
-constexpr const char* teleport_notes[] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "adult only", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    "Ganon's Castle",
+    // (the randomizer's fork: the bosses' rooms, oot_boss_rooms in host/hos_main.c, in its order after the places)
+    "Gohma",
+    "King Dodongo",
+    "Barinade",
+    "Phantom Ganon",
+    "Volvagia",
+    "Morpha",
+    "Bongo Bongo",
+    "Twinrova",
+    "Ganondorf"};
+constexpr const char* teleport_notes[] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "adult only", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+    "Deku Tree", "Dodongo's Cavern", "Jabu-Jabu's Belly", "Forest Temple", "Fire Temple", "Water Temple", "Shadow Temple", "Spirit Temple", "Ganon's Castle"};
 struct TeleportSection { const char* name; int first; };
-constexpr TeleportSection teleport_sections[] = {{"Overworld", 0}, {"Dungeons", 19}};
+constexpr TeleportSection teleport_sections[] = {{"Overworld", 0}, {"Dungeons", 19}, {"Bosses", 31}};
 constexpr int kTeleportSections = sizeof teleport_sections / sizeof teleport_sections[0];
 // (end of the generated teleport list)
 constexpr int kTeleports = sizeof teleport_names / sizeof teleport_names[0];
+static_assert(sizeof teleport_notes / sizeof teleport_notes[0] == kTeleports, "a teleport card without its note");
 int teleport_choice = 0;
 int teleport_columns = 1, teleport_page_rows = 1;   // (as last drawn: the cards in a row, the rows that fit: Page Up / Down)
 float teleport_scroll_px = 0, teleport_want_px = 0;   // (the cards' scroll, eased toward teleport_want_px)

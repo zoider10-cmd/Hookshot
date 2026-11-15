@@ -1055,6 +1055,29 @@ static const OotDestination oot_destinations[] = {   /* (generated: work/oot-tel
     {"InsideGanonCastle", "Entrance", "Dm_SY_BancChangeArrive_InsideGanonCastle_01",
      "InsideGanonCastle", "Entrance", "Dm_SY_BancChangeArrive_InsideGanonCastle_01"},   /* Ganon's Castle */
 };
+/* (the randomizer's fork) The Debug tab's Teleport page, its Bosses: each boss's room, the action OOT_TELEPORT_ACTION + the
+   destinations' count + its place here. The teleport to the dungeon's map, then Link put at the place as the Tracker's Go
+   there puts him (a metre above it, held three seconds). The places are the game's own start points in each boss's room,
+   by its door (the room's StartPos nearest the room's centre, from the map files), away from the room's blue warp: put
+   where the boss is, Link was above Gohma's ceiling and was taken out of the dungeon (seen without a window). Twinrova's
+   room has none: the place just inside its door. Asked for by the game's owner, to test the bosses without the dungeons. */
+typedef struct {
+    const char *folder, *ages;   /* (the dungeon's map folder; C the child, A the adult has it) */
+    float place[3];
+} OotBossRoom;
+static const OotBossRoom oot_boss_rooms[] = {
+    {"InsideTheDekuTree", "CA", {6.7f, 47.0f, 67.6f}},           /* Gohma */
+    {"DodongoCavern", "CA", {24.0f, 73.4f, -77.6f}},             /* King Dodongo */
+    {"InsideJabuJabuBelly", "CA", {42.4f, 102.0f, -98.1f}},      /* Barinade */
+    {"ForestTemple", "CA", {-6.0f, 74.7f, -66.0f}},              /* Phantom Ganon */
+    {"FireTemple", "CA", {-64.5f, 102.5f, 0.0f}},                /* Volvagia */
+    {"WaterTemple", "CA", {-4.5f, 131.4f, -75.3f}},              /* Morpha */
+    {"ShadowTemple", "CA", {-138.3f, -11.5f, 22.0f}},            /* Bongo Bongo */
+    {"SpiritTemple", "CA", {0.0f, 135.0f, -121.3f}},             /* Twinrova */
+    {"InsideGanonCastle", "CA", {0.0f, 171.1f, -11.3f}},         /* Ganondorf */
+};
+#define OOT_DESTINATIONS (sizeof oot_destinations / sizeof oot_destinations[0])
+#define OOT_BOSS_ROOMS (sizeof oot_boss_rooms / sizeof oot_boss_rooms[0])
 #define OOT_AGE_ACTION 999   /* (the Cheats page's Age row) */
 #define OOT_TELEPORT_ACTION 1000   /* (pouch edits use 200 to 348) */
 #define OOT_GAMEDATA_SLOT 0x84c9e180ULL   /* GameDataMgr, as ReserveBancChange's readers load it */
@@ -2410,7 +2433,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
         int waiting;
         int64_t until, settled;
     } check;
-    int go = 0;
+    int go = 0, boss = -1;
     static float target[3], velocity[3], mark[3], yaw;
     int flying = rx_option(HOS_OPT_CHEAT_FLIGHT, 0) > 0;
     /* An event that takes Link (a map change he flew into, the age toggle's, a cutscene) waits for him to stand, and the
@@ -2449,6 +2472,8 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
             const int sent = oot_toggle_age(c, actor);
             if (bridge_ticket) oot_bridge_teleport_done(bridge_ticket, sent);
         }
+    } else if (action >= OOT_TELEPORT_ACTION + (int)OOT_DESTINATIONS && action < OOT_TELEPORT_ACTION + (int)(OOT_DESTINATIONS + OOT_BOSS_ROOMS)) {
+        boss = action - OOT_TELEPORT_ACTION - (int)OOT_DESTINATIONS;   /* (a boss's room: taken below, as Go there) */
     } else if (action >= OOT_TELEPORT_ACTION) {
         const int sent = oot_teleport(c, actor, (unsigned)(action - OOT_TELEPORT_ACTION));
         if (bridge_ticket) oot_bridge_teleport_done(bridge_ticket, sent);
@@ -2476,11 +2501,21 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     }
     /* (the randomizer's tools are the randomizer's: the Tracker tab's Go there and the place in rando\goto.txt do nothing
        in the normal game or in Master Quest) */
-    if (action == 5 && hos_rando_on()) {
+    if ((action == 5 && hos_rando_on()) || boss >= 0) {   /* (a boss's room is a debug tool's: in any game) */
         char path[MAX_PATH + 32], current[80];
-        FILE *f = oot_place_file(path, sizeof path, "goto_check.txt") ? fopen(path, "r") : NULL;
-        const int read = f ? fscanf(f, "%f %f %f %39s %7s", &check.place[0], &check.place[1], &check.place[2], check.folder, check.ages) : 0;
-        if (f) fclose(f);
+        int read = 0;
+        if (boss >= 0) {
+            const OotBossRoom *room = &oot_boss_rooms[boss];
+            memcpy(check.place, room->place, sizeof check.place);
+            snprintf(check.folder, sizeof check.folder, "%s", room->folder);
+            snprintf(check.ages, sizeof check.ages, "%s", room->ages);
+            read = 5;
+            hos_log("cheats: boss room %d: %s", boss, room->folder);
+        } else {
+            FILE *f = oot_place_file(path, sizeof path, "goto_check.txt") ? fopen(path, "r") : NULL;
+            read = f ? fscanf(f, "%f %f %f %39s %7s", &check.place[0], &check.place[1], &check.place[2], check.folder, check.ages) : 0;
+            if (f) fclose(f);
+        }
         check.waiting = 0;
         int child = 1;
         oot_gamedata_bool(c, 0xcea220d3u, &child);   /* Sequence_IsChildhood */
