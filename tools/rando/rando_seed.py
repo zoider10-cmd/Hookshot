@@ -235,6 +235,36 @@ START_RUPEES = 200
 # --skip-intro starts the first at 14 and sends 23 on to 19: what the flow does after each cutscene, without it.
 OPENING = "Event/EventFlow/OpeningEvent.bfevfl.zs"
 PLAIN_EVENTS = ("KokiriForest_TreasureBox_NaviChatOff",)
+# Skip cutscenes, the talks (rando_skip_cutscenes). The game's side skips a cutscene that is a timeline (a flow file of
+# one timeline: 98 of the Dm_ scenes). The others (226) are flowcharts: camera moves, waits, animations and talks, with
+# what the scene does to the game among them, and the game's skip ends the whole event when asked of one (seen: the
+# event began over and over). Saria's first talk (the event KokiriForest_StopInFrontOfLinkHouse plays Dm_Kokiri_0060,
+# 12 talks, nothing else) and the owl's (Dm_HrlField_0010, Dm_LostWood_0000, Dm_ZoraRiver_0000...) are such scenes. So
+# the seed takes their presentation out of the flowchart (quiet_scene): each step that only shows something
+# (SCENE_SHOWS) is passed over, every way into it led to what follows it, and what the scene does stays: flags, items,
+# quest steps, the time, fades, warps, other events. A question is passed over only when one of its answers comes back
+# to it (the owl's "Do you want to hear it again?"): the other answer is taken; any other question stays, with its
+# talk. A branch of a fork, or an entry point, left with nothing goes to one of the scene's own steps that does nothing
+# (SCENE_NOTHING, the comments its makers left), so every scene so changed must have one. The scenes are the Dm_
+# flowcharts with a talk, less those where the player answers or plays (SCENE_KEEP_IF: the song lessons, the Great
+# Fairies, the games).
+SCENE_FLOWS = "Event/EventFlow"
+SCENE_SHOWS = frozenset((
+    "EventTalk", "EventWait", "EventMoveCameraAnimationInstructionsForFlowchart", "EventMoveToTargetPosCamera",
+    "EventPlayAS", "EventPlayASWithClothWarp", "EventPlayASWithRate", "EventPlayerPlayASForFlowchart",
+    "EventTriggerEmitXLink", "EventTriggerXLinkFadeByKey", "EventSetAdvancedDoFForFlowchart", "EventSetDoFForFlowchart",
+    "EventTriggerControllerRumble", "EventNorifyCutChangeForGraphics", "EventNaviMoveAroundToPlayer",
+    "EventNaviLookAtObject", "EventTriggerPlayerLookAtObject", "EventTriggerLookAtObject", "EventLookAtObjectImmediate",
+    "EventTriggerRequestLookAtTheFront", "EventTriggerPlayerRequestLookAtTheFrontLock", "EventNaviRequestLookAtTheFront",
+    "EventPlayerTurnAndLook", "EventPlayerTurnAndLookNow", "EventNPCTurnToTarget", "EventTriggerChangeEmotion",
+    "EventTriggerEmitNpcOrPlayerVoice", "EventSoundStartSound", "EventNaviRequestBallonMessage",
+    "EventTriggerRequestCameraShake", "EventNodeEffectEmit", "EventCloseMessageDialog"))
+SCENE_SHOWS_SUB = ("Common_Camera_Pln",)   # (sub-flows of these flows only set the camera's focus)
+SCENE_NOTHING = ("EventDemoProductSupportComment", "EventDoNothing")
+SCENE_CHOICE = "EventQueryTalkChoice2"
+SCENE_KEEP_IF = ("Dm_SY_Ocarina", "EventQueryTalkChoice3", "EventQueryTalkChoice4", "EventWaitForKeyInput", "EventOpenDoCommand",
+                 "RupeeDisplay", "EventTriggerSkipAcceptStart", "EventRequestQuit", "Dm_FairyFountain_", "EventPlayerPlayOcarinaFree",
+                 "EventTriggerRequestRideMe", "MiniGame")
 # The Kokiri Sword's chest starts an event of its own (GetSword, of the flow below): the chest is opened
 # (Dm_SY_Treasurebox, as every chest's), then Link puts the sword on his back (Dm_Kokiri_0063), then Navi speaks if
 # Mido is still in the way. With another item in the chest the second still played: Link put a sword on his back
@@ -2241,6 +2271,142 @@ def opening_skip(data):
     return bytes(out)
 
 
+def scene_steps(data):
+    """A scene's flowchart (a BFEVFL file of one flowchart) read for quiet_scene: (its steps, its entry points'
+    first steps with where each is kept, what its steps use). A step is a dict: kind (0 an action, 1 a switch, 2 a
+    fork, 3 a join, 4 a sub-flow call), at (where it is), what (an action's or a question's name, a sub-flow's flow),
+    and the places of its ways on: "next" (an action's, a join's, a call's), "cases" and "forks" (lists of places).
+    ValueError: not such a file."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+    if data[:6] != b"BFEVFL" or u16(0x20) != 1:
+        raise ValueError("not an event flow file of one flowchart")
+    chart = u64(u64(0x28))
+    if data[chart:chart + 4] != b"EVFL":
+        raise ValueError("the flowchart is not where the file says")
+    actors, count, entries_n = u64(chart + 0x28), u16(chart + 0x16), u16(chart + 0x18)
+    events, entries = u64(chart + 0x30), u64(chart + 0x40)
+
+    def text(ptr):
+        return bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if 0 < ptr < len(data) - 2 else ""
+
+    def choices(at):   # (a talk's ChoiceNumber: 0 when it asks nothing)
+        if not at:
+            return 0
+        keys = u64(at + 8)
+        for k in range(u16(at + 2)):
+            if keys and text(u64(keys + 8 + 16 * (k + 1) + 8)) == "ChoiceNumber":
+                item = u64(at + 0x10 + 8 * k)
+                return struct.unpack_from("<i", data, item + 0x10)[0] if data[item] == 2 else 0
+        return 0
+
+    steps = []
+    for i in range(count):
+        e = events + 0x30 * i
+        kind = data[e + 8]
+        s = {"kind": kind, "at": e, "what": "", "choices": 0}
+        if kind in (0, 1):
+            actor = actors + 0x38 * u16(e + 0x0c)
+            names = u64(actor + (0x18 if kind == 0 else 0x20))
+            s["what"] = text(u64(names + 8 * u16(e + 0x0e)))
+        if kind == 0:
+            s["next"] = e + 0x0a
+            if s["what"] == "EventTalk":
+                s["choices"] = choices(u64(e + 0x10))
+        elif kind == 1:
+            cases = u64(e + 0x18)
+            s["cases"] = [cases + 8 * c + 4 for c in range(u16(e + 0x0a))]
+        elif kind == 2:
+            forks = u64(e + 0x10)
+            s["forks"] = [forks + 2 * c for c in range(u16(e + 0x0a))]
+            s["join"] = e + 0x0c
+        elif kind == 3:
+            s["next"] = e + 0x0a
+        elif kind == 4:
+            s["next"] = e + 0x0a
+            s["what"] = text(u64(e + 0x18))
+        else:
+            raise ValueError("a step of an unknown kind (%d)" % kind)
+        steps.append(s)
+    firsts = [entries + 0x20 * k + 0x1c for k in range(entries_n)]
+    used = {s["what"] for s in steps if s["what"]}
+    return steps, firsts, used
+
+
+def quiet_scene(data):
+    """A scene (a BFEVFL file of one flowchart: a Dm_ flow the game plays as a flowchart) with what only shows
+    something passed over (SCENE_SHOWS, above): the new bytes, of the same size, and how many talks were taken out;
+    (None, 0) when nothing is to be taken out. What the scene does to the game is left. ValueError: a branch or an
+    entry point would be left with nothing and the scene has no step that does nothing (SCENE_NOTHING)."""
+    steps, firsts, _ = scene_steps(data)
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    END = 0xFFFF
+    nexts = lambda s: ([u16(s["next"])] if "next" in s else []) + [u16(c) for c in s.get("cases", []) + s.get("forks", [])] + (
+        [u16(s["join"])] if "join" in s else [])
+
+    def comes_to(start, goal):   # (whether a way from start comes to goal)
+        seen, stack = set(), [start]
+        while stack:
+            i = stack.pop()
+            if i == goal:
+                return True
+            if i == END or i >= len(steps) or i in seen:
+                continue
+            seen.add(i)
+            stack += nexts(steps[i])
+        return False
+
+    # (the steps passed over: what only shows; a question whose answers but one come back to it, with its switch)
+    shows = lambda s: (s["kind"] == 0 and s["what"] in SCENE_SHOWS and not s["choices"]) or (s["kind"] == 4 and s["what"] in SCENE_SHOWS_SUB)
+    passed, answer = set(i for i, s in enumerate(steps) if shows(s)), {}
+    for i, s in enumerate(steps):
+        if s["kind"] == 0 and s["what"] == "EventTalk" and s["choices"]:
+            j = u16(s["next"])
+            if j == END or steps[j]["kind"] != 1 or steps[j]["what"] != SCENE_CHOICE:
+                continue
+            onward = [u16(c) for c in steps[j]["cases"] if not comes_to(u16(c), i)]
+            if len(onward) == 1:
+                passed |= {i, j}
+                answer[j] = onward[0]
+    talks = sum(1 for i in passed if steps[i]["what"] == "EventTalk")
+    if not talks:
+        return None, 0
+
+    def onward(i):   # (the first step from i that is not passed over)
+        seen = set()
+        while i != END and i < len(steps) and i in passed and i not in seen:
+            seen.add(i)
+            i = answer[i] if i in answer else u16(steps[i]["next"])
+        return i
+
+    nothing = [i for i, s in enumerate(steps) if s["kind"] == 0 and s["what"] in SCENE_NOTHING and u16(s["next"]) == END]
+    out = bytearray(data)
+    if not nothing:   # (else one of the steps passed over that does not wait, an EventTrigger..., made to end there)
+        nothing = [i for i in sorted(passed) if steps[i]["kind"] == 0 and steps[i]["what"].startswith("EventTrigger")][:1]
+        if nothing:
+            struct.pack_into("<H", out, steps[nothing[0]]["next"], END)
+    for i, s in enumerate(steps):
+        for place in ([s["next"]] if "next" in s else []) + s.get("cases", []):
+            struct.pack_into("<H", out, place, onward(u16(place)))
+        if "join" in s:
+            struct.pack_into("<H", out, s["join"], onward(u16(s["join"])))
+        for place in s.get("forks", []):
+            to = onward(u16(place))
+            if to == END:
+                if not nothing:
+                    raise ValueError("a branch would be left with nothing, and the scene has no step that does nothing")
+                to = nothing[0]
+            struct.pack_into("<H", out, place, to)
+    for place in firsts:
+        to = onward(u16(place))
+        if to == END:
+            if not nothing:
+                raise ValueError("an entry point would be left with nothing, and the scene has no step that does nothing")
+            to = nothing[0]
+        struct.pack_into("<H", out, place, to)
+    return bytes(out), talks
+
+
 def sword_chest_plain(data):
     """Get_StoneOfForest (a BFEVFL file) with the Kokiri Sword's chest's own cutscene passed over: the new bytes, of the
     same size. Every step it relies on is checked first (see SWORD_EVENT, above): a flow that is not the one this
@@ -2486,7 +2652,7 @@ def dictionaries(romfs, zs):
 def settings(game):
     """the randomizer's lines of the options file (0 where it does not say)"""
     got = {"rando_on": 0, "rando_seed": 0, "rando_chests": 0, "rando_keys": 0, "rando_major": 0, "rando_open_deku": 0, "rando_open_forest": 0,
-           "rando_skip_intro": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0,
+           "rando_skip_intro": 0, "rando_skip_cutscenes": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0,
            "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
            "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0, "rando_open_door": 0}
     try:
@@ -3189,6 +3355,7 @@ def main():
     p.add_argument("--open-door", action="store_true", help="as rando_open_door=1: in a new game the Door of Time is open (OPEN_DOOR); the game's side lets the "
                                                              "Master Sword take Link through time from then on")
     p.add_argument("--skip-intro", action="store_true", help="as rando_skip_intro=1: a new game starts in Link's house, without the two opening cutscenes")
+    p.add_argument("--skip-cutscenes", action="store_true", help="as rando_skip_cutscenes=1: the scenes played as flowcharts lose their talks, camera moves and waits (quiet_scene); the game's side skips the others")
     p.add_argument("--skulltulas", type=int, choices=(0, 1, 2, 3), help="in place of rando_skulltulas: the Gold Skulltulas whose tokens change places "
                                                                         "with the chests' rupees and supplies. 1 dungeons, 2 overworld, 3 all")
     p.add_argument("--quests", action="store_true", help="as rando_quests=1: what characters give takes part with the chests (GIFTS)")
@@ -3245,6 +3412,7 @@ def main():
     a.open_forest = a.open_forest or ini["rando_open_forest"] != 0
     a.open_door = a.open_door or ini["rando_open_door"] != 0
     a.skip_intro = a.skip_intro or ini["rando_skip_intro"] != 0
+    a.skip_cutscenes = a.skip_cutscenes or ini["rando_skip_cutscenes"] != 0
     a.start_rupees = a.start_rupees or ini["rando_start_rupees"] != 0
     a.scrubs = a.scrubs or ini["rando_scrubs"] != 0
     a.progressive = a.progressive or ini["rando_progressive"] != 0
@@ -3306,7 +3474,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 7" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 7" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" talks skipped" if a.skip_cutscenes else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 10" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
@@ -4043,8 +4211,35 @@ def main():
         except (OSError, ValueError, struct.error) as e:
             sys.exit("%s: %s. Nothing written." % (SWORD_FLOW, e))
         print("the Kokiri Sword's chest holds another item: it opens without the cutscene of the sword")
+    # (Skip cutscenes: the scenes played as flowcharts without their talks, SCENE_SHOWS; a gift's scene as the gift made it)
+    scene_files = {}
+    if a.skip_cutscenes:
+        folder, talks, kept = os.path.join(romfs, *SCENE_FLOWS.split("/")), 0, []
+        for n in sorted(os.listdir(folder)):
+            stem = n.split(".")[0]
+            if not n.startswith("Dm_") or n.startswith("Dm_SY_") or stem.endswith(("_Effect", "_Env")) or not n.endswith(".bfevfl.zs"):
+                continue
+            rel = SCENE_FLOWS + "/" + n
+            try:
+                was = gift_files[rel] if rel in gift_files else unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
+                if struct.unpack_from("<H", was, 0x20)[0] != 1:
+                    continue   # (a timeline: the game's side skips it)
+                _, _, used = scene_steps(was)
+                if "EventTalk" not in used:
+                    continue
+                if any(k in w for k in SCENE_KEEP_IF for w in used | {stem}):
+                    kept.append(stem)
+                    continue
+                now, taken = quiet_scene(was)
+            except (OSError, ValueError, struct.error) as e:
+                sys.exit("a scene's flow, %s: %s. Nothing written." % (rel, e))
+            if now is not None:
+                (gift_files if rel in gift_files else scene_files)[rel] = now
+                talks += taken
+        print("Skip cutscenes: %d talks taken out of %d scene files; the scenes where Link answers or plays are as they were (%d: %s)" % (
+            talks, len(scene_files) + sum(1 for r in gift_files if r.startswith(SCENE_FLOWS + "/Dm_")), len(set(kept)), ", ".join(sorted(set(kept)))))
     for rel, data in (list(changed.items()) + list(new_tables.items()) + list(flag_files.items()) + list(pack_files.items()) + list(gift_files.items()) +
-                      list(shop_files.items())):
+                      list(shop_files.items()) + list(scene_files.items())):
         out = os.path.join(mod, "romfs", *rel.split("/"))
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, "wb") as f:

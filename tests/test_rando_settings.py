@@ -124,6 +124,20 @@ def sources(rows):
           "the skip is asked of a player that is not a cutscene (a flowchart skipped ends its event before its steps have run), or is not asked at all")
     check('static const char *const kept[] = {"Dm_Title", "Dm_StaffCredit", "Dm_Kokiri_0000", "Dm_SY_"};' in host,
           "the title, the credits, the opening narration or the game's system scenes are skipped")
+    # (the scenes the game plays as flowcharts, Saria's first words and the owl's: the seed takes their talks, camera moves
+    #  and waits out and keeps what they do. Seen without a window: the owl's Hyrule Field scene with no talk, in under 5 s)
+    check('a.skip_cutscenes = a.skip_cutscenes or ini["rando_skip_cutscenes"] != 0' in script and '(" talks skipped" if a.skip_cutscenes else "")' in script and
+          "now, taken = quiet_scene(was)" in script and "if struct.unpack_from(\"<H\", was, 0x20)[0] != 1:" in script and
+          '"rando_skip_cutscenes": 0' in script and "list(shop_files.items()) + list(scene_files.items())" in script,
+          "Skip cutscenes does not take the talks out of the scenes the game plays as flowcharts, or a seed made with it is not told apart")
+    check('    "EventTalk", "EventWait",' in script and 'SCENE_NOTHING = ("EventDemoProductSupportComment", "EventDoNothing")' in script and
+          '"Dm_SY_Ocarina"' in script and '"Dm_FairyFountain_"' in script and 'SCENE_CHOICE = "EventQueryTalkChoice2"' in script and
+          all('"%s"' % w not in script.split("SCENE_SHOWS = frozenset((")[1].split("))")[0] for w in (
+              "EventTriggerSetGameDataBool", "EventTriggerSetGameDataInt", "EventTriggerAddOrRemovePouchContent", "EventTransition", "EventEventFadeOut",
+              "EventEventFadeIn", "EventPlayerWarpToTargetPosAndRot", "EventWarpToTargetPosAndRot", "EventExecuteProgressChallengeStep", "EventTrigger_SetTime")),
+          "a scene's step that changes the game is taken out with its talks, or the scenes where Link answers or plays are not kept")
+    check("Saria's first words, the owl's" in launcher and "Saria's first words, the owl's" in read("gpu", "vk", "oot_rando.h"),
+          "the setting's words do not say that the talk scenes lose their talk")
     check("oot_rando_read(f, r, &bad)" in side and '"hookshot_options.ini"' in side and "const OotRando *hos_rando(void)" in side,
           "host/oot_rando.c does not read the options file")
     check("rando_seed.py" in side and "not placed yet" in side, "the log no longer says what places the chests and that the other settings do nothing yet")

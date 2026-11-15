@@ -2207,7 +2207,7 @@ class LauncherForm : Form {
         new object[] { "rando_progressive", "Progressive items", new[] { "Off", "On" }, new[] { 0, 1 },
             "An upgrade found gives the next one Link has not: bomb bags, the bow and quivers, the slingshot and bullet bags, Hookshot and Longshot, strength, scales, wallets, stick and nut bags, magic. A chest still shows the item it was shuffled as." },
         new object[] { "rando_skip_cutscenes", "Skip cutscenes", new[] { "Off", "On" }, new[] { 0, 1 },
-            "Cutscenes are passed over as soon as they start, with the game's own skip: Saria's goodbye, the Deku Tree's story and the like. Talk, chests and item scenes still play. Not the title, the opening narration or the credits." },
+            "Cutscenes are passed over as soon as they start, with the game's own skip: Saria's goodbye, the Deku Tree's story and the like. The scenes made of talk (Saria's first words, the owl's) lose their talk, camera moves and waits and keep what they do. Chests, item scenes, song lessons and the Great Fairies still play. Not the title, the opening narration or the credits." },
         new object[] { "rando_shop_shelves", "Every shop shelf", new[] { "Off", "On" }, new[] { 0, 1 },
             "With Shops. Off: four shelves of each shop sell a shuffled item, and what a game buys again and again stays for sale (bombs, arrows, nuts, potions, shields, tunics). On: every shelf of the six shops does, each sold once; those supplies then come from grass, pots and enemies." },
         new object[] { "rando_sword_shield", "Shuffle sword and shield", new[] { "Off", "On" }, new[] { 0, 1 },

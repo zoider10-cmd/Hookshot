@@ -225,6 +225,24 @@ bosses' and the songs' among them. With Skip cutscenes on, the log names every p
 player 0 of 2, "Dm_Kokiri_0050": a cutscene`, or `...: not a cutscene (class <hex>)` for a flowchart or another kind), so
 what is skipped and what plays can be read from one run. `HOS_OOT_SKIP_EVENTS=2` logs the same without skipping.
 
+The talks (the seed's side, with the same setting: the stamp says `talks skipped`). Of the game's 324 `Dm_` scenes 98 are
+timelines (a flow file of one timeline), which the skip above passes over; 226 are flowcharts, which it must not ask
+(see above), and 72 of those have talk: Saria's first words (`KokiriForest_StopInFrontOfLinkHouse` plays
+`Dm_Kokiri_0060`, 12 talks and nothing else), the owl's (`Dm_HrlField_0010` after the timeline `Dm_HrlField_0005`,
+`Dm_LostWood_0000`, `Dm_ZoraRiver_0000`...), the Deku Tree's, Rauru's. The seed takes their presentation out
+(`quiet_scene`, `SCENE_SHOWS`): each step that only shows something (a talk, a wait, a camera move, an animation, a
+look, Navi's moves) is passed over, every way into it leads to what follows it, and what the scene does stays (flags,
+items, quest steps, the time, fades, warps, other events). A question goes only when all of its answers but one come
+back to it (the owl's "hear it again?"); the other is taken. A branch of a fork or an entry point left with nothing goes
+to a step of the scene's own that does nothing (the makers' comments, `SCENE_NOTHING`), or else to one of the steps
+passed over that does not wait, made to end there. Kept as they are (`SCENE_KEEP_IF`): the song lessons, the Great
+Fairies, Lon Lon Ranch's horse scenes, Zelda's letter scene with its questions. Both files of a scene are changed (the
+`.110.` one too), and a gift's scene as the gift made it. A first seed: 543 talks out of 69 scene files.
+Seen without a window: the owl's Hyrule Field event (the save "Before Owl") showed the owl and went on in under five
+seconds, with no talk, and the game loaded the changed `Dm_HrlField_0010`. Not seen: Saria's first words (Link must come
+down from his house in a new game), and every other scene. Talk that is not a `Dm_` scene (what a character says when
+spoken to, Saria's words about the sword) is as it was.
+
 **Starting rupees** (`rando_start_rupees`, `--start-rupees`): a new game starts with 200 rupees, a full child's wallet in
 this game. Link's rupees are a whole number of the game's list of starting values (`GameData/GameDataList`,
 `PlayerStatus.CurrentRupee`, 0 in a new game), set there as the open ways' flags are (`flag_defaults`, kind `Int`).
