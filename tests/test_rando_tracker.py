@@ -126,7 +126,7 @@ def main():
     check(m and int(m.group(1)) == seed.CHECK_ROWS and "#define OOT_TRACKER_BASE 8192" in items and
           "static_assert(kTrackerChecks == OOT_TRACKER_MAX" in menu, "the game's side does not report as many checks as the script writes and the menu keeps")
     host_text = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%95[A-Z,-]|%31[0-9a-fA-F-]|%63[A-Za-z0-9_]"' in host_text and "if (got < 7) continue;" in host_text and
+    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%191[A-Z,/-]|%31[0-9a-fA-F-]|%63[A-Za-z0-9_]"' in host_text and "if (got < 7) continue;" in host_text and
           "rx_option_set(OOT_TRACKER_BASE + i, oot_checks[i].done == 1);" in host_text,
           "the game's side does not take the lines the menu takes, in their order, with what each gives")
     check("if (oot_checks[i].done == 1 || strcmp(oot_checks[i].item, name)) continue;" in host_text and
@@ -217,7 +217,7 @@ def main():
           "g.name, gift_key[h], gives[h])" in script and "gift_key = gift_keys(" in script, "the checks' file is not written with the seed, or a seed made before it is not made again")
     m = re.search(r"constexpr int kTrackerChecks = (\d+);", menu)
     check(m and int(m.group(1)) == seed.CHECK_ROWS, "the menu does not keep as many checks as the script may write")
-    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%95[A-Z,-]|%31[^|]|%63[^|]|%f %f %f"' in menu and "char area[48], kind[80], folder[40], ages[4];" in menu and seed.CHECK_NAME == 79 and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
+    check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%191[A-Z,/-]|%31[^|]|%63[^|]|%f %f %f"' in menu and "char area[48], kind[80], folder[40], ages[4];" in menu and seed.CHECK_NAME == 79 and '+ "checks.txt";' in menu, "the menu does not read the checks' file as it is written")
     check("if (press[3] || press[4]) tracker_pick[row] = (tracker_pick[row] + n + 1 + (press[4] ? 1 : -1)) % (n + 1), changed = true;" in menu and
           "else if (r.tracker >= 0) tracker_press(r.tracker, press, changed);" in menu,
           "Left and Right do not step through a row's checks and back to its own words")

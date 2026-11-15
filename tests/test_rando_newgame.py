@@ -219,12 +219,12 @@ def sources():
           "is without the Silver Scale, or an overworld place is changed")
     check(S.DOOR_NO_BOMBS <= S.DOOR_ADULT_AREAS and set(S.DOOR_SONGS) == set(S.DOOR_ADULT_AREAS) and
           all(v <= songs for v in S.DOOR_SONGS.values()) and (S._ZL, S._SARIA, S._TIME, S._STORMS) == (S.ZL, S.SARIA, S.TIME, S.STORMS) and
-          "a.open_forest, spots[h][0])" in script and "door_need(need, grown(h, area), a.open_forest, area)" in script,
+          "a.open_forest, spots[h][0])" in script and "each(door_need, forest(need, area), grown(h, area), a.open_forest, area)" in script,
           "the dungeons' own rules are not for the dungeons of an adult's alone, name songs that are not an adult's four, or are not asked")
     check(not S.DOOR_ADULT_AREAS & {"SpiritTemple", "DesertColossus", "KokiriForest", "InsideJabuJabuBelly", "DodongoCavern", "InsideTheDekuTree", "BottomOfTheWell"} and
           S.DOOR_ADULT_AREAS <= set(S.RULES),
           "a dungeon a child enters is taken for an adult's alone")
-    check("needs = {h: door_need(n, shelves[h][0].ages == \"A\" if h in shelves else" in script and
+    check("needs = {h: each(door_need, n, shelves[h][0].ages == \"A\" if h in shelves else" in script and
           "skull_asks = lambda h: door(step(" in script and "heart_asks = lambda h: door(step(" in script,
           "the Door of Time's rules are not the chests', the gifts', the Gold Skulltulas' and the Pieces of Heart's")
     # (the flag alone did not open the door: reported from play. The door's actor is put far under the map)

@@ -15,6 +15,7 @@
 // started with, and the Graphics tab's help lists them. Closing the menu then asks whether to restart now (menu_restart.h):
 // Later keeps the saved settings for the next start and is not asked again until they change; Restart now saves and
 // closes the window as the player would, and the game starts again (WM_APP + 9: host/hos_relaunch.c).
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -164,11 +165,12 @@ struct TrackerCheck {
     float pos[3];
     float stand[3];   // (where Link is put to go to it: a chest's front; its own place where the file has no other)
     char gives[64];   // (the item it gives, the game's name for it: said once it is collected; "" a file without it)
-    char needs[96];   // (with the songs a rule names up to 24 items. what the seed's rules ask for: kLogicItems' letters with commas, "-" nothing, "?" a file without it)
+    char needs[192];   // (what the seed's rules ask for: kLogicItems' letters with commas, "-" nothing, "?" a file without it; a rule's ways apart by "/", any one of them enough (placement 5: Zora's Domain by the river or the lake), two of a whole rule of 24 items at most)
 };
 /// A check with what Link carries: 1 in logic (he has all its rule asks for), 0 not (missing, when given: what he has
 /// not, by name), -1 not known (the file does not say, or no save's inventory has been read). Below the inventory's counts
 int tracker_in_logic(const TrackerCheck& k, std::string* missing = nullptr);
+int tracker_way_held(const char* way, size_t len, std::string* missing);   // (one way of a check's rule: tracker_in_logic)
 TrackerCheck tracker_checks[kTrackerChecks];
 int tracker_check_count = 0;
 // What the game's side says of each check, in the file's order (host/hos_main.c oot_tracker_refresh, each second): 1
@@ -2008,9 +2010,26 @@ constexpr LogicItem kLogicItems[] = {
 };
 int tracker_in_logic(const TrackerCheck& k, std::string* missing) {
     if (k.needs[0] == '?' || item_counts[0].load(std::memory_order_relaxed) < 0) return -1;
+    // (a rule's ways, apart by "/": in logic when one of them is held; missing is said of the way with the fewest)
+    std::string best;
+    int best_left = -1;
+    for (const char* way = k.needs; *way; way += strcspn(way, "/"), way += *way == '/') {
+        std::string left;
+        const int held = tracker_way_held(way, strcspn(way, "/"), &left);
+        if (held) return 1;
+        const int count = (int)std::count(left.begin(), left.end(), ',') + 1;
+        if (best_left < 0 || count < best_left) best_left = count, best = left;
+    }
+    if (missing) *missing = best;
+    return 0;
+}
+/// One way of a rule (its letters with commas, `len` of them; "-" nothing): 1 when Link carries all of it, else 0 and
+/// what he has not, by name, in missing
+int tracker_way_held(const char* way, size_t len, std::string* missing) {
     int in = 1;
-    for (const char* p = k.needs; *p && *p != '-'; p += strcspn(p, ","), p += *p == ',') {
-        const size_t n = strcspn(p, ",");
+    const char* end = way + len;
+    for (const char* p = way; p < end && *p != '-'; p += strcspn(p, ",/"), p += p < end && *p == ',') {
+        const size_t n = std::min((size_t)(end - p), strcspn(p, ",/"));
         bool known = false, has = false;
         const char* name = "an item this menu does not know";
         for (const LogicItem& item : kLogicItems) {
@@ -2315,7 +2334,7 @@ void tracker_load() {
             TrackerCheck& k = tracker_checks[checks];
             k.needs[0] = '?', k.needs[1] = 0;   // (a file written before the rules were in it)
             char hash[32], gives[64];   // (the game side's: host/hos_main.c oot_tracker_load)
-            const int got = line[0] == '#' ? 0 : sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%95[A-Z,-]|%31[^|]|%63[^|]|%f %f %f", k.area, k.kind,
+            const int got = line[0] == '#' ? 0 : sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%191[A-Z,/-]|%31[^|]|%63[^|]|%f %f %f", k.area, k.kind,
                                                         k.folder, k.ages, &k.pos[0], &k.pos[1], &k.pos[2], k.needs, hash, gives, &k.stand[0], &k.stand[1],
                                                         &k.stand[2]);
             if (got >= 7) {

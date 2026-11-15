@@ -266,7 +266,7 @@ def main():
           "the menu does not know a gating song's letters, or names a row the Inventory page has not")
     longest = len(",".join(S.CHECK_CODES.values()))
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    check(longest <= 95 and "char needs[96];" in menu and "|%95[A-Z,-]|" in menu and 'needs[96] = ""' in host and "|%95[A-Z,-]|" in host,
+    check(2 * longest + 1 <= S.CHECK_NEED == 191 and "char needs[192];" in menu and "|%191[A-Z,/-]|" in menu and 'needs[192] = ""' in host and "|%191[A-Z,/-]|" in host,
           "a rule that names every item (%d letters and commas) does not fit the menu's or the game's line" % longest)
     print("PASS: Songs")
 

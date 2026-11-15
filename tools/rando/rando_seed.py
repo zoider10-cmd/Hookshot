@@ -59,8 +59,10 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 4   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
-                # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need)
+PLACEMENT = 5   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+                # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
+                # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
+                #    asking for the forest's way out (forest_open)
 # (a chest with one of these parameters is left as it is: see the top of this file)
 KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__CheckActor", "Drop__DropActor_Substitute",
            "DropViewActor", "IsEnableRepeatOpen", "SpawnType")
@@ -1249,6 +1251,77 @@ def quest_need(need, area):
     return frozenset(need)
 
 
+class Either(tuple):
+    """A rule with alternatives (placement 5): a check is got when any one of them is held, each a frozenset of items
+    as a plain rule is. A plain rule stays a frozenset; met() and each() take either."""
+    def __new__(cls, ways):
+        ways = tuple(dict.fromkeys(frozenset(w) for w in ways))
+        if not ways:
+            raise ValueError("a rule with no way")
+        return tuple.__new__(cls, ways)
+
+    def __repr__(self):
+        return "Either(%s)" % " | ".join(sorted("{%s}" % ", ".join(sorted(w)) for w in self))
+
+
+def met(need, have):
+    """whether what Link has (a set) is what a rule asks for: every item of a plain rule, of one of an Either's ways"""
+    return any(way <= have for way in need) if isinstance(need, Either) else need <= have
+
+
+def each(step, need, *args, **kwargs):
+    """a rule as step makes it (a function from a frozenset to a frozenset, or to an Either): of each way of an Either
+    (one way made two is two ways), or of a plain rule"""
+    if not isinstance(need, Either):
+        return step(need, *args, **kwargs)
+    ways = []
+    for way in need:
+        made = step(way, *args, **kwargs)
+        ways += list(made) if isinstance(made, Either) else [made]
+    return either(ways)
+
+
+def either(ways):
+    """a rule from its ways: a plain one when they are one way, nothing when one of them asks for nothing"""
+    ways = [frozenset(w) for w in ways]
+    if any(not w for w in ways):
+        return NONE
+    ways = list(dict.fromkeys(ways))
+    return Either(ways) if len(ways) > 1 else ways[0]
+
+
+# Zora's Domain for a child (placement 5, the game's owner's word): by Zora's River, which asks for bombs (its boulders)
+# and Zelda's Lullaby (the waterfall), or by Lake Hylia, which asks for the Silver Scale (the dive into the Domain)
+# and the way out of the forest. A rule of a child's place in Zora's Domain or Jabu-Jabu that asks for the river's
+# way (CHILD_BOMBS: the Zoras' diving game, the Zora shop, Jabu-Jabu's chest with Ruto) gets the lake's way beside it:
+# what it asks for besides the river's way, with CHILD and the Silver Scale. The songs are named before this (song_need
+# adds the Lullaby there), and the lake's way leaves it out.
+ZORA_WAY_AREAS = ("ZoraDomain", "InsideJabuJabuBelly")
+
+
+def zora_ways(need, area):
+    """a rule of a place in Zora's Domain or Jabu-Jabu with the lake's way beside the river's (see above)"""
+    if area not in ZORA_WAY_AREAS or isinstance(need, Either) or not need >= CHILD_BOMBS or BM in need:
+        return need
+    lake = (need - CHILD_BOMBS - {ZL}) | CHILD | {SSC}
+    return either((need, lake))
+
+
+# Open forest exit (placement 5): CHILD in a rule is the forest's way out (the sword and the Slingshot, the Deku Tree
+# done), which the setting opens from a new game's start: so a rule that asks for it, and not for what it takes to be
+# an adult (ADULT: the Boomerang, Jabu-Jabu, among it), asks for it no more. An adult's rules keep it: the three
+# stones still ask for the Deku Tree. In Dodongo's Cavern CHILD was also the way in, which bombs open (FOREST_FLOOR):
+# its rules keep bombs.
+FOREST_FLOOR = {"DodongoCavern": frozenset((BB,))}
+
+
+def forest_open(need, area=None):
+    """a rule with Open forest exit (see above); area: the place's, for FOREST_FLOOR"""
+    if not need >= CHILD or BM in need:
+        return need
+    return frozenset((need - CHILD) | FOREST_FLOOR.get(area, NONE))
+
+
 def rule(area, event):
     """what a chest of this area with this event asks for; an area the rules do not know: everything"""
     default, by_event = RULES.get(area, (PROGRESSION, {}))
@@ -1260,7 +1333,7 @@ def collect(placed):
     items each round of opening every chest he can reach adds."""
     have, spheres = set(), []
     while True:
-        new = sorted({item for need, item in placed if item in PROGRESSION and item not in have and need <= have})
+        new = sorted({item for need, item in placed if item in PROGRESSION and item not in have and met(need, have)})
         if not new:
             return spheres
         have.update(new)
@@ -1274,7 +1347,7 @@ def reach(have, placed):
     while grew:
         grew = False
         for need, item in placed:
-            if item not in have and need <= have:
+            if item not in have and met(need, have):
                 have.add(item)
                 grew = True
     return have
@@ -3372,6 +3445,9 @@ def gift_keys(gifts, chests):
     return {g: c ^ GIFT_KEY for g, c in zip(gifts, chests)}
 
 
+CHECK_NEED = 191   # (a check's rule in the tracker's file: the menu's needs[192] and the game's side's)
+
+
 def check_lines(chests, skulls, gifts=()):
     """The checks file's lines. chests, skulls and gifts: [(area (the Banc folder), position, ages, what its rule asks
     for, its name, its actor's hash)]; a chest or a Gold Skulltula without a name is "Chest" or "Gold Skulltula". The
@@ -3388,8 +3464,12 @@ def check_lines(chests, skulls, gifts=()):
                 continue
             name = more[0] if more else plain
             rows.append([AREA_NAMES.get(area, area).replace("|", "/")[:47], (name[:1].upper() + name[1:]).replace("|", "/"), area, ages, pos,
-                         ",".join(code for item, code in CHECK_CODES.items() if item in need) or "-", order, more[1] if len(more) > 1 else None,
+                         "/".join(",".join(code for item, code in CHECK_CODES.items() if item in way) or "-" for way in (need if isinstance(need, Either) else (need,))),
+                         order, more[1] if len(more) > 1 else None,
                          more[2] if len(more) > 2 else "", more[3] if len(more) > 3 else None])
+    too_long = [r for r in rows if len(r[5]) > CHECK_NEED]
+    if too_long:   # (the menu's and the game's side read a rule of CHECK_NEED letters, commas and slashes at most)
+        raise ValueError("a rule of %s is %d letters long, more than the %d the tracker reads" % (too_long[0][1], len(too_long[0][5]), CHECK_NEED))
     rows.sort(key=lambda r: (r[0].lower(), r[6], r[1], r[4]))
     same = collections.Counter((r[0], r[1]) for r in rows if r[1] not in ("Chest", "Gold Skulltula"))
     count = collections.Counter()
@@ -3511,7 +3591,7 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart
             for k, item in enumerate(order):
                 # Link with every gating item still to be placed, and what the chests filled so far then give him
                 have = reach(order[k + 1:], fixed + [(needs[h], i) for h, i in placed.items()])
-                free = [h for h in rest if h not in placed and needs[h] <= have and (not (bound or only) or fits(item, h))]
+                free = [h for h in rest if h not in placed and met(needs[h], have) and (not (bound or only) or fits(item, h))]
                 if short and any(h in only and item in only[h][0] for h in free):
                     free, short = [h for h in free if h in only and item in only[h][0]], short - 1
                 elif only and not first(item) and songs_in and any(h in only for h in free):
@@ -3878,18 +3958,25 @@ def main():
     if a.songs:    # (the songs named: a lesson's line names its own; the frogs ask for everything)
         needs = {h: n if h in lessons else frozenset(PROGRESSION) if h in gifts and gifts[h].key in SONGS_HARD else
                  song_need(n, spots[h][0], gifts[h].key if h in gifts else None) for h, n in needs.items()}
+    if placement >= 5:   # (Zora's Domain by the river or by the lake, zora_ways)
+        needs = {h: zora_ways(n, spots[h][0]) for h, n in needs.items()}
     gear = shield_need if shield_shelf and not a.open_deku else (lambda need: need)   # (the shield with the sword: Mido)
     if shield_shelf:
         PROGRESSION = PROGRESSION | SHIELD_GATES
-    step = (lambda need: progressive_need(gear(need), PROGRESSION)) if a.progressive else gear
+    plain_step = (lambda need: progressive_need(gear(need), PROGRESSION)) if a.progressive else gear
+    step = lambda need: each(plain_step, need)
     needs = {h: step(n) for h, n in needs.items()}
+    # (Open forest exit: the forest's way out asked for no more, forest_open; with the place, for FOREST_FLOOR)
+    forest = (lambda need, area: each(forest_open, need, area)) if placement >= 5 and a.open_forest else (lambda need, area: need)
+    needs = {h: forest(n, spots[h][0]) for h, n in needs.items()}
     # (Open Door of Time: what it takes to be an adult is not asked of an adult's own places, door_need)
     grown = lambda h, area: area in DOOR_ADULT_AREAS or check_ages(maps[h]) == "A" if h in maps else area in DOOR_ADULT_AREAS
     if a.open_door:
-        needs = {h: door_need(n, shelves[h][0].ages == "A" if h in shelves else
+        needs = {h: each(door_need, n, shelves[h][0].ages == "A" if h in shelves else
                               GIFT_PLACES.get(gifts[h].key, ("CA",))[0] == "A" if h in gifts else grown(h, spots[h][0]), a.open_forest, spots[h][0])
                  for h, n in needs.items()}
-    door = (lambda need, h, area: door_need(need, grown(h, area), a.open_forest, area)) if a.open_door else (lambda need, h, area: need)
+    door = (lambda need, h, area: each(door_need, forest(need, area), grown(h, area), a.open_forest, area)) if a.open_door else (
+        lambda need, h, area: forest(need, area))   # (with Open forest exit's step: the Gold Skulltulas' and the Pieces of Heart's)
     # (what a Gold Skulltula asks for, by the same settings)
     skull_asks = lambda h: door(step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
         quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0]))), h, skulls[h][0])

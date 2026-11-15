@@ -456,6 +456,29 @@ def main():
     check(seed.BOMBCHU_ACTORS == ("Npc_Hylia_021_Shop_Child", "BGM_Shop_Market_Bombchu") and seed.BOMBCHU_SIGN == "Land_HrlCity_ShopSign_A_01" and
           "new, count = bombchu_presence(data)" in script and "if chu_done != 3:" in script,
           "the Bombchu Shop's keeper is not there from the start, or its sign stays")
+    # ---- placement 5: rules with alternatives; Zora's Domain by the river or the lake; Open forest exit ----
+    E = seed.Either
+    river = seed.song_need(seed.CHILD_BOMBS, "ZoraDomain")
+    ways = seed.zora_ways(river, "ZoraDomain")
+    check(seed.PLACEMENT >= 5 and isinstance(ways, E) and set(ways) == {river, seed.CHILD | {seed.SSC}} and
+          seed.zora_ways(seed.CHILD_BOMBS, "KakarikoVillage") == seed.CHILD_BOMBS and seed.zora_ways(seed.ADULT, "ZoraDomain") == seed.ADULT,
+          "a child's place in Zora's Domain is not had by the river or by the lake, or another rule is changed")
+    opened = seed.each(seed.forest_open, ways)
+    check(set(opened) == {frozenset({seed.BB, seed.ZL}), frozenset({seed.SSC})} and seed.forest_open(seed.ADULT) == seed.ADULT and
+          seed.forest_open(seed.CHILD) == seed.NONE and seed.forest_open(frozenset({seed.S})) == frozenset({seed.S}),
+          "Open forest exit does not take the forest's way out from a child's rules, or takes it from an adult's")
+    check(seed.met(opened, {seed.SSC}) and seed.met(opened, {seed.BB, seed.ZL}) and not seed.met(opened, {seed.BB}) and
+          seed.met(seed.CHILD, {seed.S, seed.SL}) and not seed.met(seed.CHILD, {seed.S}) and seed.either([seed.CHILD, seed.NONE]) == seed.NONE and
+          seed.either([seed.CHILD, seed.CHILD]) == seed.CHILD and seed.collect([(E([{seed.BB}, {seed.HAM}]), seed.BOW), (seed.NONE, seed.HAM)])[-1] == [seed.BOW],
+          "a rule with ways is not got by any one of them, or not as a plain rule otherwise")
+    check("if placement >= 5:   # (Zora's Domain by the river or by the lake, zora_ways)" in script and
+          "needs = {h: forest(n, spots[h][0]) for h, n in needs.items()}" in script and "met(needs[h], have)" in script and
+          seed.forest_open(seed.CHILD, "DodongoCavern") == frozenset({seed.BB}) and seed.forest_open(seed.CHILD | {seed.BB}, "DodongoCavern") == frozenset({seed.BB}) and
+          '"/".join(",".join(code for item, code in CHECK_CODES.items() if item in way)' in script,
+          "the rules' ways are not made, read by the placement, or written for the tracker")
+    menu = (ROOT / "gpu" / "vk" / "vk_menu.cpp").read_text(encoding="utf-8")
+    check("const int held = tracker_way_held(way, strcspn(way, \"/\"), &left);" in menu and "if (held) return 1;" in menu,
+          "the menu's tracker does not take a check with one of its rule's ways held as in logic")
     print("PASS: Shops")
 
 
