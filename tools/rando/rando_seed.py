@@ -74,7 +74,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 17   # (17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 19   # (19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -220,6 +220,12 @@ FIELD_CLOCK = {"HyruleField_ArriveEntrance": True}
 # this one alone brought the HUD at the next load of the area, and the 98 others did not. It is a plain truth value,
 # false in a new game. The game's side sets it for a save that has it put out (host/hos_main.c).
 DPAD_HUD = {"#7be57cb0": True}
+# Link's door. A new game's Link is in his house, the door shut until he walks up to it: the scene at the door
+# (Dm_Kokiri_0045, the event at it) plays Link's waking (Dm_Kokiri_0050) and sets the door's flag and the scene's own,
+# and asks the door's flag first (open: nothing plays). The house's logic (Land_Kokiri_House_A_Prefab) opens the door
+# by the same flag. With Skip opening on a new game starts with both set: the door open, nothing at it (asked for by the
+# game's owner: the Kokiri Sword given with the Debug tab did as much).
+LINK_DOOR = {"KokiriForest_LinkHouseDoor_Open": True, "Dm_Kokiri_0050_After_Near_End": True}
 # Starting rupees: the list's whole number PlayerStatus.CurrentRupee is what Link has, 0 in a new game. With the
 # setting on a new game starts with START_RUPEES of them (flag_defaults, kind "Int"). A game already begun keeps
 # what its save says.
@@ -280,7 +286,11 @@ SCENE_KEEP = ("Dm_MelodyGet_Sun",)
 # (MelodyOfSpirit_01/_02, MelodyOfShine: a switch on the Shadow Temple's quest step, then the talk), the windmill man's
 # after the Song of Storms in his own flow. Seen in play: Sheik's three lines before "You learned...", at the Colossus.
 # Those entry points are quieted too, only what they come to (quiet_scene's entries); the flows they are in are not.
-SCENE_LESSON_SKIP_CALLS = ("GetPouchContent", "Dm_SY_Ocarina", "Common_Camera_Pln")   # (the Royal Family's Tomb: its gift is a scene of its own, Dm_MelodyGet_Sun_03, after the tomb's play)
+SCENE_LESSON_SKIP_CALLS = ("GetPouchContent", "Dm_SY_Ocarina", "Common_Camera_Pln")
+# A scene that gives an item and has no talk (Saria's ocarina after her goodbye, Dm_Kokiri_0155; Zelda's Light Arrows,
+# Dm_TimeTemple_0130) is taken too: its presentation goes and its gift stays (seen in play: the ocarina's scene played
+# whole after the goodbye's was skipped).
+SCENE_GIFTS = ("GetPouchContent", "Dm_SY_GetInEvent")   # (the Royal Family's Tomb: its gift is a scene of its own, Dm_MelodyGet_Sun_03, after the tomb's play)
 SCENE_NOTHING = ("EventDemoProductSupportComment", "EventDoNothing")
 SCENE_CHOICE = ("EventQueryTalkChoice2", "EventQueryTalkChoice3", "EventQueryTalkChoice4")
 SCENE_KEEP_IF = ("EventWaitForKeyInput", "EventOpenDoCommand",
@@ -2463,7 +2473,7 @@ def quiet_scene(data, entries=None):
             answer[j] = to
             changed = True
     talks = sum(1 for i in passed if steps[i]["what"].startswith("EventTalk"))
-    if not talks:
+    if not talks and not (entries is None and passed and any(s["kind"] == 4 and s["what"] in SCENE_GIFTS for s in steps)):
         return None, 0
 
     return lead_past(data, steps, firsts, passed, answer), talks
@@ -3925,7 +3935,7 @@ def main():
         for n in lists:
             try:
                 was = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
-                new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **(OPEN_DOOR if a.open_door else {})))
+                new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **(OPEN_DOOR if a.open_door else {}), **(LINK_DOOR if a.skip_intro else {})))
                 if shelf_flag:   # (the same file: the shelves' flags; a flag the game has not is an error)
                     flag_defaults(new if new is not None else was, {name: False for name in shelf_flag.values()})
                     more = flag_defaults(new if new is not None else was, shelf_start) if shelf_start else None
@@ -4318,7 +4328,6 @@ def main():
         print("\n".join(spoiler[:50]))
         print("(dry run: nothing written)")
         return
-    removed = remove_old(mod)
     written = []
     if a.skip_intro:
         try:
@@ -4348,7 +4357,7 @@ def main():
                 if struct.unpack_from("<H", was, 0x20)[0] != 1:
                     continue   # (a timeline: the game's side skips it)
                 _, _, used = scene_steps(was)
-                if "EventTalk" not in used:
+                if "EventTalk" not in used and not any(g in used for g in SCENE_GIFTS):
                     continue
                 if stem in SCENE_KEEP or any(k in w for k in SCENE_KEEP_IF for w in used | {stem}):
                     kept.append(stem)
@@ -4397,6 +4406,9 @@ def main():
                 files[rel] = now
                 videos |= set(left_out)   # (not `which`: the chests' setting's name)
         print("Skip cutscenes: the videos %s are left out" % ", ".join(sorted(videos)))
+    # (the last seed's files are taken away only now, when everything is made: a step above that fails leaves it whole.
+    #  Seen: a flow a lesson calls that could not be quieted left the mod without its stamp and its checks)
+    removed = remove_old(mod)
     for rel, data in (list(changed.items()) + list(new_tables.items()) + list(flag_files.items()) + list(pack_files.items()) + list(gift_files.items()) +
                       list(shop_files.items()) + list(scene_files.items())):
         out = os.path.join(mod, "romfs", *rel.split("/"))
