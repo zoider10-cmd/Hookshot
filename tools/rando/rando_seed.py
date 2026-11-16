@@ -81,7 +81,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 34   # (34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 35   # (35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -143,6 +143,14 @@ OPEN = {
 # from before: host/hos_main.c oot_time_door.)
 OPEN_DOOR = {"Market_Child_TimeTempleDoor_Opened": True, "HavePlayedEvent.Dm_TimeTemple_0065": True}
 DOOR_ACTOR, DOOR_AREA, DOOR_AWAY = "Obj_TimeTemple_Door_A_01", "Market", 2000.0
+# The adult's "A" at the sword (reported from play, 2026-11-14: putting the sword back works, no prompt). The adult's
+# sword logic (SWORD_PROMPT_LOGIC, 4 nodes) deletes the sword's attention, the prompt, while the Forest Temple is not
+# done (node 0 SageOfForest_IsCompleted_Exp, node 1 InvBool, into node 2's Logic_Delete). With Open Door of Time that
+# input is unlinked (sword_prompt_open), as the file's other unlinked inputs are: the prompt is always there. Tried
+# before: another expression in its place (none is true that early) and the plain flag in the expression's place (the
+# node reads expressions only).
+SWORD_PROMPT_LOGIC = "Logic/Market_Adult_Prefab_89da.logic.module.ainb"
+SWORD_PROMPT_INPUT = 0x4E0   # (node 2's Logic_Delete input: its name, node, output, flags, default)
 # Sheik. Reported from play, 2026-11-14: an adult cannot go back, "he stops you until you beat the forest temple".
 # Seen without a window: he stands at the sword's stone (Npc_Hylia_Sheik_Adult of the adult's Market, 1.4 m from the
 # sword), so the button there is his talk, and the game's side asks for nothing when the game answers the button
@@ -2575,6 +2583,24 @@ def bombchu_door_open(data):
     return bytes(out)
 
 
+def sword_prompt_open(data):
+    """The adult's Master Sword logic (SWORD_PROMPT_LOGIC) with its attention's Logic_Delete input unlinked: the new
+    bytes, of the same size. The input (name, node, its output, flags, default) took node 1, InvBool of the Forest
+    Temple's expression; unlinked as the file's other unlinked inputs are (node 0xffff, flags 0x01800000, default 0),
+    the prompt is never deleted. ValueError: the file is not the one this was written for."""
+    u32 = lambda at: struct.unpack_from("<I", data, at)[0]
+    if data[:4] != b"AIB " or u32(4) != 0x408 or u32(0x10) != 4 or b"SageOfForest_IsCompleted_Exp" not in data:
+        raise ValueError("not the AI file of 4 nodes this was written for")
+    pool = u32(0x24)
+    name = lambda off: data[pool + off:].split(bytes(1))[0]
+    at = SWORD_PROMPT_INPUT
+    if name(u32(at)) != b"Logic_Delete" or data[at + 4:at + 16] != struct.pack("<HHII", 1, 0, 0, 0):
+        raise ValueError("the prompt's Logic_Delete is not linked as this was written for")
+    out = bytearray(data)
+    out[at + 4:at + 16] = struct.pack("<HHII", 0xFFFF, 0, 0x01800000, 0)
+    return bytes(out)
+
+
 def scene_steps(data):
     """A scene's flowchart (a BFEVFL file of one flowchart) read for quiet_scene: (its steps, its entry points'
     first steps with where each is kept, what its steps use). A step is a dict: kind (0 an action, 1 a switch, 2 a
@@ -4848,6 +4874,12 @@ def main():
     except (OSError, ValueError, struct.error) as e:
         sys.exit("%s: %s. Nothing written." % (BOMBCHU_DOOR_LOGIC, e))
     print("the Bombchu Shop's door opens at night from a new game's start")
+    if a.open_door:   # (the adult's "A" at the sword from the start, SWORD_PROMPT_LOGIC)
+        try:
+            flag_files[SWORD_PROMPT_LOGIC] = sword_prompt_open(unpack(open(os.path.join(romfs, *SWORD_PROMPT_LOGIC.split("/")), "rb").read(), zs, dicts))
+        except (OSError, ValueError, struct.error) as e:
+            sys.exit("%s: %s. Nothing written." % (SWORD_PROMPT_LOGIC, e))
+        print("an adult has the sword's prompt from the start")
     # (the Kokiri Sword's chest with another item in it: without the cutscene of the sword put on Link's back)
     if any(spots[h][6] == SWORD_EVENT and item != S for h, item in gives.items()):
         try:
