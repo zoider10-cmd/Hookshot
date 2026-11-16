@@ -1773,6 +1773,31 @@ static void oot_tracker_item(const char *name) {
 #define OOT_PIECE_VALLEY "Obj_GerudoValley_Heart_Piece"
 #define OOT_PIECE_WAIT 600   /* (the player's updates a piece counted late is waited for: some seconds) */
 static int oot_piece_back;   /* (a piece to take back out of the pouch: the updates it is still waited for) */
+/* (a piece that gives another item still healed Link, as a piece does: bug 4, reported 2026-11-13. Until this time
+   Link's life is not let rise over what it was before the piece: oot_piece_heal, in the player's update. The heal is
+   not the life write that patch_life hooks (tried: no heal went through it, and Link was healed all the same)) */
+#define OOT_PIECE_NO_HEAL 15000000000LL
+static int64_t oot_no_heal_until;
+static uint32_t oot_life_seen, oot_life_held;   /* (Link's life, in quarters, at the player's last update; kept) */
+static void oot_piece_heal(Ctx *c, int64_t now, uint64_t actor) {
+    if (!hos_oot_is_player(c, actor)) return;
+    const uint64_t life_at = recomp_load64(c, actor + 7184);
+    if (life_at < HOS_HEAP_BASE || (life_at & 7)) return;   /* (not made yet: seen 0x2f) */
+    const uint32_t life = recomp_load32(c, life_at + 8);
+    static int told;
+    if (!told && getenv("HOS_OOT_PIECES")) told = 1, hos_log("rando: Link's life read: %u quarters (at 0x%llx)", life, (unsigned long long)life_at);
+    if (now >= __atomic_load_n(&oot_no_heal_until, __ATOMIC_ACQUIRE)) {
+        __atomic_store_n(&oot_life_seen, life, __ATOMIC_RELAXED);
+        return;
+    }
+    const uint32_t held = __atomic_load_n(&oot_life_held, __ATOMIC_RELAXED);
+    if (life > held) {
+        recomp_store32(c, life_at + 8, held);
+        hos_log("rando: the Piece of Heart's heal is taken back (%u -> %u quarters)", life, held);
+    } else {
+        __atomic_store_n(&oot_life_held, life, __ATOMIC_RELAXED);   /* (a hit taken meanwhile stands) */
+    }
+}
 /* (the randomizer's fork) A bag found is a full bag. What Link carries a counted item in (a Bomb Bag, a quiver or the
    bow, a Bullet Bag or the Slingshot, a Deku Stick bag, a Deku Nut bag) came empty when a seed gave it: a Deku Nut bag
    bought with no nuts held showed nothing in the Items screen, and was taken for a thing that did nothing (its owner's
@@ -2522,6 +2547,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
         else if (asked) action = OOT_TELEPORT_ACTION + asked - 1;
     }
     oot_teleport_followup(c);
+    oot_piece_heal(c, now, recomp_load64(c, components + 800) - 0x1d50);   /* (Link's own actor: hos_oot_lift_player) */
     oot_inventory_refresh(c, now);
     oot_tracker_refresh(c, now, actor);
     oot_time_door(c, now, actor);
@@ -3054,6 +3080,9 @@ int hos_oot_pouch_add(Ctx *c) {
         if ((!strcmp(name, OOT_PIECE) || !strcmp(name, OOT_PIECE_VALLEY)) && c->x[30] != 0x828d50acULL &&
             oot_piece_gives(gives, sizeof gives)) {
             hos_log("rando: the Piece of Heart lying here is the seed's %s: that is given", gives);
+            /* (and the piece's heal is not: bug 4, oot_piece_heal) */
+            __atomic_store_n(&oot_life_held, __atomic_load_n(&oot_life_seen, __ATOMIC_RELAXED), __ATOMIC_RELAXED);
+            __atomic_store_n(&oot_no_heal_until, hos_now_ns() + OOT_PIECE_NO_HEAL, __ATOMIC_RELEASE);
             /* (the piece is counted all the same, by its own taking and not by this add: see oot_piece_gives. The
                valley's has been counted by now, the others are counted after it. One piece is taken out again: now
                when Link has one, so that the count to come cannot make the fourth of three; else when it has come) */
