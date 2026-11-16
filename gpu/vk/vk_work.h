@@ -55,6 +55,7 @@ inline void note_work() {
 #define vkCmdBindVertexBuffers2(...) (::mkwvk::rec::rx_vkCmdBindVertexBuffers2(__VA_ARGS__))
 #define vkCmdPushConstants(...) (::mkwvk::rec::rx_vkCmdPushConstants(__VA_ARGS__))
 #define vkCmdPushDescriptorSetKHR(...) (::mkwvk::rec::rx_vkCmdPushDescriptorSetKHR(__VA_ARGS__))
+#define vkCmdPushDescriptorSetWithTemplateKHR(...) (::mkwvk::rec::rx_vkCmdPushDescriptorSetWithTemplateKHR(__VA_ARGS__))
 #define vkCmdSetViewport(...) (::mkwvk::rec::rx_vkCmdSetViewport(__VA_ARGS__))
 #define vkCmdSetScissor(...) (::mkwvk::rec::rx_vkCmdSetScissor(__VA_ARGS__))
 #define vkCmdSetViewportWithCount(...) (::mkwvk::rec::rx_vkCmdSetViewportWithCount(__VA_ARGS__))

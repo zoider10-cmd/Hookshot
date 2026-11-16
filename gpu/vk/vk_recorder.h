@@ -53,6 +53,7 @@
 #include <new>
 #include <thread>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #include <immintrin.h>
@@ -79,7 +80,7 @@ extern std::atomic<bool> par_active;   // (vk_replay.cpp: a parallel replay's se
     A(vkCmdClearColorImage) A(vkCmdClearDepthStencilImage) A(vkCmdClearAttachments) V(vkCmdFillBuffer) A(vkCmdUpdateBuffer)          \
     V(vkCmdBeginQuery) V(vkCmdEndQuery)                                                                                            \
     V(vkCmdBindPipeline) A(vkCmdBindDescriptorSets) V(vkCmdBindIndexBuffer) A(vkCmdBindVertexBuffers2) A(vkCmdPushConstants)        \
-    A(vkCmdPushDescriptorSetKHR)                                                                                                   \
+    A(vkCmdPushDescriptorSetKHR) A(vkCmdPushDescriptorSetWithTemplateKHR)                                                          \
     A(vkCmdSetViewport) A(vkCmdSetScissor) A(vkCmdSetViewportWithCount) A(vkCmdSetScissorWithCount) A(vkCmdSetBlendConstants)       \
     V(vkCmdSetStencilReference) V(vkCmdSetStencilCompareMask) V(vkCmdSetStencilWriteMask) V(vkCmdSetStencilOp) V(vkCmdSetDepthBias) \
     V(vkCmdSetDepthBiasEnable) V(vkCmdSetLineWidth) V(vkCmdSetDepthBoundsTestEnable) V(vkCmdSetCullMode) V(vkCmdSetFrontFace)       \
@@ -1151,6 +1152,39 @@ RX_REC_PACKER void pk_vkCmdPushDescriptorSetKHR(VkCommandBuffer cb, VkPipelineBi
            [&] { ::vkx::vkCmdPushDescriptorSetKHR(cb, bp, layout, set, n, w); });
 }
 inline constexpr auto& rx_vkCmdPushDescriptorSetKHR = Route<::vkx::vkCmdPushDescriptorSetKHR, pk_vkCmdPushDescriptorSetKHR>::call;
+
+/// (hookshot) How many bytes of its data a descriptor update template reads, which its push call does not say: whoever makes one
+/// notes it here (vk_draw.cpp desc_template), and a push through it copies that many. 0: not noted (the push is then not packed)
+struct TemplateBytes {
+    std::mutex mu;
+    std::unordered_map<VkDescriptorUpdateTemplate, size_t> of;
+};
+inline TemplateBytes& template_bytes_table() {
+    static TemplateBytes t;
+    return t;
+}
+inline void template_bytes_note(VkDescriptorUpdateTemplate t, size_t bytes) {
+    TemplateBytes& tb = template_bytes_table();
+    std::lock_guard lk(tb.mu);
+    tb.of[t] = bytes;
+}
+inline size_t template_bytes(VkDescriptorUpdateTemplate t) {
+    TemplateBytes& tb = template_bytes_table();
+    std::lock_guard lk(tb.mu);
+    const auto it = tb.of.find(t);
+    return it == tb.of.end() ? 0 : it->second;
+}
+
+RX_REC_PACKER void pk_vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer cb, VkDescriptorUpdateTemplate t, VkPipelineLayout layout,
+                                                     uint32_t set, const void* data) {
+    const size_t bytes = template_bytes(t);
+    if (!bytes) return fallback([&] { ::vkx::vkCmdPushDescriptorSetWithTemplateKHR(cb, t, layout, set, data); });
+    Enc e;
+    const void* c = e.dup_bytes(data, bytes);
+    e.emit(OP_vkCmdPushDescriptorSetWithTemplateKHR, [=] { ::vkx::vkCmdPushDescriptorSetWithTemplateKHR(cb, t, layout, set, c); },
+           [&] { ::vkx::vkCmdPushDescriptorSetWithTemplateKHR(cb, t, layout, set, data); });
+}
+inline constexpr auto& rx_vkCmdPushDescriptorSetWithTemplateKHR = Route<::vkx::vkCmdPushDescriptorSetWithTemplateKHR, pk_vkCmdPushDescriptorSetWithTemplateKHR>::call;
 
 RX_REC_PACKER void pk_vkCmdSetViewport(VkCommandBuffer cb, uint32_t first, uint32_t n, const VkViewport* v) {
     Enc e;

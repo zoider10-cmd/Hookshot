@@ -50,6 +50,13 @@ struct Program {
     VkDescriptorSetLayout set_layout = VK_NULL_HANDLE;
     VkPipelineLayout layout = VK_NULL_HANDLE;
     std::vector<VkDescriptorType> binding_types;   // by binding (what each descriptor write is)
+    // (hookshot) by binding, the word in the built descriptors (vk_draw.cpp DescWriter::data) its first descriptor is at, and
+    // after the last binding all of their words: a buffer or image descriptor is 3 words, a texel buffer view 1
+    std::vector<uint32_t> binding_words;
+    // (hookshot) its descriptor update template, made at its first bind (vk_draw.cpp desc_template): pushed at the graphics and
+    // the compute bind point (a mesh fallback pushes at both), or [0] the pooled sets' (no push descriptors); tried: one bit each
+    mutable std::atomic<VkDescriptorUpdateTemplate> desc_template[2]{};
+    mutable std::atomic<uint8_t> desc_template_tried{0};
     VkPipeline compute_pipeline = VK_NULL_HANDLE;
     // (the compute pipeline's build: 0 not started, 1 on a worker, 2 done (compute_pipeline made, or failed): vk_draw.cpp dispatch)
     std::atomic<int> compute_state{0};

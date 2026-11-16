@@ -49,8 +49,10 @@ def main():
     enums = "enum { " + ", ".join(name + "=" + str(i + 1) for i, name in enumerate(symbols)) + " };"
     fixture = (ROOT / "tests/sampler_admission_test.cpp").read_text(encoding="utf-8")
     descriptors = block(source, "struct Pushed {") + ";\n" + "\n".join(block(source, marker) for marker in [
-        "void write_words(", "void words_append(", "int words_same_store(", "bool bind_descriptors("])
-    fixture = fixture.replace("/* DESCRIPTORS */", descriptors)
+        "VkWriteDescriptorSet desc_write(const Program& p, const DescWriter& w, uint32_t b) {", "void desc_writes(",
+        "bool desc_whole(const Program& p, const DescWriter& w) {", "bool bind_descriptors("])
+    writer = block(source, "constexpr uint32_t desc_words(") + "\n" + block(source, "struct DescWriter {") + ";"
+    fixture = fixture.replace("/* DESCRIPTORS */", descriptors).replace("/* WRITER */", writer)
     fixture = fixture.replace("/* PARAMS */", params).replace("/* ENUMS */", enums).replace("/* ACTUAL */", actual)
     cases = ["healthy", "host-oom", "device-oom", "unknown", "error-output", "generation-retry", "thread-retry",
              "independent", "valid-after-failure", "owner-commit", "seen-commit", "mine-commit", "failure-commit",
@@ -60,7 +62,8 @@ def main():
              "anisotropy-no-mips", "anisotropy-nearest-mip",
              "upscale-bias", "upscale-bias-plain", "upscale-bias-change",
              "unknown-id", "force-linear", "wrap", "lod-clamp", "custom-reduction",
-             "descriptor-push", "descriptor-pool", "descriptor-compute", "descriptor-old", "descriptor-whole"]
+             "descriptor-push", "descriptor-pool", "descriptor-compute", "descriptor-whole", "descriptor-template",
+             "descriptor-no-delta", "descriptor-pool-template"]
     with tempfile.TemporaryDirectory(prefix="sampler-admission-") as temp:
         cpp, exe = Path(temp) / "fixture.cpp", Path(temp) / "fixture.exe"
         cpp.write_text(fixture, encoding="utf-8")

@@ -142,7 +142,7 @@ const char* const kFineT[] = {"banks", "c1", "user uniform buffers", "storage bu
 enum FineC { FC_DRAWS, FC_BUILDS, FC_DESCS, FC_WRITES, FC_BANK_CALLS, FC_BANK_GEN, FC_BANK_FILLS, FC_BANK_FILL_BYTES, FC_BANK_SAME,
              FC_BANK_NEW, FC_BANK_NEW_BYTES, FC_C1_CALLS, FC_UBO_CALLS, FC_UBO_OVERLAY, FC_UBO_STREAM, FC_PUSH_FULL, FC_PUSH_DELTA,
              FC_PUSH_NONE, FC_PUSH_WRITES, FC_PUSH_DESCS, FC_BIND_PIPE, FC_DYN_FAST, FC_DYN_FULL, FC_DYN_CALLS, FC_VBIND, FC_IBIND,
-             FC_PUSHC, FC_PIPE_FAST, FC_PIPE_MAP, FC_POOL_SETS, FC_POOL_DESCS, FC_SSBO_DESCS, FC_COUNT };
+             FC_PUSHC, FC_PIPE_FAST, FC_PIPE_MAP, FC_POOL_SETS, FC_POOL_DESCS, FC_SSBO_DESCS, FC_PUSH_TEMPLATE, FC_COUNT };
 const char* const kFineC[] = {"draws", "descriptor builds", "descriptors", "descriptor writes", "bank calls",
                                       "bank kept by its stage's generation", "bank fills", "bank bytes filled", "bank refills equal",
                                       "bank copies into the stream", "bank bytes copied", "c1 calls", "user uniform buffer calls",
@@ -151,7 +151,8 @@ const char* const kFineC[] = {"draws", "descriptor builds", "descriptors", "desc
                                       "writes pushed", "descriptors pushed", "pipeline binds", "dynamic state from the draw before",
                                       "dynamic state worked out", "dynamic state commands", "vertex stream binds", "index buffer binds",
                                       "push constants", "pipeline keys from the fast pair", "pipeline keys from the thread's map",
-                                      "sets allocated (over the push limit)", "descriptors in them", "storage buffer descriptors built"};
+                                      "sets allocated (over the push limit)", "descriptors in them", "storage buffer descriptors built",
+                                      "full pushes through the template"};
 static_assert(std::size(kFineT) == FT_COUNT && std::size(kFineC) == FC_COUNT, "every section and count is named");
 const bool g_fine = env_on("RX_VK_PROF_FINE");
 int64_t fine_ns[FT_COUNT], fine_n[FC_COUNT];
@@ -678,14 +679,32 @@ VkFormat supported_vertex_format(VkFormat f) {
 // (+ the guest page table's address, a task draw's first, and the fallback's two buffer addresses)
 constexpr uint32_t kPushSize = Shader::Backend::SPIRV::MESH_FALLBACK_PUSH_END;
 
+// (hookshot) The descriptors built for a draw are 64-bit words, each binding's in turn, laid out as the driver reads them: a buffer
+// descriptor as a VkDescriptorBufferInfo (buffer, offset, range), an image one as a VkDescriptorImageInfo (sampler, view, layout; the
+// layout's word has its padding 0), a texel buffer as its VkBufferView. A descriptor update template (desc_template) reads them in one
+// go, and whether they are the same as pushed before is one comparison (bind_descriptors). The idea is Fritchii's (pipeline_helper.h,
+// vk_graphics_pipeline.cpp: one template per pipeline layout, descriptors as plain records in one buffer)
+static_assert(sizeof(VkDescriptorBufferInfo) == 24 && offsetof(VkDescriptorBufferInfo, offset) == 8 &&
+              offsetof(VkDescriptorBufferInfo, range) == 16);
+static_assert(sizeof(VkDescriptorImageInfo) == 24 && offsetof(VkDescriptorImageInfo, imageView) == 8 &&
+              offsetof(VkDescriptorImageInfo, imageLayout) == 16 && sizeof(VkImageLayout) == 4);
+static_assert(sizeof(VkBufferView) == 8 && sizeof(VkSampler) == 8 && sizeof(VkBuffer) == 8 && sizeof(VkImageView) == 8);
+/// The words a descriptor of this type takes in the built descriptors
+constexpr uint32_t desc_words(VkDescriptorType t) {
+    return t == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER || t == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER ? 1 : 3;
+}
+
 void ensure_layout(Program& p) {
     if (p.layout) return;
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     uint64_t total = 0;   // (64-bit: a sum of 32-bit counts)
+    uint32_t words = 0;   // (where each binding's descriptors are in the built ones: desc_words)
     auto add = [&](VkDescriptorType type, VkShaderStageFlags stage, const auto& descriptors) {
         for (const auto& d : descriptors) {
             bindings.push_back({(uint32_t)bindings.size(), type, d.count, stage, nullptr});
             p.binding_types.push_back(type);
+            p.binding_words.push_back(words);
+            words += d.count * desc_words(type);
             total += d.count;
         }
     };
@@ -697,7 +716,8 @@ void ensure_layout(Program& p) {
         add(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, st.vk_stage, st.info.texture_descriptors);
         add(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, st.vk_stage, st.info.image_descriptors);
     }
-    p.push = dev.push_descriptor && vkCmdPushDescriptorSetKHR && total <= dev.max_push_descriptors;
+    p.binding_words.push_back(words);
+    p.push =dev.push_descriptor && vkCmdPushDescriptorSetKHR && total <= dev.max_push_descriptors;
     VkDescriptorSetLayoutCreateInfo li{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
     if (p.push) li.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
     li.bindingCount = (uint32_t)bindings.size();
@@ -3459,15 +3479,25 @@ VkDescriptorBufferInfo uniform_range(const NvnState& s, const Stage& st, uint32_
 }
 
 struct DescWriter {
-    std::vector<VkWriteDescriptorSet> writes;
-    std::vector<VkDescriptorBufferInfo> bufs;
-    std::vector<VkDescriptorImageInfo> imgs;
-    std::vector<VkBufferView> views;
+    // (hookshot) the descriptors, binding after binding, as the driver reads them (desc_words; the binding's first word is the
+    // program's binding_words). They were a VkWriteDescriptorSet a binding and three vectors of infos; the writes are now made from
+    // these words only where a call needs them (desc_writes)
+    std::vector<uint64_t> data;
+    std::vector<VkWriteDescriptorSet> writes;   // (desc_writes': pointers into data)
     const Program* prog = nullptr;   // (the program they were built for: a dispatch builds its own over a draw's)
     void reset() {
-        writes.clear(), bufs.clear(), imgs.clear(), views.clear();
+        data.clear(), writes.clear();
     }
+    void put_buffer(const VkDescriptorBufferInfo& b) {
+        data.push_back((uint64_t)b.buffer), data.push_back(b.offset), data.push_back(b.range);
+    }
+    void put_image(VkSampler sampler, VkImageView view) {
+        data.push_back((uint64_t)sampler), data.push_back((uint64_t)view), data.push_back((uint64_t)VK_IMAGE_LAYOUT_GENERAL);
+    }
+    void put_view(VkBufferView v) { data.push_back((uint64_t)v); }
 };
+VkWriteDescriptorSet desc_write(const Program& p, const DescWriter& w, uint32_t b);   // (below, with bind_descriptors)
+bool desc_whole(const Program& p, const DescWriter& w);
 TLS_OBJECT(dw, DescWriter)
 TLS_OBJECT(draw_sampled, std::vector<const Texture*>)   // (the textures the descriptors being built sample or store)
 TLS_OBJECT(gfx_sampled, std::vector<const Texture*>)    // (the last draw's: kept while its descriptors are reused)
@@ -3670,8 +3700,11 @@ bool dump_ssbo_wanted(uint64_t key) {
 void dump_ssbos(VkCommandBuffer cmd, const Program& p, const char* when) {
     if (!dump_on() || !dump_ssbo_wanted(p.key)) return;
     uint32_t sb = 0;
-    for (const VkWriteDescriptorSet& w : dw().writes) {
-        if (w.descriptorType != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER || !w.pBufferInfo) continue;
+    const DescWriter& wr = dw();
+    if (wr.prog != &p || !desc_whole(p, wr)) return;
+    for (uint32_t bi = 0; bi < (uint32_t)p.binding_types.size(); bi++) {
+        if (p.binding_types[bi] != VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) continue;
+        const VkWriteDescriptorSet w = desc_write(p, wr, bi);
         for (uint32_t i = 0; i < w.descriptorCount; i++, sb++) {
             const VkDescriptorBufferInfo& b = w.pBufferInfo[i];
             if (!b.buffer || b.range == VK_WHOLE_SIZE) continue;
@@ -3737,40 +3770,27 @@ void build_descriptors(const NvnState& s, const Program& p) {
             if (packed != ~0ull) p.desc_counts.store(packed, std::memory_order_relaxed);
         }
     }
-    out.bufs.reserve(nbuf), out.imgs.reserve(nimg), out.views.reserve(nview);   // (stable pointers below)
+    out.data.reserve(3 * (nbuf + nimg) + nview);   // (hookshot: one vector, grown once at most per build)
     FINE_N(FC_DESCS, (int64_t)(nbuf + nimg + nview));
-    uint32_t binding = 0;
-    auto write = [&](VkDescriptorType type, uint32_t count) {
-        VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        w.dstBinding = binding++;
-        w.descriptorCount = count;
-        w.descriptorType = type;
-        return w;
-    };
+    uint32_t nimg_built = 0;   // (the image descriptors so far: their index in the dumps)
     const uint64_t salign = storage_binding_align();   // (the translator's: vk_internal.h)
     for (const Stage& st : p.stages) {
         const Shader::Info& info = st.info;
         const int ns = st.nvn_stage;
         for (const auto& d : info.constant_buffer_descriptors) {
-            VkWriteDescriptorSet w = write(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, d.count);
-            const size_t first = out.bufs.size();
             for (uint32_t k = 0; k < d.count; k++) {
                 const auto t0 = slow_desc_timing() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-                out.bufs.push_back(uniform_range(s, st, d.index + k));
-                if (slow_desc_timing()) slow_descriptor(t0, "uniform buffer", d.index + k, out.bufs.back().range);
+                out.put_buffer(uniform_range(s, st, d.index + k));
+                if (slow_desc_timing()) slow_descriptor(t0, "uniform buffer", d.index + k, out.data.back());
             }
-            w.pBufferInfo = &out.bufs[first];
-            out.writes.push_back(w);
         }
         for (const auto& d : info.storage_buffers_descriptors) {
             FINE_SCOPE(FT_STORAGE);
             FINE_N(FC_SSBO_DESCS, d.count);
-            VkWriteDescriptorSet w = write(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, d.count);
-            const size_t first = out.bufs.size();
             for (uint32_t k = 0; k < d.count; k++) {
                 const uint32_t off = d.cbuf_offset + k * 16;
                 if (d.count == 1 && d.cbuf_index == 0 && d.cbuf_offset == 0xff0) {   // (EvilOOT, RX_VK_MISS_LOG)
-                    out.bufs.push_back(miss_binding(p.key));
+                    out.put_buffer(miss_binding(p.key));
                     continue;
                 }
                 // (AyyBeeDee20738, PR 138; EvilOOT the same before it, for OoT's culling tables in c4) through the stage's banks as
@@ -3993,9 +4013,9 @@ void build_descriptors(const NvnState& s, const Program& p) {
                              "%#llx%s", (unsigned long long)p.key, ns, (unsigned)d.cbuf_index, off,
                              (unsigned long long)addr, (unsigned long long)size, d.is_written ? " (written)" : "");
                 }
-                out.bufs.push_back(b ? VkDescriptorBufferInfo{b.buffer, b.offset, n}
-                                    : VkDescriptorBufferInfo{dev.null_descriptor ? VK_NULL_HANDLE : zero_buffer, 0,
-                                                             dev.null_descriptor ? VK_WHOLE_SIZE : 16});
+                out.put_buffer(b ? VkDescriptorBufferInfo{b.buffer, b.offset, n}
+                                 : VkDescriptorBufferInfo{dev.null_descriptor ? VK_NULL_HANDLE : zero_buffer, 0,
+                                                          dev.null_descriptor ? VK_WHOLE_SIZE : 16});
                 {   // (RX_VK_LOG_WRITTEN=1: every storage buffer range a program writes, once, 300 of them)
                     static const bool on = env_on("RX_VK_LOG_WRITTEN");
                     if (on && d.is_written) {
@@ -4014,13 +4034,9 @@ void build_descriptors(const NvnState& s, const Program& p) {
                     if (slow_desc_timing()) slow_descriptor(t1, "stamp", base, n);
                 }
             }
-            w.pBufferInfo = &out.bufs[first];
-            out.writes.push_back(w);
         }
-        auto texel_views = [&](const auto& list, VkDescriptorType type, bool storage) {
+        auto texel_views = [&](const auto& list, bool storage) {
             for (const auto& d : list) {
-                VkWriteDescriptorSet w = write(type, d.count);
-                const size_t first = out.views.size();
                 for (uint32_t k = 0; k < d.count; k++) {
                     const uint32_t handle = handle_of(s, st, d, k);
                     desc_fp_note(handle);   // (Descriptor reuse)
@@ -4032,18 +4048,14 @@ void build_descriptors(const NvnState& s, const Program& p) {
                         ParLock lk;
                         bv = texel_buffer_view(&t, has_view ? &v : nullptr, storage);
                     }
-                    out.views.push_back(bv);
+                    out.put_view(bv);
                 }
-                w.pTexelBufferView = &out.views[first];
-                out.writes.push_back(w);
             }
         };
-        texel_views(info.texture_buffer_descriptors, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, false);
-        texel_views(info.image_buffer_descriptors, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, true);
+        texel_views(info.texture_buffer_descriptors, false);
+        texel_views(info.image_buffer_descriptors, true);
         for (const auto& d : info.texture_descriptors) {
             FINE_SCOPE(FT_TEX);
-            VkWriteDescriptorSet w = write(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, d.count);
-            const size_t first = out.imgs.size();
             const VkImageViewType vt = view_type(d.type);
             // (Lichii bd0171f7) A handle table's array: the shader indexes it per pixel with an index it read itself (OoT's
             // clustered lights: a light index from the pixel's list), and element k is table entry k's texture (that light's
@@ -4099,7 +4111,7 @@ void build_descriptors(const NvnState& s, const Program& p) {
                              "entries than the array, and those take this texture (said once)", k, (unsigned long long)p.key,
                              tex ? tex->id : 0);
                 }
-                if (dump_on()) dump_input('t', (uint32_t)(out.imgs.size() - 0), handle, view ? tex : nullptr);
+                if (dump_on()) dump_input('t', nimg_built, handle, view ? tex : nullptr);
                 if (view && tex && trace_tex_wanted(tex)) trace_tex_hit = tex;
                 if (log_img_wanted(p.key)) {
                     static std::atomic<int> told{0};
@@ -4125,14 +4137,10 @@ void build_descriptors(const NvnState& s, const Program& p) {
                                (void*)view, view ? "" : " (dummy)");
                 if (view && tex && tex->gpu_written) draw_sampled().push_back(tex);
                 if (!view) view = dummies.view[(int)vt], st_dummy_textures += handle != 0;
-                out.imgs.push_back({sampler_for((int)(handle >> 20), d.is_depth), view, VK_IMAGE_LAYOUT_GENERAL});
+                out.put_image(sampler_for((int)(handle >> 20), d.is_depth), view), nimg_built++;
             }
-            w.pImageInfo = &out.imgs[first];
-            out.writes.push_back(w);
         }
         for (const auto& d : info.image_descriptors) {
-            VkWriteDescriptorSet w = write(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, d.count);
-            const size_t first = out.imgs.size();
             const VkImageViewType vt = view_type(d.type);
             for (uint32_t k = 0; k < d.count; k++) {
                 const uint32_t handle = handle_of(s, st, d, k);
@@ -4159,12 +4167,10 @@ void build_descriptors(const NvnState& s, const Program& p) {
                              view ? "view made" : "NO view");
                 }
                 if (view && tex && d.is_written && (dump_on() || probe_on())) dump_written().push_back({tex, level});
-                if (dump_on()) dump_input(d.is_written ? 'W' : 'R', (uint32_t)out.imgs.size(), handle, view ? tex : nullptr);
+                if (dump_on()) dump_input(d.is_written ? 'W' : 'R', nimg_built, handle, view ? tex : nullptr);
                 if (!view && !dev.null_descriptor) view = VK_NULL_HANDLE;
-                out.imgs.push_back({VK_NULL_HANDLE, view, VK_IMAGE_LAYOUT_GENERAL});
+                out.put_image(VK_NULL_HANDLE, view), nimg_built++;
             }
-            w.pImageInfo = &out.imgs[first];
-            out.writes.push_back(w);
         }
     }
 }
@@ -4175,12 +4181,9 @@ void build_descriptors(const NvnState& s, const Program& p) {
 struct Pushed {
     VkCommandBuffer cmd = VK_NULL_HANDLE;
     VkPipelineLayout layout = VK_NULL_HANDLE;
-    size_t n = 0;                                // (the writes as pushed)
-    std::vector<std::vector<uint64_t>> writes;   // (each write's descriptors, as pushed; RX_VK_PUSH_STATE_OLD=1)
-    // (hookshot) the same in one vector of words and where each write's begin: a program change was a vector of vectors resized to the
-    // new program's writes, each new one grown word by word (3 allocations a write, and the ones cut off freed: a dozen of each a draw)
+    // (hookshot) the descriptors as pushed: DescWriter::data's words, so "unchanged" is one comparison of the two. They were a vector
+    // of words a write, compared write by write (and before that a vector of vectors)
     std::vector<uint64_t> words;
-    std::vector<uint32_t> at;
 };
 TLS_OBJECT(pushed, std::array<Pushed, 2>)   // [graphics, compute]
 } // namespace
@@ -4231,129 +4234,186 @@ bool mesh_args_ready();             // (below: the task programs' firsts)
 extern uint64_t mesh_args_address;
 namespace {
 
-void write_words(const VkWriteDescriptorSet& w, std::vector<uint64_t>& out) {
-    out.clear();
-    out.push_back((uint64_t)w.descriptorType << 32 | w.dstBinding);
-    for (uint32_t k = 0; k < w.descriptorCount; k++) {
-        if (w.pBufferInfo) {
-            const VkDescriptorBufferInfo& b = w.pBufferInfo[k];
-            out.push_back((uint64_t)b.buffer), out.push_back(b.offset), out.push_back(b.range);
-        } else if (w.pImageInfo) {
-            const VkDescriptorImageInfo& i = w.pImageInfo[k];
-            out.push_back((uint64_t)i.sampler), out.push_back((uint64_t)i.imageView);
-        } else if (w.pTexelBufferView) {
-            out.push_back((uint64_t)w.pTexelBufferView[k]);
-        }
+/// The write of binding b, its descriptors in w.data (a write's three arrays are the layouts desc_words keeps)
+VkWriteDescriptorSet desc_write(const Program& p, const DescWriter& w, uint32_t b) {
+    VkWriteDescriptorSet x{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+    const VkDescriptorType t = p.binding_types[b];
+    const uint32_t at = p.binding_words[b];
+    x.dstBinding = b;
+    x.descriptorType = t;
+    x.descriptorCount = (p.binding_words[b + 1] - at) / desc_words(t);
+    const uint64_t* d = w.data.data() + at;
+    if (t == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER || t == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)
+        x.pTexelBufferView = reinterpret_cast<const VkBufferView*>(d);
+    else if (t == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER || t == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+        x.pBufferInfo = reinterpret_cast<const VkDescriptorBufferInfo*>(d);
+    else
+        x.pImageInfo = reinterpret_cast<const VkDescriptorImageInfo*>(d);
+    return x;
+}
+/// w.writes: the writes of every binding with descriptors
+void desc_writes(const Program& p, DescWriter& w) {
+    w.writes.clear();
+    for (uint32_t b = 0; b + 1 < (uint32_t)p.binding_words.size(); b++)
+        if (p.binding_words[b + 1] != p.binding_words[b]) w.writes.push_back(desc_write(p, w, b));
+}
+/// Whether w's words are a whole build of p's bindings (the layout bind_descriptors and the template read them by)
+bool desc_whole(const Program& p, const DescWriter& w) {
+    return p.binding_words.size() == p.binding_types.size() + 1 && w.data.size() == p.binding_words.back();
+}
+/// The i-th image descriptor built (textures', then storage images', in binding order), null past them
+const VkDescriptorImageInfo* desc_image(const DescWriter& w, size_t i) {
+    const Program* p = w.prog;
+    if (!p || !desc_whole(*p, w)) return nullptr;
+    for (size_t b = 0; b < p->binding_types.size(); b++) {
+        const VkDescriptorType t = p->binding_types[b];
+        if (t != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && t != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) continue;
+        const size_t n = (p->binding_words[b + 1] - p->binding_words[b]) / 3;
+        if (i < n) return reinterpret_cast<const VkDescriptorImageInfo*>(w.data.data() + p->binding_words[b] + 3 * i);
+        i -= n;
     }
+    return nullptr;
+}
+/// (the stand-ins' input and output: the first texture's view and the first storage image's, ntex the textures' descriptors)
+bool desc_stand_in_views(size_t ntex, VkImageView* in, VkImageView* out) {
+    const VkDescriptorImageInfo* a = desc_image(dw(), 0);
+    const VkDescriptorImageInfo* b = desc_image(dw(), ntex);
+    if (!a || !b || !a->imageView || !b->imageView) return false;
+    *in = a->imageView, *out = b->imageView;
+    return true;
 }
 
-/// write_words' words appended to out (the words of the pushed state, a write after another)
-void words_append(const VkWriteDescriptorSet& w, std::vector<uint64_t>& out) {
-    out.push_back((uint64_t)w.descriptorType << 32 | w.dstBinding);
-    for (uint32_t k = 0; k < w.descriptorCount; k++) {
-        if (w.pBufferInfo) {
-            const VkDescriptorBufferInfo& b = w.pBufferInfo[k];
-            out.push_back((uint64_t)b.buffer), out.push_back(b.offset), out.push_back(b.range);
-        } else if (w.pImageInfo) {
-            const VkDescriptorImageInfo& i = w.pImageInfo[k];
-            out.push_back((uint64_t)i.sampler), out.push_back((uint64_t)i.imageView);
-        } else if (w.pTexelBufferView) {
-            out.push_back((uint64_t)w.pTexelBufferView[k]);
+/// (hookshot) p's descriptor update template: for a push at bind point bp, or (p.push false) for its pooled sets. Made at the first
+/// bind, kept for the program's life. Null: none (RX_VK_DESC_TEMPLATE=0, the driver's functions missing, or its creation failed),
+/// and the writes are used instead. Its data's size is noted for the recorder (RX_VK_RECORDER), which copies the data of a push
+VkDescriptorUpdateTemplate desc_template(const Program& p, VkPipelineBindPoint bp) {
+    const int i = p.push && bp == VK_PIPELINE_BIND_POINT_COMPUTE;
+    if (VkDescriptorUpdateTemplate t = p.desc_template[i].load(std::memory_order_acquire)) [[likely]]
+        return t;
+    if (p.desc_template_tried.load(std::memory_order_acquire) & (1u << i)) return VK_NULL_HANDLE;
+    static const bool on = !getenv("RX_VK_DESC_TEMPLATE") || atoi(getenv("RX_VK_DESC_TEMPLATE")) != 0;
+    static std::mutex mu;   // (a program may be bound on the parallel replay's workers at once)
+    std::lock_guard lk(mu);
+    if (VkDescriptorUpdateTemplate t = p.desc_template[i].load(std::memory_order_acquire)) return t;
+    if (p.desc_template_tried.load(std::memory_order_acquire) & (1u << i)) return VK_NULL_HANDLE;
+    VkDescriptorUpdateTemplate t = VK_NULL_HANDLE;
+    if (on && vkCreateDescriptorUpdateTemplate && p.binding_words.size() == p.binding_types.size() + 1 &&
+        (p.push ? vkCmdPushDescriptorSetWithTemplateKHR != nullptr : vkUpdateDescriptorSetWithTemplate != nullptr)) {
+        std::vector<VkDescriptorUpdateTemplateEntry> entries;
+        for (uint32_t b = 0; b < (uint32_t)p.binding_types.size(); b++) {
+            const uint32_t per = desc_words(p.binding_types[b]), words = p.binding_words[b + 1] - p.binding_words[b];
+            if (words)
+                entries.push_back({b, 0, words / per, p.binding_types[b], (size_t)p.binding_words[b] * 8, (size_t)per * 8});
+        }
+        VkDescriptorUpdateTemplateCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_CREATE_INFO};
+        ci.descriptorUpdateEntryCount = (uint32_t)entries.size();
+        ci.pDescriptorUpdateEntries = entries.data();
+        if (p.push) {
+            ci.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_PUSH_DESCRIPTORS_KHR;
+            ci.pipelineBindPoint = bp, ci.pipelineLayout = p.layout, ci.set = 0;
+        } else {
+            ci.templateType = VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET;
+            ci.descriptorSetLayout = p.set_layout;
+        }
+        if (!entries.empty() && vkCreateDescriptorUpdateTemplate(dev.device, &ci, nullptr, &t) != VK_SUCCESS) {
+            t = VK_NULL_HANDLE;
+            static std::atomic<int> told{0};
+            if (told++ < 3) logf("vk: no descriptor update template for %016llx: its descriptors are written one binding at a time",
+                                 (unsigned long long)p.key);
         }
     }
-}
-/// Whether the words in [o, end) are write_words' of w (1), or not (0: they are after the call). -1: w is not the write they were made for
-/// (its words do not fill them exactly), and nothing was touched
-int words_same_store(const VkWriteDescriptorSet& w, uint64_t* o, const uint64_t* end) {
-    const size_t per = w.pBufferInfo ? 3 : w.pImageInfo ? 2 : w.pTexelBufferView ? 1 : 0;
-    if ((size_t)(end - o) != 1 + (size_t)w.descriptorCount * per) return -1;
-    bool same = true;
-    auto put = [&](uint64_t v) {
-        same &= *o == v;
-        *o++ = v;
-    };
-    put((uint64_t)w.descriptorType << 32 | w.dstBinding);
-    for (uint32_t k = 0; k < w.descriptorCount; k++) {
-        if (w.pBufferInfo) {
-            const VkDescriptorBufferInfo& b = w.pBufferInfo[k];
-            put((uint64_t)b.buffer), put(b.offset), put(b.range);
-        } else if (w.pImageInfo) {
-            const VkDescriptorImageInfo& i = w.pImageInfo[k];
-            put((uint64_t)i.sampler), put((uint64_t)i.imageView);
-        } else if (w.pTexelBufferView) {
-            put((uint64_t)w.pTexelBufferView[k]);
-        }
-    }
-    return same ? 1 : 0;
+    if (t) rec::template_bytes_note(t, (size_t)p.binding_words.back() * 8), p.desc_template[i].store(t, std::memory_order_release);
+    p.desc_template_tried.fetch_or((uint8_t)(1u << i), std::memory_order_acq_rel);
+    return t;
 }
 
 bool bind_descriptors(VkCommandBuffer cmd, VkPipelineBindPoint bp, const Program& p) {
     DescWriter& wr = dw();   // (once: the accessor is a call and a thread-local read at each use. The same object for the thread's life: build_descriptors resets it in place)
-    if (wr.writes.empty()) return true;
+    const size_t nb = p.binding_types.size();
+    if (!nb) return true;
+    if (!desc_whole(p, wr)) {   // (built for another layout: not to be read by this one's bindings)
+        static std::atomic<int> told{0};
+        if (told++ < 3)
+            logf("vk: the descriptors built (%zu words) are not %016llx's (%u): left out", wr.data.size(), (unsigned long long)p.key,
+                 p.binding_words.empty() ? 0u : p.binding_words.back());
+        return false;
+    }
     // A failed sampler is retryable, but cannot be published to either descriptor path.
     // Check the entire array before updating the pushed-state cache or allocating a set.
-    for (const auto& w : wr.writes)
-        if (w.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-            for (uint32_t k = 0; k < w.descriptorCount; k++)
-                if (!w.pImageInfo[k].sampler) return false;
+    for (size_t b = 0; b < nb; b++)
+        if (p.binding_types[b] == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+            for (uint32_t i = p.binding_words[b]; i < p.binding_words[b + 1]; i += 3)
+                if (!wr.data[i]) return false;
+    const auto descs = [&](const VkWriteDescriptorSet* w, size_t n) {   // (RX_VK_PROF_FINE)
+        int64_t c = 0;
+        for (size_t i = 0; i < n; i++) c += w[i].descriptorCount;
+        return c;
+    };
+    const size_t bytes = wr.data.size() * sizeof(uint64_t);
     Pushed& ps = pushed()[bp == VK_PIPELINE_BIND_POINT_COMPUTE];
     if (p.push) {
         static const bool whole = env_on("RX_VK_PUSH_ALL");   // (A/B: every binding every time)
-        static const bool old_state = env_on("RX_VK_PUSH_STATE_OLD");   // (A/B: a vector of words a write, as before)
-        if (whole || ps.cmd != cmd || ps.layout != p.layout || ps.n != wr.writes.size()) {
-            if (g_fine) {
-                fine_n[FC_PUSH_FULL]++, fine_n[FC_PUSH_WRITES] += (int64_t)wr.writes.size();
-                for (const VkWriteDescriptorSet& w : wr.writes) fine_n[FC_PUSH_DESCS] += w.descriptorCount;
+        // (hookshot) RX_VK_DESC_DELTA: of a set pushed before, the bindings that changed are pushed alone (as writes) while they are
+        // at most half of them; more, and the whole set again through the template. 0: the whole set at any change; 2: the changed
+        // bindings alone, however many
+        static const int delta = getenv("RX_VK_DESC_DELTA") ? atoi(getenv("RX_VK_DESC_DELTA")) : 1;
+        const VkDescriptorUpdateTemplate tmpl = desc_template(p, bp);
+        if (!whole && ps.cmd == cmd && ps.layout == p.layout && ps.words.size() == wr.data.size()) {
+            if (!std::memcmp(ps.words.data(), wr.data.data(), bytes)) {   // (all as pushed)
+                FINE_N(FC_PUSH_NONE, 1);
+                return true;
             }
-            {
-                FINE_SCOPE(FT_PUSHCALL);
-                vkCmdPushDescriptorSetKHR(cmd, bp, p.layout, 0, (uint32_t)wr.writes.size(), wr.writes.data());
-            }
-            ps.cmd = cmd, ps.layout = p.layout, ps.n = wr.writes.size();
-            if (old_state) {
-                ps.writes.resize(wr.writes.size());
-                for (size_t i = 0; i < wr.writes.size(); i++) write_words(wr.writes[i], ps.writes[i]);
-            } else {
-                ps.words.clear(), ps.at.clear();
-                for (const VkWriteDescriptorSet& w : wr.writes) ps.at.push_back((uint32_t)ps.words.size()), words_append(w, ps.words);
-            }
-            return true;
-        }
-        static thread_local std::vector<VkWriteDescriptorSet> changed;
-        static thread_local std::vector<uint64_t> words;
-        changed.clear();
-        if (old_state) {
-            for (size_t i = 0; i < wr.writes.size(); i++) {
-                write_words(wr.writes[i], words);
-                if (words != ps.writes[i]) changed.push_back(wr.writes[i]), ps.writes[i].swap(words);
-            }
-        } else {   // (the same layout, so the same count of words in each write: compared and kept in place)
-            for (size_t i = 0; i < wr.writes.size(); i++) {
-                const uint64_t* end = ps.words.data() + (i + 1 < ps.at.size() ? ps.at[i + 1] : ps.words.size());
-                const int same = words_same_store(wr.writes[i], ps.words.data() + ps.at[i], end);
-                if (same < 0) {   // (not so: nothing is known of what is pushed; the whole set again)
-                    ps.cmd = VK_NULL_HANDLE;
-                    return bind_descriptors(cmd, bp, p);
+            if (delta || !tmpl) {
+                static thread_local std::vector<uint32_t> changed;   // (the bindings)
+                changed.clear();
+                for (uint32_t b = 0; b < (uint32_t)nb; b++) {
+                    const uint32_t at = p.binding_words[b], n = p.binding_words[b + 1] - at;
+                    if (n && std::memcmp(ps.words.data() + at, wr.data.data() + at, n * sizeof(uint64_t))) changed.push_back(b);
                 }
-                if (!same) changed.push_back(wr.writes[i]);
+                if (!tmpl || delta >= 2 || changed.size() * 2 <= nb) {
+                    wr.writes.clear();
+                    for (uint32_t b : changed) wr.writes.push_back(desc_write(p, wr, b));
+                    if (g_fine) {
+                        fine_n[FC_PUSH_DELTA]++, fine_n[FC_PUSH_WRITES] += (int64_t)wr.writes.size();
+                        fine_n[FC_PUSH_DESCS] += descs(wr.writes.data(), wr.writes.size());
+                    }
+                    {
+                        FINE_SCOPE(FT_PUSHCALL);
+                        vkCmdPushDescriptorSetKHR(cmd, bp, p.layout, 0, (uint32_t)wr.writes.size(), wr.writes.data());
+                    }
+                    std::memcpy(ps.words.data(), wr.data.data(), bytes);
+                    return true;
+                }
             }
         }
-        if (!changed.empty()) {
+        if (tmpl) {
             if (g_fine) {
-                fine_n[FC_PUSH_DELTA]++, fine_n[FC_PUSH_WRITES] += (int64_t)changed.size();
-                for (const VkWriteDescriptorSet& w : changed) fine_n[FC_PUSH_DESCS] += w.descriptorCount;
+                fine_n[FC_PUSH_FULL]++, fine_n[FC_PUSH_TEMPLATE]++;
+                for (size_t b = 0; b < nb; b++)
+                    fine_n[FC_PUSH_DESCS] += (p.binding_words[b + 1] - p.binding_words[b]) / desc_words(p.binding_types[b]);
             }
             FINE_SCOPE(FT_PUSHCALL);
-            vkCmdPushDescriptorSetKHR(cmd, bp, p.layout, 0, (uint32_t)changed.size(), changed.data());
+            vkCmdPushDescriptorSetWithTemplateKHR(cmd, tmpl, p.layout, 0, wr.data.data());
         } else {
-            FINE_N(FC_PUSH_NONE, 1);
+            desc_writes(p, wr);
+            if (g_fine) {
+                fine_n[FC_PUSH_FULL]++, fine_n[FC_PUSH_WRITES] += (int64_t)wr.writes.size();
+                fine_n[FC_PUSH_DESCS] += descs(wr.writes.data(), wr.writes.size());
+            }
+            FINE_SCOPE(FT_PUSHCALL);
+            vkCmdPushDescriptorSetKHR(cmd, bp, p.layout, 0, (uint32_t)wr.writes.size(), wr.writes.data());
         }
+        ps.cmd = cmd, ps.layout = p.layout;
+        ps.words.assign(wr.data.begin(), wr.data.end());
         return true;
     }
     ps.cmd = VK_NULL_HANDLE;   // (a set bound: what was pushed is not known to stay)
+    const VkDescriptorUpdateTemplate tmpl = desc_template(p, bp);
+    if (!tmpl) desc_writes(p, wr);
     if (g_fine) {
         fine_n[FC_POOL_SETS]++;
-        for (const VkWriteDescriptorSet& w : wr.writes) fine_n[FC_POOL_DESCS] += w.descriptorCount;
+        for (size_t b = 0; b < nb; b++)
+            fine_n[FC_POOL_DESCS] += (p.binding_words[b + 1] - p.binding_words[b]) / desc_words(p.binding_types[b]);
     }
     VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
     ai.descriptorPool = cur->extra.empty() ? cur->pool : cur->extra.back();
@@ -4376,8 +4436,12 @@ bool bind_descriptors(VkCommandBuffer cmd, VkPipelineBindPoint bp, const Program
             return false;
         }
     }
-    for (auto& w : wr.writes) w.dstSet = set;
-    vkUpdateDescriptorSets(dev.device, (uint32_t)wr.writes.size(), wr.writes.data(), 0, nullptr);
+    if (tmpl) {
+        vkUpdateDescriptorSetWithTemplate(dev.device, set, tmpl, wr.data.data());
+    } else {
+        for (auto& w : wr.writes) w.dstSet = set;
+        vkUpdateDescriptorSets(dev.device, (uint32_t)wr.writes.size(), wr.writes.data(), 0, nullptr);
+    }
     vkCmdBindDescriptorSets(cmd, bp, p.layout, 0, 1, &set, 0, nullptr);
     return true;
 }
@@ -7630,7 +7694,7 @@ void draw(VkCommandBuffer cmd, NvnState& s, const DrawArgs& d) {
         FINE_N(FC_BUILDS, 1);
         trace_tex_hit = nullptr, trace_tex_mask = 0;
         build_descriptors(s, p);   // (textures first used here are uploaded by the recording's upload command buffer)
-        FINE_N(FC_WRITES, (int64_t)dw().writes.size());
+        FINE_N(FC_WRITES, (int64_t)p.binding_types.size());
         static std::string last_logged;
         if (dump_on()) {
             char head[256];
@@ -8512,7 +8576,8 @@ bool fsr3_stand_in(VkCommandBuffer cmd, const NvnState& s, const Program& p) {
     if (st.info.texture_descriptors.empty() || st.info.image_descriptors.empty()) return false;
     size_t ntex = 0;   // (build_descriptors' image infos: the textures', then the images')
     for (const auto& d : st.info.texture_descriptors) ntex += d.count;
-    if (dw().imgs.size() <= ntex || !dw().imgs[0].imageView || !dw().imgs[ntex].imageView) return false;
+    VkImageView in_view, out_view;
+    if (!desc_stand_in_views(ntex, &in_view, &out_view)) return false;
     Texture* in = nullptr;
     const uint32_t in_handle = handle_of(s, st, st.info.texture_descriptors[0], 0);
     if (in_handle) texture_view_of(in_handle, VK_IMAGE_VIEW_TYPE_2D, ViewUse::Sample, VK_FORMAT_UNDEFINED, &in);
@@ -8521,7 +8586,7 @@ bool fsr3_stand_in(VkCommandBuffer cmd, const NvnState& s, const Program& p) {
     uint32_t level = 0;
     const uint32_t out_handle = handle_of(s, st, od, 0);
     if (out_handle) texture_view_of(out_handle, VK_IMAGE_VIEW_TYPE_2D, ViewUse::Storage, image_format(od.format), &out, &level);
-    return fsr3_upscale(cmd, p.key, gameplay_network(p.key), in, dw().imgs[0].imageView, out, dw().imgs[ntex].imageView, level);
+    return fsr3_upscale(cmd, p.key, gameplay_network(p.key), in, in_view, out, out_view, level);
 }
 /// (hookshot) A temporal upscaler (NVIDIA DLSS, AMD FSR 4: vk_temporal.cpp) in place of the gameplay upscale network, when
 /// one is on and its inputs are as expected: the network's input as it samples it, its output's storage view
@@ -8538,7 +8603,8 @@ bool temporal_stand_in(VkCommandBuffer cmd, const NvnState& s, const Program& p)
     if (st.info.texture_descriptors.empty() || st.info.image_descriptors.empty()) return false;
     size_t ntex = 0;   // (build_descriptors' image infos: the textures', then the images')
     for (const auto& d : st.info.texture_descriptors) ntex += d.count;
-    if (dw().imgs.size() <= ntex || !dw().imgs[0].imageView || !dw().imgs[ntex].imageView) return false;
+    VkImageView in_view, out_view;
+    if (!desc_stand_in_views(ntex, &in_view, &out_view)) return false;
     Texture* in = nullptr;
     const uint32_t in_handle = handle_of(s, st, st.info.texture_descriptors[0], 0);
     if (in_handle) texture_view_of(in_handle, VK_IMAGE_VIEW_TYPE_2D, ViewUse::Sample, VK_FORMAT_UNDEFINED, &in);
@@ -8547,7 +8613,6 @@ bool temporal_stand_in(VkCommandBuffer cmd, const NvnState& s, const Program& p)
     uint32_t level = 0;
     const uint32_t out_handle = handle_of(s, st, od, 0);
     if (out_handle) texture_view_of(out_handle, VK_IMAGE_VIEW_TYPE_2D, ViewUse::Storage, image_format(od.format), &out, &level);
-    VkImageView in_view = dw().imgs[0].imageView, out_view = dw().imgs[ntex].imageView;
     if (in && out && temporal_colour_pair(in->format, out->format) && out->format == VK_FORMAT_R16G16B16A16_SFLOAT) {
         in_view = texture_view_of(in_handle, VK_IMAGE_VIEW_TYPE_2D, ViewUse::Sample, VK_FORMAT_R16G16B16A16_SFLOAT);
         out_view = texture_view_of(out_handle, VK_IMAGE_VIEW_TYPE_2D, ViewUse::Storage, VK_FORMAT_R16G16B16A16_SFLOAT);
@@ -8604,7 +8669,8 @@ bool taau_stand_in(VkCommandBuffer cmd, const NvnState& s, const Program& p) {
     if (st.info.texture_descriptors.empty() || st.info.image_descriptors.empty()) return false;
     size_t ntex = 0;   // (build_descriptors' image infos: the textures', then the images')
     for (const auto& d : st.info.texture_descriptors) ntex += d.count;
-    if (dw().imgs.size() <= ntex || !dw().imgs[0].imageView || !dw().imgs[ntex].imageView) return false;
+    VkImageView in_view, out_view;
+    if (!desc_stand_in_views(ntex, &in_view, &out_view)) return false;
     const auto& od = st.info.image_descriptors[0];
     Texture* out = nullptr;
     uint32_t level = 0;
@@ -8613,7 +8679,7 @@ bool taau_stand_in(VkCommandBuffer cmd, const NvnState& s, const Program& p) {
     texture_view_of(handle, VK_IMAGE_VIEW_TYPE_2D, ViewUse::Storage, image_format(od.format), &out, &level);
     if (!out || out->format != VK_FORMAT_B10G11R11_UFLOAT_PACK32) return false;
     const char* keys = getenv("RX_VK_TAAU_KEYS") ? getenv("RX_VK_TAAU_KEYS") : "fd029a317a9a4b94";
-    return typed_upscale(cmd, dw().imgs[0].imageView, dw().imgs[ntex].imageView, out, level, p.key, keys, true);
+    return typed_upscale(cmd, in_view, out_view, out, level, p.key, keys, true);
 }
 
 bool precompile_wanted() {
