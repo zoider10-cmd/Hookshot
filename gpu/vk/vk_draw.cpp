@@ -9595,6 +9595,31 @@ void predict_defer() {
     if (FILE* f = fopen(predict_owed_path().c_str(), "wb")) fputs("1\n", f), fclose(f);
     logf("vk: the predicted pipelines are built in play, behind the game (RX_VK_PREDICT_BG=1; without it: before the title)");
 }
+// (Triforce's idea, 2026-11-16) The builder behind the game rests while the game is in play. On idle-priority threads it still
+// cost the frame: each build is tens of ms in the driver's compiler, which the replay's own calls into the driver wait behind
+// (Triforce: a ~2,850-draw scene on an RTX 4070 SUPER, 55-64 fps before the builder began, 41-47 while it ran), and AMD's driver
+// takes ~0.5 s a pipeline. Now it builds while the frame shown is a light one (the title, the menus, the pause and map screens,
+// a loading screen: under RX_VK_PREDICT_BG_PLAY_DRAWS draws, 600) or none was shown for half a second, and rests otherwise.
+// Only with Quick first start (RX_VK_PREDICT_BG=1). RX_VK_PREDICT_BG_PLAY=1: it builds in play too, as before
+namespace {
+std::atomic<int> frame_draws_last{0};
+std::atomic<int64_t> frame_shown_ms{0};
+int64_t bg_now_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+bool bg_game_in_play() {
+    static const int play_draws = getenv("RX_VK_PREDICT_BG_PLAY_DRAWS") ? atoi(getenv("RX_VK_PREDICT_BG_PLAY_DRAWS")) : 600;
+    static const bool in_play = env_on("RX_VK_PREDICT_BG_PLAY");
+    return !in_play && frame_draws_last.load(std::memory_order_relaxed) >= play_draws &&
+           bg_now_ms() - frame_shown_ms.load(std::memory_order_relaxed) < 500;
+}
+std::atomic<int64_t> bg_rested_ms{0};
+} // namespace
+void frame_shown_note(int draws) {
+    frame_draws_last.store(draws, std::memory_order_relaxed);
+    frame_shown_ms.store(bg_now_ms(), std::memory_order_relaxed);
+}
+
 void predict_background() {
     if (!predict_deferred()) return;
     if (FILE* f = fopen(predict_owed_path().c_str(), "rb")) fclose(f);
@@ -9732,6 +9757,12 @@ void predict_run(void (*progress)(size_t done, size_t total), bool background) {
         if (background) SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_IDLE);   // (Mako: behind the game)
         for (;;) {
             if (prepare_stopped() || pre->abandoned.load()) return;
+            if (background && bg_game_in_play()) {   // (Triforce's idea, above: the game in play; looked at before each program)
+                const int64_t r0 = bg_now_ms();
+                while (!prepare_stopped() && !pre->abandoned.load() && bg_game_in_play()) Sleep(50);
+                bg_rested_ms += bg_now_ms() - r0;
+                continue;
+            }
             if (budget_s > 0 && std::chrono::steady_clock::now() - t0 > std::chrono::seconds(budget_s)) {
                 pre->out_of_time = true;
                 return;
@@ -9830,6 +9861,8 @@ void predict_run(void (*progress)(size_t done, size_t total), bool background) {
          gone_on ? " (gone on without the pipelines the driver did not finish)"
          : out_of_time.load() ? " (the time budget, RX_VK_PREDICT_S, ran out: the rest are built in play)"
          : prepare_stopped() ? " (stopped: the window was closed; the driver keeps what was built)" : "");
+    if (background) logf("vk: predicted pipelines behind the game: %.0f s rested for the game in play (RX_VK_PREDICT_BG_PLAY=1: not)",
+                         bg_rested_ms.load() / 1000.0);
     if (!prepare_stopped() && !out_of_time.load()) remove(predict_owed_path().c_str());   // (Mako: all built, nothing owed)
     if (!prepare_stopped() && !out_of_time.load() && !gone_on) {
         predicted_sample_write(pre->predicted);

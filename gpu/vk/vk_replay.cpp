@@ -4005,6 +4005,13 @@ void do_present(const nvn_tex* t, const int crop[4]) {
         full_barrier(r.cmd);
         presents++;
         presents_now = presents;
+        {   // (Triforce's idea) this frame's draws, for the predicted pipelines' builder behind the game: it rests in play
+            static int64_t d_last;
+            int64_t d_now = 0, x;
+            draw_stats(&d_now, &x, &x, &x);
+            frame_shown_note((int)std::clamp<int64_t>(d_now - d_last, 0, 1 << 30));
+            d_last = d_now;
+        }
         wide_sides_tick();
         if (presents == 1) hang_watch_start(), gpu_hang_watch_start();
         {   // (EvilBoyce, diagnostics) RX_VK_WATCH_CPU=<present>:<gpu address>[,...] (hex addresses): from that present on, the
