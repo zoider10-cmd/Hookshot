@@ -69,6 +69,14 @@ py -I .claude/skills/rando-test/scripts/disasm.py --string 0x83d868d1   # a name
 py -I .claude/skills/rando-test/scripts/disasm.py --c 0x801d3620        # that function's translated C (after rebuild.sh)
 ```
 
+```bash
+bash .claude/skills/rando-test/scripts/decompile.sh 0x804d8240 0x801d3620   # Ghidra's C of those functions (~5 s)
+```
+
+Ghidra 12.2 and Java 25 are set up in `C:\Users\beerc\tools` (outside the repo; `scripts/ghidra/` has the project's
+import and decompile scripts to set it up again). The project has the code loaded without the whole-program analysis
+(that ran out of memory and failed): each call makes and decompiles only the functions asked for.
+
 Fixes to the game's code are lift patches in `nx2/oot_patches.py`: find the function by its head line
 (`void f_<addr>(Ctx *__restrict A64_NOESC c) {`) or a branch label (`L_<addr>:;`) in the translated C, insert a guard
 or wrap the function (kept as `<name>_body`, as `patch_drop_name` and `patch_bone_fallback` do), and count it in
