@@ -78,7 +78,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 25   # (25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 26   # (26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -3281,6 +3281,62 @@ SONGS = (
     Gift("song_nocturne", "Dm_MelodyGet_Shadow", (NOCTURNE,), NOCTURNE, "KakarikoVillage", "Sheik, Kakariko: the Nocturne of Shadow", SONG_ADULT | MEDALS3, "songs"),
     Gift("song_prelude", "Dm_MelodyGet_Shine", (PRELUDE,), PRELUDE, "Market", "Sheik, the Temple of Time: the Prelude of Light", SONG_ADULT | {BOW}, "songs"),
 )
+# ---- Songs: how a song looks where it is got (every seed) ----
+# A song has an actor of its own (Item_Melody_...), whose model the game left as a green rupee's (Obj_Rupee, in its
+# ModelInfo and its row of the list of actors): the original never shows a song as a thing. Got from a chest, bought
+# from a shelf or given as a gift, a song was a green rupee (the owner's pictures, 2026-11-15). The owner wants a song
+# to look like none of the other items, and not like an ocarina, which is to be shuffled too: so a song looks like
+# Sheik's harp (Item_Harp_Sheik, of Dm_Item_Sheik_Harp, the harp of Sheik's lessons). The ModelInfo of each song is
+# changed in its pack and in every shelf pack that has a copy of it (the game keeps the first copy it loads), and the
+# rows of the songs and of their shelves in the list of actors take the harp's model, size and heaps.
+SONG_LOOK = "Item_Harp_Sheik"
+SONG_LOOK_ROW = "Dm_Item_Sheik_Harp"
+SONG_LOOK_FILE = "Component/ModelInfo/%s.engine__component__ModelInfo.bgyml"
+
+
+def song_look_pack(data):
+    """A pack with each song's ModelInfo naming the harp (SONG_LOOK): (the new bytes, how many files were changed);
+    the same bytes and 0 when it has none. ValueError: a song's ModelInfo that does not name the rupee's model."""
+    files = sarc_read(data)
+    done = 0
+    for song in SONG_ITEMS:
+        name = SONG_LOOK_FILE % song
+        if name not in files:
+            continue
+        tree, version = byml_parse(files[name])
+        rows = tree[1]
+        if tree[0] != "dict" or rows.get("ModelProjectName") not in (("string", "Obj_Rupee"), ("string", SONG_LOOK)):
+            raise ValueError("%s's model is not the rupee's as this was written for" % song)
+        rows["FmdbName"] = rows["ModelProjectName"] = ("string", SONG_LOOK)
+        files[name] = byml_build(tree, version)
+        done += 1
+    return (sarc_write(files), done) if done else (data, 0)
+
+
+def song_look_rows(data, names):
+    """The list of actors (ActorInfo) with the rows named (the songs', their shelves') taking the harp's model, its
+    box and the larger of the two heaps: (the new bytes, how many rows were changed)."""
+    tree, version = byml_parse(data)
+    by = {r[1]["__RowId"][1]: r for r in tree[1]}
+    if SONG_LOOK_ROW not in by:
+        raise ValueError("the list of actors has no row of %s" % SONG_LOOK_ROW)
+    harp = by[SONG_LOOK_ROW][1]
+    done = 0
+    for name in names:
+        row = by.get(name)
+        if not row:
+            continue
+        rows = row[1]
+        for k in ("FmdbName", "ModelProjectName", "ModelAabbMax", "ModelAabbMin"):
+            if k in harp:
+                rows[k] = harp[k]
+        for k in ("InstanceHeapSize", "PreActorRenderInfoHeapSize"):
+            if k in rows and k in harp:
+                rows[k] = (rows[k][0], struct.pack("<I", max(struct.unpack("<I", rows[k][1])[0], struct.unpack("<I", harp[k][1])[0])))
+        done += 1
+    return byml_build(tree, version), done
+
+
 # ---- Songs: Anywhere (rando_songs 2, --songs 2) ----
 # A song is an item as any other: bought from a shop's shelf in a test seed, the Sun's Song and Saria's Song had the
 # scene of a song learnt and were played after, and worked (seen in play, 2026-11-14). So with Anywhere the twelve
@@ -4525,6 +4581,36 @@ def main():
     except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
         sys.exit("the Bombchus' limit: %s. Nothing written." % e)
     print("Bombchus can be carried without a Bomb Bag: %d at most" % BOMBCHU_LIMIT)
+
+    # ---- a song looks like Sheik's harp, in every seed (SONG_LOOK) ----
+    try:
+        looked = 0
+        for song in SONG_ITEMS:
+            rel = "Pack/Actor/%s.pack.zs" % song
+            new, count = song_look_pack(pack_files[rel] if rel in pack_files else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts))
+            if not count:
+                raise ValueError("%s's pack has no ModelInfo of its own" % song)
+            pack_files[rel] = new
+            pack_sizes["Pack/Actor/%s.pack" % song] = len(new)
+            looked += 1
+        for files_of, sizes_of in ((pack_files, pack_sizes), (shop_files, shop_packs)):
+            for rel in [r for r in files_of if r.startswith("Pack/Actor/") and r[len("Pack/Actor/"):-len(".pack.zs")] not in SONG_ITEMS]:
+                new, count = song_look_pack(files_of[rel])
+                if count:
+                    files_of[rel] = new
+                    sizes_of[rel[:-3]] = len(new)
+        folder = os.path.join(romfs, "RSDB")
+        n = next((n for n in sorted(os.listdir(folder)) if n.startswith("ActorInfo.") and ".byml" in n.lower()), None)
+        if n is None:
+            raise ValueError("the game has no list ActorInfo")
+        rel = "RSDB/" + n
+        rows = list(SONG_ITEMS) + ([actor for actor, (item, _) in on_sale.items() if item in SONG_ITEMS] if shelves else [])
+        table, count = song_look_rows(shop_files[rel] if rel in shop_files else unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts), rows)
+        shop_files[rel] = table
+        shop_sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(table)
+    except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
+        sys.exit("the songs' look: %s. Nothing written." % e)
+    print("a song looks like Sheik's harp (%d songs, %d rows of the list of actors)" % (looked, count))
 
     # ---- bombs without the Goron's Bracelet, in every seed ----
     try:

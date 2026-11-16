@@ -268,6 +268,21 @@ def main():
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     check(2 * longest + 1 <= S.CHECK_NEED == 191 and "char needs[192];" in menu and "|%191[A-Z,/-]|" in menu and 'needs[192] = ""' in host and "|%191[A-Z,/-]|" in host,
           "a rule that names every item (%d letters and commas) does not fit the menu's or the game's line" % longest)
+    # (a song looks like Sheik's harp: its ModelInfo in its pack, and its row in the list of actors)
+    info = lambda model: seed.byml_build(("dict", collections.OrderedDict((("FmdbName", ("string", model)), ("ModelProjectName", ("string", model))))), 7)
+    pack = seed.sarc_write({seed.SONG_LOOK_FILE % seed.SUN: info("Obj_Rupee"), "Actor/x.bgyml": b"x"})
+    new, count = seed.song_look_pack(pack)
+    looked = seed.byml_parse(seed.sarc_read(new)[seed.SONG_LOOK_FILE % seed.SUN])[0][1]
+    row = lambda name, model, heap: ("dict", collections.OrderedDict((("FmdbName", ("string", model)), ("ModelProjectName", ("string", model)),
+                                                                      ("InstanceHeapSize", (0xD3, struct.pack("<I", heap))), ("__RowId", ("string", name)))))
+    table = seed.byml_build(("array", [row(seed.SUN, "Obj_Rupee", 100), row(seed.SONG_LOOK_ROW, seed.SONG_LOOK, 200), row("Obj_Rupee_Green", "Obj_Rupee", 50)]), 7)
+    rows, changed = seed.song_look_rows(table, [seed.SUN, "Shop_Rando_absent"])
+    by = {r[1]["__RowId"][1]: r[1] for r in seed.byml_parse(rows)[0][1]}
+    check(count == 1 and looked["FmdbName"][1] == looked["ModelProjectName"][1] == "Item_Harp_Sheik" and
+          seed.song_look_pack(seed.sarc_write({"Actor/x.bgyml": b"x"}))[1] == 0 and changed == 1 and
+          by[seed.SUN]["ModelProjectName"][1] == seed.SONG_LOOK and struct.unpack("<I", by[seed.SUN]["InstanceHeapSize"][1])[0] == 200 and
+          by["Obj_Rupee_Green"]["ModelProjectName"][1] == "Obj_Rupee",
+          "a song does not look like Sheik's harp (its pack's ModelInfo, its row), or a rupee does too")
     print("PASS: Songs")
 
 
