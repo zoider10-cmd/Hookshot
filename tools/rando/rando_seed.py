@@ -78,7 +78,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 24   # (24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 25   # (25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -2453,6 +2453,41 @@ def bombchu_presence(data):
     return byml_build(tree, version), done
 
 
+# Three red rupees on Hyrule Castle's drawbridge (asked for by the owner, 2026-11-15): the original game had three at
+# the top of the drawbridge's chains, which the remake's bridge cannot be climbed to. They are loose rupees of the
+# kind the game lays about elsewhere (Obj_Rupee_Red, as in Death Mountain Crater: a name, its two hashes and a place,
+# nothing else), put in the child's Hyrule Field down the middle of the lowered bridge's deck (Land_HrlField_DrawBridge
+# at z 34.0 by the gate, over the moat, whose floor is at z 36 to 45, to the field at about z 47; the Market's side is
+# below z 34, its loading zone an Area at z 28.1). A loose rupee is not kept as taken: it should be there again after
+# a loading zone. Their hashes are new ones of our own (DRAWBRIDGE_HASH + 1..3), not in the file before.
+DRAWBRIDGE_FILE = "Banc/HyruleField/HyruleField_Child_Dynamic.bcett.byml.zs"
+DRAWBRIDGE_RUPEES = ((0.0, 151.2, 37.5), (0.0, 151.2, 40.5), (0.0, 151.2, 43.5))   # (the deck: from the gate, z 34, out over the moat to the field at about z 47)
+DRAWBRIDGE_HASH = 0x5241_4E44_0B21_D000   # (+1, +2, +3; SRTHash: the low 32 bits)
+
+
+def drawbridge_rupees(data):
+    """The child's Hyrule Field map file with the drawbridge's three red rupees (DRAWBRIDGE_RUPEES) added: (the file
+    written anew, how many were added). ValueError: the file has no actors, or a hash of ours already."""
+    tree, version = byml_parse(data)
+    actors = tree[1].get("Actors")
+    if not actors or actors[0] != "array":
+        raise ValueError("the field's map file has no actors")
+    have = {rows[1]["Hash"][1] for rows in actors[1] if "Hash" in rows[1]}
+    added = []
+    for i, (x, y, z) in enumerate(DRAWBRIDGE_RUPEES, 1):
+        h = struct.pack("<Q", DRAWBRIDGE_HASH + i)
+        if h in have:
+            raise ValueError("the field's map file has a rupee of ours already")
+        added.append(("dict", collections.OrderedDict((
+            ("Gyaml", ("string", "Obj_Rupee_Red")),
+            ("Hash", (0xD5, h)),
+            ("Phive", ("dict", collections.OrderedDict((("Placement", ("dict", collections.OrderedDict((("ID", (0xD5, h)),)))),)))),
+            ("SRTHash", (0xD3, struct.pack("<I", (DRAWBRIDGE_HASH + i) & 0xFFFFFFFF))),
+            ("Translate", ("array", [(0xD2, struct.pack("<f", v)) for v in (x, y, z)]))))))
+    tree[1]["Actors"] = ("array", actors[1] + added)
+    return byml_build(tree, version), len(added)
+
+
 def bombchu_door_open(data):
     """The Bombchu Shop's door logic (BOMBCHU_DOOR_LOGIC, above) with its two AND nodes made OR nodes: the new bytes,
     of the same size. ValueError: the file is not the one this was written for."""
@@ -4465,6 +4500,17 @@ def main():
     if chu_done != 3:
         sys.exit("the Bombchu Shop: %d of its keeper, music and sign found in the child's Market, not 3. Nothing written." % chu_done)
     print("the Bombchu Shop's keeper is there from the start, and its sign gone")
+
+    # ---- three red rupees on Hyrule Castle's drawbridge, in every seed (DRAWBRIDGE_RUPEES) ----
+    try:
+        rel = DRAWBRIDGE_FILE
+        data = changed[rel] if rel in changed else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
+        new, count = drawbridge_rupees(data)
+        changed[rel] = new
+        sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
+    except (OSError, ValueError, struct.error, IndexError, KeyError) as e:
+        sys.exit("the drawbridge's rupees: %s. Nothing written." % e)
+    print("Hyrule Castle's drawbridge has %d red rupees" % count)
 
     # ---- Bombchus: a limit of their own, in every seed (the list of pouch actors, with the shops' rows when there are) ----
     try:

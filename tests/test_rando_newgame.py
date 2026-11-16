@@ -291,6 +291,23 @@ def main():
     # ---- Link's door: with Skip opening a new game starts with it open and the scene at it done ----
     check(seed.LINK_DOOR == {"KokiriForest_LinkHouseDoor_Open": True, "Dm_Kokiri_0050_After_Near_End": True},
           "Link's door is not open from a new game's start with Skip opening")
+    # (the drawbridge's three red rupees: added to a field map file as loose rupees, of new hashes, on the deck)
+    one = ("dict", collections.OrderedDict((("Gyaml", ("string", "StartPos")), ("Hash", (0xD5, struct.pack("<Q", 7))),
+                                             ("Translate", ("array", [(0xD2, struct.pack("<f", 0.0))] * 3)))))
+    field = seed.byml_build((("dict", collections.OrderedDict((("Actors", ("array", [one])),)))), 7)
+    new, count = seed.drawbridge_rupees(field)
+    actors = seed.byml_parse(new)[0][1]["Actors"][1]
+    rupees = [a[1] for a in actors if a[1]["Gyaml"][1] == "Obj_Rupee_Red"]
+    zs = [struct.unpack("<f", r["Translate"][1][2][1])[0] for r in rupees]
+    check(count == 3 and len(actors) == 4 and len({r["Hash"][1] for r in rupees}) == 3 and
+          all(r["Phive"][1]["Placement"][1]["ID"][1] == r["Hash"][1] for r in rupees) and all(34.0 < z < 47.0 for z in zs) and
+          seed.DRAWBRIDGE_FILE.startswith("Banc/HyruleField/HyruleField_Child_"),
+          "the drawbridge's rupees are not three loose red rupees of their own on the child's bridge deck")
+    try:
+        seed.drawbridge_rupees(new)
+        check(False, "the drawbridge's rupees are added twice to a file that has them")
+    except ValueError:
+        pass
     print("PASS: a new game's open ways and its opening")
 
 
