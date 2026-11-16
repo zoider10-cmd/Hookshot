@@ -1,6 +1,6 @@
 ---
 name: rando-test
-description: Build, install and test the Mako randomizer fork on this PC - rebuild the game after a change to host/ or nx2/oot_patches.py, rewrite the seed or the cosmetics after a change to tools/rando, run the game without a window on a copy of a save (teleport, buttons, pictures), look at the pictures as a grid, and read a crash's backtrace in the game's code. Use when a randomizer or cosmetics change needs trying in the game, when the user reports a crash or a bug seen in play, or when asked to test something without them playing.
+description: Build, install and test the Mako randomizer fork on this PC, and read its files and saves - rebuild the game after a change to host/ or nx2/oot_patches.py, rewrite the seed or the cosmetics after a change to tools/rando, run the game without a window on a copy of a save (teleport, buttons, pictures), look at the pictures as a grid, read a crash's backtrace in the game's code, and look up a save's flags, a character's event flow, the logic that makes things appear, who says a line, and where an actor is placed. Use when a randomizer or cosmetics change needs trying in the game, when the user reports a crash or a bug seen in play, or when asked to test something without them playing.
 ---
 
 # Testing the randomizer on this PC
@@ -74,7 +74,25 @@ Fixes to the game's code are lift patches in `nx2/oot_patches.py`: find the func
 or wrap the function (kept as `<name>_body`, as `patch_drop_name` and `patch_bone_fallback` do), and count it in
 `apply`'s `done`. Read the real C first: guessing its text fails silently. Then rebuild and run again.
 
-## 5. Before committing
+## 5. Reading the game's files and saves
+
+Readers in `scripts/` (run from that folder or with its path; `--help` on each). All read only; add `--modded` to read
+the mods' copy (the seed's or the cosmetics' rewrite) in place of the game's.
+
+| Question | Command |
+|---|---|
+| Is a flag set in a save? What changed between two saves? | `py -I savedata.py get "<save copy>" <FlagName>...`, `py -I savedata.py diff "<copy A>" "<copy B>"` (`live` = the newest live save; `hash` gives HOS_OOT_SETFLAG's hex) |
+| What does a character's or scene's flow do? Which flows set or ask a flag? | `py -I flow.py <Flow> --entries`, `--entry <Entry>` (its steps in order), `--find <Flag or text>` |
+| What makes a thing appear, go or open? | `py -I logic.py --find <Flag>`, then `py -I logic.py <LogicName>`; `--where <LogicName>` gives the map that uses it |
+| Who says a line, and its label? | `py -I text.py "words of the line"`, `--label <File>:<Label>`, `--file ActorMsg/PouchContent --grep Kokiri` |
+| Where is a character or object, and when is it there? | `py -I actors.py <Name> --map <Folder>`, `--near x y z --map <Folder> --radius 5` |
+
+Found so far, worth knowing: a true/false question's case 0 is its TRUE answer in `flow.py`'s dumps; a character's
+behaviour can hang on its schedule (`Component/AIScheduleParam/<actor>`: `ConditionFlag`) as well as its flow; things in
+a map often come and go by a flag (`actors.py` shows "when <flag>"). The save's layout, the name hash (murmur3) and the
+name list (built once into `$WORK/flag_names.txt`) are in `savedata.py`'s notes.
+
+## 6. Before committing
 
 - `py -I -B tests/run_all.py` (with `PATH=$PWD/llvm-mingw/bin:$PATH`): 112 checks fail on this branch already; compare
   the failing list with a run without the change rather than the count alone. Checks read the source by its text: update
