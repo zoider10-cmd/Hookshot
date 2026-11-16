@@ -48,9 +48,9 @@ def sources(rows):
     saving = saving[:saving.index("\n}")]
     check("if (!mine) others += line" in saving and "fputs(others.c_str(), f);" in saving,
           "the menu no longer keeps the options file's lines that are not its own: the randomizer's would be dropped at its next save")
-    # (the fast forward is a row of the new menu, under a number of its own: 18 is 3.3's gyro)
+    # (the fast forward is a row of the new menu, under a number of its own: 18 is 3.3's gyro; 58 since Mako 4.1.1 gave 48 to the Camera speed)
     api = read("gpu", "vk", "vk_api.h")
-    check('{TAB_GAMEPLAY, "Fast forward", &opts.fast_forward, 0, 2, 1, tx_fast_forward,' in menu and "HOS_OPT_FAST_FORWARD = 48" in api and
+    check('{TAB_GAMEPLAY, "Fast forward", &opts.fast_forward, 0, 2, 1, tx_fast_forward,' in menu and "HOS_OPT_FAST_FORWARD = 58" in api and "HOS_OPT_CAMERA_SPEED = 48" in api and
           "HOS_OPT_GYRO = 18" in api, "the menu has no Fast forward row, or its option number is another's")
     check("if (id == HOS_OPT_FAST_FORWARD) return opts.fast_forward;" in read("gpu", "vk", "vk_replay.cpp") and
           "rx_option(HOS_OPT_FAST_FORWARD, 0)" in read("host", "nn_vi.c"), "the fast forward's setting does not reach the game's clock")
