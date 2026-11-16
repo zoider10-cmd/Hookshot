@@ -599,23 +599,24 @@ def bones(data):
     return out
 
 
-# (only where Link's things hang: his sword's and shield's places on his back and in hand, his shield's strap, his pouch.
-#  All of Link's missing bones answered by their parents bent the other model's head back: his face's and neck's bones
-#  (Head_2, Mouth_Root) are moved by his own code, which then moved the other's head; seen without a window 2026-11-16)
-BONE_ATTACH = frozenset(("Pod_A", "Pod_B", "Weapon_Root", "Ph_ArmStrap", "Ph_Porch"))
+# (every one of Link's missing bones, but those that would be answered by the other model's head, hair or face, or by a
+#  bone its own cloth moves: all of them answered bent the other model's head back (his face's and neck's bones, Head_2,
+#  Mouth_Root, are moved by his own code, which then moved the other's head); only the five where his sword and shield
+#  hang left the Longshot's (Ph_Sleeve_All_L) unanswered, and the game fell (seen in play 2026-11-16, adult Link as Talon))
+BONE_AVOID = frozenset(("Head", "Head_2", "Neck", "Hair_Root", "Face_Root"))
 
 
-def bone_fallbacks(own, other, only=BONE_ATTACH):
-    """{a bone of `own` (a skeleton, bones()) of `only` that `other` has not: the nearest of its parents that `other` has};
-    a bone with none such is left out"""
+def bone_fallbacks(own, other, avoid=BONE_AVOID):
+    """{a bone of `own` (a skeleton, bones()) that `other` has not: the nearest of its parents that `other` has}; a bone
+    with none such, or answered by one of `avoid` or by a cloth bone (Ph_...), is left out"""
     have = {name for name, _ in other}
     out = {}
     for name, parent in own:
-        if name in have or (only is not None and name not in only):
+        if name in have:
             continue
         while parent is not None and own[parent][0] not in have:
             parent = own[parent][1]
-        if parent is not None:
+        if parent is not None and own[parent][0] not in avoid and not own[parent][0].startswith("Ph_"):
             out[name] = own[parent][0]
     return out
 

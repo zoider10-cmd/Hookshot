@@ -301,9 +301,13 @@ def characters():
     own = [("Root", None), ("Spine", 0), ("Head", 1), ("Head_2", 2), ("Arm_2_R", 1), ("Ph_ArmStrap", 4), ("Weapon_Root", 0), ("Pod_A", 1)]
     other = [("Root", None), ("Spine", 0), ("Head", 1), ("Arm_2_R", 1)]
     check(t.bone_fallbacks(own, other) == {"Ph_ArmStrap": "Arm_2_R", "Weapon_Root": "Root", "Pod_A": "Spine"},
-          "Link's bones where his things hang are not answered by their nearest parent the other model has, or his face's are")
-    check(t.bone_fallbacks(own, other, None)["Head_2"] == "Head" and t.BONE_ATTACH >= {"Ph_ArmStrap", "Weapon_Root", "Pod_A", "Pod_B"},
-          "the bones answered are not the ones where his sword and shield hang")
+          "Link's missing bones are not answered by their nearest parent the other model has, or his face's are")
+    check(t.bone_fallbacks(own, other, avoid=())["Head_2"] == "Head" and {"Head", "Hair_Root", "Face_Root"} <= t.BONE_AVOID,
+          "a bone the head would answer is not left out, or one another would is")
+    sleeve = own + [("Ph_Sleeve_All_L", 4), ("Ph_Cloth", 1), ("Ph_Cloth_Child", 9)]   # (8, 9, 10)
+    got = t.bone_fallbacks(sleeve, other + [("Ph_Cloth", 1)])
+    check(got.get("Ph_Sleeve_All_L") == "Arm_2_R" and "Ph_Cloth_Child" not in got,
+          "a bone of his other things (the Longshot's sleeve) is not answered, or one by a cloth bone is")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     patches_text = (ROOT / "nx2" / "oot_patches.py").read_text(encoding="utf-8")
     check("uint64_t hos_oot_bone_fallback(Ctx *c, uint64_t name)" in host and '"mods/zz-cosmetics-models/bone_fallbacks.txt"' in host and
