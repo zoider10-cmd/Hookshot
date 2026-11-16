@@ -477,9 +477,13 @@ def main():
           '"/".join(",".join(code for item, code in CHECK_CODES.items() if item in way)' in script,
           "the rules' ways are not made, read by the placement, or written for the tracker")
     check(seed.PLACEMENT >= 6 and set(seed.DEKU_STORY) == {"song_zelda", "song_saria"} and
-          "story = {h for h, g in gifts.items() if g.key in DEKU_STORY} if placement >= 6 else set()" in script and
+          "story = ({h for h, g in gifts.items() if g.key in DEKU_STORY} if placement >= 6 else set()) | slingshot_room" in script and
           all('Gift("%s", ' % k in script for k in seed.DEKU_STORY),
           "Impa's and Saria's lessons do not keep the Deku Tree done with Open forest exit (DEKU_STORY)")
+    check(seed.PLACEMENT >= 7 and seed.SLINGSHOT_ROOM == (0x0b66198d17d6584e, 0xb4ca60d52ca4d05f) and
+          "needs = {h: n | CHILD if h in slingshot_room else n for h, n in needs.items()}" in script and
+          "| slingshot_room" in script,
+          "the Deku Tree's Slingshot room's chests do not ask for the Slingshot, with Open forest exit too (SLINGSHOT_ROOM)")
     menu = (ROOT / "gpu" / "vk" / "vk_menu.cpp").read_text(encoding="utf-8")
     check("const int held = tracker_way_held(way, strcspn(way, \"/\"), &left);" in menu and "if (held) return 1;" in menu,
           "the menu's tracker does not take a check with one of its rule's ways held as in logic")

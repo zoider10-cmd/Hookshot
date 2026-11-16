@@ -59,11 +59,12 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 6   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+PLACEMENT = 7   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
                 # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
                 # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
                 #    asking for the forest's way out (forest_open)
                 # 6: Impa's and Saria's lessons keep the Deku Tree done with Open forest exit (DEKU_STORY)
+                # 7: the Deku Tree's Slingshot room's two chests ask for the Slingshot (SLINGSHOT_ROOM)
 # (a chest with one of these parameters is left as it is: see the top of this file)
 KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__CheckActor", "Drop__DropActor_Substitute",
            "DropViewActor", "IsEnableRepeatOpen", "SpawnType")
@@ -1325,6 +1326,13 @@ FOREST_FLOOR = {"DodongoCavern": frozenset((BB,))}
 # Goto_HyruleCastle_MeetZelda sets (SacredForestMeadow_Child_Prefab_bbc3; found in play, 2026-11-15: the lesson was
 # not there in a new game with Open forest exit). Open forest exit leaves their CHILD (the Deku Tree done) in place.
 DEKU_STORY = ("song_zelda", "song_saria")
+# The Deku Tree's Slingshot room (room 2) can't be left without the Slingshot in the remake: its way out is a ladder
+# that the eye switch drops (Obj_InsideTheDekuTree_FallingLadder_A_01, Obj_EyeSwitch_A_02), and a child has no warp
+# song (the owner's word, 2026-11-15). Its two chests, the Slingshot's own and "Chest (Deku Nuts), room 2", ask for the
+# Slingshot from elsewhere (placement 7), with Open forest exit too. Nothing stops Link walking in without it; the
+# tracker's Return home takes him out. The owner chose this for now over keeping the Slingshot in its chest, and may
+# look at it again.
+SLINGSHOT_ROOM = (0x0b66198d17d6584e, 0xb4ca60d52ca4d05f)
 
 
 def forest_open(need, area=None):
@@ -4064,6 +4072,8 @@ def main():
     rng = random.Random("stage2:%d:%d:%d%s%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else "",
                                                    ":songs2" if a.songs == 2 else ":songs" if a.songs else ""))
     needs = {h: rule(s[0], s[6]) for h, s in spots.items()}
+    slingshot_room = {h for h in SLINGSHOT_ROOM if h in needs} if placement >= 7 else set()
+    needs = {h: n | CHILD if h in slingshot_room else n for h, n in needs.items()}
     if a.quests:   # (the rules with the gifts' two gating items named; a gift asks for what its line of GIFTS says)
         needs = {h: quest_need(gifts[h].need, gifts[h].area) if h in gifts else quest_need(n, spots[h][0]) for h, n in needs.items()}
     elif gifts:    # (the scrubs alone)
@@ -4081,7 +4091,7 @@ def main():
     needs = {h: step(n) for h, n in needs.items()}
     # (Open forest exit: the forest's way out asked for no more, forest_open; with the place, for FOREST_FLOOR)
     forest = (lambda need, area: each(forest_open, need, area)) if placement >= 5 and a.open_forest else (lambda need, area: need)
-    story = {h for h, g in gifts.items() if g.key in DEKU_STORY} if placement >= 6 else set()
+    story = ({h for h, g in gifts.items() if g.key in DEKU_STORY} if placement >= 6 else set()) | slingshot_room
     needs = {h: n if h in story else forest(n, spots[h][0]) for h, n in needs.items()}
     # (Open Door of Time: what it takes to be an adult is not asked of an adult's own places, door_need)
     grown = lambda h, area: area in DOOR_ADULT_AREAS or check_ages(maps[h]) == "A" if h in maps else area in DOOR_ADULT_AREAS
