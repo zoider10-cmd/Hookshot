@@ -17,6 +17,7 @@
 using VkShaderModule = uintptr_t;
 using VkDescriptorSetLayout = uintptr_t;
 using VkPipelineLayout = uintptr_t;
+using VkDescriptorUpdateTemplate = uintptr_t;
 using VkPipeline = uintptr_t;
 using VkDescriptorType = uint32_t;
 using VkShaderStageFlagBits = uint32_t;
