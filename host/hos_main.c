@@ -2846,6 +2846,13 @@ static const char *oot_progressive_give(Ctx *c, const char *name) {
    registers are as the function left them. */
 void hos_oot_drop_name(Ctx *c, uint64_t self) {
 #if defined(_WIN32) || defined(__linux__)
+    /* (seen without a window 2026-11-15: the name here is made the family's next as the chest is made, but the
+       chest's scene still showed and said the bigger bag, and the pouch's add was given the bigger bag's name: the
+       scene takes its name from the event's own parameter (f_828d4a70 reads it from its action's +0x20), not from
+       this buffer. Off until that is found; HOS_OOT_DROP_NAME=1 turns this on for a test) */
+    static int on = -1;
+    if (on < 0) { const char *e = getenv("HOS_OOT_DROP_NAME"); on = e && *e == '1'; }
+    if (!on) return;
     if (!self || !hos_rando_on() || !hos_rando_progressive()) return;
     const uint64_t text = recomp_load64(c, self + 0x48);
     const int size = (int)recomp_load32(c, self + 0x50);
