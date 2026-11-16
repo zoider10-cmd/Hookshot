@@ -1080,7 +1080,9 @@ static const OotBossRoom oot_boss_rooms[] = {
     {"WaterTemple", "CA", {-4.5f, 131.4f, -75.3f}, "Demo_SageOfWater_BossAppears", 0x3be817e9u},              /* Morpha */
     {"ShadowTemple", "CA", {-138.3f, -11.5f, 22.0f}, "ShadowTemple_BossAppear"},            /* Bongo Bongo */
     {"SpiritTemple", "CA", {0.0f, 135.0f, -121.3f}, "SageOfSpirit_BossStart"},             /* Twinrova */
-    {"InsideGanonCastle", "CA", {0.0f, 171.1f, -11.3f}, "Dm_InsideGanonCastle_BossIn"},         /* Ganondorf */
+    {"InsideGanonCastle", "CA", {0.0f, 171.1f, -11.3f}, "Common_Dungeon_OpenDoorChainLock_UnlockGanonBossRoomMoveTo0"},
+                                                                 /* Ganondorf: his door's unlock, which calls Defeat_Ganon's
+                                                                    BossAppear_1 (his entrance scene alone left the room empty) */
 };
 #define OOT_DESTINATIONS (sizeof oot_destinations / sizeof oot_destinations[0])
 #define OOT_BOSS_ROOMS (sizeof oot_boss_rooms / sizeof oot_boss_rooms[0])
