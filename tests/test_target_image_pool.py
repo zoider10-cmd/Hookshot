@@ -65,10 +65,15 @@ class TargetImagePoolTests(unittest.TestCase):
 
     def test_the_dead_targets_are_swept_every_present_after_one_unused(self):
         frame = block(self.tex, "void texture_frame(uint64_t completed)")
-        self.assertIn('getenv("RX_VK_DEAD_EVERY")', frame)
-        self.assertIn(": 1;", frame[frame.index('getenv("RX_VK_DEAD_EVERY")'):])
+        every = block(self.tex, "uint64_t dead_every_presents()")
+        self.assertIn('getenv("RX_VK_DEAD_EVERY")', every)
+        self.assertIn(": 1;", every[every.index('getenv("RX_VK_DEAD_EVERY")'):])
         self.assertIn("frame_no % (dead_targets ? dead_every : 600)", frame)
-        self.assertIn(": 1;", frame[frame.index('getenv("RX_VK_DEAD_MIN_UNUSED")'):])
+        unused = block(self.tex, "uint64_t dead_min_unused_presents()")
+        self.assertIn(": 1;", unused[unused.index('getenv("RX_VK_DEAD_MIN_UNUSED")'):])
+        # (and the pass that reads them is not the only one that looks: it runs at every tenth present, and on the presents
+        # between the sweep does. tests/test_dead_targets_sweep.py has the presents)
+        self.assertIn("dead_targets_sweep(completed);", frame)
 
     def test_a_pooled_image_is_taken_before_one_is_made_and_still_cleared_from_undefined(self):
         make = block(self.tex, "Texture* create(const Key& key")
@@ -91,14 +96,14 @@ class TargetImagePoolTests(unittest.TestCase):
         self.assertLess(loop.index("if (it->pool_key) {"), loop.index("destroy_image(it->image, it->allocation);"))
         self.assertIn("pool_put(*it);", loop[:loop.index("destroy_image(")])
         trim = frame.index("pool_trim();")
-        self.assertLess(trim, frame.index("if (frame_no % 10) return;"))   # (every present, not every tenth)
+        self.assertLess(trim, frame.index("if (!dead_targets::pass_due(frame_no)) {"))   # (every present, not every tenth)
         self.assertIn("pool_pressed = known && pressure > allowed / 10 * 9;", frame)
 
     def test_the_trim_is_bounded_a_present_and_gives_back_idle_and_excess_images(self):
         trim = block(self.tex, "size_t pool_trim()")
         self.assertIn("pool_pressed ? 0 : pool_cap()", trim)
         self.assertIn("pool_pressed ? 64 : 16", trim)
-        self.assertIn("frame_no - v[i].since <= 120", trim)
+        self.assertIn("!target_pool::idle_out(frame_no, v[i].since, idle)", trim)   # (RX_VK_POOL_IDLE, 8 presents: target_pool.h)
         self.assertIn("pool_bytes <= cap", trim)
         self.assertIn("pool_destroy(v[i]);", trim)
         destroy = block(self.tex, "void pool_destroy(Pooled& p)")
