@@ -178,7 +178,7 @@ int main(void) {
 class RumbleMappingTests(unittest.TestCase):
     def test_the_poll_scales_both_motors_by_the_menu(self):
         poll = re.sub(r"\s+", " ", function(PAD, "static void pads_poll"))
-        self.assertRegex(poll, r"\brx_option\(\s*9\s*,\s*100\s*\)")
+        self.assertRegex(poll, r"\brx_option\(\s*9\s*,\s*0\s*\)")   # (Off until set: the randomizer's default)
         call = re.search(r"\brumble_strength\(([^;]*)\);", poll)
         self.assertIsNotNone(call, "the poll does not scale the rumble by the menu's strength")
         self.assertRegex(call.group(1), r"rumble_low\b.*rumble_high\b")   # (heavy first, light second)

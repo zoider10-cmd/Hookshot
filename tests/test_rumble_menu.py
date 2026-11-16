@@ -109,7 +109,7 @@ void arrow(Row& r, bool right) { %(arrow)s }
 int main() {
     Row r = {TAB_CONTROLS, "Rumble strength", &opts.rumble, %(lo)s, %(hi)s, %(step)s, nullptr, nullptr%(exempt)s};
     CHECK(r.lo == 0 && r.hi == 150 && r.step == 25);
-    CHECK(opts.rumble == 100);
+    CHECK(opts.rumble == 0);   /* (off until the player turns it up: the randomizer's default) */
     CHECK(!std::strcmp(ini_key(r), "rumble_strength"));
     opts.preset = 3;
     /* the arrows (and clicks): Off stays Off, 150%% stays 150%% */
