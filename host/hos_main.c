@@ -2873,6 +2873,71 @@ static uint64_t oot_kept_name(const char *give) {   /* (a string in the game's m
 }
 #endif
 
+/* (characters' looks, tools/rando/rando_cosmetics.py) Link shown as another character: his code asks the model for his own
+   bones by name (where his sword and shield hang, his straps), which the other model has not; f_801d3620 then answers -1
+   and its callers used that unasked (seen in play 2026-11-16: the shield on the ground, the game fell when it was raised).
+   The cosmetics write <game>/mods/zz-cosmetics-models/bone_fallbacks.txt, "<Link's bone>=<the nearest of its parents the
+   other model has>", read here once; f_801d3620 (nx2/oot_patches.py patch_bone_fallback) asks again with that name when its
+   own is not found. No file (no look of Link's chosen): nothing changes. Returns the other name's string in the game's
+   memory, or 0. */
+uint64_t hos_oot_bone_fallback(Ctx *c, uint64_t name) {
+#if defined(_WIN32) || defined(__linux__)
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static int loaded;
+    static struct { char from[64]; uint64_t to; } *table;
+    static int count;
+    if (!name) return 0;
+    AcquireSRWLockExclusive(&lock);
+    if (!loaded) {
+        loaded = 1;
+        char path[MAX_PATH + 64];
+        FILE *f = oot_game_file(path, sizeof path, "mods/zz-cosmetics-models/bone_fallbacks.txt") ? fopen(path, "rb") : NULL;
+        if (f) {
+            char line[160];
+            static struct { char name[64]; uint64_t at; } names[64];
+            int nnames = 0;
+            table = calloc(1024, sizeof *table);
+            while (table && count < 1024 && fgets(line, sizeof line, f)) {
+                line[strcspn(line, "\r\n")] = 0;
+                char *eq = strchr(line, '=');
+                if (!eq || eq == line || !eq[1] || strlen(line) >= 64 || strlen(eq + 1) >= 64) continue;
+                *eq = 0;
+                uint64_t to = 0;
+                for (int i = 0; i < nnames && !to; i++)
+                    if (!strcmp(names[i].name, eq + 1)) to = names[i].at;
+                if (!to && nnames < 64 && (to = hos_sys_alloc(64, 16)) != 0) {
+                    memcpy(A64_PTR(to), eq + 1, strlen(eq + 1) + 1);
+                    snprintf(names[nnames].name, sizeof names[nnames].name, "%s", eq + 1);
+                    names[nnames++].at = to;
+                }
+                if (!to) continue;
+                snprintf(table[count].from, sizeof table[count].from, "%s", line);
+                table[count++].to = to;
+            }
+            fclose(f);
+            hos_log("rando: characters' looks: %d of Link's bones answered by another (bone_fallbacks.txt)", count);
+        }
+    }
+    uint64_t to = 0;
+    if (count) {
+        char want[64];
+        int i = 0;
+        for (; i < 63; i++) {
+            want[i] = (char)recomp_load8(c, name + i);
+            if (!want[i]) break;
+        }
+        want[i] = 0;
+        for (int k = 0; k < count && !to; k++)
+            if (!strcmp(table[k].from, want)) to = table[k].to;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    return to;
+#else
+    (void)c; (void)name;
+    return 0;
+#endif
+}
+
 void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made) {
 #if defined(_WIN32) || defined(__linux__)
     static int on = -1;

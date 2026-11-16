@@ -571,6 +571,55 @@ CHARACTERS = (
 )
 
 
+BONE_FALLBACKS = "bone_fallbacks.txt"   # (in MODEL_MOD: read by the game, host/hos_main.c hos_oot_bone_fallback)
+
+
+def bones(data):
+    """a model file's (BFRES) skeleton: [(a bone's name, its parent's place or None)], in its order. The skeleton is the
+    file's FSKL section: its bones' array at +0x10 and their count at +0x38; a bone is 0x58 bytes, its name's offset at
+    its start (a string with its length before it) and its parent's place at +0x22 (0xffff: none). ValueError: no such
+    section, or not as read here."""
+    at = data.find(b"FSKL")
+    if at < 0:
+        raise ValueError("no skeleton")
+    array, count = struct.unpack_from("<Q", data, at + 0x10)[0], struct.unpack_from("<H", data, at + 0x38)[0]
+    if not 0 < count < 4096 or array + count * 0x58 > len(data):
+        raise ValueError("a skeleton not as read here")
+    out = []
+    for i in range(count):
+        entry = array + i * 0x58
+        name_at = struct.unpack_from("<Q", data, entry)[0]
+        if name_at + 2 > len(data):
+            raise ValueError("a bone's name past the file")
+        n = struct.unpack_from("<H", data, name_at)[0]
+        parent = struct.unpack_from("<H", data, entry + 0x22)[0]
+        if struct.unpack_from("<H", data, entry + 0x20)[0] != i or (parent != 0xFFFF and parent >= count):
+            raise ValueError("a skeleton not as read here (bone %d)" % i)
+        out.append((data[name_at + 2:name_at + 2 + n].decode("ascii", "replace"), None if parent == 0xFFFF else parent))
+    return out
+
+
+# (only where Link's things hang: his sword's and shield's places on his back and in hand, his shield's strap, his pouch.
+#  All of Link's missing bones answered by their parents bent the other model's head back: his face's and neck's bones
+#  (Head_2, Mouth_Root) are moved by his own code, which then moved the other's head; seen without a window 2026-11-16)
+BONE_ATTACH = frozenset(("Pod_A", "Pod_B", "Weapon_Root", "Ph_ArmStrap", "Ph_Porch"))
+
+
+def bone_fallbacks(own, other, only=BONE_ATTACH):
+    """{a bone of `own` (a skeleton, bones()) of `only` that `other` has not: the nearest of its parents that `other` has};
+    a bone with none such is left out"""
+    have = {name for name, _ in other}
+    out = {}
+    for name, parent in own:
+        if name in have or (only is not None and name not in only):
+            continue
+        while parent is not None and own[parent][0] not in have:
+            parent = own[parent][1]
+        if parent is not None:
+            out[name] = own[parent][0]
+    return out
+
+
 def looks_for(age):
     """the places in LOOKS a character of `age` may take (None: any), "Its own" first"""
     return [i for i, (_, _, _, a) in enumerate(LOOKS) if i == 0 or age is None or a == age]
@@ -1051,7 +1100,7 @@ def main():
         if new:
             print("  %s: the look of %s (%s), in %d packs" % (label, look, model, len(new)))
     looked = collections.OrderedDict()   # (the characters' looks: rel -> bytes, for MODEL_MOD)
-    changes = {}
+    changes, fallback = {}, {}
     for name, _, label, age, models in CHARACTERS:
         if not chosen[name]:
             continue
@@ -1067,6 +1116,12 @@ def main():
                     sys.exit("%s's pack %s: %s. Nothing written." % (label, pack, e))
                 changes[pack] = (model, heaps)
         print("  %s: the look of %s (%s), in %d packs" % (label, look, model, sum(len(m[2]) for m in models)))
+        if name in ("young_link", "adult_link"):   # (Link's bones the other model has not: answered by their nearest parent it has)
+            try:
+                own = bones(load("Model/%s.%s.bfres.zs" % (models[0][1], models[0][1]))[1])
+                fallback.update(bone_fallbacks(own, bones(load("Model/%s.%s.bfres.zs" % (model, model))[1])))
+            except (ValueError, struct.error) as e:
+                sys.exit("%s as %s, the skeletons: %s. Nothing written." % (label, look, e))
     if changes:
         try:
             looked[ACTOR_INFO] = actor_rows(seed.unpack(open(base_list, "rb").read(), zs, dicts), changes)
@@ -1084,6 +1139,10 @@ def main():
             with open(out, "wb") as f:
                 f.write(zs.ZstdCompressor(level=9, threads=-1).compress(data))
             model_written.append("romfs/" + rel)
+        if fallback:   # (beside romfs: the game reads it, host/hos_main.c hos_oot_bone_fallback)
+            with open(os.path.join(model_mod, BONE_FALLBACKS), "w", encoding="utf-8", newline="\n") as f:
+                f.write("".join("%s=%s\n" % kv for kv in sorted(fallback.items())))
+            model_written.append(BONE_FALLBACKS)
         with open(os.path.join(model_mod, "cosmetics_manifest.txt"), "w", encoding="utf-8") as f:
             f.write("\n".join(sorted(model_written)) + "\n")
     os.makedirs(mod, exist_ok=True)   # (its stamp and list, even with only the characters' looks to write)

@@ -296,6 +296,19 @@ def characters():
         check(False, "a row the list has not is passed over")
     except ValueError:
         pass
+    # (Link's bones where his things hang, answered by their nearest parent the other model has; his face's are not: they
+    #  bent the other's head back)
+    own = [("Root", None), ("Spine", 0), ("Head", 1), ("Head_2", 2), ("Arm_2_R", 1), ("Ph_ArmStrap", 4), ("Weapon_Root", 0), ("Pod_A", 1)]
+    other = [("Root", None), ("Spine", 0), ("Head", 1), ("Arm_2_R", 1)]
+    check(t.bone_fallbacks(own, other) == {"Ph_ArmStrap": "Arm_2_R", "Weapon_Root": "Root", "Pod_A": "Spine"},
+          "Link's bones where his things hang are not answered by their nearest parent the other model has, or his face's are")
+    check(t.bone_fallbacks(own, other, None)["Head_2"] == "Head" and t.BONE_ATTACH >= {"Ph_ArmStrap", "Weapon_Root", "Pod_A", "Pod_B"},
+          "the bones answered are not the ones where his sword and shield hang")
+    host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
+    patches_text = (ROOT / "nx2" / "oot_patches.py").read_text(encoding="utf-8")
+    check("uint64_t hos_oot_bone_fallback(Ctx *c, uint64_t name)" in host and '"mods/zz-cosmetics-models/bone_fallbacks.txt"' in host and
+          "def patch_bone_fallback(source):" in patches_text and t.BONE_FALLBACKS == "bone_fallbacks.txt",
+          "the game does not read the bones' answers the cosmetics write")
     # ---- the launcher: the same characters and looks, Link's of his age only; Randomize all leaves them ----
     launcher = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
     chars = launcher[launcher.index("static readonly object[][] CharacterRows = {"):]

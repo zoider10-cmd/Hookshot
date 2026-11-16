@@ -167,9 +167,57 @@ SWAP_STEP_HEAD = "void f_80312220(Ctx *__restrict A64_NOESC c) {\n"
 #  - functions called on an object another character's model leaves unmade (null), unasked: they return at once then.
 #    f_8030a320: the physics part at the model unit's +0x1a8 (called from f_80c93834's caller, the unit's update)
 SWAP_NULL_SELF = ("f_8030a320",)
+#  - f_8031ef80 itself (a bound part's record by its place; called from many places of the physics, more than were
+#    guarded above: the shield raised, seen without a window): with its tables empty it answers a record of zeros, 64
+#    bytes the host keeps, made zero again at each such call, in place of reading through nothing
+SWAP_RECORD_HEAD = "void f_8031ef80(Ctx *__restrict A64_NOESC c) {\n"
+SWAP_RECORD_GUARD = ("    if (!c->x[0] || !recomp_load64(c, c->x[0] + 104) || !recomp_load64(c, c->x[0] + 24)) {   /* (nx2/oot_patches.py: "
+                     "model swaps, the tables empty) */\n"
+                     "        static uint64_t blank;\n"
+                     "        if (!blank) blank = hos_sys_alloc(64, 16);\n"
+                     "        if (blank) memset(A64_PTR(blank), 0, 64);\n"
+                     "        c->x[0] = blank;\n"
+                     "        return;\n"
+                     "    }\n")
 SWAP_NULL_RETURN = "    if (!c->x[0]) return;   /* (nx2/oot_patches.py: model swaps, an object the model leaves unmade) */\n"
 SWAP_BIND_SKIP = ("    { const uint64_t _o = recomp_load64(c, c->x[0] + 160);   /* (nx2/oot_patches.py: model swaps, the bound parts' "
                   "tables empty) */\n      if (!_o || !recomp_load64(c, _o + 104) || !recomp_load64(c, _o + 24)) return; }\n")
+
+
+#  - f_801d3620 finds a bone of the model by name (its key at x1, the name at the key's start; the pair out at x8): one of
+#    Link's own the other model has not came back -1, used unasked (his shield's strap, Ph_ArmStrap: the game fell). It is
+#    kept under another name, and the one of its name asks the host for another name when none was found
+#    (hos_oot_bone_fallback: the nearest of the bone's parents the other model has, from the cosmetics), then asks again
+BONE_NAME = "f_801d3620"
+BONE_HEAD = "void %s(Ctx *__restrict A64_NOESC c) {\n" % BONE_NAME
+BONE_BODY = BONE_NAME + "_body"
+
+
+def patch_bone_fallback(source):
+    if BONE_BODY in source:   # (made by an earlier run over this file)
+        return source
+    if source.count(BONE_HEAD) != 1:
+        return None
+    start = source.find(BONE_HEAD)
+    end = source.find("\n}\n", start)
+    if end < 0:
+        return None
+    end += 3
+    body = source[start:end].replace("void %s(" % BONE_NAME, "static void %s(" % BONE_BODY, 1)
+    wrapper = (BONE_HEAD +
+               "    const uint64_t self = c->x[0], key = c->x[1], out = c->x[8];   /* (nx2/oot_patches.py: characters' looks, Link's bones) */\n"
+               "    %s(c);\n"
+               "    if ((int16_t)recomp_load16(c, out) < 0) {\n"
+               "        const uint64_t name = recomp_load64(c, key), other = hos_oot_bone_fallback(c, name);\n"
+               "        if (other) {\n"
+               "            recomp_store64(c, key, other);\n"
+               "            c->x[0] = self, c->x[1] = key, c->x[8] = out;\n"
+               "            %s(c);\n"
+               "            recomp_store64(c, key, name);\n"
+               "        }\n"
+               "    }\n}\n" % (BONE_BODY, BONE_BODY))
+    return (source[:start] + body + wrapper + source[end:]).replace(
+        '#include "a64.h"\n', '#include "a64.h"\nextern uint64_t hos_oot_bone_fallback(Ctx *c, uint64_t name);\n', 1)
 
 
 def patch_model_swap(source):
@@ -180,6 +228,11 @@ def patch_model_swap(source):
             if head + SWAP_BIND_SKIP not in source:
                 source = source.replace(head, head + SWAP_BIND_SKIP, 1)
             found = True
+    if source.count(SWAP_RECORD_HEAD) == 1:
+        if SWAP_RECORD_HEAD + SWAP_RECORD_GUARD not in source:
+            source = source.replace(SWAP_RECORD_HEAD, SWAP_RECORD_HEAD + SWAP_RECORD_GUARD, 1).replace(
+                '#include "a64.h"\n', '#include "a64.h"\nextern uint64_t hos_sys_alloc(uint64_t size, uint64_t align);\n', 1)
+        found = True
     for name in SWAP_NULL_SELF:
         head = "void %s(Ctx *__restrict A64_NOESC c) {\n" % name
         if source.count(head) == 1:
@@ -1026,6 +1079,12 @@ def patch_file(s, name, protect_hearts=False):
             lines.append("oot_patches: progressive items, a chest's name, in " + name)
         out = drop
         counts["progressive chest name"] += 1
+    bone = patch_bone_fallback(out) if protect_hearts else None   # (the randomizer's fork: Link's bones on another model)
+    if bone is not None:
+        if bone != out:
+            lines.append("oot_patches: Link's bones answered by another model's in " + name)
+        out = bone
+        counts["bone fallback"] += 1
     swap = patch_model_swap(out) if protect_hearts else None   # (the randomizer's fork: model swaps of Link)
     if swap is not None:
         if swap != out:
@@ -1109,6 +1168,7 @@ def report(paths, counts, protect_hearts=False):
         done["progressive items"] = 0
         done["progressive chest name"] = 0
         done["model swap guards"] = 0
+        done["bone fallback"] = 0
         done["scene format"] = 0
         done["zstd stream hook"] = 0
     total = collections.Counter()
