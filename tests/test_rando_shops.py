@@ -472,10 +472,14 @@ def main():
           seed.either([seed.CHILD, seed.CHILD]) == seed.CHILD and seed.collect([(E([{seed.BB}, {seed.HAM}]), seed.BOW), (seed.NONE, seed.HAM)])[-1] == [seed.BOW],
           "a rule with ways is not got by any one of them, or not as a plain rule otherwise")
     check("if placement >= 5:   # (Zora's Domain by the river or by the lake, zora_ways)" in script and
-          "needs = {h: forest(n, spots[h][0]) for h, n in needs.items()}" in script and "met(needs[h], have)" in script and
+          "needs = {h: n if h in story else forest(n, spots[h][0]) for h, n in needs.items()}" in script and "met(needs[h], have)" in script and
           seed.forest_open(seed.CHILD, "DodongoCavern") == frozenset({seed.BB}) and seed.forest_open(seed.CHILD | {seed.BB}, "DodongoCavern") == frozenset({seed.BB}) and
           '"/".join(",".join(code for item, code in CHECK_CODES.items() if item in way)' in script,
           "the rules' ways are not made, read by the placement, or written for the tracker")
+    check(seed.PLACEMENT >= 6 and set(seed.DEKU_STORY) == {"song_zelda", "song_saria"} and
+          "story = {h for h, g in gifts.items() if g.key in DEKU_STORY} if placement >= 6 else set()" in script and
+          all('Gift("%s", ' % k in script for k in seed.DEKU_STORY),
+          "Impa's and Saria's lessons do not keep the Deku Tree done with Open forest exit (DEKU_STORY)")
     menu = (ROOT / "gpu" / "vk" / "vk_menu.cpp").read_text(encoding="utf-8")
     check("const int held = tracker_way_held(way, strcspn(way, \"/\"), &left);" in menu and "if (held) return 1;" in menu,
           "the menu's tracker does not take a check with one of its rule's ways held as in logic")

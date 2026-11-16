@@ -59,10 +59,11 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 5   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+PLACEMENT = 6   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
                 # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
                 # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
                 #    asking for the forest's way out (forest_open)
+                # 6: Impa's and Saria's lessons keep the Deku Tree done with Open forest exit (DEKU_STORY)
 # (a chest with one of these parameters is left as it is: see the top of this file)
 KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__CheckActor", "Drop__DropActor_Substitute",
            "DropViewActor", "IsEnableRepeatOpen", "SpawnType")
@@ -1318,6 +1319,12 @@ def zora_ways(need, area):
 # stones still ask for the Deku Tree. In Dodongo's Cavern CHILD was also the way in, which bombs open (FOREST_FLOOR):
 # its rules keep bombs.
 FOREST_FLOOR = {"DodongoCavern": frozenset((BB,))}
+# Gifts that the story holds back until the Deku Tree is done, whatever the way out of the forest (placement 6): Zelda
+# is met only after the Deku Tree's quest sends Link to the castle (Goto_HyruleCastle), and Impa's lesson follows her.
+# Saria's lesson in the meadow waits for the same meeting: its trigger asks for DoorOfTime_IsAfter_Step01_Exp, which
+# Goto_HyruleCastle_MeetZelda sets (SacredForestMeadow_Child_Prefab_bbc3; found in play, 2026-11-15: the lesson was
+# not there in a new game with Open forest exit). Open forest exit leaves their CHILD (the Deku Tree done) in place.
+DEKU_STORY = ("song_zelda", "song_saria")
 
 
 def forest_open(need, area=None):
@@ -3983,7 +3990,8 @@ def main():
     needs = {h: step(n) for h, n in needs.items()}
     # (Open forest exit: the forest's way out asked for no more, forest_open; with the place, for FOREST_FLOOR)
     forest = (lambda need, area: each(forest_open, need, area)) if placement >= 5 and a.open_forest else (lambda need, area: need)
-    needs = {h: forest(n, spots[h][0]) for h, n in needs.items()}
+    story = {h for h, g in gifts.items() if g.key in DEKU_STORY} if placement >= 6 else set()
+    needs = {h: n if h in story else forest(n, spots[h][0]) for h, n in needs.items()}
     # (Open Door of Time: what it takes to be an adult is not asked of an adult's own places, door_need)
     grown = lambda h, area: area in DOOR_ADULT_AREAS or check_ages(maps[h]) == "A" if h in maps else area in DOOR_ADULT_AREAS
     if a.open_door:
