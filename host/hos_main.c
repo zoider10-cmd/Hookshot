@@ -1060,21 +1060,27 @@ static const OotDestination oot_destinations[] = {   /* (generated: work/oot-tel
    there puts him (a metre above it, held three seconds). The places are the game's own start points in each boss's room,
    by its door (the room's StartPos nearest the room's centre, from the map files), away from the room's blue warp: put
    where the boss is, Link was above Gohma's ceiling and was taken out of the dungeon (seen without a window). Twinrova's
-   room has none: the place just inside its door. Asked for by the game's owner, to test the bosses without the dungeons. */
+   room has none: the place just inside its door. Asked for by the game's owner, to test the bosses without the dungeons.
+   A fight starts as Link comes through the room's door (the door's shutter or a request at the doorway asks for the
+   boss's event); put inside, he found the boss and no fight (King Dodongo, Barinade, Ganondorf: the owner, 2026-11-16).
+   So the boss's own event (the game's event list, RSDB/EventSetting) is asked for once he has been held in the room. */
 typedef struct {
     const char *folder, *ages;   /* (the dungeon's map folder; C the child, A the adult has it) */
     float place[3];
+    const char *event;           /* (what starts the fight, from the map's request or door in the room) */
+    uint32_t seen;               /* (0, or the dungeon's entry scene's played flag (HavePlayedEvent.Goto_<dungeon>), set first:
+                                    that scene walked Link back to the entrance from the boss's room, and held the camera) */
 } OotBossRoom;
 static const OotBossRoom oot_boss_rooms[] = {
-    {"InsideTheDekuTree", "CA", {6.7f, 47.0f, 67.6f}},           /* Gohma */
-    {"DodongoCavern", "CA", {24.0f, 73.4f, -77.6f}},             /* King Dodongo */
-    {"InsideJabuJabuBelly", "CA", {42.4f, 102.0f, -98.1f}},      /* Barinade */
-    {"ForestTemple", "CA", {-6.0f, 74.7f, -66.0f}},              /* Phantom Ganon */
-    {"FireTemple", "CA", {-64.5f, 102.5f, 0.0f}},                /* Volvagia */
-    {"WaterTemple", "CA", {-4.5f, 131.4f, -75.3f}},              /* Morpha */
-    {"ShadowTemple", "CA", {-138.3f, -11.5f, 22.0f}},            /* Bongo Bongo */
-    {"SpiritTemple", "CA", {0.0f, 135.0f, -121.3f}},             /* Twinrova */
-    {"InsideGanonCastle", "CA", {0.0f, 171.1f, -11.3f}},         /* Ganondorf */
+    {"InsideTheDekuTree", "CA", {6.7f, 47.0f, 67.6f}, "InsideTheDekuTree_BossArea_ShutIn"},           /* Gohma */
+    {"DodongoCavern", "CA", {24.0f, 73.4f, -77.6f}, "Get_StoneOfFire_AppearBoss"},             /* King Dodongo */
+    {"InsideJabuJabuBelly", "CA", {42.4f, 102.0f, -98.1f}, "Get_StoneOfWater_BossAppear"},      /* Barinade */
+    {"ForestTemple", "CA", {-6.0f, 74.7f, -66.0f}, "ForestTemple_SageOfForest_PhantomGanonAppearance"},              /* Phantom Ganon */
+    {"FireTemple", "CA", {-64.5f, 102.5f, 0.0f}, "SageOfFire_BossAppear", 0xde8666fau},                /* Volvagia */
+    {"WaterTemple", "CA", {-4.5f, 131.4f, -75.3f}, "Demo_SageOfWater_BossAppears", 0x3be817e9u},              /* Morpha */
+    {"ShadowTemple", "CA", {-138.3f, -11.5f, 22.0f}, "ShadowTemple_BossAppear"},            /* Bongo Bongo */
+    {"SpiritTemple", "CA", {0.0f, 135.0f, -121.3f}, "SageOfSpirit_BossStart"},             /* Twinrova */
+    {"InsideGanonCastle", "CA", {0.0f, 171.1f, -11.3f}, "Dm_InsideGanonCastle_BossIn"},         /* Ganondorf */
 };
 #define OOT_DESTINATIONS (sizeof oot_destinations / sizeof oot_destinations[0])
 #define OOT_BOSS_ROOMS (sizeof oot_boss_rooms / sizeof oot_boss_rooms[0])
@@ -2480,6 +2486,8 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     }
     static uint64_t flying_actor, marked_actor, marked_controller;
     static int64_t last_tick, last_player_tick, hold_until, trace_until, trace_next;
+    static const char *boss_event;   /* (a boss room's fight, asked for after Link is put there: oot_boss_rooms) */
+    static int64_t boss_event_at;
     /* (the randomizer's fork) the Tracker tab's Go there: a check's place and its map's folder, read from
        <game folder>/rando/goto_check.txt at the action 5. waiting: the teleport to that map was sent, and the place is
        taken once Link is in it with no event playing and no map loading for a second and a half. */
@@ -2566,6 +2574,8 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
             snprintf(check.folder, sizeof check.folder, "%s", room->folder);
             snprintf(check.ages, sizeof check.ages, "%s", room->ages);
             read = 5;
+            boss_event = room->event, boss_event_at = 0;
+            if (room->seen) oot_gamedata_set_bool(c, room->seen, 1);
             hos_log("cheats: boss room %d: %s", boss, room->folder);
         } else {
             FILE *f = oot_place_file(path, sizeof path, "goto_check.txt") ? fopen(path, "r") : NULL;
@@ -2604,9 +2614,16 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
             check.settled = 0;
         } else if (!check.settled) {
             check.settled = now;
-        } else if (now - check.settled > 1500000000LL) {
+        } else if (now - check.settled > (boss_event ? 5000000000LL : 1500000000LL)) {
+            /* (a boss room's: five seconds, so a dungeon's arrival scene has begun and ended first. The Water Temple's,
+               Goto_WaterTemple, began after a second and a half and walked Link to the entrance, which he never reached
+               from Morpha's room: the camera stayed on it and Link could not be moved; the owner, 2026-11-16) */
             check.waiting = 0, go = 1;
         }
+    }
+    if (boss_event && boss_event_at && now >= boss_event_at && !oot_event_playing(c)) {   /* (a boss room's fight: above) */
+        hos_log("cheats: boss room: the fight's event %s %s", boss_event, oot_event_request(c, actor, boss_event) ? "asked for" : "NOT SENT");
+        boss_event = NULL, boss_event_at = 0;
     }
     if (now < trace_until && now >= trace_next) {   /* (where Link is, twice a second, for a while after a go-to) */
         trace_next = now + 500000000LL;
@@ -2666,6 +2683,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
         hold_until = now + 3000000000LL;
         trace_until = hold_until + 8000000000LL, trace_next = 0;
         hos_log("cheats: go to a check: %s, %.2f %.2f %.2f", check.folder, mark[0], mark[1], mark[2]);
+        if (boss_event) boss_event_at = hold_until + 1000000000LL;   /* (the boss's event, once he has been held there) */
     }
     if (action == 2 || marked_controller != controller) hold_until = 0;
     const int returning = (action == 3 || go || now < hold_until) && marked_controller == controller;
