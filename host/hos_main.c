@@ -1663,7 +1663,7 @@ static const char *const oot_families[][3][2] = {
     {{"Item_Range_Bow", "Weapon_Range_Bow"}, {"Item_Quiver_Medium"}, {"Item_Quiver_Large"}},
     {{"Item_Range_SlingShot", "Weapon_Range_SlingShot"}, {"Item_BulletBag_Medium"}, {"Item_BulletBag_Large"}},
     {{"Item_Hookshot"}, {"Item_Longshot"}},
-    {{"Item_Gauntlet_Goron"}, {"Item_Gauntlet_Silver", "Armor_Adult_Gauntlet_Silver"}, {"Item_Gauntlet_Gold", "Armor_Adult_Gauntlet_Gold"}},
+    {{"Item_Gauntlet_Goron", "Armor_Child_Gauntlet_Goron"}, {"Item_Gauntlet_Silver", "Armor_Adult_Gauntlet_Silver"}, {"Item_Gauntlet_Gold", "Armor_Adult_Gauntlet_Gold"}},
     {{"Item_Scale_Silver"}, {"Item_Scale_Gold"}},
     {{"Item_Wallet_Medium"}, {"Item_Wallet_Large"}},
     {{"Item_StickBag_Small"}, {"Item_StickBag_Medium"}, {"Item_StickBag_Large"}},
@@ -1671,6 +1671,16 @@ static const char *const oot_families[][3][2] = {
     {{"Item_FairyBless_MP"}, {"Item_FairyBless_MPDouble"}},
 };
 #define OOT_FAMILIES ((int)(sizeof oot_families / sizeof oot_families[0]))
+/* (what a chest can show and say: the game has a "You got" message (PouchContent.msbt, <name>_GetMessage) for these
+   spellings and not for the others of the same thing. A chest made to give one without a message stopped in its
+   scene, the model shown and no words (seen without a window 2026-11-16, the first Deku Nut bag). So a chest shows
+   the spelling with the message; the first Stick and Nut bags have none: such a chest shows its own item as before) */
+static const char *const oot_show_as[][2] = {
+    {"Item_Range_Bow", "Weapon_Range_Bow"}, {"Item_Range_SlingShot", "Weapon_Range_SlingShot"},
+    {"Item_Gauntlet_Goron", "Armor_Child_Gauntlet_Goron"}, {"Item_Gauntlet_Silver", "Armor_Adult_Gauntlet_Silver"},
+    {"Item_Gauntlet_Gold", "Armor_Adult_Gauntlet_Gold"},
+};
+static const char *const oot_no_show[] = {"Item_StickBag_Small", "Item_NutBag_Small"};
 
 /* the family a content is of (its index), and which spelling it was given by; -1 for none */
 static int oot_family_of(const char *name, int *spelling) {
@@ -2837,44 +2847,91 @@ static const char *oot_progressive_give(Ctx *c, const char *name) {
 }
 #endif
 
-/* (the randomizer's fork) Progressive items, what a chest shows and says: f_80bf1c00 reads an actor's
-   Drop__DropActor (a chest's content, a drop's) into its own name, a buffer whose address is at +0x48 and whose size
-   is the 32 bits at +0x50, and the chest's scene takes its model, its words ("You got a bigger bomb bag!") and the pouch's add from
-   that name. Called as f_80bf1c00 returns (nx2/oot_patches.py patch_drop_name), with the x0 it was called with: a
-   content of a family is made the family's next for Link there (oot_progressive_give), so the scene shows and names
-   what he gets. Seen in play 2026-11-15: a Bomb Bag in Mido's house with no bag had said "bigger bomb bag". The
-   registers are as the function left them. */
-void hos_oot_drop_name(Ctx *c, uint64_t self) {
+/* (the randomizer's fork) Progressive items, what a chest shows and says. f_80bf1c00 is handed an actor as it is made
+   (x0, a drop's component; x1, what the actor is made with) and reads the actor's Drop__DropActor (a chest's content)
+   from the actor's list of parameters (x1+0x40, +0x270, then [0]: the list at +0x10, its count of names at +0, the
+   names at +8, its count of values at +0x10, the values at +0x18, all pointers) into the component's own name (+0x48,
+   its size the 32 bits at +0x50). The chest's scene (Dm_SY_Treasurebox) shows, names and adds its ContentName, which
+   is not that copy: seen without a window 2026-11-16, the copy made the family's next, the scene still said "a bigger
+   Deku-nut bag". So the value in the list is pointed at the family's next too, a string of the host's own that stays,
+   for what reads the list after. Called as f_80bf1c00 returns (nx2/oot_patches.py patch_drop_name). Seen in play
+   2026-11-15: a Bomb Bag in Mido's house with no bag had said "bigger bomb bag". HOS_OOT_DROP_NAME=0 turns it off. */
 #if defined(_WIN32) || defined(__linux__)
-    /* (seen without a window 2026-11-15: the name here is made the family's next as the chest is made, but the
-       chest's scene still showed and said the bigger bag, and the pouch's add was given the bigger bag's name: the
-       scene takes its name from the event's own parameter (f_828d4a70 reads it from its action's +0x20), not from
-       this buffer. Off until that is found; HOS_OOT_DROP_NAME=1 turns this on for a test) */
+static uint64_t oot_kept_name(const char *give) {   /* (a string in the game's memory that stays, one per name) */
+    static struct { char name[48]; uint64_t at; } kept[32];
+    static int count;
+    for (int i = 0; i < count; i++)
+        if (!strcmp(kept[i].name, give)) return kept[i].at;
+    if (count >= 32 || strlen(give) >= sizeof kept[0].name) return 0;
+    const uint64_t at = hos_sys_alloc(64, 16);
+    if (!at) return 0;
+    memcpy(A64_PTR(at), give, strlen(give) + 1);
+    snprintf(kept[count].name, sizeof kept[count].name, "%s", give);
+    kept[count].at = at;
+    count++;
+    return at;
+}
+#endif
+
+void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made) {
+#if defined(_WIN32) || defined(__linux__)
     static int on = -1;
-    if (on < 0) { const char *e = getenv("HOS_OOT_DROP_NAME"); on = e && *e == '1'; }
-    if (!on) return;
-    if (!self || !hos_rando_on() || !hos_rando_progressive()) return;
-    const uint64_t text = recomp_load64(c, self + 0x48);
-    const int size = (int)recomp_load32(c, self + 0x50);
-    if (!text || size < 8 || size > 4096) return;
+    if (on < 0) { const char *e = getenv("HOS_OOT_DROP_NAME"); on = !(e && *e == '0'); }
+    if (!on || !self || !made || !hos_rando_on() || !hos_rando_progressive()) return;
+    /* (the list, as f_80bf1c00 finds it) */
+    uint64_t list = recomp_load64(c, made + 0x40);
+    if (list) list = recomp_load64(c, list + 0x270);
+    if (list) list = recomp_load64(c, list);
+    if (list) list = recomp_load64(c, list + 0x10);
+    if (!list) return;
+    const int names = (int)recomp_load32(c, list), values = (int)recomp_load32(c, list + 0x10);
+    const uint64_t name_at = recomp_load64(c, list + 8), value_at = recomp_load64(c, list + 0x18);
+    if (!name_at || !value_at || names <= 0 || names > 4096) return;
+    static const char key[] = "Drop__DropActor";
+    int found = -1;
+    for (int i = 0; i < names && i < values && found < 0; i++) {
+        const uint64_t k = recomp_load64(c, name_at + 8ULL * i);
+        if (!k) continue;
+        int same = 1;
+        for (int j = 0; j < (int)sizeof key && same; j++) same = (char)recomp_load8(c, k + j) == key[j];
+        if (same) found = i;
+    }
+    if (found < 0) return;
+    const uint64_t value = recomp_load64(c, value_at + 8ULL * found);
+    if (!value) return;
     char name[96];
     int length = 0;
-    for (; length + 1 < (int)sizeof name && length < size; length++) {
-        name[length] = (char)recomp_load8(c, text + length);
+    for (; length + 1 < (int)sizeof name; length++) {
+        name[length] = (char)recomp_load8(c, value + length);
         if (!name[length]) break;
     }
-    name[length < (int)sizeof name ? length : (int)sizeof name - 1] = 0;
+    name[length] = 0;
     if (oot_family_of(name, NULL) < 0) return;
     uint64_t saved[31];
     memcpy(saved, c->x, sizeof saved);   /* (oot_pouch_count calls the game: the registers are given back as they were) */
     const char *give = oot_progressive_give(c, name);
     memcpy(c->x, saved, sizeof saved);
-    if (!give || !strcmp(give, name) || (int)strlen(give) + 1 > size) return;
-    const size_t n = strlen(give);
-    for (size_t i = 0; i <= n; i++) recomp_store8(c, text + i, (uint8_t)give[i]);   /* (with its end) */
+    if (!give) return;
+    for (size_t i = 0; i < sizeof oot_show_as / sizeof oot_show_as[0]; i++)
+        if (!strcmp(give, oot_show_as[i][0])) give = oot_show_as[i][1];
+    for (size_t i = 0; i < sizeof oot_no_show / sizeof oot_no_show[0]; i++)
+        if (!strcmp(give, oot_no_show[i])) {
+            hos_log("rando: progressive: a chest's %s gives %s, which has no words of its own: it shows its own", name, give);
+            return;
+        }
+    if (!strcmp(give, name)) return;
+    const uint64_t kept = oot_kept_name(give);
+    if (!kept) return;
+    recomp_store64(c, value_at + 8ULL * found, kept);   /* (the list's value: what reads it after) */
+    const uint64_t text = recomp_load64(c, self + 0x48);   /* (the component's own copy) */
+    const int size = (int)recomp_load32(c, self + 0x50);
+    if (text && size > (int)strlen(give) && size <= 4096) {
+        const size_t n = strlen(give);
+        for (size_t i = 0; i <= n; i++) recomp_store8(c, text + i, (uint8_t)give[i]);
+    }
     hos_log("rando: progressive: a chest's %s shows and gives %s", name, give);
 #else
-    (void)c; (void)self;
+    (void)c; (void)self; (void)made;
 #endif
 }
 

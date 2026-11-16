@@ -72,17 +72,17 @@ def main():
                 "    if (c->x[1]) {\n        c->x[2] = 1;\n    }\n    return;\n}\nvoid f_2(Ctx *__restrict A64_NOESC c) {\n}\n")
     dropped = oot_patches.patch_drop_name(drop_src)
     check(dropped is not None and "static void f_80bf1c00_body(Ctx *__restrict A64_NOESC c) {\n    if (c->x[1]) {" in dropped and
-          dropped.count(oot_patches.DROP_HEAD) == 1 and "    f_80bf1c00_body(c);\n    hos_oot_drop_name(c, self);\n}\n" in dropped and
+          dropped.count(oot_patches.DROP_HEAD) == 1 and "    f_80bf1c00_body(c);\n    hos_oot_drop_name(c, self, made);\n}\n" in dropped and
           dropped.index("f_80bf1c00_body(c);") > dropped.index("static void f_80bf1c00_body(") and
           "void f_2(Ctx *__restrict A64_NOESC c) {\n}\n" in dropped and
-          dropped.count("extern void hos_oot_drop_name(Ctx *c, uint64_t self);") == 1,
+          dropped.count("extern void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made);") == 1,
           "a chest's content name is not handed to the host after f_80bf1c00, or the function is cut wrong")
     check(oot_patches.patch_drop_name(dropped) == dropped and oot_patches.patch_drop_name(drop_src.replace("f_80bf1c00", "f_80bf1c01")) is None,
           "the chest name's patch is made twice, or made where the function is not")
     check('done["progressive chest name"] = 0' in patches and "drop = patch_drop_name(out) if protect_hearts else None" in patches,
           "the lift does not make the chest name's patch, or does not count it made")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    check("void hos_oot_drop_name(Ctx *c, uint64_t self) {" in host and "static const char *oot_progressive_give(Ctx *c, const char *name) {" in host and
+    check("void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made) {" in host and "static const char *oot_progressive_give(Ctx *c, const char *name) {" in host and
           "(family < 0 || oot_family_of(oot_checks[i].item, NULL) != family)" in host,
           "the host does not name a chest's content by the family's next, or the tracker does not take the family's other names")
 
@@ -102,7 +102,7 @@ def main():
                  "Item_NutBag_Large", "Item_FairyBless_MPDouble"):
         check(word in flat, "the game's families have no %s" % word)
     add = host[host.index("int hos_oot_pouch_add(Ctx *c) {"):host.index("void hos_oot_lift_player(Ctx *c, uint64_t actor) {")]
-    give = host[host.index("static const char *oot_progressive_give(Ctx *c, const char *name) {"):host.index("void hos_oot_drop_name(Ctx *c, uint64_t self) {")]
+    give = host[host.index("static const char *oot_progressive_give(Ctx *c, const char *name) {"):host.index("static uint64_t oot_kept_name(const char *give) {")]
     check("if ((int32_t)c->x[3] <= 0) return 0;" in add and "if (!hos_rando_progressive()) {" in add and
           add.index("if ((int32_t)c->x[3] <= 0) return 0;") < add.index("if (!hos_rando_progressive()) {") < add.index("if (oot_family_of(name, NULL) >= 0) {") and
           "if (level >= tiers) return NULL;" in give and "for (int t = tiers - 1; t >= 0 && !level; t--)" in give,

@@ -153,10 +153,10 @@ def patch_drop_name(source):
         return None
     end += 3
     body = source[start:end].replace("void %s(" % DROP_NAME, "static void %s(" % DROP_BODY, 1)
-    wrapper = (DROP_HEAD + "    const uint64_t self = c->x[0];   /* (nx2/oot_patches.py: progressive items, what a chest shows) */\n"
-               "    %s(c);\n    hos_oot_drop_name(c, self);\n}\n" % DROP_BODY)
+    wrapper = (DROP_HEAD + "    const uint64_t self = c->x[0], made = c->x[1];   /* (nx2/oot_patches.py: progressive items, what a chest shows) */\n"
+               "    %s(c);\n    hos_oot_drop_name(c, self, made);\n}\n" % DROP_BODY)
     return (source[:start] + body + wrapper + source[end:]).replace(
-        '#include "a64.h"\n', '#include "a64.h"\nextern void hos_oot_drop_name(Ctx *c, uint64_t self);\n', 1)
+        '#include "a64.h"\n', '#include "a64.h"\nextern void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made);\n', 1)
 
 
 def patch_flight_rotation(source):
