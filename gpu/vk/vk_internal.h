@@ -247,6 +247,13 @@ void checkpoint_mark(VkCommandBuffer cmd, uint64_t key, char kind);
 /// what they share (textures and their uploads, programs, pipelines, samplers, pools and memory stamps) is used under
 /// one lock; the per-draw caches are each thread's own
 extern std::atomic<bool> par_active;
+/// (hookshot, after Project ReLink) set by dispatch() when it records one of OoT's exposure programs (the sky light's sums,
+/// which the game's CPU reads back for its exposure), on whichever thread: the parallel replay keeps a command buffer that
+/// ran them on the replay thread (vk_replay.cpp replay_handle)
+extern std::atomic<bool> replay_saw_exposure;
+inline bool exposure_program(uint64_t key) {
+    return key == 0x6ccba775ea111ee9ull || key == 0x499dbfd0721d2858ull || key == 0xab7699ee7f536755ull;
+}
 extern std::atomic<int64_t> par_lock_wait_ns, par_locks;   // (contention: the time threads waited for it)
 std::recursive_mutex& par_mutex();
 int64_t par_now_ns();
