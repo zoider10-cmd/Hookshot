@@ -59,12 +59,13 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 7   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+PLACEMENT = 8   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
                 # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
                 # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
                 #    asking for the forest's way out (forest_open)
                 # 6: Impa's and Saria's lessons keep the Deku Tree done with Open forest exit (DEKU_STORY)
                 # 7: the Deku Tree's Slingshot room's two chests ask for the Slingshot (SLINGSHOT_ROOM)
+                # 8: Open forest exit no longer lightens the Gold Skulltulas' rules (skull_door)
 # (a chest with one of these parameters is left as it is: see the top of this file)
 KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__CheckActor", "Drop__DropActor_Substitute",
            "DropViewActor", "IsEnableRepeatOpen", "SpawnType")
@@ -4106,8 +4107,13 @@ def main():
                  for h, n in needs.items()}
     door = (lambda need, h, area: each(door_need, forest(need, area), grown(h, area), a.open_forest, area)) if a.open_door else (
         lambda need, h, area: forest(need, area))   # (with Open forest exit's step: the Gold Skulltulas' and the Pieces of Heart's)
-    # (what a Gold Skulltula asks for, by the same settings)
-    skull_asks = lambda h: door(step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
+    # (what a Gold Skulltula asks for, by the same settings; from placement 8 without Open forest exit's step: in a
+    #  Skulltula's rule CHILD is often a weapon to kill it, or the sword past Mido into the Deku Tree, not the forest's
+    #  way out. Found 2026-11-15: a seed put the Kokiri Sword on a Deku Tree Skulltula, with Open Deku Tree off)
+    skull_door = (lambda need, h, area: each(door_need, need, grown(h, area), a.open_forest, area)) if a.open_door else (
+        lambda need, h, area: need)
+    skull_door = skull_door if placement >= 8 else door
+    skull_asks = lambda h: skull_door(step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
         quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0]))), h, skulls[h][0])
     # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags)
     lesson_safe, lesson_only = frozenset(), {}

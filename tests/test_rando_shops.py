@@ -485,6 +485,9 @@ def main():
           "needs = {h: n | CHILD if h in slingshot_room else n for h, n in needs.items()}" in script and
           "| slingshot_room" in script,
           "the Deku Tree's Slingshot room's chests do not ask for the Slingshot, with Open forest exit too (SLINGSHOT_ROOM)")
+    check(seed.PLACEMENT >= 8 and "skull_door = skull_door if placement >= 8 else door" in script and
+          "skull_asks = lambda h: skull_door(step(" in script,
+          "Open forest exit still lightens the Gold Skulltulas' rules in new seeds (a Deku Tree Skulltula could hold the sword)")
     menu = (ROOT / "gpu" / "vk" / "vk_menu.cpp").read_text(encoding="utf-8")
     check("const int held = tracker_way_held(way, strcspn(way, \"/\"), &left);" in menu and "if (held) return 1;" in menu,
           "the menu's tracker does not take a check with one of its rule's ways held as in logic")
