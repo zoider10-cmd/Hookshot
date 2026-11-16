@@ -129,7 +129,9 @@ def main():
     check('"%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%191[A-Z,/-]|%31[0-9a-fA-F-]|%63[A-Za-z0-9_]"' in host_text and "if (got < 7) continue;" in host_text and
           "rx_option_set(OOT_TRACKER_BASE + i, oot_checks[i].done == 1);" in host_text,
           "the game's side does not take the lines the menu takes, in their order, with what each gives")
-    check("if (oot_checks[i].done == 1 || strcmp(oot_checks[i].item, name)) continue;" in host_text and
+    check("if (oot_checks[i].done == 1) continue;" in host_text and
+          "if (strcmp(oot_checks[i].item, name) && (family < 0 || oot_family_of(oot_checks[i].item, NULL) != family)) continue;" in host_text and
+          "const int family = hos_rando_progressive() ? oot_family_of(name, NULL) : -1;" in host_text and
           "if (best >= 0 && nearest > OOT_CHECK_NEAR) best = -1;" in host_text and "if (!oot_banc_in_folder(oot_link_map, oot_checks[i].folder)) {" in host_text and
           "c->x[30] != 0x8112d4b8ULL && c->x[30] != 0x8112f998ULL && c->x[30] != 0x8112e19cULL &&" in host_text and
           # (but for a test's switch)

@@ -134,6 +134,31 @@ def patch_pouch_add(source):
         '#include "a64.h"\n', '#include "a64.h"\nextern int hos_oot_pouch_add(Ctx *c);\n', 1)
 
 
+# Progressive items, what a chest shows and says (the randomizer's fork: host/hos_main.c hos_oot_drop_name): f_80bf1c00
+# reads an actor's Drop__DropActor into its own name, which the chest's scene shows, names and adds. The function is
+# kept under another name and called by one of the same name, which then hands the host the x0 it was called with.
+DROP_NAME = "f_80bf1c00"
+DROP_HEAD = "void %s(Ctx *__restrict A64_NOESC c) {\n" % DROP_NAME
+DROP_BODY = DROP_NAME + "_body"
+
+
+def patch_drop_name(source):
+    if DROP_BODY in source:   # (made by an earlier run over this file)
+        return source
+    if source.count(DROP_HEAD) != 1:
+        return None
+    start = source.find(DROP_HEAD)
+    end = source.find("\n}\n", start)
+    if end < 0:
+        return None
+    end += 3
+    body = source[start:end].replace("void %s(" % DROP_NAME, "static void %s(" % DROP_BODY, 1)
+    wrapper = (DROP_HEAD + "    const uint64_t self = c->x[0];   /* (nx2/oot_patches.py: progressive items, what a chest shows) */\n"
+               "    %s(c);\n    hos_oot_drop_name(c, self);\n}\n" % DROP_BODY)
+    return (source[:start] + body + wrapper + source[end:]).replace(
+        '#include "a64.h"\n', '#include "a64.h"\nextern void hos_oot_drop_name(Ctx *c, uint64_t self);\n', 1)
+
+
 def patch_flight_rotation(source):
     start = source.find(WARP_HEAD)
     if start < 0:
@@ -933,6 +958,12 @@ def patch_file(s, name, protect_hearts=False):
             lines.append("oot_patches: progressive items in " + name)
         out = pouch
         counts["progressive items"] += 1
+    drop = patch_drop_name(out) if protect_hearts else None   # (the randomizer's fork: what a chest shows)
+    if drop is not None:
+        if drop != out:
+            lines.append("oot_patches: progressive items, a chest's name, in " + name)
+        out = drop
+        counts["progressive chest name"] += 1
     opening = patch_opening(out) if protect_hearts else None
     if opening is not None:
         n = opening.count(OPENING_REQUEST) + opening.count(OPENING_TIMELINE) + opening.count(OPENING_QUERY)
@@ -1008,6 +1039,7 @@ def report(paths, counts, protect_hearts=False):
         done["mouse camera"] = 0
         done["disable camera centering"] = 0
         done["progressive items"] = 0
+        done["progressive chest name"] = 0
         done["scene format"] = 0
         done["zstd stream hook"] = 0
     total = collections.Counter()

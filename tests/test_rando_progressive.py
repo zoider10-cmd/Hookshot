@@ -67,11 +67,29 @@ def main():
     check('done["progressive items"] = 0' in patches and "pouch = patch_pouch_add(out) if protect_hearts else None" in patches and
           'counts["progressive items"] += 1' in patches,   # (Mako 4.1.1: each file's patches are counted in a worker of its own)
           "the lift does not make the hook, or does not count it made")
+    # (what a chest shows and says: f_80bf1c00 kept under another name, called by one of its name that hands the host its x0)
+    drop_src = ('#include "a64.h"\nvoid f_80bf1c00(Ctx *A64_NOESC);\n' + oot_patches.DROP_HEAD +
+                "    if (c->x[1]) {\n        c->x[2] = 1;\n    }\n    return;\n}\nvoid f_2(Ctx *__restrict A64_NOESC c) {\n}\n")
+    dropped = oot_patches.patch_drop_name(drop_src)
+    check(dropped is not None and "static void f_80bf1c00_body(Ctx *__restrict A64_NOESC c) {\n    if (c->x[1]) {" in dropped and
+          dropped.count(oot_patches.DROP_HEAD) == 1 and "    f_80bf1c00_body(c);\n    hos_oot_drop_name(c, self);\n}\n" in dropped and
+          dropped.index("f_80bf1c00_body(c);") > dropped.index("static void f_80bf1c00_body(") and
+          "void f_2(Ctx *__restrict A64_NOESC c) {\n}\n" in dropped and
+          dropped.count("extern void hos_oot_drop_name(Ctx *c, uint64_t self);") == 1,
+          "a chest's content name is not handed to the host after f_80bf1c00, or the function is cut wrong")
+    check(oot_patches.patch_drop_name(dropped) == dropped and oot_patches.patch_drop_name(drop_src.replace("f_80bf1c00", "f_80bf1c01")) is None,
+          "the chest name's patch is made twice, or made where the function is not")
+    check('done["progressive chest name"] = 0' in patches and "drop = patch_drop_name(out) if protect_hearts else None" in patches,
+          "the lift does not make the chest name's patch, or does not count it made")
+    host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
+    check("void hos_oot_drop_name(Ctx *c, uint64_t self) {" in host and "static const char *oot_progressive_give(Ctx *c, const char *name) {" in host and
+          "(family < 0 || oot_family_of(oot_checks[i].item, NULL) != family)" in host,
+          "the host does not name a chest's content by the family's next, or the tracker does not take the family's other names")
 
     # ---- the game's side ----
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    block = host[host.index("int hos_oot_pouch_add(Ctx *c) {"):host.index("void hos_oot_lift_player(Ctx *c, uint64_t actor) {")]
-    rows = re.findall(r"^        \{(\{.*\})\},$", block, re.M)
+    block = host[host.index("static const char *const oot_families[][3][2] = {"):host.index("#define OOT_FAMILIES")]
+    rows = re.findall(r"^    \{(\{.*\})\},$", block, re.M)
     families = [[re.findall(r'"([^"]+)"', tier) for tier in re.findall(r"\{([^{}]*)\}", row)] for row in rows]
     check(len(families) == 10 and all(2 <= len(f) <= 3 and all(1 <= len(t) <= 2 for t in f) for f in families),
           "the game's families are not ten of two or three upgrades, each in one or two spellings: %r" % families)
@@ -83,9 +101,11 @@ def main():
     for word in ("Item_BombBag_Small", "Item_Quiver_Large", "Item_BulletBag_Large", "Item_Longshot", "Item_Wallet_Large", "Item_StickBag_Large",
                  "Item_NutBag_Large", "Item_FairyBless_MPDouble"):
         check(word in flat, "the game's families have no %s" % word)
-    check("if ((int32_t)c->x[3] <= 0) return 0;" in block and "if (!hos_rando_progressive()) {" in block and "if (level >= tiers) {" in block and
-          block.index("if ((int32_t)c->x[3] <= 0) return 0;") < block.index("if (!hos_rando_progressive()) {") < block.index("for (unsigned f = 0;") and
-          "for (int t = tiers - 1; t >= 0 && !level; t--)" in block,
+    add = host[host.index("int hos_oot_pouch_add(Ctx *c) {"):host.index("void hos_oot_lift_player(Ctx *c, uint64_t actor) {")]
+    give = host[host.index("static const char *oot_progressive_give(Ctx *c, const char *name) {"):host.index("void hos_oot_drop_name(Ctx *c, uint64_t self) {")]
+    check("if ((int32_t)c->x[3] <= 0) return 0;" in add and "if (!hos_rando_progressive()) {" in add and
+          add.index("if ((int32_t)c->x[3] <= 0) return 0;") < add.index("if (!hos_rando_progressive()) {") < add.index("if (oot_family_of(name, NULL) >= 0) {") and
+          "if (level >= tiers) return NULL;" in give and "for (int t = tiers - 1; t >= 0 && !level; t--)" in give,
           "a content taken away, or one found with the setting off, is changed; or Link's place in a family is not the highest he carries")
     # ---- a bag found is a full bag: the holder given (after the progressive step) is noted, and what it holds is added
     #      a few updates later until the count stops going up ----
@@ -106,8 +126,8 @@ def main():
                     "Weapon_Range_Bow": "Item_Arrow_Normal", "Item_BulletBag_": "Item_DekuSeed", "Item_Range_SlingShot": "Item_DekuSeed",
                     "Weapon_Range_SlingShot": "Item_DekuSeed", "Item_StickBag_": "Item_DekuStick", "Item_NutBag_": "Item_DekuNut"},
           "what each holder holds is not the five kinds (bombs, arrows, seeds, sticks, nuts): %r" % pairs)
-    check(block.count("oot_fill_note(") == 4 and "oot_fill_note(give);" in block and
-          block.index("if (!hos_rando_on()) return 0;") < block.index("oot_fill_note("),
+    check(add.count("oot_fill_note(") == 4 and "oot_fill_note(give);" in add and
+          add.index("if (!hos_rando_on()) return 0;") < add.index("oot_fill_note("),
           "the holder given is not noted at each way out of the add, or is with the randomizer off")
     update = host[host.index("static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components) {"):]
     update = update[:update.index("if (__atomic_load_n(&oot_piece_back")]
@@ -117,12 +137,12 @@ def main():
           "__atomic_store_n(&oot_fill_wait[k], OOT_FILL_APART, __ATOMIC_RELEASE);" in update and
           "oot_fill_last[k] = -1, oot_fill_adds[k] = 0, oot_fill_bagged[k] = 0;" in host,
           "what a holder holds is not added until the count stops going up, the adds are not apart, or they have no end")
-    name = host[host.index("static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {"):host.index("int hos_oot_pouch_add(Ctx *c) {")]
-    check("c->x[1] = block + 16;" in name and "memcpy(A64_PTR(block + 96), give, strlen(give) + 1);" in name and "oot_pouch_name(c, view, give);" in block and
-          "recomp_store8(c, text" not in block and "recomp_store8(c, text" not in name,
+    name = host[host.index("static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {"):host.index("static const char *oot_progressive_give(Ctx *c, const char *name) {")]
+    check("c->x[1] = block + 16;" in name and "memcpy(A64_PTR(block + 96), give, strlen(give) + 1);" in name and "oot_pouch_name(c, view, give);" in add and
+          "recomp_store8(c, text" not in add and "recomp_store8(c, text" not in name,
           "the name is written over where it is, or the call is not given the host's own view of it")
-    check('if (!strcmp(name, "Item_BombBag_Small") && c->x[30] == 0x828d50acULL && (uint32_t)c->x[4] == 2 && !(c->x[7] & 1)) {' in block and
-          "if (!hos_rando_on()) return 0;" in block and block.index("if (!hos_rando_on()) return 0;") < block.index('"Item_BombBag_Small") && c->x[30]'),
+    check('if (!strcmp(name, "Item_BombBag_Small") && c->x[30] == 0x828d50acULL && (uint32_t)c->x[4] == 2 && !(c->x[7] & 1)) {' in add and
+          "if (!hos_rando_on()) return 0;" in add and add.index("if (!hos_rando_on()) return 0;") < add.index('"Item_BombBag_Small") && c->x[30]'),
           "the Bomb Bag the game gives with bombs is given in a seed, or is kept back with the randomizer off, or a chest's own bag is")
     side = (ROOT / "host" / "oot_rando.c").read_text(encoding="utf-8")
     header = (ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")

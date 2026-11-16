@@ -1654,13 +1654,49 @@ static int oot_shelf_flags(Ctx *c) {
     return changed + marks;
 }
 
+/* (the randomizer's fork) Progressive items: the families, smallest first; a tier may have a second spelling (the
+   pouch's name of the same thing). Used by the pouch's add (hos_oot_pouch_add), by a chest's content name as the
+   chest is made (hos_oot_drop_name: what it shows and says), and by the tracker (a check whose item is of the same
+   family as the one given). */
+static const char *const oot_families[][3][2] = {
+    {{"Item_BombBag_Small"}, {"Item_BombBag_Medium"}, {"Item_BombBag_Large"}},
+    {{"Item_Range_Bow", "Weapon_Range_Bow"}, {"Item_Quiver_Medium"}, {"Item_Quiver_Large"}},
+    {{"Item_Range_SlingShot", "Weapon_Range_SlingShot"}, {"Item_BulletBag_Medium"}, {"Item_BulletBag_Large"}},
+    {{"Item_Hookshot"}, {"Item_Longshot"}},
+    {{"Item_Gauntlet_Goron"}, {"Item_Gauntlet_Silver", "Armor_Adult_Gauntlet_Silver"}, {"Item_Gauntlet_Gold", "Armor_Adult_Gauntlet_Gold"}},
+    {{"Item_Scale_Silver"}, {"Item_Scale_Gold"}},
+    {{"Item_Wallet_Medium"}, {"Item_Wallet_Large"}},
+    {{"Item_StickBag_Small"}, {"Item_StickBag_Medium"}, {"Item_StickBag_Large"}},
+    {{"Item_NutBag_Small"}, {"Item_NutBag_Medium"}, {"Item_NutBag_Large"}},
+    {{"Item_FairyBless_MP"}, {"Item_FairyBless_MPDouble"}},
+};
+#define OOT_FAMILIES ((int)(sizeof oot_families / sizeof oot_families[0]))
+
+/* the family a content is of (its index), and which spelling it was given by; -1 for none */
+static int oot_family_of(const char *name, int *spelling) {
+    for (int f = 0; f < OOT_FAMILIES; f++)
+        for (int t = 0; t < 3 && oot_families[f][t][0]; t++)
+            for (int a = 0; a < 2; a++)
+                if (oot_families[f][t][a] && !strcmp(name, oot_families[f][t][a])) {
+                    if (spelling) *spelling = a;
+                    return f;
+                }
+    return -1;
+}
+
+int hos_rando_progressive(void);   /* host/oot_rando.c */
+
 /* An item given (hos_oot_pouch_add): the check that gives it is collected */
 static void oot_tracker_item(const char *name) {
     AcquireSRWLockExclusive(&oot_checks_lock);
     int best = -1, elsewhere = -1, others = 0;
     float nearest = 1e30f;
+    /* (with Progressive items a check gives the family's next, by its own name or, since the chest says so, by that
+       next's: a check of the same family is the one) */
+    const int family = hos_rando_progressive() ? oot_family_of(name, NULL) : -1;
     for (int i = 0; i < oot_check_count; i++) {
-        if (oot_checks[i].done == 1 || strcmp(oot_checks[i].item, name)) continue;
+        if (oot_checks[i].done == 1) continue;
+        if (strcmp(oot_checks[i].item, name) && (family < 0 || oot_family_of(oot_checks[i].item, NULL) != family)) continue;
         if (!oot_banc_in_folder(oot_link_map, oot_checks[i].folder)) {
             others++, elsewhere = i;
             continue;
@@ -2783,20 +2819,60 @@ static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {
     return block + 16;
 }
 #endif
+#if defined(_WIN32) || defined(__linux__)
+/* With Progressive items: what a content of a family gives Link now, the next of the family he has not (by the
+   spelling it was named by); NULL when it is of no family, or he has the family whole (it is given as it is). */
+static const char *oot_progressive_give(Ctx *c, const char *name) {
+    int spelling = 0;
+    const int f = oot_family_of(name, &spelling);
+    if (f < 0) return NULL;
+    int tiers = 0;
+    while (tiers < 3 && oot_families[f][tiers][0]) tiers++;
+    int level = 0;   /* (how many of the family Link has: the highest he carries, and all under it) */
+    for (int t = tiers - 1; t >= 0 && !level; t--)
+        for (int a = 0; a < 2; a++)
+            if (oot_families[f][t][a] && oot_pouch_count(c, oot_families[f][t][a]) > 0) level = t + 1;
+    if (level >= tiers) return NULL;
+    return oot_families[f][level][spelling] ? oot_families[f][level][spelling] : oot_families[f][level][0];
+}
+#endif
+
+/* (the randomizer's fork) Progressive items, what a chest shows and says: f_80bf1c00 reads an actor's
+   Drop__DropActor (a chest's content, a drop's) into its own name, a buffer whose address is at +0x48 and whose size
+   is the 32 bits at +0x50, and the chest's scene takes its model, its words ("You got a bigger bomb bag!") and the pouch's add from
+   that name. Called as f_80bf1c00 returns (nx2/oot_patches.py patch_drop_name), with the x0 it was called with: a
+   content of a family is made the family's next for Link there (oot_progressive_give), so the scene shows and names
+   what he gets. Seen in play 2026-11-15: a Bomb Bag in Mido's house with no bag had said "bigger bomb bag". The
+   registers are as the function left them. */
+void hos_oot_drop_name(Ctx *c, uint64_t self) {
+#if defined(_WIN32) || defined(__linux__)
+    if (!self || !hos_rando_on() || !hos_rando_progressive()) return;
+    const uint64_t text = recomp_load64(c, self + 0x48);
+    const int size = (int)recomp_load32(c, self + 0x50);
+    if (!text || size < 8 || size > 4096) return;
+    char name[96];
+    int length = 0;
+    for (; length + 1 < (int)sizeof name && length < size; length++) {
+        name[length] = (char)recomp_load8(c, text + length);
+        if (!name[length]) break;
+    }
+    name[length < (int)sizeof name ? length : (int)sizeof name - 1] = 0;
+    if (oot_family_of(name, NULL) < 0) return;
+    uint64_t saved[31];
+    memcpy(saved, c->x, sizeof saved);   /* (oot_pouch_count calls the game: the registers are given back as they were) */
+    const char *give = oot_progressive_give(c, name);
+    memcpy(c->x, saved, sizeof saved);
+    if (!give || !strcmp(give, name) || (int)strlen(give) + 1 > size) return;
+    const size_t n = strlen(give);
+    for (size_t i = 0; i <= n; i++) recomp_store8(c, text + i, (uint8_t)give[i]);   /* (with its end) */
+    hos_log("rando: progressive: a chest's %s shows and gives %s", name, give);
+#else
+    (void)c; (void)self;
+#endif
+}
+
 int hos_oot_pouch_add(Ctx *c) {
 #if defined(_WIN32) || defined(__linux__)
-    static const char *const families[][3][2] = {
-        {{"Item_BombBag_Small"}, {"Item_BombBag_Medium"}, {"Item_BombBag_Large"}},
-        {{"Item_Range_Bow", "Weapon_Range_Bow"}, {"Item_Quiver_Medium"}, {"Item_Quiver_Large"}},
-        {{"Item_Range_SlingShot", "Weapon_Range_SlingShot"}, {"Item_BulletBag_Medium"}, {"Item_BulletBag_Large"}},
-        {{"Item_Hookshot"}, {"Item_Longshot"}},
-        {{"Item_Gauntlet_Goron"}, {"Item_Gauntlet_Silver", "Armor_Adult_Gauntlet_Silver"}, {"Item_Gauntlet_Gold", "Armor_Adult_Gauntlet_Gold"}},
-        {{"Item_Scale_Silver"}, {"Item_Scale_Gold"}},
-        {{"Item_Wallet_Medium"}, {"Item_Wallet_Large"}},
-        {{"Item_StickBag_Small"}, {"Item_StickBag_Medium"}, {"Item_StickBag_Large"}},
-        {{"Item_NutBag_Small"}, {"Item_NutBag_Medium"}, {"Item_NutBag_Large"}},
-        {{"Item_FairyBless_MP"}, {"Item_FairyBless_MPDouble"}},
-    };
     if (!hos_rando_on()) return 0;
     uint64_t view = c->x[1];
     const uint64_t text = view ? recomp_load64(c, view) : 0;
@@ -2850,25 +2926,13 @@ int hos_oot_pouch_add(Ctx *c) {
         oot_fill_note(name);   /* (a bag found is a full bag) */
         return 0;
     }
-    for (unsigned f = 0; f < sizeof families / sizeof families[0]; f++) {
-        int spelling = -1, tiers = 0;
-        for (int t = 0; t < 3; t++) {
-            if (!families[f][t][0]) break;
-            tiers = t + 1;
-            for (int a = 0; a < 2; a++)
-                if (families[f][t][a] && !strcmp(name, families[f][t][a])) spelling = a;
-        }
-        if (spelling < 0) continue;
-        int level = 0;   /* (how many of the family Link has: the highest he carries, and all under it) */
-        for (int t = tiers - 1; t >= 0 && !level; t--)
-            for (int a = 0; a < 2; a++)
-                if (families[f][t][a] && oot_pouch_count(c, families[f][t][a]) > 0) level = t + 1;
-        if (level >= tiers) {   /* (he has them all: the one found is given as it is) */
+    if (oot_family_of(name, NULL) >= 0) {
+        const char *give = oot_progressive_give(c, name);
+        if (!give) {   /* (he has them all: the one found is given as it is) */
             oot_fill_note(name);
             return 0;
         }
-        const char *give = families[f][level][spelling] ? families[f][level][spelling] : families[f][level][0];
-        hos_log("rando: progressive: %s found, Link has %d of its %d: %s given", name, level, tiers, give);
+        hos_log("rando: progressive: %s found: %s given", name, give);
         oot_fill_note(give);
         if (!strcmp(give, name)) return 0;
         oot_pouch_name(c, view, give);
