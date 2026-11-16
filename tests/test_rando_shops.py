@@ -201,6 +201,15 @@ def main():
           read(mine[ACTOR % name])["Components"]["ModelInfoRef"] == "?" + seed.MODEL_INFO_FILE % name,
           "a shield's model file on a shelf is not the shelf's own, under its name, or the shelf's actor does not name it")
     check(seed.MODEL_INFO_FILE % "x" == MODEL % "x", "the shelf's own model file is not where a model file is")
+    # (the Potion Shop keeper's bottle: a gift from placement 9, his errand of the bug passed over in every seed)
+    potion = {g.key: g for g in seed.GIFTS}.get("potion_bottle")
+    check(potion is not None and potion.flow == "Npc_Hylia_020_Shop_Child" and potion.olds == ("Item_Bottle",) and potion.area == "Market" and
+          seed.GIFTS_FROM.get("potion_bottle") == 9 <= seed.PLACEMENT and "potion_bottle" in seed.GIFT_PLACES and
+          seed.POTION_FLOW == "Event/EventFlow/Npc_Hylia_020_Shop_Child.bfevfl.zs",
+          "the Potion Shop keeper's bottle is not a gift of the shuffle from placement 9, or has no place on the Tracker tab")
+    script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
+    check("gift_files[POTION_FLOW] = potion_errand_skip(was)" in script and "if g.key in GIFTS_FROM and placement < GIFTS_FROM[g.key]:" in script,
+          "the keeper's errand is not passed over in the seed's flows, or a gift added later changes the seeds made before")
     for bad, why in ((seed.sarc_write({ACTOR % "Item_Other": b""}), "an item whose pack has no actor of its name"),):
         try:
             seed.shop_pack("Item_Thing", bad, base, sample, 70)
