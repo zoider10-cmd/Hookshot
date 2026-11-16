@@ -3305,8 +3305,10 @@ SONGS = (
 SONG_LOOK = "Item_Harp_Sheik"
 # On a shelf the harp lay tipped back and sunk in, only its top bar showing (the owner's picture, 2026-11-15): the
 # shelf's fit was the rupee's (its box, read before the songs took the harp's), the rupee standing on its base and the
-# harp's model turning about its middle. It is stood up as the Mirror Shield is (a quarter turn about X) and raised.
-SHELF_TURN.update({song: (1.57, 0.0, 0.0) for song in SONG_ITEMS})
+# harp's model turning about its middle. A quarter turn about X (as the Mirror Shield's) only spun it in its own
+# plane (seen without a window, the owner's save in the Bombchu Shop); a quarter turn about the upright stands it up,
+# facing out, and it is raised.
+SHELF_TURN.update({song: (0.0, 1.57, 0.0) for song in SONG_ITEMS})
 SHELF_LIFT.update({song: 0.3 for song in SONG_ITEMS})
 SONG_LOOK_ROW = "Dm_Item_Sheik_Harp"
 SONG_LOOK_FILE = "Component/ModelInfo/%s.engine__component__ModelInfo.bgyml"
