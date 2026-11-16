@@ -49,6 +49,9 @@ VkResult vmaFlushAllocation(VmaAllocator, VmaAllocation a, uint64_t offset, uint
 void logf(const char*, ...) {}
 enum LogLevel : int { log_error, log_warn, log_info, log_debug, log_trace };   // (gpu/vk/vk_internal.h's: staging's slow-arena line is debug)
 void logf_at(LogLevel, const char*, ...) {}
+// (staging()'s count of every arena it makes, and their time: the log's memory line)
+std::atomic<uint64_t> st_arena_makes{0};
+std::atomic<int64_t> st_arena_make_ns{0};
 void consume(VkCommandBuffer) {
     for (auto& a : allocations) {
         if (!a->alive) continue;
