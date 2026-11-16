@@ -2079,6 +2079,7 @@ class LauncherForm : Form {
     readonly List<TabW> tabs = new List<TabW>();
     Selector langSel;
     Btn updateButton, playButton, fsrButton, benchButton;
+    const bool UpdatesOn = false;   // (the Update button and the check at start; see where updateButton is made)
     Bench bench; bool benchBusy;   // (Mako 4.0: Test my PC, its last result)
     string fsrLine = ""; Color fsrLineColor = Theme.Dim; bool fsrBusy;
     Image logo, mqLogo;
@@ -2355,7 +2356,10 @@ class LauncherForm : Form {
         // (left panel: update card button and PLAY)
         updateButton = new Btn { Text = "Check again", R = new RectangleF(236, 448, 116, 30), Font = Theme.Label, Enabled = false };
         updateButton.Click = OnUpdateButton;
-        widgets.Add(updateButton);
+        // (no Update button, no check at start: asked for by the owner, 2026-11-15. Upstream's releases are Mako's
+        //  without the randomizer, and an update from them would replace it; upstream's changes are merged by hand.
+        //  The card shows the version installed. OnUpdateButton and CheckUpdate stay for a later release of our own)
+        if (UpdatesOn) widgets.Add(updateButton);
         // (Continue plays the game and the save played last, without asking; the button under it opens the window to choose
         // the game (the normal one, the randomizer, Master Quest) and its save, and plays those. PlayMode, SaveSlots)
         playButton = new Btn { Text = "CONTINUE", Style = Btn.Kind.Play, R = new RectangleF(32, 504, 336, 62), Click = OnPlay };
@@ -2514,7 +2518,8 @@ class LauncherForm : Form {
         timer = new System.Windows.Forms.Timer { Interval = 16 };
         timer.Tick += (s, e) => Step();
         timer.Start();
-        CheckUpdate();
+        if (UpdatesOn) CheckUpdate();
+        else SetUpdate(Theme.Faint, Fork.Shown(Fork.Version), "Updates are merged by hand for this build", "Check again", false, false);
     }
 
     protected override void OnHandleCreated(EventArgs e) {
