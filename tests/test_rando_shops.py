@@ -322,6 +322,21 @@ def main():
     check(both[a:b] == b"You got the other!\0" and seed.msbt_text(both, "Item_Thing_ShopCaption"), "an item with no description is not given what is said when it is got")
     check(seed.shop_caption(data, "Item_Sold") is None and seed.shop_caption(data, "Item_Nothing") is None, "an item that has the line, or no words at all, is given one")
     check(seed.msbt_add(data, "Item_Thing_Name", b"New") == seed.msbt_set(data, "Item_Thing_Name", b"New"), "a label the file has is added again")
+    # (the name keeps its capitals in a keeper's line: a tag before each capital word, the game's own tags kept whole)
+    cap = seed.NAME_CAP
+    named = text_file([("Item_Song_Name", b"\x0e\xc9\x00\x00\x00\x04\x00\x00\x00\xff\x01Saria's Song"), ("Item_Kept_Name", cap + b"Deku " + cap + b"Shield"),
+                       ("Item_Low_Name", b"bomb"), ("Item_Milk_Name", b"Half-Full Milk")])
+    song = seed.shop_name_caps(named, "Item_Song")
+    a, b = seed.msbt_text(song, "Item_Song_Name")
+    check(song[a:b] == b"\x0e\xc9\x00\x00\x00\x04\x00\x00\x00\xff\x01" + cap + b"Saria's " + cap + b"Song\0", "a name's words are not each given the capital's tag, or its own tag is broken")
+    milk = seed.shop_name_caps(named, "Item_Milk")
+    a, b = seed.msbt_text(milk, "Item_Milk_Name")
+    check(milk[a:b] == cap + b"Half-" + cap + b"Full " + cap + b"Milk\0", "a word after a hyphen keeps no capital")
+    check(seed.shop_name_caps(named, "Item_Kept") is None and seed.shop_name_caps(named, "Item_Low") is None and seed.shop_name_caps(named, "Item_None") is None,
+          "a name already tagged, one with no capitals or none at all is changed")
+    script_now = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
+    check("caps = n.startswith(SHOP_NAME_CAPS) and shop_caption(text, name) is not None" in script_now and "text = shop_name_caps(text, name) or text" in script_now,
+          "the names of what the game never sells are not given their capitals in English")
     extra = bytearray(data)
     extra[data.index(b"TXT2"):data.index(b"TXT2") + 4] = b"ATR1"
     try:

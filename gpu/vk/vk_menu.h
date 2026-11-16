@@ -73,7 +73,7 @@ struct Options {
     int camera_speed = 100;   // (hookshot) the right stick's camera turn in percent of the game's, 50 to 400 (host/nn_vi.c, nx2/oot_patches.py: HOS_OPT_CAMERA_SPEED, 48)
     int invert_cam_x = 0; // right-stick camera horizontal inversion: 0 normal, 1 inverted
     int invert_cam_y = 0; // right-stick camera vertical inversion: 0 normal, 1 inverted
-    int rumble = 0;       // the controllers' rumble in percent of the game's: 0 Off, 25 to 150 (host/pad_sdl.c). Off by default (the randomizer's owner, 2026-11-15)
+    int rumble = 0;       // the controllers' rumble in percent of the game's: 0 Off, 25 to 150 (host/pad_sdl.c). Off by default (the owner's wish, 2026-11-15)
     int stick_dead_zone = 0;  // circular stick cutoff: 0 XInput's 7849 (~24%), 1..5 5% to 30% (host/nn_hid.c)
     int hold_toggle = 0;  // enabled Switch buttons (1 << HOS_SW_*); persisted as toggle_<button>, not one mask entry
     int pad_layout = 0;   // 0 Nintendo (default), 1 Xbox / PC, 2 Swap Face Buttons, 3 Custom

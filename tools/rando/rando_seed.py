@@ -80,7 +80,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 29   # (29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 30   # (30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -1142,6 +1142,40 @@ def shop_caption(data, name):
             continue
         return msbt_add(data, name + "_ShopCaption", bytes(data[a:b]).rstrip(b"\0"))
     return None
+
+
+# A shop keeper's line names the item on the shelf from its <name>_Name line in lowercase ("Lookin' at the
+# <Shop_SelectItemName>?"), save each word with a tag before it (group 0xc9, tag 0x0d: "^Deku ^Shield", "Five ^Deku
+# Nuts"). An item the game never sells (one with no _ShopCaption of its own: shop_caption) has none, so the keeper said
+# "the kokiri sword?", "the saria's song?" (seen in play). Such a name keeps its capitals in English (SHOP_NAME_CAPS):
+# each word that starts with a capital is given the tag. The tag is the game's own in its names, so the name looks the
+# same where it is shown as it is (the pause menu, a shelf's title). Other languages are left as they are.
+NAME_CAP = b"\x0e\xc9\x00\x0d\x00\x00\x00"
+SHOP_NAME_CAPS = ("USen", "EUen")
+
+
+def shop_name_caps(data, name):
+    """The pouch's text file with each word of <name>_Name that starts with a capital letter given the tag that keeps
+    it so in a keeper's line (NAME_CAP). None: no such line, or nothing to tag."""
+    try:
+        a, b = msbt_text(data, name + "_Name")
+    except ValueError:
+        return None
+    raw = bytes(data[a:b]).rstrip(b"\0")
+    out, i, changed, word_start = bytearray(), 0, False, True
+    while i < len(raw):
+        if raw[i] == 0x0e:   # (a tag, kept whole: its parameters' size is at +5)
+            n = 7 + struct.unpack_from("<H", raw, i + 5)[0]
+            out += raw[i:i + n]
+            i += n
+            continue
+        if word_start and 0x41 <= raw[i] <= 0x5a and not out.endswith(NAME_CAP):
+            out += NAME_CAP
+            changed = True
+        word_start = raw[i] in b" -\n"
+        out.append(raw[i])
+        i += 1
+    return msbt_set(data, name + "_Name", bytes(out)) if changed else None
 
 
 # ---- a scrub's words ----
@@ -4527,7 +4561,10 @@ def main():
                     continue
                 was = text
                 for name in sorted(set(names.values())):
+                    caps = n.startswith(SHOP_NAME_CAPS) and shop_caption(text, name) is not None
                     text = shop_caption(text, name) or text
+                    if caps:
+                        text = shop_name_caps(text, name) or text
                 if text != was:
                     parts[SHOP_TEXT] = text
                     gift_files[rel] = sarc_write(parts)
