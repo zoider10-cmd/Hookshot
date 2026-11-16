@@ -80,7 +80,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 30   # (30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 31   # (31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -723,7 +723,7 @@ SHELF_SCALE = {"Item_Dungeon_SmallKey": 0.6, "Item_Dungeon_Compass": 1.5, "Item_
 #  feathers and heads to the viewer; lifted over the board and a little smaller, the arrows being as long as the
 #  shelf is wide. Seen without a window on the Kokiri shop's shelves, among four turns tried)
 SHELF_TURN = {"TBox_ArrowBundle_Small": (0.0, 1.57, 0.0), "Item_Range_Bow": (0.0, 1.57, 1.57), "Item_Range_SlingShot": (0.0, 1.57, 1.57), "Item_Sword_Kokiri": (0.0, 1.57, 1.57), "Item_Shield_Mirror": (1.57, 0.0, 0.0),
-              "TBox_Shield_Deku": (1.57, 0.0, 0.0), "TBox_Shield_Hylian": (-1.57, 3.14, 0.0)}
+              "TBox_Shield_Deku": (-1.57, 3.14, 0.0), "TBox_Shield_Hylian": (-1.57, 3.14, 0.0)}
 # An item whose model is made where it is worn, not at its own origin (the gauntlets: 1.17 m up): its shelf's actor is
 # put that much lower (shelf_fit). The gauntlets keep their size: their box is the pair's, 1.6 m from one to the other.
 SHELF_WORN = 0.5
@@ -805,6 +805,16 @@ def wallet_need(price):
     return next((need for most, need in WALLETS if price <= most), WALLETS[-1][1])
 
 
+# A shield on a shelf names its model in a file the shield Link carries names too (Component/ModelInfo/Weapon_Shield_Deku), and
+# the game keeps the first copy of a file's name it loads. The shelf's pack had the game's own copy, so after the Potion Shop's
+# Deku Shield was loaded, the shield on Link's back lost the look the cosmetics give it (rando_cosmetics.py SHIELD_PACKS) until
+# the game was started again (seen in play, 2026-11-16). The shelf's copy now has the shelf's own name, and the shelf's actor
+# names that one: the shield's own name is only ever loaded from the game's packs and the cosmetics'. (The shelf shows the
+# shield's own look.)
+SHELF_OWN_MODEL = ("Weapon_Shield_Deku", "Weapon_Shield_Hylian", "Weapon_Shield_Mirror")
+MODEL_INFO_FILE = "Component/ModelInfo/%s.engine__component__ModelInfo.bgyml"
+
+
 def shop_pack(item, item_pack, base_pack, sample_pack, price, pouch=None, name=None):
     """An item's shelf actor (name: its actor's, shop_actor(item) when not given): (its pack, the names of the three files it has that no other pack has, the name its
     texts go by). The pack is the shelf base's files and the item's; its actor has the base's as its parent and the
@@ -842,6 +852,12 @@ def shop_pack(item, item_pack, base_pack, sample_pack, price, pouch=None, name=N
     _, version = byml_parse(sample[sample_actor])
     # (not the item's pose and animation, ASInfoRef, ASRef and AnimationRef: they are its "item got" scene's: SHELF_POSE, above SHELF_LIFT)
     comps = collections.OrderedDict((key, part(key)) for key in ("ActorNameRef", "ModelInfoRef", "PouchContentRef") if part(key))
+    # (a shield's model file is the shelf's own, under the shelf's name: SHELF_OWN_MODEL)
+    model_file = ref_file(comps["ModelInfoRef"][1])
+    if model_file.split("/")[-1].split(".")[0] in SHELF_OWN_MODEL and model_file in files:
+        own_model = MODEL_INFO_FILE % name
+        files[own_model] = files.pop(model_file)
+        comps["ModelInfoRef"] = ("string", "?" + own_model)
     comps["GameParameterTableRef"] = ("string", "?" + table_name)
     files[actor_name] = byml_build(("dict", collections.OrderedDict((("$parent", ("string", ACTOR_REF % SHOP_BASE)),
                                                                      ("Components", ("dict", collections.OrderedDict(sorted(comps.items()))))))), version)
@@ -3344,7 +3360,9 @@ SONG_LOOK = "Item_Harp_Sheik"
 # harp's model turning about its middle. A quarter turn about X (as the Mirror Shield's) only spun it in its own
 # plane (seen without a window, the owner's save in the Bombchu Shop); a quarter turn about the upright stands it up,
 # facing out, and it is raised.
-SHELF_TURN.update({song: (0.0, 1.57, 0.0) for song in SONG_ITEMS})
+# A quarter turn about the upright left it edge-on to Link (the owner's picture, 2026-11-16, the Potion Shop's Bolero of Fire):
+# it faces out with no turn, raised as before.
+SHELF_TURN.update({song: (0.0, 0.0, 0.0) for song in SONG_ITEMS})
 SHELF_LIFT.update({song: 0.3 for song in SONG_ITEMS})
 SONG_LOOK_ROW = "Dm_Item_Sheik_Harp"
 SONG_LOOK_FILE = "Component/ModelInfo/%s.engine__component__ModelInfo.bgyml"

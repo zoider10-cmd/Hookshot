@@ -188,6 +188,19 @@ def main():
     again = seed.sarc_read(seed.shop_pack("Item_Thing", item, base, sample, 70, changed)[0])
     check(read(again[POUCH % "Item_Thing"]).get("DefaultAutoGet") == 1 and "Component/Other.bgyml" not in again,
           "a pouch file a pick-up changed is not taken, or a file the pack has not is")
+    # (a shield's model file is the shelf's own, under the shelf's name: the shield's own name stays the cosmetics')
+    check(seed.SHELF_OWN_MODEL == ("Weapon_Shield_Deku", "Weapon_Shield_Hylian", "Weapon_Shield_Mirror") and "Item_Thing" not in seed.SHELF_OWN_MODEL,
+          "the shields whose model file a shelf keeps for itself are not the three")
+    kept = seed.SHELF_OWN_MODEL
+    seed.SHELF_OWN_MODEL = kept + ("Item_Thing",)
+    try:
+        mine = seed.sarc_read(seed.shop_pack("Item_Thing", item, base, sample, 70)[0])
+    finally:
+        seed.SHELF_OWN_MODEL = kept
+    check(MODEL % "Item_Thing" not in mine and mine.get(seed.MODEL_INFO_FILE % name) == files[MODEL % "Item_Thing"] and
+          read(mine[ACTOR % name])["Components"]["ModelInfoRef"] == "?" + seed.MODEL_INFO_FILE % name,
+          "a shield's model file on a shelf is not the shelf's own, under its name, or the shelf's actor does not name it")
+    check(seed.MODEL_INFO_FILE % "x" == MODEL % "x", "the shelf's own model file is not where a model file is")
     for bad, why in ((seed.sarc_write({ACTOR % "Item_Other": b""}), "an item whose pack has no actor of its name"),):
         try:
             seed.shop_pack("Item_Thing", bad, base, sample, 70)
@@ -272,7 +285,7 @@ def main():
     check(lifted[0]["Translate"] == [1.0, 2.25, 3.0] and lifted[1]["Translate"] == [4.0, 5.0, 6.0], "a shelf whose item asks for it is not put higher, or another is")
     check("Item_Gauntlet_Gold" not in seed.SHELF_LIFT and seed.SHELF_SCALE["Item_Gauntlet_Gold"] == 1.0 and seed.SHELF_SCALE["Item_Gauntlet_Goron"] == 1.5 and seed.SHELF_TURN["TBox_ArrowBundle_Small"] == (0.0, 1.57, 0.0) and seed.SHELF_LIFT["TBox_ArrowBundle_Small"] == 0.2 and
           set(seed.SHELF_TURN) == {"TBox_ArrowBundle_Small", "Item_Range_Bow", "Item_Range_SlingShot", "Item_Sword_Kokiri", "Item_Shield_Mirror", "TBox_Shield_Deku", "TBox_Shield_Hylian"} | set(seed.SONG_ITEMS) and
-          all(seed.SHELF_TURN[song] == (0.0, 1.57, 0.0) and seed.SHELF_LIFT[song] == 0.3 for song in seed.SONG_ITEMS),
+          all(seed.SHELF_TURN[song] == (0.0, 0.0, 0.0) and seed.SHELF_LIFT[song] == 0.3 for song in seed.SONG_ITEMS),
           "the gauntlets have a height of their own again (their box is right without the pose), or are made smaller, or another item is turned")
     info = byml([{"ModelAabbMin": {"X": -0.2, "Y": -0.193, "Z": 0.0}, "__RowId": "Item_Token_Gold"}, {"ModelAabbMin": {"X": 0.0, "Y": 1.171, "Z": 0.0}, "__RowId": "Item_Gauntlet_Gold"},
                  {"__RowId": "Item_Bare"}])

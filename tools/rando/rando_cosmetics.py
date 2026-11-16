@@ -534,8 +534,10 @@ def shield_look_of(text):
 # Deku Shield (its owner's report, 2026-11-13; the Hylian Shield as another showed, no copy of its file being in a
 # pack loaded there before Link's). So every copy is changed, in every pack that has one (SHIELD_PACKS, found by
 # going through all the packs): the shop's, the chests' and the world's shields then have the look too.
-# Not covered: a pack the randomizer's seed writes itself with a copy in it (a shield made a pick-up or put on a
-# shelf): its copy is the game's own, and where it is loaded first the look is not shown.
+# A shield put on a shelf by the randomizer's seed has its own copy under the shelf's name (rando_seed.py SHELF_OWN_MODEL):
+# the shelf shows the shield's own look, and the look here stays on Link's (seen without a window, 2026-11-16). Not covered:
+# a shield the seed makes a pick-up (its whole pack is the seed's, with the game's copy): where it is loaded first the
+# look is not shown.
 SHIELD_PACKS = {
     "Weapon_Shield_Deku": ("Weapon_Shield_Deku", "Obj_Shield_Deku", "Shop_Weapon_Shield_Deku", "TBox_Shield_Deku"),
     "Weapon_Shield_Hylian": ("Weapon_Shield_Hylian", "Shop_Weapon_Shield_Hylian"),   # (Dark Link's names the file and has no copy)
