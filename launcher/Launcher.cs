@@ -2251,7 +2251,29 @@ class LauncherForm : Form {
     static readonly int[] ShieldValues = { 0, 1, 2, 3, 4 };
     const string ShieldHelp = " Only its look changes: it guards, burns and reflects as the shield it is, and is held as that shield is at Link's age. No model is resized.";
     // (the lines the Cosmetics page's selectors take, two to a line)
-    static int CosmeticLines { get { return (CosmeticRows.Length + ShieldRows.Length + 1) / 2; } }
+    static int CosmeticLines { get { return (CosmeticRows.Length + ShieldRows.Length + CharacterRows.Length + 1) / 2; } }
+    // (the characters' looks: a character shown with another's model, tools/rando/rando_cosmetics.py LOOKS and CHARACTERS, the
+    // same numbers. Link takes only the looks of his own age: his code asks his model for parts of his, and the game's code is
+    // made safe for those of his age only (nx2/oot_patches.py patch_model_swap). The others take any)
+    static readonly string[] AnyLook = { "Its own", "Young Link", "Adult Link", "Young Zelda", "Adult Zelda", "Ganondorf", "Young Malon",
+                                         "Adult Malon", "Talon", "Ingo" };
+    static readonly int[] AnyLookValues = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    const string LookHelp = " The character keeps its own moves on the other body, and is the same character in every other way. " +
+                            "Parts moved by cloth (Ganondorf's cape, Talon's scarf, Malon's skirt) can hang stretched.";
+    static readonly object[][] CharacterRows = {
+        new object[] { "cosmetic_model_young_link", "Young Link looks like", new[] { "Its own", "Young Zelda", "Young Malon" }, new[] { 0, 3, 6 },
+            "Young Link shown as another young character." + LookHelp + " His sword and shield are not shown." },
+        new object[] { "cosmetic_model_adult_link", "Adult Link looks like", new[] { "Its own", "Adult Zelda", "Ganondorf", "Adult Malon", "Talon", "Ingo" },
+            new[] { 0, 4, 5, 7, 8, 9 }, "Adult Link shown as another grown-up character." + LookHelp + " His sword and shield are not shown." },
+        new object[] { "cosmetic_model_young_zelda", "Young Zelda looks like", AnyLook, AnyLookValues, "Young Zelda shown as another character." + LookHelp },
+        new object[] { "cosmetic_model_adult_zelda", "Adult Zelda looks like", AnyLook, AnyLookValues, "Zelda as an adult shown as another character." + LookHelp },
+        new object[] { "cosmetic_model_ganondorf", "Ganondorf looks like", AnyLook, AnyLookValues,
+            "Ganondorf shown as another character, in his scenes and his fight." + LookHelp + " Not tried in his fight yet." },
+        new object[] { "cosmetic_model_young_malon", "Young Malon looks like", AnyLook, AnyLookValues, "Young Malon shown as another character." + LookHelp },
+        new object[] { "cosmetic_model_adult_malon", "Adult Malon looks like", AnyLook, AnyLookValues, "Malon as an adult shown as another character." + LookHelp },
+        new object[] { "cosmetic_model_talon", "Talon looks like", AnyLook, AnyLookValues, "Talon shown as another character." + LookHelp },
+        new object[] { "cosmetic_model_ingo", "Ingo looks like", AnyLook, AnyLookValues, "Ingo, young and grown, shown as another character." + LookHelp },
+    };
     static readonly object[][] ShieldRows = {
         new object[] { "cosmetic_shield_deku", "Deku Shield looks like", ShieldLooks, ShieldValues,
             "The model shown for the Deku Shield, on Link's back and held up." + ShieldHelp },
@@ -2429,10 +2451,13 @@ class LauncherForm : Form {
         AddSelectors(RandoRows, RandoPage, cx, colW, null, 47, 45, true);
         randoHeight = 112 + (RandoRows.Length - RandoHidden.Count + 1) / 2 * 47 - 2 - RandoView.Y;
         // (fourteen of them: the closer lines of the Randomizer page. The shields' looks follow the colours)
-        AddSelectors(CosmeticRows, CosmeticPage, cx, colW, cosmetics, 47, 45);
-        AddSelectors(ShieldRows, CosmeticPage, cx, colW, cosmetics, 47, 45, false, CosmeticRows.Length);
-        // (under the selectors, over the page's note)
-        widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx, 112 + CosmeticLines * 47 + 6, 160, 40), Page = CosmeticPage, Click = OnRandomCosmetics });
+        // (the colours, the shields' looks and the characters' looks: a list that scrolls in RandoView, as the Randomizer page's)
+        AddSelectors(CosmeticRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true);
+        AddSelectors(ShieldRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true, CosmeticRows.Length);
+        AddSelectors(CharacterRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true, CosmeticRows.Length + ShieldRows.Length);
+        cosmeticHeight = 112 + CosmeticLines * 47 - 2 - RandoView.Y;
+        // (under the list, over the page's note)
+        widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx, 542, 160, 36), Page = CosmeticPage, Click = OnRandomCosmetics });
         // (under the selectors: the seed's three buttons, and its ID beside them)
         widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx, 542, 116, 36), Page = RandoPage, Click = OnNewSeed });
         widgets.Add(new Btn { Text = "Copy seed ID", R = new RectangleF(cx + 126, 542, 136, 36), Page = RandoPage, Click = OnCopySeedId });
@@ -2507,7 +2532,11 @@ class LauncherForm : Form {
         ShowPage(cmd.Length > 2 && int.TryParse(cmd[2], out first) && first >= 0 && first <= CosmeticPage ? first : 0);
         { var t0 = tabs.Find(x => x.Index == TabPage(PageNow)).R; tabX = t0.X; tabW = t0.Width; }
         float scroll0;   // (a third argument: the Recommended tab scrolled, for screenshots)
-        if (cmd.Length > 3 && float.TryParse(cmd[3], out scroll0)) { recScroll = scroll0; if (PageNow == RandoPage) ScrollRando(scroll0); }
+        if (cmd.Length > 3 && float.TryParse(cmd[3], out scroll0)) {
+            recScroll = scroll0;
+            if (PageNow == RandoPage) ScrollRando(scroll0);
+            if (PageNow == CosmeticPage) ScrollCosmetics(scroll0);
+        }
 
         // (MAKO_TEST_BENCH=1: Test my PC starts with the window, no question: for testing the test)
         // (MAKO_TEST_MOD=<a file or folder>: installs it with the window, as a drop would: for testing)
@@ -2531,10 +2560,15 @@ class LauncherForm : Form {
     // whole height. A row is shown, lit and pressed only inside the view.
     static readonly RectangleF RandoView = new RectangleF(LeftW + 1, 104, W - LeftW - 2, 430);
     float randoScroll, randoHeight;
+    float cosmeticScroll, cosmeticHeight;   // (the Cosmetics page's list, the same way)
     bool InView(Widget w, PointF p) { return !w.Scrolls || RandoView.Contains(p); }
     void ScrollRando(float by) {
         randoScroll = Math.Max(0, Math.Min(randoScroll + by, Math.Max(0, randoHeight - RandoView.Height)));
-        foreach (var w in widgets) if (w.Scrolls) w.R.Y = w.HomeY - randoScroll;
+        foreach (var w in widgets) if (w.Scrolls && w.Page == RandoPage) w.R.Y = w.HomeY - randoScroll;
+    }
+    void ScrollCosmetics(float by) {
+        cosmeticScroll = Math.Max(0, Math.Min(cosmeticScroll + by, Math.Max(0, cosmeticHeight - RandoView.Height)));
+        foreach (var w in widgets) if (w.Scrolls && w.Page == CosmeticPage) w.R.Y = w.HomeY - cosmeticScroll;
     }
 
     void AddSelectors(object[][] rows, int page, float x0, float colW, Dictionary<string, Selector> into = null, int pitch = 70, int height = 62, bool scrolls = false, int first = 0) {
@@ -2652,17 +2686,18 @@ class LauncherForm : Form {
             g.Restore(whole);
         }
         g.Restore(state);
-        if (PageNow == RandoPage && randoHeight > RandoView.Height) {   // (the list goes on under the view, or over it: a fade at that edge, and a bar at the right)
-            float x = LeftW + 36, w = W - LeftW - 72, more = randoHeight - RandoView.Height;
-            if (randoScroll < more - 1)
+        float listScroll = PageNow == CosmeticPage ? cosmeticScroll : randoScroll, listHeight = PageNow == CosmeticPage ? cosmeticHeight : randoHeight;
+        if ((PageNow == RandoPage || PageNow == CosmeticPage) && listHeight > RandoView.Height) {   // (the list goes on under the view, or over it: a fade at that edge, and a bar at the right)
+            float x = LeftW + 36, w = W - LeftW - 72, more = listHeight - RandoView.Height;
+            if (listScroll < more - 1)
                 using (var b = new LinearGradientBrush(new RectangleF(x, RandoView.Bottom - 24, w, 25), Theme.A(Theme.Bg1, 0), Theme.A(Theme.Bg1, 235), LinearGradientMode.Vertical))
                     g.FillRectangle(b, x, RandoView.Bottom - 24, w, 24);
-            if (randoScroll > 1)
+            if (listScroll > 1)
                 using (var b = new LinearGradientBrush(new RectangleF(x, RandoView.Y - 1, w, 19), Theme.A(Theme.Bg1, 235), Theme.A(Theme.Bg1, 0), LinearGradientMode.Vertical))
                     g.FillRectangle(b, x, RandoView.Y, w, 18);
-            float track = RandoView.Height - 16, bar = Math.Max(30, track * RandoView.Height / randoHeight);
+            float track = RandoView.Height - 16, bar = Math.Max(30, track * RandoView.Height / listHeight);
             using (var b = new SolidBrush(Theme.A(Theme.Cyan, 110)))
-            using (var p = Theme.Round(new RectangleF(W - 30, RandoView.Y + 8 + (track - bar) * randoScroll / more, 4, bar), 2)) g.FillPath(b, p);
+            using (var p = Theme.Round(new RectangleF(W - 30, RandoView.Y + 8 + (track - bar) * listScroll / more, 4, bar), 2)) g.FillPath(b, p);
         }
         if (pageFade < 1)   // (the page fading in: a veil of the background over it)
             using (var b = new SolidBrush(Theme.A(Theme.Bg1, (int)(255 * (1 - Ease(pageFade)))))) g.FillRectangle(b, LeftW + 1, 100, W - LeftW - 2, 496);
@@ -2770,9 +2805,8 @@ class LauncherForm : Form {
                         Theme.Small, Theme.Faint, new RectangleF(x, 584, W - LeftW - 72, 18), StringAlignment.Near, StringAlignment.Near);
         }
         if (PageNow == CosmeticPage)
-            Theme.Text_(g, "Written when Play is pressed: about half a minute after a colour is changed, nothing after that. " +
-                        "The equipment menu's pictures of the tunics, shields and swords keep the game's own.",
-                        Theme.Small, Theme.Faint, new RectangleF(x, 112 + CosmeticLines * 47 + 54, W - LeftW - 72, 40), StringAlignment.Near, StringAlignment.Near);
+            Theme.Text_(g, "Written when Play is pressed (about half a minute after a change). The equipment menu's pictures keep the game's own.",
+                        Theme.Small, Theme.Faint, new RectangleF(x + 172, 540, W - LeftW - 72 - 172, 40), StringAlignment.Near, StringAlignment.Near);
         if (PageNow == 3)
             Theme.Text_(g, "Read by the game when it starts.", Theme.Small, Theme.Faint, new RectangleF(x, 150 + Fixes.Length * FixPitch, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
@@ -3064,7 +3098,8 @@ class LauncherForm : Form {
     void OnRandomCosmetics() {
         var r = new Random(Environment.TickCount ^ Guid.NewGuid().GetHashCode());
         loading = true;
-        foreach (var s in cosmetics.Values) s.Set(r.Next(1, s.Items.Length), false);
+        foreach (var s in cosmetics.Values)   // (the colours and the shields: the characters' looks are the player's own choice)
+            if (!s.Key.StartsWith("cosmetic_model_")) s.Set(r.Next(1, s.Items.Length), false);
         loading = false;
         SaveCosmetics();
     }
@@ -3941,6 +3976,7 @@ class LauncherForm : Form {
         }
         if (PageNow == 0) recScroll = Math.Max(0, Math.Min(recScroll - e.Delta * 0.6f, Math.Max(0, recHeight - 488)));
         if (PageNow == RandoPage) ScrollRando(-e.Delta * 47f / 120);   // (a notch of the wheel: a line of the list)
+        if (PageNow == CosmeticPage) ScrollCosmetics(-e.Delta * 47f / 120);
     }
 
     void OnApplyRecommended() {

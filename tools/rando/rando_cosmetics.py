@@ -47,6 +47,7 @@ import argparse
 import collections
 import colorsys
 import functools
+import hashlib
 import os
 import struct
 import sys
@@ -517,6 +518,107 @@ SHIELD_MODELS = (
 SHIELD_MODEL_FILE = "Component/ModelInfo/"   # (the one file of a shield's pack that names its model)
 
 
+# ---- characters' looks (asked 2026-11-16): a character shown with another's model ----
+# A character's model is named the way a shield's is: a file in its actor's pack (Component/ModelInfo/<name>), and its row
+# of the game's list of actors (RSDB/ActorInfo: FmdbName, ModelProjectName, and the heaps its model is made in). Both are
+# changed; the character keeps its own animations, which the game moves onto the other body by bone name (the people of the
+# game share their bones' names: young Malon shown as Ganondorf knelt and swayed as she does, seen without a window).
+# Link's own code asks his model for parts only his has (his hair's material, his cloth's bones): the game's code is made
+# safe for that by nx2/oot_patches.py (patch_model_swap), and the parts moved by cloth physics of the model he is shown as
+# are not moved (Talon's scarf, Ganondorf's cape and young Malon's skirt hang stretched). Link takes only a look of his own
+# age (the owner's choice): adult Zelda and young Zelda were seen whole, walking, without a window.
+# The list of actors is the randomizer's seed's when it has one (mods/rando-seed): the looks go into a mod of their own
+# that sorts after it (MODEL_MOD), made again when the seed's list changes (its bytes are in the stamp).
+MODEL_MOD = "zz-cosmetics-models"
+ACTOR_INFO = "RSDB/ActorInfo.Product.111.rstbl.byml.zs"
+LOOKS = (   # (a look's label, its model, the row of the game's list that has that model's heaps, its age)
+    ("Its own", None, None, None),
+    ("Young Link", "Player_Child", "Player_Child", "young"),
+    ("Adult Link", "Player_Adult", "Player_Adult", "adult"),
+    ("Young Zelda", "Npc_Hylia_WU_Zelda_Child", "Npc_Hylia_Zelda_Child", "young"),
+    ("Adult Zelda", "Npc_Hylia_WU_Zelda_Adult", "Npc_Hylia_Zelda_Adult", "adult"),
+    ("Ganondorf", "Npc_Gerudo_GEU_Ganondorf_Adult", "Enemy_DungeonBoss_Ganondorf", "adult"),
+    ("Young Malon", "Npc_Hylia_WC_Malon_Child", "Npc_Hylia_Malon_Child", "young"),
+    ("Adult Malon", "Npc_Hylia_WN_Malon_Adult", "Npc_Hylia_Malon_Adult", "adult"),
+    ("Talon", "Npc_Hylia_MU_Talon", "Npc_Hylia_Talon_Adult", "adult"),
+    ("Ingo", "Npc_Hylia_MU_Ingo_Adult", "Npc_Hylia_Ingo_002_Adult", "adult"),
+)
+# (a character: its name here, its line of hookshot_cosmetics.ini, its label, the age of the looks it may take (None: any;
+#  Link: his own age only), and its models: (the model file's name, the model it names, the packs that have a copy, whose
+#  rows of the list are the packs' names))
+CHARACTERS = (
+    ("young_link", "cosmetic_model_young_link", "Young Link", "young",
+     (("Player_Child", "Player_Child", ("Player_Child", "PouchPlayer_Child")),)),
+    ("adult_link", "cosmetic_model_adult_link", "Adult Link", "adult",
+     (("Player", "Player_Adult", ("Player_Adult", "Player_Base", "PouchPlayer_Adult")),)),
+    ("young_zelda", "cosmetic_model_young_zelda", "Young Zelda", None,
+     (("Npc_Hylia_WU_Zelda_Child", "Npc_Hylia_WU_Zelda_Child", ("Npc_Hylia_Zelda_Child",)),)),
+    ("adult_zelda", "cosmetic_model_adult_zelda", "Adult Zelda", None,
+     (("Npc_Hylia_WU_Zelda_Adult", "Npc_Hylia_WU_Zelda_Adult", ("Npc_Hylia_Zelda_Adult", "Npc_Hylia_Zelda_Adult_Scalable")),)),
+    ("ganondorf", "cosmetic_model_ganondorf", "Ganondorf", None,
+     (("Npc_Gerudo_GEU_Ganondorf_Adult", "Npc_Gerudo_GEU_Ganondorf_Adult", ("Enemy_DungeonBoss_Ganondorf", "Enemy_DungeonBoss_Ganondorf_Dictionary")),
+      ("Dm_Npc_Gerudo_Ganondorf", "Npc_Gerudo_GEU_Ganondorf_Child", ("Dm_Npc_Gerudo_Ganondorf",)))),
+    ("young_malon", "cosmetic_model_young_malon", "Young Malon", None,
+     (("Npc_Hylia_WC_Malon_Child", "Npc_Hylia_WC_Malon_Child", ("Npc_Hylia_Malon_Child",)),)),
+    ("adult_malon", "cosmetic_model_adult_malon", "Adult Malon", None,
+     (("Npc_Hylia_WN_Malon_Adult", "Npc_Hylia_WN_Malon_Adult", ("Npc_Hylia_Malon_Adult",)),)),
+    ("talon", "cosmetic_model_talon", "Talon", None,
+     (("Npc_Hylia_MU_Talon", "Npc_Hylia_MU_Talon", ("Npc_Hylia_Talon_Adult", "Npc_Hylia_Talon_Adult_Kakariko", "Npc_Hylia_Talon_Child",
+                                                    "Npc_Hylia_Talon_Child_SecondTime")),)),
+    ("ingo", "cosmetic_model_ingo", "Ingo", None,
+     (("Npc_Hylia_MU_Ingo_Child", "Npc_Hylia_MU_Ingo_Child", ("Npc_Hylia_Ingo_001_Adult", "Npc_Hylia_Ingo_001_Child")),
+      ("Npc_Hylia_MU_Ingo_Adult", "Npc_Hylia_MU_Ingo_Adult", ("Npc_Hylia_Ingo_002_Adult", "Npc_Hylia_Ingo_003_Adult")))),
+)
+
+
+def looks_for(age):
+    """the places in LOOKS a character of `age` may take (None: any), "Its own" first"""
+    return [i for i, (_, _, _, a) in enumerate(LOOKS) if i == 0 or age is None or a == age]
+
+
+def look_of(text):
+    """a look's place in LOOKS, from its number, its label or its model's name; None when it is none of them"""
+    text = str(text).strip().lower()
+    for i, (label, model, _, _) in enumerate(LOOKS):
+        if text in (str(i), label.lower(), (model or "own").lower(), label.lower().replace(" ", "_")):
+            return i
+    return None
+
+
+def model_info(data, file_name, model):
+    """a pack (SARC) with its file Component/ModelInfo/<file_name> naming `model`: the new bytes. ValueError: no such
+    file. A file grows by a few bytes when the name is longer; the pack's entry in the size table (its size rounded to
+    32, and 312 more) holds that (seen in play with Link's packs)."""
+    files = seed.sarc_read(data)
+    name = SHIELD_FILE % file_name
+    if name not in files:
+        raise ValueError("no %s" % name)
+    tree, version = seed.byml_parse(files[name])
+    if tree[0] != "dict" or "FmdbName" not in tree[1]:
+        raise ValueError("%s names no model" % name)
+    tree[1]["FmdbName"] = tree[1]["ModelProjectName"] = ("string", model)
+    files[name] = seed.byml_build(tree, version)
+    return seed.sarc_write(files)
+
+
+def actor_rows(data, changes):
+    """the game's list of actors (RSDB/ActorInfo, a BYML array of rows) with each row of `changes` ({its __RowId: (the
+    model, the row that has that model's heaps)}) naming that model, and with heaps for the larger of the two, half again.
+    ValueError: a row that is not there."""
+    tree, version = seed.byml_parse(data)
+    rows = {r[1]["__RowId"][1]: r[1] for r in tree[1] if r[0] == "dict" and "__RowId" in r[1]}
+    for row, (model, heaps) in changes.items():
+        if row not in rows or heaps not in rows:
+            raise ValueError("the list of actors has no row %s" % (row if row not in rows else heaps))
+        r, other = rows[row], rows[heaps]
+        r["FmdbName"] = r["ModelProjectName"] = ("string", model)
+        for k in ("InstanceHeapSize", "PreActorRenderInfoHeapSize"):
+            if k in r and k in other:
+                n = max(struct.unpack("<I", r[k][1][:4])[0], struct.unpack("<I", other[k][1][:4])[0])
+                r[k] = (r[k][0], struct.pack("<I", n + n // 2))
+    return seed.byml_build(tree, version)
+
+
 def shield_look_of(text):
     """a look's place in SHIELD_MODELS, from its number, its label or its model's name; None when it is none of them"""
     text = str(text).strip().lower()
@@ -769,7 +871,11 @@ def settings(game):
     keys = {key: name for name, key, _, _, _, _ in COSMETICS}
     got.update({name: 0 for name, _, _, _ in SHIELDS})   # (the shields' looks: places in SHIELD_MODELS)
     keys.update({key: name for name, key, _, _ in SHIELDS})
+    got.update({name: 0 for name, _, _, _, _ in CHARACTERS})   # (the characters' looks: places in LOOKS)
+    keys.update({key: name for name, key, _, _, _ in CHARACTERS})
     most = dict({name: len(COLOURS) for name in got}, **{name: len(SHIELD_MODELS) for name, _, _, _ in SHIELDS})
+    most.update({name: len(LOOKS) for name, _, _, _, _ in CHARACTERS})
+    allowed = {name: looks_for(age) for name, _, _, age, _ in CHARACTERS}
     try:
         with open(os.path.join(game, "hookshot_cosmetics.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -779,7 +885,8 @@ def settings(game):
                         v = int(value.strip())
                     except ValueError:
                         continue
-                    got[keys[key.strip()]] = v if 0 <= v < most[keys[key.strip()]] else 0
+                    name = keys[key.strip()]
+                    got[name] = v if 0 <= v < most[name] and (name not in allowed or v in allowed[name]) else 0
     except OSError:
         pass
     return got
@@ -816,6 +923,9 @@ def main():
         p.add_argument("--" + name, help="in place of the %s's line: a colour's name or number (%s)" % (label, ", ".join(c[0] for c in COLOURS)))
     for name, _, label, _ in SHIELDS:
         p.add_argument("--" + name.replace("_", "-"), help="in place of the %s's line: a look's name or number (%s)" % (label, ", ".join(m[0] for m in SHIELD_MODELS)))
+    for name, _, label, age, _ in CHARACTERS:
+        p.add_argument("--" + name.replace("_", "-"), help="in place of %s's line: a look's name or number (%s)" % (
+            label, ", ".join(LOOKS[i][0] for i in looks_for(age))))
     p.add_argument("--if-changed", action="store_true", help="do nothing when the mod is already these colours' (the launcher, at Play)")
     p.add_argument("--dry-run", action="store_true", help="say what would change, write nothing")
     p.add_argument("--stats", nargs="+", metavar="TEXTURE", help="say what colours these textures hold (names in Tex, without .bntx.zs), write nothing")
@@ -838,13 +948,34 @@ def main():
             chosen[name] = shield_look_of(given)
         if SHIELD_MODELS[chosen[name]][1] == actor:   # (its own look, chosen by name: nothing to change)
             chosen[name] = 0
-    stamp = "cosmetics %d %s\n" % (VERSION, " ".join("%s=%d" % (name, chosen[name]) for name in [row[0] for row in COSMETICS] + [row[0] for row in SHIELDS]))
+    for name, _, label, age, models in CHARACTERS:
+        given = getattr(a, name)
+        if given is not None:
+            if look_of(given) is None or look_of(given) not in looks_for(age):
+                sys.exit("--%s %s: not a look %s may take (%s)" % (name.replace("_", "-"), given, label,
+                                                                   ", ".join(LOOKS[i][0] for i in looks_for(age))))
+            chosen[name] = look_of(given)
+        if LOOKS[chosen[name]][1] in [m[1] for m in models]:   # (its own model, chosen by name: nothing to change)
+            chosen[name] = 0
+    model_mod = os.path.join(game, "mods", MODEL_MOD)
+    base_list = os.path.join(game, "mods", "rando-seed", "romfs", *ACTOR_INFO.split("/"))   # (the seed's, when it has one)
+    if not os.path.isfile(base_list):
+        base_list = os.path.join(romfs, *ACTOR_INFO.split("/"))
+    base_mark = ""
+    if any(chosen[row[0]] for row in CHARACTERS):   # (the list the looks are made over: a new seed's makes them again)
+        try:
+            base_mark = " list=" + hashlib.sha1(open(base_list, "rb").read()).hexdigest()[:16]
+        except OSError:
+            base_mark = " list=none"
+    stamp = "cosmetics %d %s%s\n" % (VERSION, " ".join("%s=%d" % (name, chosen[name]) for name in [row[0] for row in COSMETICS] +
+                                                         [row[0] for row in SHIELDS] + [row[0] for row in CHARACTERS]), base_mark)
     stamp_path = os.path.join(mod, "cosmetics_stamp.txt")
     if not a.stats:
         print("cosmetics: " + ", ".join(["%s %s" % (label, COLOURS[chosen[name]][0]) for name, _, label, _, _, _ in COSMETICS] +
-                                        ["%s as %s" % (label, SHIELD_MODELS[chosen[name]][0].lower()) for name, _, label, _ in SHIELDS]))
+                                        ["%s as %s" % (label, SHIELD_MODELS[chosen[name]][0].lower()) for name, _, label, _ in SHIELDS] +
+                                        ["%s as %s" % (label, LOOKS[chosen[name]][0].lower()) for name, _, label, _, _ in CHARACTERS]))
         if not any(chosen.values()):
-            n = 0 if a.dry_run else remove_old(mod)
+            n = 0 if a.dry_run else remove_old(mod) + remove_old(model_mod)
             print("everything has the game's own colour: nothing to write%s" % (": %d files of the last colours removed" % n if n else ""))
             return
         if a.if_changed:
@@ -919,10 +1050,43 @@ def main():
             made[loaded[pack][0]] = data
         if new:
             print("  %s: the look of %s (%s), in %d packs" % (label, look, model, len(new)))
+    looked = collections.OrderedDict()   # (the characters' looks: rel -> bytes, for MODEL_MOD)
+    changes = {}
+    for name, _, label, age, models in CHARACTERS:
+        if not chosen[name]:
+            continue
+        look, model, heaps, _ = LOOKS[chosen[name]]
+        if not os.path.isfile(os.path.join(romfs, "Model", "%s.%s.bfres.zs" % (model, model))):
+            sys.exit("Model/%s.%s.bfres.zs is not among the game's files. Nothing written." % (model, model))
+        for file_name, own, packs in models:
+            for pack in packs:
+                rel, data = load("Pack/Actor/%s.pack.zs" % pack)
+                try:
+                    looked[rel] = model_info(data, file_name, model)
+                except (ValueError, KeyError, IndexError, struct.error) as e:
+                    sys.exit("%s's pack %s: %s. Nothing written." % (label, pack, e))
+                changes[pack] = (model, heaps)
+        print("  %s: the look of %s (%s), in %d packs" % (label, look, model, sum(len(m[2]) for m in models)))
+    if changes:
+        try:
+            looked[ACTOR_INFO] = actor_rows(seed.unpack(open(base_list, "rb").read(), zs, dicts), changes)
+        except (OSError, ValueError, KeyError, struct.error) as e:
+            sys.exit("the list of actors (%s): %s. Nothing written." % (base_list, e))
     if a.dry_run:
         print("(dry run: nothing written)")
         return
-    removed = remove_old(mod)
+    removed = remove_old(mod) + remove_old(model_mod)
+    if looked:   # (the characters' looks, in their own mod: after the seed's, whose list of actors they change)
+        model_written = []
+        for rel, data in looked.items():
+            out = os.path.join(model_mod, "romfs", *rel.split("/"))
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            with open(out, "wb") as f:
+                f.write(zs.ZstdCompressor(level=9, threads=-1).compress(data))
+            model_written.append("romfs/" + rel)
+        with open(os.path.join(model_mod, "cosmetics_manifest.txt"), "w", encoding="utf-8") as f:
+            f.write("\n".join(sorted(model_written)) + "\n")
+    os.makedirs(mod, exist_ok=True)   # (its stamp and list, even with only the characters' looks to write)
     written = []
     for rel, data in made.items():
         out = os.path.join(mod, "romfs", *rel.split("/"))

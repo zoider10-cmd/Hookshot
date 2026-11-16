@@ -142,6 +142,68 @@ DROP_HEAD = "void %s(Ctx *__restrict A64_NOESC c) {\n" % DROP_NAME
 DROP_BODY = DROP_NAME + "_body"
 
 
+# Model swaps of Link (the randomizer's fork, tools/rando/rando_cosmetics.py): Link's code finds parts of his model by name
+# and keeps their places, a (model, part) pair of 16-bit numbers, -1 when the name is not in the model; then uses them
+# without asking. With another character's model the names are not all there, and the game fell (seen without a window,
+# 2026-11-16):
+#  - f_804d8240 looks for the hair's material (Mt_Hairs) to move its texture: not found, it went on with -1. It now
+#    returns there (L_804d8410, its "none found" branch, to its end L_804d83b8);
+#  - f_80e6a110, a part's matrix set by such a pair (a tail call into the model's own), with -1 read past its list. It
+#    now returns when either number is below 0: such a pair is no part.
+SWAP_HAIR_HEAD = "void f_804d8240(Ctx *__restrict A64_NOESC c) {\n"
+SWAP_HAIR_NONE = re.compile(r"L_804d8410:;[^\n]*\n")
+SWAP_HAIR_SKIP = "    goto L_804d83b8;   /* (nx2/oot_patches.py: model swaps, no hair material: nothing to move) */\n"
+SWAP_PART_HEAD = "void f_80e6a110(Ctx *__restrict A64_NOESC c) {\n"
+SWAP_PART_GUARD = ("    if ((int16_t)recomp_load16(c, c->x[1]) < 0 || (int16_t)recomp_load16(c, c->x[1] + 2) < 0) return;   "
+                   "/* (nx2/oot_patches.py: model swaps, a part the model has not) */\n")
+
+
+#  - f_8031f510 (a physics step over the model's bound parts, its x0 the step's object) reads an object at its +0xa0,
+#    and f_8031ef80 (called four times) that one's two tables (+0x68, +0x18), without asking; with another character's
+#    model they were empty. The step is left out then (the game's Link always has them)
+SWAP_BIND_HEAD = "void f_8031f510(Ctx *__restrict A64_NOESC c) {\n"
+#    (and f_80312220, the whole update the step is one part of, with the same object: f_8031ef80 is called from more of it)
+SWAP_STEP_HEAD = "void f_80312220(Ctx *__restrict A64_NOESC c) {\n"
+#  - functions called on an object another character's model leaves unmade (null), unasked: they return at once then.
+#    f_8030a320: the physics part at the model unit's +0x1a8 (called from f_80c93834's caller, the unit's update)
+SWAP_NULL_SELF = ("f_8030a320",)
+SWAP_NULL_RETURN = "    if (!c->x[0]) return;   /* (nx2/oot_patches.py: model swaps, an object the model leaves unmade) */\n"
+SWAP_BIND_SKIP = ("    { const uint64_t _o = recomp_load64(c, c->x[0] + 160);   /* (nx2/oot_patches.py: model swaps, the bound parts' "
+                  "tables empty) */\n      if (!_o || !recomp_load64(c, _o + 104) || !recomp_load64(c, _o + 24)) return; }\n")
+
+
+def patch_model_swap(source):
+    """the places above made safe; None when this file has none of the functions"""
+    found = False
+    for head in (SWAP_BIND_HEAD, SWAP_STEP_HEAD):
+        if source.count(head) == 1:
+            if head + SWAP_BIND_SKIP not in source:
+                source = source.replace(head, head + SWAP_BIND_SKIP, 1)
+            found = True
+    for name in SWAP_NULL_SELF:
+        head = "void %s(Ctx *__restrict A64_NOESC c) {\n" % name
+        if source.count(head) == 1:
+            if head + SWAP_NULL_RETURN not in source:
+                source = source.replace(head, head + SWAP_NULL_RETURN, 1)
+            found = True
+    if source.count(SWAP_HAIR_HEAD) == 1:
+        start = source.find(SWAP_HAIR_HEAD)
+        end = source.find("\n}\n", start)
+        body = source[start:end]
+        if SWAP_HAIR_SKIP not in body:
+            m = SWAP_HAIR_NONE.search(body)
+            if m is None or "L_804d83b8:;" not in body:
+                return None
+            body = body[:m.end()] + SWAP_HAIR_SKIP + body[m.end():]
+            source = source[:start] + body + source[end:]
+        found = True
+    if source.count(SWAP_PART_HEAD) == 1:
+        if SWAP_PART_HEAD + SWAP_PART_GUARD not in source:
+            source = source.replace(SWAP_PART_HEAD, SWAP_PART_HEAD + SWAP_PART_GUARD, 1)
+        found = True
+    return source if found else None
+
+
 def patch_drop_name(source):
     if DROP_BODY in source:   # (made by an earlier run over this file)
         return source
@@ -964,6 +1026,12 @@ def patch_file(s, name, protect_hearts=False):
             lines.append("oot_patches: progressive items, a chest's name, in " + name)
         out = drop
         counts["progressive chest name"] += 1
+    swap = patch_model_swap(out) if protect_hearts else None   # (the randomizer's fork: model swaps of Link)
+    if swap is not None:
+        if swap != out:
+            lines.append("oot_patches: model swaps' guards in " + name)
+        out = swap
+        counts["model swap guards"] += 1
     opening = patch_opening(out) if protect_hearts else None
     if opening is not None:
         n = opening.count(OPENING_REQUEST) + opening.count(OPENING_TIMELINE) + opening.count(OPENING_QUERY)
@@ -1040,6 +1108,7 @@ def report(paths, counts, protect_hearts=False):
         done["disable camera centering"] = 0
         done["progressive items"] = 0
         done["progressive chest name"] = 0
+        done["model swap guards"] = 0
         done["scene format"] = 0
         done["zstd stream hook"] = 0
     total = collections.Counter()

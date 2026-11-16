@@ -215,12 +215,18 @@ def mod_and_sources():
         game = Path(tmp)
         none = {"kokiri": 0, "goron": 0, "zora": 0, "hearts": 0, "magic": 0, "shield_deku": 0, "shield_hylian": 0, "shield_mirror": 0,
                 "deku_emblem": 0, "hylian_face": 0, "mirror_rim": 0, "kokiri_hilt": 0, "master_hilt": 0, "biggoron_grip": 0}
+        none.update({name: 0 for name, _, _, _, _ in t.CHARACTERS})
         check(t.settings(str(game)) == none, "no file: everything the game's own")
         (game / "hookshot_cosmetics.ini").write_text("cosmetic_tunic_goron=4\ncosmetic_tunic_zora=99\nother=1\ncosmetic_tunic_kokiri=x\ncosmetic_magic=5\n", encoding="utf-8")
         check(t.settings(str(game)) == dict(none, goron=4, magic=5), "the file's lines are read, a colour that is not one is the game's own")
         # (the shields' looks: places in SHIELD_MODELS, which has fewer than there are colours)
         (game / "hookshot_cosmetics.ini").write_text("cosmetic_shield_deku=3\ncosmetic_shield_hylian=5\ncosmetic_shield_mirror=4\ncosmetic_hearts=10\n", encoding="utf-8")
         check(t.settings(str(game)) == dict(none, shield_deku=3, shield_mirror=4, hearts=10), "a shield's look is read, one that is not a look is its own")
+        # (the characters' looks: Link takes only a look of his own age; the others any)
+        (game / "hookshot_cosmetics.ini").write_text("cosmetic_model_young_link=3\ncosmetic_model_adult_link=3\ncosmetic_model_ingo=5\n"
+                                                     "cosmetic_model_talon=2\ncosmetic_model_ganondorf=10\n", encoding="utf-8")
+        check(t.settings(str(game)) == dict(none, young_link=3, ingo=5, talon=2),
+              "a character's look is not read, Link takes a look of the other age, or one that is not a look is taken")
         # the files of the last colours are removed, and nothing else in the mod's folder
         mod = game / "mods" / t.MOD
         (mod / "romfs" / "Tex").mkdir(parents=True)
@@ -243,7 +249,7 @@ def mod_and_sources():
     rows = rows[:rows.index("\n    };")]
     check(re.findall(r'new object\[\] \{ "(\w+)", "([^"]*)", TunicColours, TunicValues,', rows) == [(key, label) for _, key, label, _, _, _ in t.COSMETICS],
           "the launcher's Cosmetics page and the script's tunics differ")
-    check("AddSelectors(CosmeticRows, CosmeticPage, cx, colW, cosmetics, 47, 45);" in launcher and '"hookshot_cosmetics.ini"' in launcher and
+    check("AddSelectors(CosmeticRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true);" in launcher and '"hookshot_cosmetics.ini"' in launcher and
           "void SaveCosmetics()" in launcher, "the launcher does not show or keep its Cosmetics page")
     check('Text = "Randomize all"' in launcher and "Click = OnRandomCosmetics" in launcher and "s.Set(r.Next(1, s.Items.Length), false);" in launcher,
           "the launcher's Cosmetics page has no Randomize all button, or it can pick the game's own colour")
@@ -253,6 +259,61 @@ def mod_and_sources():
     make = (ROOT / "nx2" / "make_game.py").read_text(encoding="utf-8")
     check('os.path.join(ROOT, "tools", "rando", "rando_cosmetics.py")' in make and 'os.path.join(out, "rando", "rando_cosmetics.py")' in make,
           "the build does not put the cosmetics script beside the game, where the launcher runs it")
+
+
+def characters():
+    """a character's look: its model file names the other model, its rows of the list of actors name it with the larger
+    heaps; Link takes only the looks of his own age; the launcher's rows are the script's"""
+    seed = t.seed
+    check(t.looks_for("young") == [0, 1, 3, 6] and t.looks_for("adult") == [0, 2, 4, 5, 7, 8, 9] and t.looks_for(None) == list(range(len(t.LOOKS))),
+          "the looks of an age are not the young and the grown-up characters'")
+    check(t.look_of("adult zelda") == 4 and t.look_of("Ganondorf") == 5 and t.look_of("own") == 0 and t.look_of("nobody") is None,
+          "a look is not found by its name")
+    check(all(models and all(packs for _, _, packs in models) for _, _, _, _, models in t.CHARACTERS) and t.MODEL_MOD > "rando-seed",
+          "a character has no model or no pack, or the looks' mod does not sort after the seed's, whose list of actors it changes")
+    info = seed.byml_build(("dict", collections.OrderedDict((("FmdbName", ("string", "Npc_A")), ("ModelProjectName", ("string", "Npc_A"))))), 7)
+    pack = seed.sarc_write({"Component/ModelInfo/Npc_A.engine__component__ModelInfo.bgyml": info, "Actor/Npc_A.bgyml": b"actor" * 9})
+    new = seed.sarc_read(t.model_info(pack, "Npc_A", "Npc_Longer_Name_B"))
+    rows = seed.byml_parse(new["Component/ModelInfo/Npc_A.engine__component__ModelInfo.bgyml"])[0][1]
+    check(rows["FmdbName"] == ("string", "Npc_Longer_Name_B") and rows["ModelProjectName"] == ("string", "Npc_Longer_Name_B") and
+          new["Actor/Npc_A.bgyml"] == b"actor" * 9, "the model file does not name the look, or another file of the pack changed")
+    try:
+        t.model_info(pack, "Npc_Other", "Npc_B")
+        check(False, "a pack without the model file is changed")
+    except ValueError:
+        pass
+    n = lambda v: (0xD1, struct.pack("<I", v))
+    row = lambda rid, model, heap, pre: ("dict", collections.OrderedDict((("__RowId", ("string", rid)), ("FmdbName", ("string", model)),
+                                         ("ModelProjectName", ("string", model)), ("InstanceHeapSize", n(heap)), ("PreActorRenderInfoHeapSize", n(pre)))))
+    table = seed.byml_build(("array", [row("Npc_A_Row", "Npc_A", 1000, 300), row("Npc_B_Row", "Npc_B", 4000, 100)]), 7)
+    out = {r[1]["__RowId"][1]: r[1] for r in seed.byml_parse(t.actor_rows(table, {"Npc_A_Row": ("Npc_B", "Npc_B_Row")}))[0][1]}
+    heap = lambda r, k: struct.unpack("<I", out[r][k][1])[0]
+    check(out["Npc_A_Row"]["FmdbName"] == ("string", "Npc_B") and out["Npc_A_Row"]["ModelProjectName"] == ("string", "Npc_B") and
+          heap("Npc_A_Row", "InstanceHeapSize") == 6000 and heap("Npc_A_Row", "PreActorRenderInfoHeapSize") == 450 and
+          out["Npc_B_Row"]["FmdbName"] == ("string", "Npc_B"), "the row does not name the look with the larger heaps, half again, or another row changed")
+    try:
+        t.actor_rows(table, {"Npc_Nobody": ("Npc_B", "Npc_B_Row")})
+        check(False, "a row the list has not is passed over")
+    except ValueError:
+        pass
+    # ---- the launcher: the same characters and looks, Link's of his age only; Randomize all leaves them ----
+    launcher = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
+    chars = launcher[launcher.index("static readonly object[][] CharacterRows = {"):]
+    chars = chars[:chars.index("\n    };")]
+    check(re.findall(r'new object\[\] \{ "(\w+)", "([^"]*) looks like"', chars) == [(key, label) for _, key, label, _, _ in t.CHARACTERS],
+          "the launcher's characters are not the script's, in its order")
+    any_look = re.search(r"static readonly string\[\] AnyLook = \{ ([^}]*) \};", launcher)
+    check(any_look and re.findall(r'"([^"]*)"', any_look.group(1)) == [look[0] for look in t.LOOKS], "the launcher's looks are not the script's")
+    young = re.search(r'"cosmetic_model_young_link".*?new\[\] \{ ([0-9, ]+) \}', chars, re.S)
+    adult = re.search(r'"cosmetic_model_adult_link".*?new\[\] \{ ([0-9, ]+) \}', chars, re.S)
+    check(young and [int(v) for v in young.group(1).split(",")] == [0, 3, 6] and adult and [int(v) for v in adult.group(1).split(",")] == [0, 4, 5, 7, 8, 9],
+          "Link's looks in the launcher are not the other characters of his age")
+    check('if (!s.Key.StartsWith("cosmetic_model_")) s.Set(r.Next(1, s.Items.Length), false);' in launcher and
+          "AddSelectors(CharacterRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true, CosmeticRows.Length + ShieldRows.Length);" in launcher and
+          "if (PageNow == CosmeticPage) ScrollCosmetics(" in launcher, "the characters' rows are not on the page, it does not scroll, or Randomize all sets them")
+    patches = (ROOT / "nx2" / "oot_patches.py").read_text(encoding="utf-8")
+    check("def patch_model_swap(source):" in patches and "swap = patch_model_swap(out) if protect_hearts else None" in patches,
+          "the game's code is not made safe for Link shown as another character")
 
 
 def shields():
@@ -321,8 +382,8 @@ def shields():
     check(t.shield_look_of("mirror") == 3 and t.shield_look_of("Dark Link's shield") == 4 and t.shield_look_of("0") == 0 and
           t.shield_look_of("Weapon_Shield_Hylian") == 2 and t.shield_look_of("sword") is None, "a look is not read from its name or number")
     source = (ROOT / "tools" / "rando" / "rando_cosmetics.py").read_text(encoding="utf-8")
-    check('for name in [row[0] for row in COSMETICS] + [row[0] for row in SHIELDS]))' in source and t.VERSION >= 6,
-          "the shields' looks are not in the mod's stamp: a changed look would not be written at Play")
+    check('for name in [row[0] for row in COSMETICS] +' in source and '[row[0] for row in SHIELDS] + [row[0] for row in CHARACTERS]), base_mark)' in source and t.VERSION >= 6,
+          "the shields' or characters' looks, or the list the looks are made over, are not in the mod's stamp: a change would not be written at Play")
     # ---- the launcher's rows: the same lines and looks, in the same order ----
     launcher = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
     looks = re.search(r"static readonly string\[\] ShieldLooks = \{ ([^}]*) \};", launcher)
@@ -348,8 +409,8 @@ def shields():
         check(abs(colorsys.rgb_to_hsv(*(c / 255.0 for c in got))[0] * 360.0 - 172.0) < 3.0 and
               change(tuple(c * 255.0 for c in far)) == tuple(c * 255.0 for c in far),
               "%s: its own colour is not changed, or one opposite it is" % row[2])
-    check("AddSelectors(CosmeticRows, CosmeticPage, cx, colW, cosmetics, 47, 45);" in launcher and
-          "AddSelectors(ShieldRows, CosmeticPage, cx, colW, cosmetics, 47, 45, false, CosmeticRows.Length);" in launcher and
+    check("AddSelectors(CosmeticRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true);" in launcher and
+          "AddSelectors(ShieldRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true, CosmeticRows.Length);" in launcher and
           "int place = first;" in launcher and "int col = place % 2, line = place / 2;" in launcher,
           "the launcher does not show the shields' looks on its Cosmetics page, after the colours")
 
@@ -360,6 +421,7 @@ def main():
     files(block)
     mod_and_sources()
     shields()
+    characters()
     print("ok: cosmetics")
 
 
