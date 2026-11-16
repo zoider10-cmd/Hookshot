@@ -1,0 +1,83 @@
+---
+name: rando-test
+description: Build, install and test the Mako randomizer fork on this PC - rebuild the game after a change to host/ or nx2/oot_patches.py, rewrite the seed or the cosmetics after a change to tools/rando, run the game without a window on a copy of a save (teleport, buttons, pictures), look at the pictures as a grid, and read a crash's backtrace in the game's code. Use when a randomizer or cosmetics change needs trying in the game, when the user reports a crash or a bug seen in play, or when asked to test something without them playing.
+---
+
+# Testing the randomizer on this PC
+
+The owner plays and reports; the fixes are tried here first, without a window, on copies of their saves. The scripts
+are in `scripts/` beside this file (run them from the repository root with Git Bash and `py`, which has capstone,
+zstandard and Pillow). Their files go to `$WORK` (default `$TEMP/rando-test`); the game folder is `$GAME` (default
+`/f/Games/OOT Remake Rando`).
+
+**Rules, before anything:**
+- **Nothing made from the game leaves the PC** (AGENTS.md): pictures, logs, `image.bin`, the translated C, seeds and
+  saves stay here. Describe what a picture shows; never upload one.
+- **Never while the owner plays.** The scripts refuse when `hookshot.exe` or the launcher runs; also don't install a
+  seed, cosmetics or a build then. Ask them to close the game, and wait.
+- **Their saves are not touched.** Runs use copies (`SAVE=`); a test mod put in `$GAME/mods` is removed right after.
+- Commit locally only; push to their fork (`origin`) only when asked; never to `forge`.
+
+## 1. Put the change in the game
+
+| Changed | Do |
+|---|---|
+| `host/*.c`, `nx2/oot_patches.py` (a lift patch), `gpu/` | `bash .claude/skills/rando-test/scripts/rebuild.sh` (~2 min; it keeps the translated C) |
+| `tools/rando/rando_seed.py` | `cp tools/rando/rando_seed.py "$GAME/rando/"`, then in `$GAME`: `python -I rando/rando_seed.py romfs` (rewrites the seed the launcher last placed; its `FIXES_VERSION`/`PLACEMENT` decide what changes) |
+| `tools/rando/rando_cosmetics.py` | `cp` it to `$GAME/rando/` too, then in `$GAME`: `py -I rando/rando_cosmetics.py romfs` (the owner's `hookshot_cosmetics.ini`), or with `--young-link "young zelda"` and the like for a test; run it again without them after, so their own choices are back |
+| `launcher/Launcher.cs` | `powershell launcher/build.ps1`, then copy `launcher/Mako Launcher.exe` to `$GAME` |
+
+The build's "button prompts of other controllers were not made" (an AssertionError) is old and harmless.
+
+## 2. Run it without a window
+
+```bash
+SAVE="All Items unlocked" bash .claude/skills/rando-test/scripts/run_headless.sh mytest \
+  "5:!cheat 999" "20:GO -42.0 97.9 22.0 KakarikoVillage A" "30:0:Y" "3:0:R/2000" "5:0:LUP/10"
+```
+
+- Steps are `"<seconds>:<what>"`, run after ~100 s of loading. `GO x y z Folder ages` teleports (the map must be Link's
+  age: switch with `!cheat 999` first); `0:A`, `0:B`, `0:Y`, `0:R/2000`, `0:LUP/1500`... press or hold (`host/control.c`
+  has the names); `!cheat 1003` is the Market's fountain. Leave ~25-40 s after a teleport for the area to load.
+- Checks' places: `$GAME/mods/rando-seed/checks.txt` (folder, ages, x y z per check).
+- **Save copies** the owner made for tests are in `$GAME/user/save_copies/save_rando/` (`ls` it): "Early Save Test"
+  (young Link, away from talk), "All Items unlocked" (young; switch age for adult), "Young Link in front of Potion Shop
+  Owner, before bug errand", and others. A test that needs a place or a state no copy has: **ask the owner to make a save
+  there** and a backup copy; they can save almost anywhere. Mind that the autosave overwrites their newest save.
+- A character's talk can catch Link before a teleport (a shop keeper's greeting): start from a copy away from people.
+- The exit line: 124 ran to its end; 139 crashed (the backtrace is printed).
+- `SETFLAG="c1b29b0a=1"` sets flags from the start; `EVERY=20` takes pictures more often.
+
+## 3. Look at it
+
+```bash
+py -I .claude/skills/rando-test/scripts/grid.py "$TEMP/rando-test/grid.png" --last 48 --step 4
+py -I .claude/skills/rando-test/scripts/grid.py "$TEMP/rando-test/zoom.png" --last 40 --step 10 --crop 380,230,580,430 --zoom 0.9
+```
+
+Then Read the PNG. Pictures are 960x540; crop to a character or a shelf to see detail. Say what the pictures show in
+the report; the owner confirms in play (`share/verify-list.md` holds what waits for them).
+
+## 4. A crash
+
+The log's `CRASH: guest backtrace: lr 0x...` gives the game's code addresses; the owner's own crashes are in
+`$GAME/logs/hookshot_log*.txt` (newest first).
+
+```bash
+py -I .claude/skills/rando-test/scripts/disasm.py 0x8022e9bc            # the code around the first lr
+py -I .claude/skills/rando-test/scripts/disasm.py --string 0x83d868d1   # a name the code looks up
+py -I .claude/skills/rando-test/scripts/disasm.py --c 0x801d3620        # that function's translated C (after rebuild.sh)
+```
+
+Fixes to the game's code are lift patches in `nx2/oot_patches.py`: find the function by its head line
+(`void f_<addr>(Ctx *__restrict A64_NOESC c) {`) or a branch label (`L_<addr>:;`) in the translated C, insert a guard
+or wrap the function (kept as `<name>_body`, as `patch_drop_name` and `patch_bone_fallback` do), and count it in
+`apply`'s `done`. Read the real C first: guessing its text fails silently. Then rebuild and run again.
+
+## 5. Before committing
+
+- `py -I -B tests/run_all.py` (with `PATH=$PWD/llvm-mingw/bin:$PATH`): 112 checks fail on this branch already; compare
+  the failing list with a run without the change rather than the count alone. Checks read the source by its text: update
+  the check with the change.
+- Commit with `git -c user.name=Claude -c user.email=noreply@anthropic.com commit` and the attribution line; note the
+  fix in `share/bugs.md` and what the owner should see in play in `share/verify-list.md`.
