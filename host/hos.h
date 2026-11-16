@@ -84,6 +84,13 @@ extern int hos_trace;
 void hos_log(const char *fmt, ...);
 void hos_log_at(int level, const char *fmt, ...);
 void hos_log_flush(void);
+/* (longshot) the slow-frame recorder (host/slow_frames.c, HOS_SLOW_FRAMES): its path (NULL: off), the sampler's interval, a
+   present (rx_nvn_present), a sample and a sweep's end (the all-thread samplers) */
+const char *hos_slow_frames_path(void);
+int hos_slow_frames_every_ms(void);
+void hos_slow_frame_present(void);
+void hos_slow_sample(int64_t sweep_ns, const char *text);
+void hos_slow_sweep_done(void);
 #define HOS_TRACE_CALL(name) do { if (hos_trace) hos_log_at(HOS_LOG_TRACE, "%s(%#llx, %#llx, %#llx, %#llx) lr %#llx", name, \
     (unsigned long long)c->x[0], (unsigned long long)c->x[1], (unsigned long long)c->x[2], \
     (unsigned long long)c->x[3], (unsigned long long)c->x[30]); } while (0)

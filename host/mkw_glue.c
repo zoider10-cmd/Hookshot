@@ -661,15 +661,21 @@ static DWORD WINAPI sample_all_thread(void *p) {
     static char tn[MAXT][64];
     int nt = 0;
     int64_t t0 = 0;
+    /* (longshot) HOS_SLOW_FRAMES (host/slow_frames.c): sampled the whole run into its ring, the thread list taken again every
+       5 s (threads come and go), nothing written here */
+    const int ring = path == hos_slow_frames_path();
+    int64_t listed_at = 0;
     for (;;) {
-        if (GetFileAttributesA(go) == INVALID_FILE_ATTRIBUTES) {
+        if (!ring && GetFileAttributesA(go) == INVALID_FILE_ATTRIBUTES) {
             if (out) { fclose(out); out = NULL; hos_log("prof: all-thread sampling stopped"); }
             Sleep(200);
             continue;
         }
-        if (!out) {
-            out = fopen(path, "a");
-            if (!out) { Sleep(1000); continue; }
+        if (ring ? !listed_at || hos_now_ns() - listed_at > 5000000000LL : !out) {
+            if (!ring) {
+                out = fopen(path, "a");
+                if (!out) { Sleep(1000); continue; }
+            }
             for (int i = 0; i < nt; i++) CloseHandle(th[i]);
             nt = 0;
             static HANDLE gh[1024];
@@ -698,12 +704,19 @@ static DWORD WINAPI sample_all_thread(void *p) {
                 nt++;
             }
             CloseHandle(snap);
-            t0 = hos_now_ns();
-            fprintf(out, "# t0_ns %lld\n", (long long)t0);   /* (the clock of HOS_CHAIN's records: scripts/chain.py) */
-            hos_log("prof: all-thread sampling of %d threads into %s", nt, path);
+            if (ring) {
+                if (!listed_at) hos_log("prof: slow frames: %d threads sampled every %d ms, written for a slow frame to %s-<n>.txt", nt,
+                                        hos_slow_frames_every_ms(), path);
+                listed_at = hos_now_ns();
+            } else {
+                t0 = hos_now_ns();
+                fprintf(out, "# t0_ns %lld\n", (long long)t0);   /* (the clock of HOS_CHAIN's records: scripts/chain.py) */
+                hos_log("prof: all-thread sampling of %d threads into %s", nt, path);
+            }
         }
-        Sleep(2);
-        const long ms = (long)((hos_now_ns() - t0) / 1000000);
+        Sleep(ring ? hos_slow_frames_every_ms() : 2);
+        const int64_t sweep_ns = hos_now_ns();   /* (the ring's: one time a sweep) */
+        const long ms = (long)((sweep_ns - t0) / 1000000);
         for (int i = 0; i < nt; i++) {
             if (SuspendThread(th[i]) == (DWORD)-1) continue;
             CONTEXT ctx = {0};
@@ -735,8 +748,10 @@ static DWORD WINAPI sample_all_thread(void *p) {
                 RtlVirtualUnwind(UNW_FLAG_NHANDLER, image, ctx.Rip, f, &ctx, &hd, &frame, NULL);
             }
             ResumeThread(th[i]);
-            fprintf(out, "%s\n", line);
+            if (ring) hos_slow_sample(sweep_ns, strchr(line, ' ') + 1);
+            else fprintf(out, "%s\n", line);
         }
+        if (ring) hos_slow_sweep_done();
     }
     return 0;
 }
@@ -750,6 +765,8 @@ void hos_prof_start(void) {
     if (e && atoi(e) > 0 && s && *s) CreateThread(NULL, 0, sample_thread, (void *)s, 0, NULL);
     const char *all = getenv("HOS_SAMPLE_ALL");
     if (all && *all) CreateThread(NULL, 0, sample_all_thread, (void *)all, 0, NULL);
+    const char *slow = hos_slow_frames_path();   /* (longshot: the slow-frame recorder, host/slow_frames.c) */
+    if (slow) CreateThread(NULL, 0, sample_all_thread, (void *)slow, 0, NULL);
     const char *watch = getenv("HOS_WATCH");
     if (watch && *watch) CreateThread(NULL, 0, watch_thread, (void *)watch, 0, NULL);
 }

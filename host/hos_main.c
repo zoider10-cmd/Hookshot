@@ -612,7 +612,7 @@ static int env_line_allowed(const char *name, const char *value) {
        the file select) */
     static const char *const by_name[] = {
         "HOS_AUDIO_DUMP", "HOS_AUDIO_WB_DUMP", "HOS_SHADER_DUMP", "HOS_FS_OVERLAY", "HOS_MODS", "HOS_INPUT_LIVE",
-        "HOS_INPUT_SCRIPT", "HOS_SAMPLE_ALL", "HOS_CHAIN", "HOS_WATCH", "HOOKSHOT_BUILDER_HOME", "RX_VK_SHOTS", "RX_VK_SHOT_GO",
+        "HOS_INPUT_SCRIPT", "HOS_SAMPLE_ALL", "HOS_SLOW_FRAMES", "HOS_CHAIN", "HOS_WATCH", "HOOKSHOT_BUILDER_HOME", "RX_VK_SHOTS", "RX_VK_SHOT_GO",
         "RX_VK_FRAMELOG", "RX_VK_HANG_DUMP", "RX_VK_DUMP", "RX_VK_DUMP_SPV", "RX_VK_DUMP_MESH_SPV", "RX_VK_DUMP_STAGES",
         "RX_VK_DUMP_FAILED", "RX_VK_IR", "RX_VK_MENU_SCRIPT", "RX_DUMP_WGSL", "RX_DUMP_SLOW_WGSL", "RX_DUMP_TICS",
         "RX_WGSL_OVERRIDE"};
@@ -674,6 +674,40 @@ static void load_hookshot_env(void) {
 #endif
     }
     fclose(f);
+}
+
+/* (longshot) HOS_RECORD_STUTTERS=1: the stutter tools in one switch, the one players are asked to set (docs/performance-report.md),
+   allowed in hookshot_env.txt where HOS_SLOW_FRAMES=<path> is not (a path). It sets, for this run, what is not set already:
+   HOS_SLOW_FRAMES to the game folder's logs/slow_frame (the slow-frame recorder, host/slow_frames.c: logs/slow_frame-<n>.txt)
+   and RX_VK_FRAME_TRACE=1 (logs/hookshot_frames.csv with the main thread's columns). HOS_VCORE_LOG_MS is on by default
+   already. After load_hookshot_env and hos_game_layout (logs/ made), before the samplers and the renderer read them */
+static void record_stutters_env(void) {
+    if (!env_on("HOS_RECORD_STUTTERS")) return;
+    if (!getenv("HOS_SLOW_FRAMES")) {
+        char path[MAX_PATH + 32];
+        DWORD n = hos_game_path_a(path, MAX_PATH);
+        while (n && path[n - 1] != 92 && path[n - 1] != 47) n--;
+        if (n) {
+            memcpy(path + n, "logs" SEP_S "slow_frame", sizeof("logs" SEP_S "slow_frame"));
+#ifdef _WIN32
+            char put[MAX_PATH + 64];
+            snprintf(put, sizeof put, "HOS_SLOW_FRAMES=%s", path);
+            _putenv(put);
+#else
+            setenv("HOS_SLOW_FRAMES", path, 1);
+#endif
+        }
+    }
+    if (!getenv("RX_VK_FRAME_TRACE")) {
+#ifdef _WIN32
+        _putenv("RX_VK_FRAME_TRACE=1");
+#else
+        setenv("RX_VK_FRAME_TRACE", "1", 1);
+#endif
+    }
+    fprintf(stderr, "env: HOS_RECORD_STUTTERS: the slow-frame recorder in %s, the frame trace %s\n",
+            getenv("HOS_SLOW_FRAMES") ? getenv("HOS_SLOW_FRAMES") : "(no game folder: off)",
+            env_on("RX_VK_FRAME_TRACE") ? "on" : "off (RX_VK_FRAME_TRACE set to 0)");
 }
 
 /* Switches this build no longer reads, still set (in the environment or hookshot_env.txt, as older issues told players):
@@ -3419,6 +3453,7 @@ static int game_main(int argc, char **argv) {
         hos_relaunch_keep_env();
     }
     load_hookshot_env();
+    record_stutters_env();   /* (HOS_RECORD_STUTTERS: after the file, which may set it) */
 #endif
     occlusion_switch();
     {
@@ -3763,6 +3798,7 @@ int main(int argc, char **argv) {
     void hos_display_loop(void);
     hos_game_layout();   /* (the game folder's cache/ and logs/, before anything writes there, --prepare-shaders too: host/game_layout.c) */
     load_hookshot_env();
+    record_stutters_env();   /* (HOS_RECORD_STUTTERS: after the file, which may set it) */
     driver_cache_room();
     driver_cache_folder();
     game_argc = argc, game_argv = argv;
