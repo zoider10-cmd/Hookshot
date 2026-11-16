@@ -81,7 +81,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 32   # (32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 33   # (33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -2651,22 +2651,27 @@ def scene_steps(data):
 # caught, he puts a Red Potion in the bottle and marks it cleared, and the shop is open (the owner's account, 2026-11-16;
 # the flow Npc_Hylia_020_Shop_Child). With the randomizer the bug is passed over: after the gift the two talks about
 # the bug are skipped, and from the mark of the errand started the flow goes on to the mark of it cleared and the
-# challenge's last step. The bottle is a gift of the shuffle (GIFTS, "potion_bottle"); the Red Potion is not given.
+# challenge's last step, by the step that takes the bug away (its own, from the scene of it caught). The bottle is a gift of the
+# shuffle (GIFTS, "potion_bottle"); the Red Potion is not given.
 POTION_FLOW = SCENE_FLOWS + "/Npc_Hylia_020_Shop_Child.bfevfl.zs"
 POTION_STARTED, POTION_CLEARED = "Market_Item_Bottle_TutorialEvent_Started", "Market_Item_Bottle_TutorialEvent_Cleared"
+# (the bug is made by the map's logic once the errand is started, Market_Child_Prefab_f039, and goes when this is set: left there,
+#  it kept Link in the shop, the keeper asking for it again as he walked away; seen in play, 2026-11-16)
+POTION_BUG_GONE = "Market_Item_Bottle_TutorialEvent_Insect_Delete"
 
 
 def potion_errand_skip(data):
     """The Potion Shop keeper's flow (POTION_FLOW) with the bug passed over: the steps that led into the talks before the
-    errand's start mark lead to the mark itself, and the step after the mark goes on to the cleared mark. The new bytes,
+    errand's start mark lead to the mark itself, and the step after the mark goes on to the bug's mark and that to the
+    cleared mark. The new bytes,
     of the same size. ValueError: not the flow this was written for."""
     steps, _, _ = scene_steps(data)
     u16 = lambda at: struct.unpack_from("<H", data, at)[0]
     sets = lambda name: [i for i, s in enumerate(steps) if s["kind"] == 0 and s["what"] == "EventTriggerSetGameDataBool" and s.get("name") == name]
-    started, cleared = sets(POTION_STARTED), sets(POTION_CLEARED)
-    if len(started) != 1 or len(cleared) != 1:
-        raise ValueError("the keeper's flow does not set the errand's marks once each")
-    started, cleared = started[0], cleared[0]
+    started, cleared, gone = sets(POTION_STARTED), sets(POTION_CLEARED), sets(POTION_BUG_GONE)
+    if len(started) != 1 or len(cleared) != 1 or len(gone) != 1:
+        raise ValueError("the keeper's flow does not set the errand's marks and the bug's once each")
+    started, cleared, gone = started[0], cleared[0], gone[0]
     after = u16(steps[started]["next"])   # (the keeper's schedule set back, then the challenge's "playing" step)
     if after >= len(steps) or steps[after]["kind"] != 0 or u16(steps[after]["next"]) >= len(steps):
         raise ValueError("the keeper's flow has no step after the errand's start mark")
@@ -2691,7 +2696,8 @@ def potion_errand_skip(data):
                 into += 1
     if into != 1:
         raise ValueError("the keeper's talks about the bug are come to from %d steps, not one" % into)
-    struct.pack_into("<H", out, steps[after]["next"], cleared)
+    struct.pack_into("<H", out, steps[after]["next"], gone)   # (the bug gone, then the errand cleared)
+    struct.pack_into("<H", out, steps[gone]["next"], cleared)
     return bytes(out)
 
 
