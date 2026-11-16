@@ -10006,6 +10006,7 @@ void dispatch(VkCommandBuffer cmd, NvnState& s, uint32_t x, uint32_t y, uint32_t
     ProgramUse use(s.prog, s.has_prog, true);   // (the program's first dispatch, for the census: vk_programs.h)
     const Program* cp = program_for(s, ProgramKind::Compute, types);
     if (use.on) use.program(cp, cp && cp->ready.load(std::memory_order_acquire));
+    if (cp && exposure_program(cp->key)) replay_saw_exposure.store(true, std::memory_order_relaxed);
     dclock.t_prog = slow_dispatch_timing() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     // (a program still being translated is waited for, as a draw's is: a dispatch left out is work never done again.
     // MKW updates its terrain height clipmaps a region at a time as the camera moves, and makes its sky's tables

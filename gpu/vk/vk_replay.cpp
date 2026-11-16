@@ -960,7 +960,12 @@ bool dry_clears_on() {   // (the dry pass marks a clear's targets too: NOP_CLEAR
     static const bool v = !env_on("RX_VK_NO_DRY_CLEARS");
     return v;
 }
+bool dry_rts_on() {   // (the dry pass makes the render targets: NOP_SET_RT in replay())
+    static const bool v = !env_on("RX_VK_NO_DRY_RTS");
+    return v;
+}
 int64_t dry_work = 0;
+int64_t serial_work = 0;   // (draws and dispatches replayed on the replay thread alone, ever: replay_handle's measure)
 size_t ub_first_of_recording = 0;  // (the current recording's first entry)
 uint64_t rec_value_now = 0;
 
@@ -1413,7 +1418,22 @@ void replay(VkCommandBuffer& cmd, NvnState& s, const uint8_t* p, const uint8_t* 
             break;
         }
         // ---- state ----
-        case NOP_SET_RT: s.rt = payload<nvn_p_set_rt>(a, avail), s.rt_serial++; break;
+        case NOP_SET_RT:
+            s.rt = payload<nvn_p_set_rt>(a, avail), s.rt_serial++;
+            // (hookshot, after Project ReLink) the parallel replay's dry pass makes the render targets now, on the replay thread,
+            // in the recording submitted before every segment: a target a segment met first was made by its worker, and in
+            // ReLink a later segment's clear of it then ran after the earlier segments' draws into it (one frame darker in
+            // places at camera cuts). Here a worker's new image already goes to the earliest open segment's init command
+            // buffer (vk_texture.cpp InitRedirect); made here, it is not made under the threads' lock at all. (Unlike the draw
+            // path, which resolves a pass's targets at its first draw, this makes targets set and never drawn into as well;
+            // in the Market by day that cost nothing measurable: 74.8 / 79.9 fps with it, 78.4 / 79.0 without.)
+            // RX_VK_NO_DRY_RTS=1: as before
+            if (dry && dry_rts_on()) {
+                for (int i = 0; i < std::min(s.rt.n, 8); i++)
+                    if (s.rt.color[i]) texture_get(s.rt.color[i], false);
+                if (s.rt.depth) texture_get(s.rt.depth, false);
+            }
+            break;
         case NOP_VIEWPORTS: {
             const auto v = payload<nvn_p_viewports>(a, avail);
             for (int i = 0; i < v.n && v.first + i < 16; i++) std::memcpy(s.viewport[v.first + i], v.v[i], 16);
@@ -1738,6 +1758,7 @@ void replay(VkCommandBuffer& cmd, NvnState& s, const uint8_t* p, const uint8_t* 
                 if (s.render_enabled && (compute || !s.raster_discard)) dry_mark_written(s, compute, dry_work == 0);
                 if (++dry_work % 64 == 0) par_points.push_back({p + h.size, s, ub_updates.size(), par_conds.size(), dry_work});
             } else if (!worker) {
+                serial_work++;
                 maybe_split(cmd);
             }
         }
@@ -1896,9 +1917,54 @@ int64_t stream_work(const uint8_t* p, int64_t most) {
     }
 }
 
+// (hookshot, after Project ReLink's gate) a command buffer goes to the threads only when the one at its place in the last
+// frame (the n-th replayed since the frame began: the game builds its passes in the same order frame to frame) had at least
+// RX_VK_PARALLEL_MIN draws and dispatches (default 700). Below that the dry pass, the threads' lock and the threads
+// themselves (taken from the game's own busy cores) cost more than they save: in the Market by day at the fountain (RX 9070
+// XT, 9800X3D) every command buffer of 320 and more in segments on 3 threads made 56.5 and 59.6 fps against 74.2 on the
+// replay thread alone, most of the time spent waiting on the lock. ReLink measured 700 against 1000 on OoT (Hyrule Castle's
+// arrival 53.7 -> 58.1 fps, the Market's street 57.0 -> 58.9); 500 gained nothing more there. Gated, the same Market spot
+// here: 74.8 and 79.9 fps on 3 threads against 75.0 and 72.5 on the replay thread alone (about one buffer of ~800 draws a
+// frame in 5 segments), and ungated again 60.0. One gated run of the same build fell to 13.6 fps (median frame 48 ms)
+// while the serial run just before it kept 67.6, at a time another program was loading the PC; four later runs did not
+// show it again, and 16 busy loops on the CPU stall serial and gated alike, so its cause is not known.
+// And a buffer that ran OoT's exposure programs (the sky light's sums, read back by the game's CPU: replay_saw_exposure)
+// stays on the replay thread for 600 frames after: in segments ReLink saw its exposure step by 7-8% from frame to frame.
+// Here it is seen on the threads too, so a buffer let out after 600 frames comes back when it runs them again.
+// RX_VK_PARALLEL_EXPOSURE=1: such buffers go to the threads as any other
+struct ParGate {
+    uint64_t frame = UINT64_MAX;
+    size_t at = 0;
+    std::vector<int64_t> work;       // (by place in the frame: the last frame's draws and dispatches there)
+    std::vector<uint64_t> exposure;  // (by place: the last frame it ran an exposure program in, plus one; 0: never)
+    /// The next command buffer's place in frame f (the first of a new frame: 0)
+    size_t next(uint64_t f) {
+        if (f != frame) frame = f, at = 0;
+        const size_t place = at++;
+        if (work.size() <= place) work.resize(place + 1, 0), exposure.resize(place + 1, 0);
+        return place;
+    }
+    /// Whether the buffer at place goes to the threads in frame f
+    bool big(size_t place, uint64_t f, int64_t min, bool exposure_serial) const {
+        if (exposure_serial && exposure[place] && f + 1 - exposure[place] < 600) return false;
+        return work[place] >= min;
+    }
+    /// What the buffer at place did in frame f
+    void note(size_t place, uint64_t f, int64_t w, bool saw_exposure) {
+        work[place] = w;
+        if (saw_exposure) exposure[place] = f + 1;
+    }
+};
+ParGate par_gate;
+int64_t par_min_work() {
+    static const int64_t v = getenv("RX_VK_PARALLEL_MIN") ? std::max(0, atoi(getenv("RX_VK_PARALLEL_MIN"))) : 700;
+    return v;
+}
+
 /// A command buffer of the submission from h (its start, or where it stopped at a wait): on the replay thread alone
-/// (RX_VK_PARALLEL off, one too short for two segments, dumps and profiles), or its dry pass there and its segments on
-/// the threads. may_stop: up to a wait not met, which it returns (null: the command buffer done)
+/// (RX_VK_PARALLEL off, one whose place had fewer than RX_VK_PARALLEL_MIN draws and dispatches last frame, one too short for
+/// two segments, dumps and profiles), or its dry pass there and its segments on the threads. may_stop: up to a wait not met,
+/// which it returns (null: the command buffer done)
 const uint8_t* replay_handle(VkCommandBuffer& cmd, const uint8_t* h, bool may_stop = false) {
     const int threads = par_threads();
     NvnState& state = *cur_state;
@@ -1917,6 +1983,31 @@ const uint8_t* replay_handle(VkCommandBuffer& cmd, const uint8_t* h, bool may_st
         suspend_ok = false;
         return suspend_at;
     }
+    // (the gate: this buffer's place in the frame, and what the one there did last frame)
+    static const bool exposure_serial = !env_on("RX_VK_PARALLEL_EXPOSURE");
+    const uint64_t frame = texture_frame_no();
+    const size_t place = par_gate.next(frame);
+    if (!par_gate.big(place, frame, par_min_work(), exposure_serial)) {
+        const int64_t w0 = serial_work;
+        replay_saw_exposure.store(false, std::memory_order_relaxed);
+        suspend_ok = may_stop;
+        replay(cmd, state, h);
+        suspend_ok = false;
+        par_gate.note(place, frame, serial_work - w0, replay_saw_exposure.load(std::memory_order_relaxed));
+        static int told;
+        if (replay_saw_exposure.load(std::memory_order_relaxed) && told++ < 4)
+            logf("vk: parallel replay: command buffer %zu of frame %llu ran OoT's exposure programs: on the replay thread",
+                 place, (unsigned long long)frame);
+        return suspend_at;
+    }
+    replay_saw_exposure.store(false, std::memory_order_relaxed);
+    struct ExposureNote {   // (however it returns: the threads' dispatches, or the replay thread's for one segment)
+        size_t place;
+        uint64_t frame;
+        ~ExposureNote() {
+            if (replay_saw_exposure.load(std::memory_order_relaxed)) par_gate.note(place, frame, par_gate.work[place], true);
+        }
+    } exposure_note{place, frame};
     // (segments of ~RX_VK_PARALLEL_SEG draws and dispatches (default 160), taken in order by the threads and submitted
     // as each is done with those before it: the GPU starts on the first while the rest are recorded)
     static const int64_t per = getenv("RX_VK_PARALLEL_SEG") ? std::max(32, atoi(getenv("RX_VK_PARALLEL_SEG"))) : 160;
@@ -1929,10 +2020,12 @@ const uint8_t* replay_handle(VkCommandBuffer& cmd, const uint8_t* h, bool may_st
         shorts++;
         const bool was_split = split_off;
         split_off = true;   // (the segment the dry pass would have recorded is one, and a segment is not split)
+        const int64_t w0 = serial_work;
         suspend_ok = may_stop;
         replay(cmd, state, h);
         suspend_ok = false;
         split_off = was_split;
+        par_gate.note(place, frame, serial_work - w0, false);   // (fewer than last frame: the gate learns it)
         return suspend_at;
     }
     // the dry pass: the state at every 64 draws and dispatches, the render conditions, the uniform updates
@@ -1949,6 +2042,7 @@ const uint8_t* replay_handle(VkCommandBuffer& cmd, const uint8_t* h, bool may_st
     rmode = Mode::Serial;
     const uint8_t* const stop = suspend_at;   // (the segments end there)
     const int64_t total = dry_work;
+    par_gate.note(place, frame, total, false);   // (its exposure programs: seen by the threads, noted below)
     static double dry_ms, seg_ms, segs_n;
     static int64_t timed;
     dry_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_dry0).count();
@@ -5626,6 +5720,7 @@ void fill_replay_table(MkwVkRenderer& t) {
 }
 
 std::atomic<bool> par_active{false};
+std::atomic<bool> replay_saw_exposure{false};
 std::atomic<int64_t> par_lock_wait_ns{0}, par_locks{0};
 std::recursive_mutex& par_mutex() {
     return par_mu;
