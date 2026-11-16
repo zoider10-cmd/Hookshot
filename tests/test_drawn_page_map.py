@@ -108,6 +108,8 @@ void logf_at(LogLevel, const char*, ...) {}
 void vw_note(Texture&) {}
 void watch_tex(const Texture*, const char*) {}
 void drawn_writeback_note(Texture*) {}
+struct nvn_tex;
+void reuse_released(const nvn_tex*) {}   // (decoded ASTC used again, gpu/vk/astc_reuse.h: none here)
 
 // (the host's GPU mappings: each 64 KB virtual page's guest address, and their generations. `calls` counts what the code
 // cut out asks of them and of the page generations: a page walk or a memory check)
