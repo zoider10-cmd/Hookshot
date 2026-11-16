@@ -8,9 +8,10 @@
 #include <vk_mem_alloc.h>
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <vector>
-#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -526,6 +527,50 @@ bool vram_usage(uint64_t* used, uint64_t* budget, uint64_t* block_free) {
     static const uint64_t test_allowed = getenv("RX_VK_TEST_ALLOWED_MB") ? (uint64_t)atoi(getenv("RX_VK_TEST_ALLOWED_MB")) << 20 : 0;
     if (test_allowed && t > test_allowed) t = test_allowed;
     if (ballast_held) u -= std::min(u, ballast_held), t -= std::min(t, ballast_held);
+    // (and RX_VK_TEST_ALLOWED_FILE=<file>: the same bound read from that file's number of MB, looked at again once a second, so
+    // a run can shrink the allowance in play, as Windows does when another program takes VRAM: an RX 6600 went from 7378 to
+    // 5940 MB allowed in Hyrule Field (#1025). A missing file or 0 leaves the driver's)
+    static const char* test_file = getenv("RX_VK_TEST_ALLOWED_FILE");
+    if (test_file) {
+        static std::atomic<uint64_t> file_allowed{0};
+        static std::atomic<int64_t> read_at{0};
+        const int64_t now = (int64_t)std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (now - read_at.load(std::memory_order_relaxed) >= 1000) {
+            read_at.store(now, std::memory_order_relaxed);
+            uint64_t mb = 0;
+            if (FILE* fp = fopen(test_file, "r")) {
+                unsigned long long v = 0;
+                if (fscanf(fp, "%llu", &v) == 1) mb = v;
+                fclose(fp);
+            }
+            if ((mb << 20) != file_allowed.load(std::memory_order_relaxed))
+                logf("vk: test allowance (RX_VK_TEST_ALLOWED_FILE): %llu MB%s", (unsigned long long)mb, mb ? "" : " (the driver's)");
+            file_allowed.store(mb << 20, std::memory_order_relaxed);
+        }
+        const uint64_t fa = file_allowed.load(std::memory_order_relaxed);
+        if (fa && t > fa) t = fa;
+    }
+    // (and RX_VK_TEST_ALLOWED_FOLLOW=1: an allowance the count is past is reported as the count, as AMD's Windows driver does
+    // (#933, #1025), so the rule below can be seen at work on any card)
+    static const bool test_follow = env_on("RX_VK_TEST_ALLOWED_FOLLOW");
+    if (test_follow && (test_allowed || test_file) && t && u > t) t = u;
+    // (longshot) an allowance the driver gives as the count itself is past: AMD's Windows driver, once a process is over what it
+    // allows, reports the allowance as what the process uses. An RX 6600 at 3.4 of 7.2 GB entered Hyrule Field and sat at 5940 of
+    // 5940 MB; another went from 5.3 of 6.5 GB to 6.6 of 6.6, the allowance rising with the count. Taken as it is, the count is
+    // within it: room in the blocks kept the 97% squeeze waiting and the hold's line rose with the count, while the driver paged:
+    // frames of 1.2-15.7 s (#933, #1025). vram_compact::past_allowance makes it a tenth under the count, so every rule sees the
+    // count past it and gives back until the driver reports an allowance over the count again. RX_VK_ALLOWED_AT_COUNT=0: as before
+    static const bool at_count_rule = !getenv("RX_VK_ALLOWED_AT_COUNT") || atoi(getenv("RX_VK_ALLOWED_AT_COUNT")) != 0;
+    if (at_count_rule) {
+        const uint64_t was = t;
+        t = vram_compact::past_allowance(u, t);
+        static std::atomic<int> told{0};
+        if (t != was && told.fetch_add(1, std::memory_order_relaxed) < 8)
+            logf("vk: the driver's allowance is the count itself (%llu MB used of %llu): past it, taken as %llu MB "
+                 "(RX_VK_ALLOWED_AT_COUNT=0: as the driver says)", (unsigned long long)(u >> 20), (unsigned long long)(was >> 20),
+                 (unsigned long long)(t >> 20));
+    }
     *used = u, *budget = t;
     if (block_free) *block_free = f;
     return t != 0;

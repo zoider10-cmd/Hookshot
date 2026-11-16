@@ -47,6 +47,43 @@ inline uint64_t returnable(uint64_t block_bytes, uint64_t free_bytes, uint64_t k
 /// the driver's count: the rule that squeezes by the count alone (97% of the allowance) waits, as it does for room in the blocks
 inline bool kept_only(uint64_t block_bytes, uint64_t kept) { return kept && block_bytes <= kept; }
 
+/// The driver's count, in percent of its allowance, above which the textures give up the excess. 97 on a dedicated card, whose
+/// driver pages what is past the allowance out to system memory. 90 on an integrated GPU: its heap is the PC's RAM, with nowhere
+/// to page to, so past the allowance the driver's own allocations fail. A UHD Graphics (i3-1115G4, 7.0 GB allowed) at 6.7 GB
+/// entered Hyrule Castle, its imports grew by 560 MB, and at 7.5 of 7.0 GB graphics pipelines were not made (-2) and the next
+/// vkCmdDispatchIndirect faulted inside igvk64.dll; 3% of the allowance is 215 MB of room, 10% is 717
+inline uint64_t count_line_pct(bool integrated) { return integrated ? 90 : 97; }
+
+/// Whether VMA's blocks hold room enough (an eighth of the allowance free) that the count line's squeeze waits: new images take
+/// that space and the count does not grow. Not past the allowance, where a dedicated card's driver pages (#2156), and not on an
+/// integrated GPU: what grows there near the line is the driver's own (pipelines, command memory) and the staging arenas, which
+/// no block's free space takes. The UHD Graphics above sat at 6,709 of 7,172 MB with 1,121 MB of it free in the blocks, so the
+/// squeeze waited; Hyrule Castle's load then took the count to 7.5 GB
+inline bool room_in_blocks(uint64_t used, uint64_t allowed, uint64_t block_free, bool integrated) {
+    return !integrated && used <= allowed && block_free >= allowed / 8;
+}
+
+/// What the textures give up once the driver has refused a pipeline for want of memory (VK_ERROR_OUT_OF_DEVICE_MEMORY or
+/// _HOST_MEMORY): the count's excess over its line, and kShortGive at least, whatever the blocks hold free. The count is read
+/// every 10 frames (3 s at the UHD Graphics' 3.5 fps); the refusals say it sooner, and the UHD Graphics' next indirect dispatch
+/// after six of them faulted inside igvk64.dll
+inline constexpr uint64_t kShortGive = 256ull << 20;
+inline uint64_t short_excess(uint64_t used, uint64_t count_line) {
+    return std::max<uint64_t>(used > count_line ? used - count_line : 0, kShortGive);
+}
+
+/// The allowance as the rules take it, from the driver's count (used) and allowance: one the driver gives as the count itself,
+/// within kAtCount, is past: AMD's Windows driver reports a process over what it allows as allowed what it uses (an RX 6600 at
+/// 5940 of 5940 MB, another at 6.6 of 6.6 GB after 5.3 of 6.5: #933, #1025). Taken as it is, every rule saw the count within it
+/// while the driver paged. Then a tenth under the count (kPastShare), so the rules give back until the driver says again how
+/// much it allows. An allowance under the count is past already and stays as it is; 0 (unknown) too
+inline constexpr uint64_t kAtCount = 16ull << 20;
+inline constexpr uint64_t kPastShare = 10;
+inline uint64_t past_allowance(uint64_t used, uint64_t allowed) {
+    if (!allowed || allowed + kAtCount < used || allowed > used + kAtCount) return allowed;
+    return used - used / kPastShare;
+}
+
 /// The presents between the end of a run and the next look
 inline uint64_t rest(bool is_pressed) { return is_pressed ? 120 : 600; }
 

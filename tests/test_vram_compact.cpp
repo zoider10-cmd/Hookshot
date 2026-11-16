@@ -109,6 +109,28 @@ int main() {
     CHECK(hold_target(age_at_60(105, 3.5), 60, none, 5000 * MB, 4500 * MB) == 4500 * MB);   // (the reserve's after thirty)
     CHECK(hold_target(age_at_60(34, 3.5), 60, none, 5000 * MB, 4500 * MB) == UINT64_MAX);   // (under ten seconds: stays)
     CHECK(age_at_60(10, 0.5) == 300);                            // (a load's stall counts as kMinFps, not as 0.5 fps)
+    // the room in VMA's blocks that makes the count line's squeeze wait: on a dedicated card within the allowance only, and never
+    // on an integrated GPU (the UHD Graphics: 6,709 of 7,172 MB used, 1,121 MB free in the blocks)
+    CHECK(room_in_blocks(6709 * MB, 7172 * MB, 1121 * MB, false));
+    CHECK(!room_in_blocks(6709 * MB, 7172 * MB, 1121 * MB, true));
+    CHECK(!room_in_blocks(7602 * MB, 6982 * MB, 1649 * MB, false));   // (#2156: past the allowance the driver pages)
+    CHECK(!room_in_blocks(6709 * MB, 7172 * MB, 800 * MB, false));    // (less than an eighth free)
+    // what a pipeline refused for want of memory asks: the excess over the line, and kShortGive at least
+    CHECK(short_excess(6600 * MB, 6450 * MB) == kShortGive);           // (150 MB over: kShortGive)
+    CHECK(short_excess(6709 * MB, 6450 * MB) == 259 * MB);
+    CHECK(short_excess(7680 * MB, 6450 * MB) == 1230 * MB);            // (7.5 of 7.0 GB: the whole excess)
+    CHECK(short_excess(5000 * MB, 6450 * MB) == kShortGive);           // (under the line: refused all the same)
+    // an allowance the driver gives as the count itself is past (AMD's Windows driver: #933, #1025): a tenth under the count
+    CHECK(past_allowance(5940 * MB, 5940 * MB) == 5940 * MB - 5940 * MB / 10);   // (the RX 6600 in Hyrule Field)
+    CHECK(past_allowance(6600 * MB, 6600 * MB + 8 * MB) < 6600 * MB);           // (within kAtCount over the count)
+    CHECK(past_allowance(6600 * MB + 8 * MB, 6600 * MB) < 6600 * MB);           // (within kAtCount under it)
+    CHECK(past_allowance(5300 * MB, 6500 * MB) == 6500 * MB);                   // (an allowance over the count: as it is)
+    CHECK(past_allowance(7602 * MB, 6982 * MB) == 6982 * MB);                   // (under the count, past already: as it is)
+    CHECK(past_allowance(5000 * MB, 0) == 0);                                   // (unknown: as it is)
+    CHECK(past_allowance(0, 0) == 0);
+    // and the rules then see the count past it: no room in the blocks, the squeeze's line crossed
+    CHECK(!room_in_blocks(5940 * MB, past_allowance(5940 * MB, 5940 * MB), 746 * MB, false));
+    CHECK(room_in_blocks(5940 * MB, 5940 * MB, 746 * MB, false));               // (what the rule did with the driver's word)
     std::printf("PASS: the compaction's rules\n");
     return 0;
 }
