@@ -47,7 +47,7 @@ class TargetImagePoolTests(unittest.TestCase):
             self.assertIn(part, rule, part)
         cap = block(self.tex, "uint64_t pool_cap()")
         self.assertIn('getenv("RX_VK_TARGET_POOL_MB")', cap)
-        self.assertIn(": 256", cap)
+        self.assertIn("target_pool::default_mb(vram_usage(&used, &allowed) ? allowed : 0)", cap)
         self.assertIn("uint64_t pool_key = 0;", self.hdr)
 
     def test_a_texture_made_for_a_target_is_one_and_its_image_comes_from_the_targets_blocks(self):
@@ -63,11 +63,12 @@ class TargetImagePoolTests(unittest.TestCase):
         self.assertIn("pi.blockSize = kImageBlock;", pool)
         self.assertIn("void vma_log_image_blocks()", vma)
 
-    def test_the_dead_targets_are_swept_every_ten_presents(self):
+    def test_the_dead_targets_are_swept_every_present_after_one_unused(self):
         frame = block(self.tex, "void texture_frame(uint64_t completed)")
         self.assertIn('getenv("RX_VK_DEAD_EVERY")', frame)
-        self.assertIn(": 10;", frame[frame.index('getenv("RX_VK_DEAD_EVERY")'):])
+        self.assertIn(": 1;", frame[frame.index('getenv("RX_VK_DEAD_EVERY")'):])
         self.assertIn("frame_no % (dead_targets ? dead_every : 600)", frame)
+        self.assertIn(": 1;", frame[frame.index('getenv("RX_VK_DEAD_MIN_UNUSED")'):])
 
     def test_a_pooled_image_is_taken_before_one_is_made_and_still_cleared_from_undefined(self):
         make = block(self.tex, "Texture* create(const Key& key")
