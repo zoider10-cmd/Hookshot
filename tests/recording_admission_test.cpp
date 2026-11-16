@@ -95,6 +95,10 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(VkDevice, uint32_t n, const Vk
     for (uint32_t i = 0; i < n; ++i) require(sets.count(writes[i].dstSet), "update failed/destroyed set");
     ++updates;
 }
+VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSetWithTemplate(VkDevice, VkDescriptorSet set, VkDescriptorUpdateTemplate, const void*) {
+    require(sets.count(set), "update failed/destroyed set");
+    ++updates;
+}
 VKAPI_ATTR void VKAPI_CALL vkCmdBindDescriptorSets(VkCommandBuffer, VkPipelineBindPoint, VkPipelineLayout, uint32_t, uint32_t n, const VkDescriptorSet* bound, uint32_t, const uint32_t*) {
     require(n == 1 && sets.count(bound[0]), "bind failed/destroyed set"); ++binds;
 }
@@ -143,12 +147,13 @@ VkDescriptorBufferInfo cached_bank(const NvnState& s, const Stage& st) {
     /* BANK_BRANCH */
     return bi;
 }
-struct Writes { std::vector<VkWriteDescriptorSet> writes{VkWriteDescriptorSet{}}; } writes;
+struct Writes { std::vector<uint64_t> data{0, 0, 0}; std::vector<VkWriteDescriptorSet> writes{VkWriteDescriptorSet{}}; } writes;
 Writes& dw() { return writes; }
 bool bind_tail() {
     VkCommandBuffer cmd{}; VkPipelineBindPoint bp = VK_PIPELINE_BIND_POINT_GRAPHICS;
     struct { VkDescriptorSetLayout set_layout{}; VkPipelineLayout layout{}; } p;
     Writes& wr = dw();   // (bind_descriptors takes it at its top, above the part cut in here)
+    const VkDescriptorUpdateTemplate tmpl = VK_NULL_HANDLE;   // (and its template: none here, the writes)
     /* DESCRIPTORS */
 }
 void begin(int slot = 0, uint64_t value = 1) { draw_begin_recording(slot, VkCommandBuffer{}, value); }

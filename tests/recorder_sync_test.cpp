@@ -361,6 +361,9 @@ F(vkCmdPushConstants, (VkCommandBuffer cb, VkPipelineLayout l, VkShaderStageFlag
   handle(cb), handle(l), put(f), put(o), put(s); if (readable(v, s / 16)) raw(v, s);)
 F(vkCmdPushDescriptorSetKHR, (VkCommandBuffer cb, VkPipelineBindPoint bp, VkPipelineLayout l, uint32_t set, uint32_t n, const VkWriteDescriptorSet* w),
   handle(cb), put(bp), handle(l), put(set); A(w, n);)
+// (the data's size is the template's: the frame's templates read 48 bytes)
+F(vkCmdPushDescriptorSetWithTemplateKHR, (VkCommandBuffer cb, VkDescriptorUpdateTemplate t, VkPipelineLayout l, uint32_t set, const void* d),
+  handle(cb), handle(t), handle(l), put(set); if (readable(d, 3)) raw(d, 48);)
 F(vkCmdSetViewport, (VkCommandBuffer cb, uint32_t first, uint32_t n, const VkViewport* v), handle(cb), put(first); A(v, n);)
 F(vkCmdSetScissor, (VkCommandBuffer cb, uint32_t first, uint32_t n, const VkRect2D* r), handle(cb), put(first); A(r, n);)
 F(vkCmdSetViewportWithCount, (VkCommandBuffer cb, uint32_t n, const VkViewport* v), handle(cb); A(v, n);)
@@ -736,6 +739,13 @@ static void frame() {
                 changed.push_back(dw.writes[0]), changed.push_back(dw.writes[4]), changed.push_back(dw.writes[8]);
                 vkCmdPushDescriptorSetKHR(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, 0, (uint32_t)changed.size(), changed.data());
                 if (g_mutate) poison(changed);
+            }
+            {   // (a whole push through a template: its data copied, as many bytes as the template noted it reads)
+                static thread_local uint64_t words[6];
+                for (int i = 0; i < 6; i++) words[i] = 0x900 + at * 8 + i;
+                rec::template_bytes_note(H<VkDescriptorUpdateTemplate>(0x700 + at), sizeof words);
+                vkCmdPushDescriptorSetWithTemplateKHR(cmd, H<VkDescriptorUpdateTemplate>(0x700 + at), layout, 0, words);
+                if (g_mutate) for (uint64_t& w : words) w = 0xCDCDCDCDCDCDCDCDull;
             }
             dw.after_call();
             push_constants(cmd, layout, at);

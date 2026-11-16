@@ -86,7 +86,7 @@ bool sampler_of(int id, nvn_samp_par* p) {
     return true;
 }
 const char* getenv(const char* name) {
-    if (!std::strcmp(name, "RX_VK_PUSH_STATE_OLD") && descriptor_policy == "descriptor-old") return "1";
+    if (!std::strcmp(name, "RX_VK_DESC_DELTA") && descriptor_policy == "descriptor-no-delta") return "0";
     if (!std::strcmp(name, "RX_VK_PUSH_ALL") && descriptor_policy == "descriptor-whole") return "1";
     if (!std::strcmp(name, "RX_VK_SAMPLER_CACHE") && cache_off) return "0";
     if (!std::strcmp(name, "RX_VK_SHADOW_PCF") && policy == "compare-pcf-off") return "0";
@@ -126,16 +126,27 @@ void vkDestroySampler(VkDevice, VkSampler sampler, const VkAllocationCallbacks*)
 }
 /* ACTUAL */
 
-struct Program { bool push = true; VkPipelineLayout layout{}; VkDescriptorSetLayout set_layout{}; };
-struct DescWriter { std::vector<VkWriteDescriptorSet> writes; } descriptor_writes;   // (bind_descriptors names the type)
+struct Program {
+    uint64_t key = 0; bool push = true; VkPipelineLayout layout{}; VkDescriptorSetLayout set_layout{};
+    std::vector<VkDescriptorType> binding_types; std::vector<uint32_t> binding_words;
+};
+/* WRITER */
+DescWriter descriptor_writes;
 DescWriter& dw() { return descriptor_writes; }
+// (the template: the policies descriptor-template and descriptor-no-delta have one, the others push and update by writes)
+VkDescriptorUpdateTemplate desc_template(const Program&, VkPipelineBindPoint) {
+    return descriptor_policy == "descriptor-template" || descriptor_policy == "descriptor-no-delta" ||
+                   descriptor_policy == "descriptor-pool-template"
+               ? reinterpret_cast<VkDescriptorUpdateTemplate>(uintptr_t(30)) : VK_NULL_HANDLE;
+}
+const Program* tested = nullptr;   // (what a template call's data is laid out by)
 struct Pushed;
 std::array<Pushed, 2>& pushed();
 struct Recording { VkDescriptorPool pool{}; std::vector<VkDescriptorPool> extra; } recording;
 Recording* cur = &recording;
 bool g_fine = false;
-enum { FC_PUSH_FULL, FC_PUSH_WRITES, FC_PUSH_DESCS, FC_PUSH_DELTA, FC_POOL_SETS, FC_POOL_DESCS };
-int64_t fine_n[6]{};
+enum { FC_PUSH_FULL, FC_PUSH_WRITES, FC_PUSH_DESCS, FC_PUSH_DELTA, FC_POOL_SETS, FC_POOL_DESCS, FC_PUSH_TEMPLATE, FC_PUSH_NONE };
+int64_t fine_n[8]{};
 #define FINE_SCOPE(x) (void)0
 #define FINE_N(x, n) (void)0
 unsigned descriptor_allocs = 0, descriptor_updates = 0, descriptor_binds = 0, descriptor_pushes = 0;
@@ -147,6 +158,19 @@ void check_writes(uint32_t n, const VkWriteDescriptorSet* writes) {
 }
 void vkCmdPushDescriptorSetKHR(VkCommandBuffer, VkPipelineBindPoint, VkPipelineLayout, uint32_t, uint32_t n, const VkWriteDescriptorSet* writes) {
     check_writes(n, writes); descriptor_pushes++;
+}
+void check_data(const void* data) {   // (a template's: every combined image sampler's sampler, by the program's bindings)
+    const uint64_t* d = static_cast<const uint64_t*>(data);
+    for (size_t b = 0; b < tested->binding_types.size(); b++)
+        if (tested->binding_types[b] == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+            for (uint32_t i = tested->binding_words[b]; i < tested->binding_words[b + 1]; i += 3)
+                assert(live.count(reinterpret_cast<VkSampler>(d[i])));
+}
+void vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer, VkDescriptorUpdateTemplate, VkPipelineLayout, uint32_t, const void* data) {
+    check_data(data); descriptor_pushes++;
+}
+void vkUpdateDescriptorSetWithTemplate(VkDevice, VkDescriptorSet, VkDescriptorUpdateTemplate, const void* data) {
+    check_data(data); descriptor_updates++;
 }
 VkDescriptorPool make_pool() { return reinterpret_cast<VkDescriptorPool>(uintptr_t(11)); }
 void vkDestroyDescriptorPool(VkDevice, VkDescriptorPool pool, const VkAllocationCallbacks*) { assert(pool); }
@@ -187,34 +211,45 @@ void run(const std::string& test) {
     if (test.find("descriptor-") == 0) {
         descriptor_policy = test;
         recording.pool = make_pool();   // A live recording already owns its initial pool before binding.
-        Program p; p.push = test != "descriptor-pool";
+        Program p; p.push = test.find("descriptor-pool") != 0;
         p.layout = reinterpret_cast<VkPipelineLayout>(uintptr_t(20));
+        p.binding_types = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER}, p.binding_words = {0, 6};
+        tested = &p;
         const auto bp = test == "descriptor-compute" ? VK_PIPELINE_BIND_POINT_COMPUTE : VK_PIPELINE_BIND_POINT_GRAPHICS;
         const auto cmd = reinterpret_cast<VkCommandBuffer>(uintptr_t(21));
         auto first = get(); valid(first);
-        VkDescriptorImageInfo images[2]{{first, {}, VK_IMAGE_LAYOUT_GENERAL}, {first, {}, VK_IMAGE_LAYOUT_GENERAL}};
-        VkWriteDescriptorSet w{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-        w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; w.descriptorCount = 2; w.pImageInfo = images;
-        dw().writes = {w};
-        create_result = VK_ERROR_OUT_OF_DEVICE_MEMORY; images[1].sampler = get(1);
+        DescWriter& d = dw();
+        d.reset(); d.prog = &p;
+        d.put_image(first, VK_NULL_HANDLE); d.put_image(first, VK_NULL_HANDLE);
+        // (the two descriptors' samplers, words 0 and 3 of the built words)
+        struct Images {
+            DescWriter& d;
+            struct Ref { uint64_t& w; VkSampler sampler; Ref& operator=(VkSampler s) { w = (uint64_t)s; sampler = s; return *this; } };
+            Ref operator[](int i) { Ref r{d.data[3 * i], reinterpret_cast<VkSampler>(d.data[3 * i])}; return r; }
+        } images{d};
+        create_result = VK_ERROR_OUT_OF_DEVICE_MEMORY; images[1] = get(1);
         assert(!images[1].sampler && !bind_descriptors(cmd, bp, p));
         assert(!descriptor_allocs && !descriptor_updates && !descriptor_binds && !descriptor_pushes);
-        create_result = VK_SUCCESS; frame_no++; images[1].sampler = get(1); valid(images[1].sampler);
+        create_result = VK_SUCCESS; frame_no++; images[1] = get(1); valid(images[1].sampler);
         assert(bind_descriptors(cmd, bp, p));
         auto before = pushed()[bp == VK_PIPELINE_BIND_POINT_COMPUTE];
         const auto allocs = descriptor_allocs, updates = descriptor_updates, binds = descriptor_binds, pushes = descriptor_pushes;
         create_result = VK_ERROR_OUT_OF_DEVICE_MEMORY;
-        images[1].sampler = get(2); assert(!images[1].sampler);
+        images[1] = get(2); assert(!images[1].sampler);
         assert(!bind_descriptors(cmd, bp, p));
         assert(descriptor_allocs == allocs && descriptor_updates == updates && descriptor_binds == binds && descriptor_pushes == pushes);
         const auto& after = pushed()[bp == VK_PIPELINE_BIND_POINT_COMPUTE];
-        assert(after.cmd == before.cmd && after.layout == before.layout && after.n == before.n && after.words == before.words && after.writes == before.writes && after.at == before.at);
-        create_result = VK_SUCCESS; frame_no++; images[1].sampler = get(2); valid(images[1].sampler);
+        assert(after.cmd == before.cmd && after.layout == before.layout && after.words == before.words);
+        create_result = VK_SUCCESS; frame_no++; images[1] = get(2); valid(images[1].sampler);
         assert(bind_descriptors(cmd, bp, p));
         assert(p.push ? descriptor_pushes == pushes + 1 : descriptor_updates == updates + 1 && descriptor_binds == binds + 1);
         // Storage images do not consume a sampler: their null sampler remains legal.
-        dw().writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; images[0].sampler = images[1].sampler = VK_NULL_HANDLE;
+        p.binding_types[0] = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; images[0] = VK_NULL_HANDLE; images[1] = VK_NULL_HANDLE;
         assert(bind_descriptors(cmd, bp, p));
+        // (and a build that is not this program's layout is left out, nothing pushed or bound)
+        d.data.pop_back();
+        const auto pushes2 = descriptor_pushes, updates2 = descriptor_updates;
+        assert(!bind_descriptors(cmd, bp, p) && descriptor_pushes == pushes2 && descriptor_updates == updates2);
         return;
     }
     if (test == "host-oom" || test == "device-oom" || test == "unknown" || test == "error-output" ||
