@@ -1,5 +1,6 @@
-/* (hookshot) The sound manager's job at 60 Hz and the physics solver's steps rounded up, under a Frame rate cap above 60: the
-   lifted f_80435300, f_83373400, f_838ceb80 and f_838cfc10 call these (nx2/oot_patches.py); host/oot_high_fps.h has why and the logic.
+/* (hookshot) The sound manager's job at 60 Hz, the physics solver's steps rounded up and a horse's jump blend, under a Frame rate
+   cap above 60: the lifted f_80435300, f_83373400, f_838ceb80, f_838cfc10 and f_82c59eb0 call these (nx2/oot_patches.py);
+   host/oot_high_fps.h has why and the logic.
    HOS_FPS_LOG (on, by the switches' rule: =0 is off): what they do, every 600 calls. */
 #include "hos.h"
 #include "oot_high_fps.h"
@@ -92,4 +93,26 @@ uint32_t hos_oot_solver_steps(uint32_t game, uint32_t scaled_bits, uint32_t per_
                     (oot_bits_float(scaled_bits) - 0.001f) / oot_bits_float(per_frame_bits), oot_bits_float(per_frame_bits));
     }
     return (uint32_t)steps;
+}
+
+/* f_82c59eb0's test of its step against 1 (a horse's jump): step_bits its step (a float's bits), slot the guest address of the
+   pointer to the time object (+0x10 this frame's step). 1: the step is the whole frame's, the branch for steps under 1 is skipped */
+int hos_oot_horse_whole_step(uint32_t step_bits, uint64_t slot) {
+    const int t = timed();
+    uint32_t frame = 0;
+    if (t) {
+        const uint64_t object = G64(slot);
+        const uint64_t time = object ? G64(object) : 0;
+        if (time) frame = *(const uint32_t *)GP(time + 0x10);
+    }
+    const int whole = oot_horse_whole_step(step_bits, frame, t);
+    if (fps_log()) {
+        static volatile LONG64 calls, skipped;
+        const LONG64 s = whole ? InterlockedIncrement64(&skipped) : skipped;
+        const LONG64 n = InterlockedIncrement64(&calls);
+        if (n % 600 == 0)
+            hos_log("oot: a horse's jump blend: the whole-frame step skipped the slow-motion branch %lld of %lld times (step %.3f, "
+                    "the frame's %.3f)", (long long)s, (long long)n, oot_bits_float(step_bits), oot_bits_float(frame));
+    }
+    return whole;
 }

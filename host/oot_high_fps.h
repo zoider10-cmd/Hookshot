@@ -31,7 +31,17 @@
    fps); 4 steps a 60 fps frame would be 0 above 240. A moving platform (the stone one under the spikes in the Deku Tree)
    then slides out from under Link (issue 1798). While the step is under 1 the count is rounded up instead, so a solver step
    never covers more time than at 60 fps, give or take 10% (the frame time's jitter, so a steady rate keeps a steady count),
-   and it is at least 1 and never under the game's. A step of 1 or more (a frame slower than 60 fps) keeps the game's count. */
+   and it is at least 1 and never under the game's. A step of 1 or more (a frame slower than 60 fps) keeps the game's count.
+
+   A horse's jump (f_82c59eb0, the horse's jump state machine, s10 its step): while a horse gets ready to jump an obstacle (its
+   JumpReady animation), the state machine sets each frame the blend frames of the move into that animation (an animation
+   variable, here 16), so the blend ends at takeoff. With a step under 1 it takes another branch: last frame's blend frames plus
+   the step (a step under 1 is slow motion at 60 fps). Above 60 fps every step is under 1, so the blend frames grew by the step
+   each frame (25 at 60 fps, 100 to 1500 above), the blend into the jump hardly started, and Epona galloped through the fence
+   while her body went over it (more often the higher the frame rate; around 60 to 90 fps, only when no frame's step reached
+   1). The step is compared with this frame's own step instead (the game's time object, +0x10: 1 at 60 fps): a step that is
+   the whole frame's is not slow motion, and a step under it still takes the game's branch. At a cap of 60, and on a frame
+   slower than 60 fps, the game's own test decides. */
 #pragma once
 #include <math.h>
 #include <stdint.h>
@@ -102,4 +112,13 @@ static inline int32_t oot_solver_steps(int32_t game, uint32_t scaled_bits, uint3
     int32_t steps = (int32_t)ceilf(scaled - 0.1f);
     if (steps < 1) steps = 1;
     return steps > game ? steps : game;
+}
+
+/* A horse's jump: 1 when f_82c59eb0's step (step_bits) is under 1 only because the frame is short, so its branch for steps
+   under 1 (slow motion) is skipped; 0 when the game's own test (step < 1) decides. frame_step_bits: this frame's step from the
+   game's time object (0 when it has none). The step is the frame's own when within 0.1% of it */
+static inline int oot_horse_whole_step(uint32_t step_bits, uint32_t frame_step_bits, int timed) {
+    const float step = oot_bits_float(step_bits), frame = oot_bits_float(frame_step_bits);
+    if (!timed || !(frame > 0.0f) || !(frame < 1.0f) || !(step > 0.0f)) return 0;
+    return step >= frame * 0.999f;
 }
