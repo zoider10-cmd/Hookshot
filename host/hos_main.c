@@ -3219,7 +3219,7 @@ int hos_oot_shelf_map(const char *rel, char *out, size_t cap) {
     static SRWLOCK lock = SRWLOCK_INIT;
     static int loaded, on = -1, count;
     static struct { char rel[160]; char items[3][40]; int n; } maps[64];
-    if (on < 0) { const char *e = getenv("HOS_OOT_SHELF_TIERS"); on = !(e && *e == '0'); }
+    if (on < 0) { const char *e = getenv("HOS_OOT_SHELF_TIERS"); on = e && *e == '1'; }   /* (off by default: a map with two shops of the families, the Market, went black on loading; HOS_OOT_SHELF_TIERS=1 on) */
     if (!on || !rel || _strnicmp(rel, "Banc/", 5) || !hos_rando_on() || !hos_rando_progressive()) return 0;
     AcquireSRWLockExclusive(&lock);
     if (!loaded) {
