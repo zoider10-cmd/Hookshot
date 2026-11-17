@@ -270,6 +270,15 @@ def main():
           'return k->gives[0] ? "Collected: it gave " + tracker_item_name(k->gives) + "."' in menu,
           "a check collected does not say what it gave, or one not collected does")
     check('"No seed"' in menu and "now - last < 1000" in menu, "the tab says nothing without a seed, or reads its file every frame")
+    # ---- a chest's own rule (CHEST_NEEDS, placement 10): Hyrule Field's Piece of Heart chest, adult and back ----
+    field = seed.RULES["HyruleField"][0]
+    paradox = 0x292e3ed6acacbe44
+    check(seed.PLACEMENT >= 10 and seed.chest_need(paradox, field, False) == seed.ADULT | {seed.BOW} and
+          seed.chest_need(paradox, field, True) == seed.ADULT and seed.chest_need(1, field, False) == field and
+          seed.CHEST_AGES[paradox] == "C" and "if placement >= 10:   # (a chest's own rule, CHEST_NEEDS)" in
+          (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8"),
+          "Hyrule Field's Piece of Heart chest does not ask for an adult and the way back (the Forest Temple without Open "
+          "Door of Time), or another chest is changed")
     # ---- the way to a check (check_ways.txt, from Ocarina Atlas's directions: rando_seed.py CHECK_WAYS) ----
     import json
     import tempfile

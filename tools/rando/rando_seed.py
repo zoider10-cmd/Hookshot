@@ -59,7 +59,7 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 9   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+PLACEMENT = 10  # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
                 # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
                 # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
                 #    asking for the forest's way out (forest_open)
@@ -67,6 +67,7 @@ PLACEMENT = 9   # 2: the chests of LOCKED_ROOMS kept their items; 3: they take p
                 # 7: the Deku Tree's Slingshot room's two chests ask for the Slingshot (SLINGSHOT_ROOM)
                 # 8: Open forest exit no longer lightens the Gold Skulltulas' rules (skull_door)
                 # 9: the Potion Shop keeper's bottle is a gift of the shuffle (GIFTS_FROM)
+                # 10: Hyrule Field's Piece of Heart chest asks for having been an adult and coming back (CHEST_NEEDS)
 # (a chest with one of these parameters is left as it is: see the top of this file)
 KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__CheckActor", "Drop__DropActor_Substitute",
            "DropViewActor", "IsEnableRepeatOpen", "SpawnType")
@@ -3413,7 +3414,22 @@ CHEST_FRONT = 1.3
 CHEST_GO = {0x3c5bb811b4cf54dd: (-120.5, 114.5, -38.2)}
 # The ages a chest is for, where its map files say both and play says one (only the Tracker tab's line: the logic
 # asks the same of it). The stump chest is an adult's: only an adult rides the bean's leaf (seen in play, 2026-11-15).
-CHEST_AGES = {0x3c5bb811b4cf54dd: "A"}
+CHEST_AGES = {0x3c5bb811b4cf54dd: "A", 0x292e3ed6acacbe44: "C"}
+# A chest's own rule, from placement 10, in place of its area's (RULES asks each overworld chest for what its area's
+# hardest did). Hyrule Field's Piece of Heart chest, by the Gerudo Valley exit (the owner's word, 2026-11-16, and Ocarina
+# Atlas's "Paradox of the chest from the past"): opened as a child once Link has been an adult (as an adult it is open and
+# empty), so it asks for ADULT and the way back to a child: the Forest Temple done (Sheik keeps an adult from going back
+# until then: DOOR_SHEIK), which is its own rule, ADULT | {BOW}. With Open Door of Time the way back is free (chest_need).
+# Not the Megaton Hammer its area asked for. A child's chest on the Tracker tab (CHEST_AGES).
+CHEST_NEEDS = {0x292e3ed6acacbe44: ("adult and back", ADULT, frozenset((BOW,)))}
+
+
+def chest_need(h, need, open_door):
+    """a chest's rule by CHEST_NEEDS (its own, what it asks for always and what only without Open Door of Time), else need"""
+    if h not in CHEST_NEEDS:
+        return need
+    _, always, without_door = CHEST_NEEDS[h]
+    return frozenset(always) if open_door else frozenset(always | without_door)
 
 
 def chest_front(pos, turned, far=CHEST_FRONT):
@@ -4265,6 +4281,8 @@ def main():
     rng = random.Random("stage2:%d:%d:%d%s%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else "",
                                                    ":songs2" if a.songs == 2 else ":songs" if a.songs else ""))
     needs = {h: rule(s[0], s[6]) for h, s in spots.items()}
+    if placement >= 10:   # (a chest's own rule, CHEST_NEEDS)
+        needs = {h: chest_need(h, n, a.open_door) for h, n in needs.items()}
     slingshot_room = {h for h in SLINGSHOT_ROOM if h in needs} if placement >= 7 else set()
     needs = {h: n | CHILD if h in slingshot_room else n for h, n in needs.items()}
     if a.quests:   # (the rules with the gifts' two gating items named; a gift asks for what its line of GIFTS says)
