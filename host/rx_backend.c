@@ -124,9 +124,19 @@ static int64_t collect_in(const uint64_t (*ranges)[2], int nranges, uint32_t **p
     return (int64_t)n;
 }
 static int64_t host_collect(uint32_t **pages) {
+    /* (hookshot) the list grows while the merged ranges fill it: past its size the rest went uncollected, as the renderer's
+       8,192-pool list left the newest pools out (the Ganondorf fight's lag, 7edeee8d) */
     static uint64_t (*ranges)[2];
-    if (!ranges) ranges = malloc(sizeof *ranges * 4096);
-    return collect_in(ranges, hos_gpu_guest_ranges(ranges, 4096), pages);
+    static int cap;
+    if (!ranges) cap = 4096, ranges = malloc(sizeof *ranges * (size_t)cap);
+    int n;
+    while ((n = hos_gpu_guest_ranges(ranges, cap)) == cap) {
+        uint64_t (*more)[2] = realloc(ranges, sizeof *ranges * (size_t)cap * 2);
+        if (!more) break;
+        ranges = more, cap *= 2;
+        hos_log("rx: the collection's ranges grow to %d", cap);
+    }
+    return collect_in(ranges, n, pages);
 }
 /* (only within the given guest ranges: the submit-time capture of the mirrored pools, a small part of the 20 ms the
    whole collection takes) */
