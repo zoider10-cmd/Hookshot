@@ -60,7 +60,7 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 10  # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+PLACEMENT = 11  # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
                 # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
                 # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
                 #    asking for the forest's way out (forest_open)
@@ -69,6 +69,7 @@ PLACEMENT = 10  # 2: the chests of LOCKED_ROOMS kept their items; 3: they take p
                 # 8: Open forest exit no longer lightens the Gold Skulltulas' rules (skull_door)
                 # 9: the Potion Shop keeper's bottle is a gift of the shuffle (GIFTS_FROM)
                 # 10: Hyrule Field's Piece of Heart chest asks for having been an adult and coming back (CHEST_NEEDS)
+                # 11: Kakariko's Bazaar and Potion Shop are shops of their own, the adult's, apart from the Market's (SHOP_TOWNS)
 # (a chest with one of these parameters is left as it is: see the top of this file)
 KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__CheckActor", "Drop__DropActor_Substitute",
            "DropViewActor", "IsEnableRepeatOpen", "SpawnType")
@@ -571,14 +572,15 @@ def shop_need(shop, placement, open_forest):
         if open_forest and shop.areas[0] == "Market":
             need = frozenset(need - CHILD)
     return need
+POTION_KEEPER, POTION_ADULT = "Npc_Hylia_020_Shop_Adult", "Npc_Hylia_020_Shop_Adult"   # (the adult Potion Shop keeper's pack; his goods list's name, SHOP_TOWNS)
 SHOPS = (
     Shop("kokiri", ("Npc_Kokiri_001_Shop_Child", "Npc_Kokiri_001_Shop_Child_ShortStock"), ("KokiriForest",), "the Kokiri shop", NONE,
          (-1.9, 110.7, -22.6), "CA", ((0, "Shop_Heart"), (1, "Shop_DekuSeedBundle_02"), (3, "Shop_DekuNutBundle_02"), (5, "Shop_DekuStickBundle_Medium")),
          ((2, "Shop_DekuNutBundle_01"), (4, "Shop_DekuSeedBundle_01"), (7, "Shop_DekuStick"))),   # (and SHIELD_SHELF, 6)
-    Shop("general", ("Npc_Hylia_018_Shop", "Npc_Hylia_018_Shop_Adult"), ("Market", "KakarikoVillage"), "the Bazaar", CHILD,
+    Shop("general", ("Npc_Hylia_018_Shop",), ("Market",), "the Bazaar", CHILD,
          (19.5, 100.4, 16.1), "C", ((0, "Shop_Heart"), (1, "Shop_MagicJar_Small"), (2, "Shop_DekuSeedBundle_02"), (7, "Shop_DekuStick")),
          ((3, "Shop_ArrowBundle_01"), (4, "Shop_BombBundle_01"), (5, "Shop_DekuNutBundle_01"), (6, "Shop_Weapon_Shield_Hylian"))),
-    Shop("medicine", ("Npc_Hylia_020_Shop",), ("Market", "KakarikoVillage"), "the Potion Shop", CHILD,
+    Shop("medicine", ("Npc_Hylia_020_Shop",), ("Market",), "the Potion Shop", CHILD,
          (20.6, 100.1, 6.0), "C", ((2, "Shop_Bottle_HalfMilk"), (5, "Shop_Bottle_Poe"), (6, "Shop_Bottle_Bug"), (7, "Shop_Bottle_Fish")),
          ((0, "Shop_Bottle_RedPotion"), (1, "Shop_Bottle_GreenPotion"), (3, "Shop_Bottle_Fairy"), (4, "Shop_Bottle_BlueFire"))),
     Shop("bombchu", ("Npc_Hylia_021_Shop",), ("Market",), "the Bombchu Shop (at night, after Dodongo's Cavern)", DODONGO_DONE,
@@ -590,7 +592,55 @@ SHOPS = (
     Shop("zora", ("Npc_Zora_011_Shop",), ("ZoraDomain",), "the Zora shop", ADULT,
          (-27.1, 104.9, 18.2), "CA", ((2, "Shop_Bottle_Bug"), (5, "Shop_ArrowBundle_02"), (6, "Shop_Bottle_Fish"), (7, "Shop_ArrowBundle_03")),
          ((0, "Shop_Bottle_RedPotion"), (1, "Shop_Bottle_GreenPotion"), (3, "Shop_Armor_Zora"), (4, "Shop_ArrowBundle_01"))),
+    # (placement 11 on, SHOP_TOWNS: Kakariko's Bazaar and Potion Shop, the adult's, apart from the Market's)
+    Shop("kgeneral", ("Npc_Hylia_018_Shop_Adult",), ("KakarikoVillage",), "Kakariko's Bazaar", ADULT,
+         (-73.9, 104.2, 8.0), "A", ((0, "Shop_Heart"), (1, "Shop_MagicJar_Small"), (2, "Shop_DekuSeedBundle_02"), (7, "Shop_DekuStick")),
+         ((3, "Shop_ArrowBundle_01"), (4, "Shop_BombBundle_01"), (5, "Shop_DekuNutBundle_01"), (6, "Shop_Weapon_Shield_Hylian"))),
+    Shop("kmedicine", (POTION_ADULT,), ("KakarikoVillage",), "Kakariko's Potion Shop", ADULT,
+         (-37.5, 107.4, 8.4), "A", ((2, "Shop_Bottle_HalfMilk"), (5, "Shop_Bottle_Poe"), (6, "Shop_Bottle_Bug"), (7, "Shop_Bottle_Fish")),
+         ((0, "Shop_Bottle_RedPotion"), (1, "Shop_Bottle_GreenPotion"), (3, "Shop_Bottle_Fairy"), (4, "Shop_Bottle_BlueFire"))),
 )
+# Until placement 11 the Bazaar and the Potion Shop were one shop each in two towns, the child's Market and the adult's
+# Kakariko: the same shelves' items written in both towns' maps and goods lists, one check each, under the Market (the
+# owner noticed Kakariko's adult shops missing from the Tracker, and asked for them to be shops of their own, selling
+# other items, 2026-11-16). From placement 11 (SHOP_TOWNS) the Market's shops are the Market's and Kakariko's two are
+# shops of their own, the adult's (their rule: an adult, ADULT, as the Zora shop's was; their place for the Tracker
+# three metres from their keeper, away from his shelves, as the Market's). Their keepers have goods lists of their own:
+# the Bazaar's adult keeper has always had one (Npc_Hylia_018_Shop_Adult); the Potion Shop's adult keeper had the
+# child's (his actor's parent's ShopRef), so he is given one, POTION_ADULT, a copy of it in his pack (potion_adult).
+# Each shelf has a "still for sale" flag of its own (shelf_flags), so a shelf bought in one town is not in the other.
+SHOP_TOWNS = 11
+SHOPS_JOINT = {"general": Shop("general", ("Npc_Hylia_018_Shop", "Npc_Hylia_018_Shop_Adult"), ("Market", "KakarikoVillage"), "the Bazaar", CHILD,
+                               SHOPS[1].place, "C", SHOPS[1].slots, SHOPS[1].rest),
+               "medicine": Shop("medicine", ("Npc_Hylia_020_Shop",), ("Market", "KakarikoVillage"), "the Potion Shop", CHILD,
+                                SHOPS[2].place, "C", SHOPS[2].slots, SHOPS[2].rest)}
+
+
+def shops(placement=PLACEMENT):
+    """the shops a seed of this placement has (SHOPS; before SHOP_TOWNS, the Bazaar and the Potion Shop one shop each
+    in both towns, as the seeds made then have them)"""
+    if placement >= SHOP_TOWNS:
+        return SHOPS
+    return tuple(SHOPS_JOINT.get(shop.key, shop) for shop in SHOPS if shop.key not in ("kgeneral", "kmedicine"))
+
+
+def potion_adult(pack_data):
+    """The adult Potion Shop keeper's pack with a goods list of his own (POTION_ADULT, a copy of the child's) and his
+    actor naming it (ShopRef, which he took from his parent, the child's actor): (the pack written anew, the goods
+    list's file, the actor's file). ValueError: the pack is not what it was."""
+    parts = sarc_read(pack_data)
+    child, mine = SHOP_PARAM % "Npc_Hylia_020_Shop", SHOP_PARAM % POTION_ADULT
+    actor = ACTOR_FILE % POTION_KEEPER
+    if child not in parts or actor not in parts:
+        raise ValueError("the adult Potion Shop keeper's pack has no goods list or no actor of his")
+    if mine not in parts:
+        parts[mine] = parts[child]
+    tree, version = byml_parse(parts[actor])
+    comps = tree[1].setdefault("Components", ("dict", collections.OrderedDict()))
+    comps[1]["ShopRef"] = ("string", "?" + mine)
+    tree[1]["Components"] = ("dict", collections.OrderedDict(sorted(comps[1].items())))
+    parts[actor] = byml_build(tree, version)
+    return sarc_write(parts), mine, actor
 
 
 def shop_slots(shop, every=False, shield=False):
@@ -1083,6 +1133,12 @@ def chu_limit(data, limit=BOMBCHU_LIMIT):
 # (SHELF_FLAG_SHOP: a shelf's own actor, when no shelf of the seed still sells it). The first kind before the second.
 SHELF_FLAGS = "shelf_flags.txt"
 SHELF_FLAG_WORDS = ("HavePlayedGetEvent.", "IsGet.")
+# (and after those, for the Kakariko shops of their own, SHOP_TOWNS: with every shelf, 64 shelves and 50 flags. Actors
+#  never got: Dark Link's sword, two that are only other actors' base, the heads Link wears with no mask and the bow's
+#  three kinds of magic arrows in the pouch; their flags false in a save at the end of the logic run, and the arrows'
+#  with the Fire Arrows got. After the others: a seed's shelves keep their flags)
+SHELF_FLAG_MORE = ("Weapon_Sword_DarkLinkSword", "Obj_Item_Base", "Weapon_Base", "Armor_Child_Default_Head", "Armor_Adult_Default_Head",
+                   "Pouch_Range_BowAndArrow_Fire", "Pouch_Range_BowAndArrow_Ice", "Pouch_Range_BowAndArrow_Light")
 SHELF_FLAG_NEVER = ("Armor_Child_Mask_Amiibo0", "Armor_Child_Mask_Amiibo1", "Pouch_Amiibo", "Armor_Mask_Base", "Weapon_Shield_DarkLinkShield")
 SHELF_FLAG_SHOP = ("Shop_ArrowBundle_01", "Shop_ArrowBundle_02", "Shop_ArrowBundle_03", "Shop_BombBundle_01", "Shop_BombBundle_02", "Shop_BombBundle_03",
                    "Shop_BombBundle_04", "Shop_BombchuBundle_01", "Shop_BombchuBundle_02", "Shop_BombchuBundle_03", "Shop_BombchuBundle_04",
@@ -1090,16 +1146,17 @@ SHELF_FLAG_SHOP = ("Shop_ArrowBundle_01", "Shop_ArrowBundle_02", "Shop_ArrowBund
                    "Shop_DekuNutBundle_02", "Shop_DekuSeedBundle_01", "Shop_DekuSeedBundle_02", "Shop_DekuStickBundle_Medium")
 
 
-def shelf_flags(count, every=False, shield=False):
+def shelf_flags(count, every=False, shield=False, placement=PLACEMENT):
     """the flags of `count` shelves that sell a shuffled item, in the shelves' order: names of the game's flags that
     this seed has no use for (see above). every and shield: as shop_slots'. ValueError: more shelves than flags."""
     sold = set()   # (the game's own shelf actors that the seed still sells somewhere)
-    for shop in SHOPS:
+    for shop in shops(placement):
         taken = set(shop_slots(shop, every, shield))
         sold.update(actor for slot in list(shop.slots) + list(shop.rest) + ([SHIELD_SHELF[1:]] if shop.key == SHIELD_SHELF[0] else [])
                     for actor in [slot[1]] if tuple(slot) not in taken)
     actors = list(SHELF_FLAG_NEVER) + [n for n in SHELF_FLAG_SHOP if n not in sold]
     names = [word + actor for word in SHELF_FLAG_WORDS for actor in actors]
+    names += [word + actor for word in SHELF_FLAG_WORDS for actor in SHELF_FLAG_MORE]   # (after: the others keep their places)
     if count > len(names):
         raise ValueError("%d shelves and %d flags to keep them sold by" % (count, len(names)))
     return names[:count]
@@ -4337,7 +4394,7 @@ def main():
                 gifts[gift_hash(g.key)] = g
                 spots[gift_hash(g.key)] = [g.area, g.item, None, None, "gift", g.name, ""]
         roll = random.Random("shop prices:%d:%d" % (seed, a.shops))
-        for shop in SHOPS:
+        for shop in shops(placement):
             for k, (index, actor) in enumerate(shop_slots(shop, a.shop_shelves, shield_shelf)):
                 price = shop_price(roll, a.shops)
                 g = Gift("shop_%s_%d" % (shop.key, index), "", (), shelf_item(actor), shop.areas[0],
@@ -4347,7 +4404,7 @@ def main():
                 spots[gift_hash(g.key)] = [g.area, g.item, None, None, "shop", g.name, ""]
     # (the flag each shelf waits for, "still for sale": a test, RANDO_TEST_SHELF_FLAGS=0, leaves them to start false)
     try:
-        shelf_flag = dict(zip(shelves, shelf_flags(len(shelves), a.shop_shelves, shield_shelf)))
+        shelf_flag = dict(zip(shelves, shelf_flags(len(shelves), a.shop_shelves, shield_shelf, placement)))
     except ValueError as e:
         sys.exit("the shops: %s. Nothing written." % e)
     shelf_start = {} if os.environ.get("RANDO_TEST_SHELF_FLAGS") == "0" else {name: True for name in shelf_flag.values()}
@@ -4787,7 +4844,13 @@ def main():
                 shop_files["RSDB/" + n] = table
                 shop_sizes["RSDB/" + (n[:-3] if n.lower().endswith(".zs") else n)] = len(table)
             packs = sorted(n[:-len(".pack.zs")] for n in os.listdir(os.path.join(romfs, "Pack", "Actor")) if "Shop" in n and n.startswith("Npc_") and n.endswith(".pack.zs"))
-            for shop in SHOPS:   # (the goods lists, in every pack that has a copy, and the shelves of the map files)
+            if placement >= SHOP_TOWNS:   # (the adult Potion Shop keeper's goods list of his own)
+                new, mine, actor = potion_adult(pack(POTION_KEEPER))
+                pack_files["Pack/Actor/%s.pack.zs" % POTION_KEEPER] = new
+                pack_sizes["Pack/Actor/%s.pack" % POTION_KEEPER] = len(new)
+                shop_new.add(mine)
+                shop_parts.add(actor)
+            for shop in shops(placement):   # (the goods lists, in every pack that has a copy, and the shelves of the map files)
                 sells = {index: (actor, shop_actor("%s_%d" % (shop.key, index))) for index, actor in shop_slots(shop, a.shop_shelves, shield_shelf)}
                 shown = {index: shelf_flag[h] for h, (its, index, _) in shelves.items() if its is shop}
                 for param in shop.params:
@@ -4846,7 +4909,7 @@ def main():
         except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
             sys.exit("the shops: %s. Nothing written." % e)
         print("Shops (%s): %d shelves of %d shops take part, each sold once; %d within the child's wallet, %d ask for the Adult's, %d for the Giant's" % (
-            "any price" if a.shops == 2 else "most prices low", len(shelves), len(SHOPS),
+            "any price" if a.shops == 2 else "most prices low", len(shelves), len(shops(placement)),
             *(sum(1 for p in shelf_prices.values() if wallet_need(p) == need) for _, need in WALLETS)))
 
     # ---- Open Door of Time: the door out of the way, in the child's Market and the adult's ----

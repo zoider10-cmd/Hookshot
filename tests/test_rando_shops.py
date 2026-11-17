@@ -129,8 +129,33 @@ def packs():
 def main():
     # ---- the table ----
     slots = [(shop, index, actor) for shop in seed.SHOPS for index, actor in shop.slots]
-    check(len(seed.SHOPS) == 6 and all(len(shop.slots) == 4 for shop in seed.SHOPS) and len({shop.key for shop in seed.SHOPS}) == 6,
-          "the shops are not six of four shelves each")
+    check(len(seed.SHOPS) == 8 and all(len(shop.slots) == 4 for shop in seed.SHOPS) and len({shop.key for shop in seed.SHOPS}) == 8,
+          "the shops are not eight of four shelves each")
+    # (placement 11, SHOP_TOWNS: Kakariko's Bazaar and Potion Shop are the adult's, apart from the Market's; a seed made
+    #  before has the six shops it had, the two of them in both towns, so that it keeps its items and its shelves' flags)
+    by_key = {shop.key: shop for shop in seed.SHOPS}
+    old = seed.shops(seed.SHOP_TOWNS - 1)
+    check(seed.SHOP_TOWNS == 11 and seed.PLACEMENT >= 11 and seed.shops() == seed.SHOPS and [shop.key for shop in old] ==
+          ["kokiri", "general", "medicine", "bombchu", "goron", "zora"] and old[1].areas == old[2].areas == ("Market", "KakarikoVillage") and
+          old[1].params == ("Npc_Hylia_018_Shop", "Npc_Hylia_018_Shop_Adult") and old[1].ages == old[2].ages == "C" and
+          by_key["general"].areas == by_key["medicine"].areas == ("Market",) and by_key["general"].params == ("Npc_Hylia_018_Shop",) and
+          by_key["kgeneral"].areas == by_key["kmedicine"].areas == ("KakarikoVillage",) and by_key["kgeneral"].ages == by_key["kmedicine"].ages == "A" and
+          by_key["kgeneral"].params == ("Npc_Hylia_018_Shop_Adult",) and by_key["kmedicine"].params == (seed.POTION_ADULT,) and
+          by_key["kgeneral"].slots == by_key["general"].slots and by_key["kmedicine"].slots == by_key["medicine"].slots and
+          by_key["kgeneral"].need == by_key["kmedicine"].need == seed.ADULT and
+          all(len(seed.shop_actor("%s_%d_%d" % (key, 7, 2))) <= 25 for key in by_key),
+          "Kakariko's shops are not the adult's own from placement 11, or a seed made before does not keep its six shops")
+    # (the adult Potion Shop keeper's goods list of his own: a copy of the child's in his pack, and his actor naming it)
+    goods_child = seed.byml_build(("dict", collections.OrderedDict((("GoodsList", ("array", [])),))), 7)
+    actor = seed.byml_build(("dict", collections.OrderedDict((("$parent", ("string", "Work/Actor/Npc_Hylia_020_Shop_Child.engine__actor__ActorParam.gyml")),
+                                                             ("Components", ("dict", collections.OrderedDict((("AIScheduleRef", ("string", "?x")),))))))), 7)
+    made, mine, actor_file = seed.potion_adult(seed.sarc_write({seed.SHOP_PARAM % "Npc_Hylia_020_Shop": goods_child,
+                                                                seed.ACTOR_FILE % seed.POTION_KEEPER: actor}))
+    parts = seed.sarc_read(made)
+    comps = seed.byml_parse(parts[actor_file])[0][1]["Components"][1]
+    check(mine == seed.SHOP_PARAM % seed.POTION_ADULT and bytes(parts[mine]) == goods_child and comps["ShopRef"] == ("string", "?" + mine) and
+          comps["AIScheduleRef"] == ("string", "?x") and "potion_adult(pack(POTION_KEEPER))" in (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8"),
+          "the adult Potion Shop keeper is not given a goods list of his own")
     check(all(len({index for index, _ in shop.slots}) == 4 and all(0 <= index < 8 for index, _ in shop.slots) for shop in seed.SHOPS),
           "a shop's shelves are not four places of its row of eight")
     check(not any(word in actor for _, _, actor in slots for word in ("Mask", "Shield", "Armor", "Potion", "Fairy")) and
@@ -260,13 +285,15 @@ def main():
     check(kept[0] == {"Actor": REF % name, "StockNum": 1, "Release": {"IsCheckReleaseGameData": 1, "ReleaseGameData": "IsGet.Pouch_Amiibo"}} and
           kept[1] == {"Actor": REF % name, "IsDefaultFocus": 1, "StockNum": 1},
           "a shelf does not wait for its flag, or one without a flag waits for something: %r" % kept[:2])
-    for every, shield, count in ((False, False, 24), (False, True, 25), (True, True, 48), (True, False, 47)):
-        flags = seed.shelf_flags(count, every, shield)
+    for every, shield, count, placement in ((False, False, 24, 10), (False, True, 25, 10), (True, True, 48, 10), (True, False, 47, 10),
+                                            (False, False, 32, 11), (False, True, 33, 11), (True, True, 64, 11), (True, False, 63, 11)):
+        flags = seed.shelf_flags(count, every, shield, placement)
         check(len(flags) == count == len(set(flags)) and all(f.startswith(seed.SHELF_FLAG_WORDS) for f in flags),
               "the shelves' flags are not one each (%d shelves, every %r, the shield's %r)" % (count, every, shield))
         # (a flag of a shelf actor the seed still sells is the game's to set: not one of them)
-        still = {actor for shop in seed.SHOPS for index, actor in list(shop.slots) + list(shop.rest) + ([seed.SHIELD_SHELF[1:]] if shop.key == "kokiri" else [])
+        still = {actor for shop in seed.shops(placement) for index, actor in list(shop.slots) + list(shop.rest) + ([seed.SHIELD_SHELF[1:]] if shop.key == "kokiri" else [])
                  if (index, actor) not in seed.shop_slots(shop, every, shield)}
+        check(placement >= 11 or flags == seed.shelf_flags(count, every, shield, 10)[:count], "a seed made before has other shelves' flags")
         check(not any(f.split(".", 1)[1] in still for f in flags), "a shelf waits for the flag of an actor the seed still sells: %r" % sorted(still))
     check(seed.shelf_flags(3)[0] == "HavePlayedGetEvent.Armor_Child_Mask_Amiibo0" and seed.shelf_flags(48, True, True)[-1].startswith("IsGet."),
           "the flags are not the never got actors' first, the scene's flag before the item's")
