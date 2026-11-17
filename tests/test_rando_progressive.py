@@ -15,8 +15,10 @@ seed's side makes the rules ask for the ones under an upgrade too (tools/rando/r
 
     python -I -B tests/test_rando_progressive.py
 """
+import collections
 import importlib.util
 import re
+import struct
 import sys
 from pathlib import Path
 
@@ -163,17 +165,45 @@ def main():
     shelf = host[host.index("int hos_oot_shelf_map(const char *rel, char *out, size_t cap) {"):host.index("int hos_oot_pouch_add(Ctx *c) {")]
     check("if (hos_oot_shelf_map(rel, out, cap)) return 1;" in mods and '"mods/rando-seed/shelf_tiers.txt"' in shelf and
           '"mods/rando-seed/shelf_tiers/%s.%s"' in shelf and "level < tiers ? level : own" in shelf and
-          "if (loaded) oot_family_levels_refresh(c);" in host and "family_levels.txt" in host,
-          "a shop's map is not given for the tiers Link has")
+          "if (loaded) oot_family_levels_refresh(c);" in host and "family_levels.txt" in host and
+          "on = !(e && *e == '0');" in shelf and "if (maps[i].n && !_stricmp(maps[i].rel, rel)) found = i;" in shelf and
+          "if (n && !twice) count++;" in shelf,
+          "a shop's map is not given for the tiers Link has, is off by default, or a map listed twice is used")
+    # (a map with two shops' shelves of a family, one of them turned and lifted, and an edit of the map's own: each
+    #  version swaps the shelves' actors and their places, and keeps the rest; bug 49, the Market went black)
+    f32 = lambda v: (0xD2, struct.pack("<f", v))
+    shelf_row = lambda name, y: ("dict", collections.OrderedDict((("Gyaml", ("string", name)), ("Rotate", ("array", [f32(0.0), f32(0.5), f32(0.0)])),
+                                                                  ("Translate", ("array", [f32(1.0), f32(y), f32(2.0)])))))
+    door = ("dict", collections.OrderedDict((("Gyaml", ("string", "Door_Edited")), ("Translate", ("array", [f32(0.0), f32(9.0), f32(0.0)])))))
+    made = seed.byml_build(("dict", collections.OrderedDict((("Actors", ("array", [shelf_row("Shop_Rando_bazaar_1", 100.2), door,
+                                                                                  shelf_row("Shop_Rando_potion_3", 100.0)])),))), 7)
+    tiers = {"Shop_Rando_bazaar_1": ["Shop_Rando_bazaar_1_0", "Shop_Rando_bazaar_1"],
+             "Shop_Rando_potion_3": ["Shop_Rando_potion_3", "Shop_Rando_potion_3_1", "Shop_Rando_potion_3_2"]}
+    versions = seed.shelf_tier_maps(made, ["Shop_Rando_bazaar_1", "Shop_Rando_potion_3"], tiers, {"Shop_Rando_bazaar_1": 0.2},
+                                    {"Shop_Rando_potion_3_2": 0.5}, {"Shop_Rando_bazaar_1_0": (0.0, 1.0, 0.0)})
+    rows = lambda data: [(r[1]["Gyaml"][1], [round(struct.unpack("<f", x[1])[0], 3) for x in r[1]["Translate"][1]],
+                          [round(struct.unpack("<f", x[1])[0], 3) for x in r[1].get("Rotate", ("array", []))[1]],
+                          [round(struct.unpack("<f", x[1])[0], 3) for x in r[1].get("Scale", ("array", []))[1]])
+                         for r in seed.byml_parse(data)[0][1]["Actors"][1]]
+    v02 = rows(versions.get("0_2", made))
+    check(sorted(versions) == ["0_0", "0_1", "0_2", "1_0", "1_1", "1_2"] and
+          v02[0] == ("Shop_Rando_bazaar_1_0", [1.0, 100.0, 2.0], [0.0, 1.5, 0.0], []) and
+          v02[1] == ("Door_Edited", [0.0, 9.0, 0.0], [], []) and v02[2] == ("Shop_Rando_potion_3_2", [1.0, 100.0, 2.0], [0.0, 0.5, 0.0], [0.5, 0.5, 0.5]) and
+          rows(versions["1_0"]) == rows(made),
+          "a map's versions do not swap both shops' shelves with their places, or lose the map's other edits: %r" % (v02,))
+    check("mine = tier_maps.setdefault(rel, [])" in script and
+          "for combo, version in shelf_tier_maps(changed[rel], held, tiers, lifts, scales, turns).items():" in script and
+          script.index("# ---- the shelves of a family's maps:") > script.index("# ---- three red rupees on Hyrule Castle's drawbridge") and
+          script.index("# ---- the shelves of a family's maps:") < script.index("    # ---- the size table ----"),
+          "a map's versions are not made once, after the seed's last edit of the maps and before the size table")
     first = {f[0][0] for f in families}
     check(all(f[0] in first or any(f[0] in g[0] for g in families) for f in seed.SHELF_FAMILIES) and
           all(any(list(f) == [t[0] for t in g] for g in families) for f in seed.SHELF_FAMILIES),
           "a shelf's family is not one of the game's, in its order")
     check(seed.shelf_family("Item_Quiver_Large") == seed.SHELF_FAMILIES[1] and seed.shelf_family("Item_Boomerang") is None and
           seed.SHELF_TIERS == "shelf_tiers.txt" and "SHELF_TIERS, \"rando_stamp.txt\"" in script and
-          '[actor if each == item else "%s_%d" % (actor, k) for k, each in enumerate(family)]' in script and
-          "held, versions = shelf_tier_maps(data, on_shelf, tiers, lifts, scales, turns)" in script,
-          "shelf_family, the list's name, or the maps' versions")
+          '[actor if each == item else "%s_%d" % (actor, k) for k, each in enumerate(family)]' in script,
+          "shelf_family, the list's name, or the shuffled tier's actor")
     side = (ROOT / "host" / "oot_rando.c").read_text(encoding="utf-8")
     header =(ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
     check("int hos_rando_progressive(void) { return rando_active && rando.v[OOT_RANDO_PROGRESSIVE] != 0; }" in side and

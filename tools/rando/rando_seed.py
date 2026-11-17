@@ -83,7 +83,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 38   # (38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 39   # (39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -836,20 +836,45 @@ def shelf_family(item):
     return next((f for f in SHELF_FAMILIES if item in f), None)
 
 
-def shelf_tier_maps(data, on_shelf, tiers, lifts=None, scales=None, turns=None):
-    """A map file's versions for the tiers of its shelves of a family: on_shelf as shelf_actors' sells, tiers {a shelf's
-    actor: [its family's actors, smallest first]}. Returns ([the shelves' actors in this map that have tiers, in order],
-    {"<k>_<k>...": the map file written with those tiers' actors}); ([], {}) when the map has none of them."""
-    here = [(key, new) for key, new in on_shelf.items() if new in tiers and shelf_actors(data, {key: new})[1]][:SHELF_TIER_MOST]
-    if not here:
-        return [], {}
+def shelf_tier_swap(data, chosen, lifts=None, scales=None, turns=None):
+    """A map file whose shelves are already the seed's (shelf_actors) with some of them made another actor: chosen {a
+    shelf's actor: the actor in its place}. Each such actor's place, size and turn are its own in place of the shelf's
+    (lifts, scales, turns as shelf_actors'): what one adds is taken off and the other's put on. Every other edit of the
+    file is kept. Returns the file written anew (the same bytes when nothing is chosen)."""
+    tree, version = byml_parse(data)
+    actors = tree[1].get("Actors")
+    f32 = lambda node: struct.unpack("<f", node[1])[0] if isinstance(node[1], (bytes, bytearray)) and len(node[1]) == 4 else None
+    for actor in actors[1] if actors and actors[0] == "array" else ():
+        gyaml = actor[1].get("Gyaml", ("", ""))
+        new = chosen.get(gyaml[1]) if gyaml[0] == "string" else None
+        if not new or new == gyaml[1]:
+            continue
+        was = gyaml[1]
+        actor[1]["Gyaml"] = ("string", new)
+        lift = (lifts or {}).get(new, 0.0) - (lifts or {}).get(was, 0.0)
+        at = actor[1].get("Translate")
+        if lift and at and at[0] == "array" and len(at[1]) == 3 and f32(at[1][1]) is not None:
+            at[1][1] = (at[1][1][0], struct.pack("<f", f32(at[1][1]) + lift))
+        size, size_was = (scales or {}).get(new, 1.0), (scales or {}).get(was, 1.0)
+        if size != size_was:
+            actor[1]["Scale"] = ("array", [(0xD2, struct.pack("<f", size))] * 3)
+        turn, turn_was = (turns or {}).get(new, (0.0, 0.0, 0.0)), (turns or {}).get(was, (0.0, 0.0, 0.0))
+        if turn != turn_was:
+            rot = actor[1].get("Rotate")
+            angles = [f32(x) or 0.0 for x in rot[1]] if rot and rot[0] == "array" and len(rot[1]) == 3 else [0.0, 0.0, 0.0]
+            actor[1]["Rotate"] = ("array", [(0xD2, struct.pack("<f", x - y + z)) for x, y, z in zip(angles, turn_was, turn)])
+    return byml_build(tree, version)
+
+
+def shelf_tier_maps(data, held, tiers, lifts=None, scales=None, turns=None):
+    """A map file's versions for the tiers of its shelves of a family: held, the shelves' actors in it that have tiers,
+    in order (at most SHELF_TIER_MOST); tiers {a shelf's actor: [its family's actors, smallest first]}. data is the map
+    as the seed leaves it, every other edit made. Returns {"<k>_<k>...": the map file with those tiers' actors}."""
     versions = {}
-    for combo in itertools.product(*[range(len(tiers[new])) for _, new in here]):
-        chosen = dict(on_shelf)
-        for (key, new), k in zip(here, combo):
-            chosen[key] = tiers[new][k]
-        versions["_".join(str(k) for k in combo)] = shelf_actors(data, chosen, lifts, scales, turns)[0]
-    return [new for _, new in here], versions
+    for combo in itertools.product(*[range(len(tiers[actor])) for actor in held]):
+        versions["_".join(str(k) for k in combo)] = shelf_tier_swap(
+            data, {actor: tiers[actor][k] for actor, k in zip(held, combo)}, lifts, scales, turns)
+    return versions
 
 
 def shop_price(rng, mode):
@@ -4692,7 +4717,7 @@ def main():
 
     # ---- Shops: the shelves that take part sell what the shuffle put there, once ----
     shop_files, shop_packs, shop_new, shop_sizes, shop_parts = {}, {}, set(), {}, set()
-    tier_files, tier_maps = {}, []   # (a shelf of a family: its map for each tier, SHELF_TIERS)
+    tier_files, tier_maps = {}, {}   # (a shelf of a family: its map for each tier, SHELF_TIERS; a map: its shelves of a family)
     if shelves:
         def pack(name):
             rel = "Pack/Actor/%s.pack.zs" % name
@@ -4792,15 +4817,13 @@ def main():
                         new, count = shelf_actors(data, on_shelf, lifts, scales, turns)
                         if new is not None:
                             changed[rel] = new
-                            sized = rel[:-3] if rel.lower().endswith(".zs") else rel
-                            sizes[sized] = len(new)
+                            sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
                             found += count
-                            held, versions = shelf_tier_maps(data, on_shelf, tiers, lifts, scales, turns)
-                            if held:   # (the map once for each choice of its shelves' tiers: the game opens the one for what Link has)
-                                for combo, version in versions.items():
-                                    tier_files["%s.%s" % (rel, combo)] = version
-                                    sizes[sized] = max(sizes[sized], len(version))
-                                tier_maps.append((rel, [on_sale[actor][0] for actor in held]))
+                            # (its shelves of a family, of every shop in it: the versions are made once the map is
+                            #  finished, below "the shelves of a family's maps". The Market has two shops' shelves)
+                            mine = tier_maps.setdefault(rel, [])
+                            mine += [actor for actor in tiers if actor not in mine and actor.encode() in new and
+                                     actor in on_shelf.values()]
                 if found < len(sells):
                     raise ValueError("%s: the map files have %d of its %d shelves" % (shop.name, found, len(sells)))
             folder = os.path.join(romfs, "Mals")   # (the words under an item's name, in every language)
@@ -4947,6 +4970,20 @@ def main():
         for path, size in shop_packs.items():
             tbl = size_table_add(tbl, [path], size_entry(size, PACK_EXTRA))
         return size_table_update(size_table_raise(size_table_add(tbl, shop_new), shop_parts | song_parts), shop_sizes, SHOP_EXTRA)
+
+    # ---- the shelves of a family's maps: each map once for each choice of its shelves' tiers, every other edit of it made ----
+    # (one entry a map, every shop's shelves in it: seen 2026-11-16, the Market listed twice, for two shops, each one's
+    #  versions overwriting the other's and made before the map's later edits; the game stayed black entering it)
+    for rel, held in list(tier_maps.items()):
+        held = held[:SHELF_TIER_MOST]
+        if not held:
+            del tier_maps[rel]
+            continue
+        tier_maps[rel] = held
+        sized = rel[:-3] if rel.lower().endswith(".zs") else rel
+        for combo, version in shelf_tier_maps(changed[rel], held, tiers, lifts, scales, turns).items():
+            tier_files["%s.%s" % (rel, combo)] = version
+            sizes[sized] = max(sizes.get(sized, 0), len(version))
 
     # ---- the size table ----
     folder = os.path.join(romfs, "System", "Resource")
@@ -5102,7 +5139,7 @@ def main():
         written.append(SHELF_TIER_DIR + "/" + rel)
     if tier_maps:   # (a map's path in the game's files, then the items its shelves of a family sell, in its versions' order)
         with open(os.path.join(mod, SHELF_TIERS), "w", encoding="utf-8", newline="\n") as f:
-            f.write("".join("%s|%s\n" % (rel, ",".join(items)) for rel, items in tier_maps))
+            f.write("".join("%s|%s\n" % (rel, ",".join(on_sale[actor][0] for actor in held)) for rel, held in tier_maps.items()))
         print("Progressive items: %d map file%s of shops with shelves of a family, written for each tier" % (len(tier_maps), "" if len(tier_maps) == 1 else "s"))
     with open(os.path.join(mod, "spoiler.txt"), "w", encoding="utf-8") as f:
         f.write("seed %d, chests setting %d, dungeon keys setting %d\n(area: chest type, position, what it held -> what it holds now)\n" % (

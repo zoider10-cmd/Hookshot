@@ -3195,7 +3195,10 @@ static void oot_family_levels_path(char *out, size_t cap) {
 }
 
 static void oot_family_levels_refresh(Ctx *c) {
-    int changed = 0;
+    int changed = 0, loading = 0;
+    /* (not while an event plays or a map loads: the pouch is then the game's to change, and a count read half way
+       would be kept for the maps opened next. A precaution: nothing wrong was seen) */
+    if (oot_event_playing(c) || (oot_gamedata_bool(c, 0xef2b60c2u, &loading) && loading)) return;   /* (Sequence_IsLoadingBanc) */
     for (int f = 0; f < OOT_FAMILIES; f++) {
         int tiers = 0, level = 0;
         while (tiers < 3 && oot_families[f][tiers][0]) tiers++;
@@ -3219,7 +3222,7 @@ int hos_oot_shelf_map(const char *rel, char *out, size_t cap) {
     static SRWLOCK lock = SRWLOCK_INIT;
     static int loaded, on = -1, count;
     static struct { char rel[160]; char items[3][40]; int n; } maps[64];
-    if (on < 0) { const char *e = getenv("HOS_OOT_SHELF_TIERS"); on = e && *e == '1'; }   /* (off by default: a map with two shops of the families, the Market, went black on loading; HOS_OOT_SHELF_TIERS=1 on) */
+    if (on < 0) { const char *e = getenv("HOS_OOT_SHELF_TIERS"); on = !(e && *e == '0'); }
     if (!on || !rel || _strnicmp(rel, "Banc/", 5) || !hos_rando_on() || !hos_rando_progressive()) return 0;
     AcquireSRWLockExclusive(&lock);
     if (!loaded) {
@@ -3236,7 +3239,13 @@ int hos_oot_shelf_map(const char *rel, char *out, size_t cap) {
             for (char *item = strtok(bar + 1, ","); item && n < 3; item = strtok(NULL, ","))
                 snprintf(maps[count].items[n++], sizeof maps[count].items[0], "%s", item);
             maps[count].n = n;
-            if (n) count++;
+            /* (a map named twice is left as the seed's own: a seed made before fixes 39 listed the Market once for each
+               of its two shops, whose versions had overwritten each other, and the game stayed black entering it) */
+            int twice = 0;
+            for (int i = 0; i < count; i++)
+                if (!_stricmp(maps[i].rel, maps[count].rel)) maps[i].n = 0, twice = 1;
+            if (twice) hos_log("rando: progressive: %s is listed twice in shelf_tiers.txt: the seed's own map is used", maps[count].rel);
+            if (n && !twice) count++;
         }
         if (f) fclose(f);
         if (count) hos_log("rando: progressive: %d shop map(s) with shelves of a family (shelf_tiers.txt)", count);
@@ -3252,7 +3261,7 @@ int hos_oot_shelf_map(const char *rel, char *out, size_t cap) {
     }
     int found = -1;
     for (int i = 0; i < count && found < 0; i++)
-        if (!_stricmp(maps[i].rel, rel)) found = i;
+        if (maps[i].n && !_stricmp(maps[i].rel, rel)) found = i;
     char combo[16] = "";
     int ok = found >= 0;
     for (int k = 0; ok && k < maps[found].n; k++) {
