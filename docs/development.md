@@ -153,9 +153,11 @@ process with code **124**. A console handler returning first can instead produce
 (`STATUS_CONTROL_C_EXIT`). Both are incomplete stops and may interrupt cache writes. OS scheduling, a shorter
 system deadline, or external termination can preempt this work.
 
-Only `stop: close work done (the game's saves are not waited for)` **together with observed process exit 0** means
-the explicit close hooks returned before exit. It is not a completed-save receipt or proof every cache write
-succeeded. Exit 124, 0xC000013A, any other nonzero exit, a missing marker, or no exit is incomplete/unknown.
+Only `stop: close work done (a file the game was writing waited for, at most 3 s)` **together with observed process
+exit 0** means the explicit close hooks returned before exit. Before that line the close waits up to 3 s while a file
+the game opened for writing was written in the last second (`host/nn_fs.c` `hos_fs_wait_writes`, logged as `stop: the
+game was writing a file: waited N ms for it`); that wait counts against an OS-ending event's four seconds. It is not a
+completed-save receipt or proof every cache write succeeded. Exit 124, 0xC000013A, any other nonzero exit, a missing marker, or no exit is incomplete/unknown.
 The timeout path deliberately avoids logger locks: if logging is blocked or Windows kills the process first,
 there may be no final timeout line. A log alone cannot prove a clean process exit.
 

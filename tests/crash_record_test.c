@@ -144,6 +144,7 @@ void hos_hostcall_stats(void) {}
 /* HOS_LOG */
 /* HOS_FATAL */
 void rx_close_asked(void) {}
+void hos_fs_wait_writes(void) {}
 /* CLOSE_FINISH */
 /* CONTROL_QUIT */
 static int relaunch_asked = 1;

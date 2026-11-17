@@ -166,7 +166,9 @@ static void relaunch(void) {
 /* Shared tail after rx_close_asked returned. No process exit or restart here: the Windows stop worker must
    keep its watchdog alive until all explicit close work and the log flush have returned. */
 void hos_close_finish(void) {
-    hos_log("stop: close work done (the game's saves are not waited for)");
+    void hos_fs_wait_writes(void);   /* (nn_fs.c: a file the game is writing, up to 3 s) */
+    hos_fs_wait_writes();
+    hos_log("stop: close work done (a file the game was writing waited for, at most 3 s)");
     hos_log_flush();
     void hos_crash_clean_end(void);
     hos_crash_clean_end();

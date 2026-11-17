@@ -93,7 +93,7 @@ void rx_close_asked(void) { assert(!in_handler); work++; now += rx_delay; }
 void hos_close_finish(void) {
     assert(!in_handler && work == 1);
     closes++;
-    hos_log("stop: close work done (the game's saves are not waited for)");
+    hos_log("stop: close work done (a file the game was writing waited for, at most 3 s)");
     hos_log_flush();
 }
 /* ExitProcess kills the watchdog BEFORE entering a potentially stuck DLL detach. The old fixture just
@@ -222,7 +222,7 @@ int main(void) {
         if (!setjmp(escaped)) stop_worker(NULL);
         assert(force_code == 0 && !exit_process_calls && !detach_blocked && watchdog_alive);
         assert(now == 12100 && work == 1 && closes == 1 && flushes == 2);
-        assert(strstr(logs, "no forced deadline") && strstr(logs, "the game's saves are not waited for"));
+        assert(strstr(logs, "no forced deadline") && strstr(logs, "a file the game was writing waited for, at most 3 s"));
     }
     reset(); request_stop(STOP_SESSION);
     if (!setjmp(escaped)) stop_worker(NULL);
