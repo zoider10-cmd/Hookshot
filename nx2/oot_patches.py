@@ -274,6 +274,25 @@ def patch_drop_name(source):
         '#include "a64.h"\n', '#include "a64.h"\nextern void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made);\n', 1)
 
 
+# The day's 15:00 cap (the randomizer's fork, bug 58: host/hos_main.c hos_oot_field_clock_free). The world's clock stops at
+# 54000 s (15:00) until the cutscene Dm_HrlField_0020 has played (HavePlayedEvent.Dm_HrlField_0020, its flag 0x53efe6f6:
+# the Door of Time's story, Zelda's escape); f_803edf70 reads it and hands the clock the limit (0 none). A shuffle reaches
+# that scene late or never, so day never turned to night. The host is asked after the flag: with the randomizer on, no
+# limit, as once the scene has played.
+CLOCK_CAP = ("c->x[30] = 0x803ee634ULL; f_8022d9c0(c);\n    c->x[8]=recomp_load8(c,c->x[31] + 8);\n"
+             "if ((uint32_t)c->x[8] != 0) { goto L_803ee644; }\n")
+CLOCK_FREE = "if (hos_oot_field_clock_free()) { goto L_803ee644; }   /* (nx2/oot_patches.py patch_clock_cap) */\n"
+
+
+def patch_clock_cap(source):
+    if CLOCK_FREE in source:   # (made by an earlier run over this file)
+        return source
+    if source.count(CLOCK_CAP) != 1:
+        return None
+    return source.replace(CLOCK_CAP, CLOCK_CAP + CLOCK_FREE, 1).replace(
+        '#include "a64.h"\n', '#include "a64.h"\nextern int hos_oot_field_clock_free(void);\n', 1)
+
+
 # Progressive items, what a gift or a shop shows and says (the randomizer's fork: host/hos_main.c hos_oot_get_name). Two
 # nodes of the game's AI ask the host at their start, with the node (x0):
 #  - f_8295a4b0, OneShotSetNonStructGameDataString64's run: a String64 flag set (its name's input at +0x30, its value's at
@@ -1104,6 +1123,12 @@ def patch_file(s, name, protect_hearts=False):
             lines.append("oot_patches: progressive items, a chest's name, in " + name)
         out = drop
         counts["progressive chest name"] += 1
+    clock = patch_clock_cap(out) if protect_hearts else None   # (the randomizer's fork: the day's 15:00 cap)
+    if clock is not None:
+        if clock != out:
+            lines.append("oot_patches: the day's 15:00 cap in " + name)
+        out = clock
+        counts["day clock cap"] += 1
     get = patch_get_name(out) if protect_hearts else None   # (the randomizer's fork: what a gift shows)
     if get is not None:
         if get != out:
@@ -1200,6 +1225,7 @@ def report(paths, counts, protect_hearts=False):
         done["disable camera centering"] = 0
         done["progressive items"] = 0
         done["progressive chest name"] = 0
+        done["day clock cap"] = 0
         done[GET_NAME_COUNTS[0]] = 0
         done[GET_NAME_COUNTS[1]] = 0
         done["model swap guards"] = 0

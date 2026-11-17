@@ -3020,6 +3020,17 @@ uint64_t hos_oot_bone_fallback(Ctx *c, uint64_t name) {
 #endif
 }
 
+/* (the randomizer's fork) The day's 15:00 cap, bug 58: the world's clock stops at 15:00 until the cutscene Dm_HrlField_0020
+   (Zelda's escape, the Door of Time's story) has played, and a shuffle reaches it late or never: the owner stood five
+   minutes in Hyrule Field at fast forward and the day never ended (seen without a window: the clock's seconds climbed
+   to 54000 and stayed). f_803edf70 asks this after the scene's flag (nx2/oot_patches.py patch_clock_cap): with the
+   randomizer on, no limit. HOS_OOT_CLOCK_CAP=1 keeps the game's cap. */
+int hos_oot_field_clock_free(void) {
+    static int keep = -1;
+    if (keep < 0) { const char *e = getenv("HOS_OOT_CLOCK_CAP"); keep = e && *e == '1'; }
+    return !keep && hos_rando_on();
+}
+
 void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made) {
 #if defined(_WIN32) || defined(__linux__)
     static int on = -1;
