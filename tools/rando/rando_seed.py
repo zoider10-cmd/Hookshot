@@ -48,6 +48,7 @@ Needs the zstandard package.
 """
 import argparse
 import collections
+import itertools
 import math
 import os
 import random
@@ -82,7 +83,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 37   # (37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 38   # (38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -800,6 +801,55 @@ def shelf_item(actor):
 def shop_actor(name):
     """the shelf actor made for an item, or for a shelf (its shop's key and its place: one shelf, one price)"""
     return "Shop_Rando_" + name
+
+
+# ---- Progressive items on a shelf: the shelf shows what Link would get ----
+# With Progressive items a shelf's item of a family gives the family's next for what Link has (host/hos_main.c
+# hos_oot_pouch_add), and the shelf showed and named the item the shuffle put there: "Bigger Quiver" with no bow (asked
+# for 2026-11-14). A shelf's look, name and the keeper's words are its actor's, which its map file names. So such a
+# shelf has an actor for each of its family (SHELF_FAMILIES: the shuffled item's is the shelf's own, the others <the
+# shelf's actor>_<k>, k the tier from 0, each at the shelf's price, with its own place, size and turn on the shelf), and
+# its map is written once for each choice of them
+# (shelf_tier_maps: <mod>/SHELF_TIER_DIR/<the map's path>.<k>[_<k>...], the shelves in their order in SHELF_TIERS).
+# The game's side reads the list and, as the map is opened, gives the game the one for what Link has then
+# (host/hos_main.c hos_oot_shelf_map): the next of the family, or the shelf's own item when he has the family whole.
+# Still sold once: what keeps a shelf sold is its goods list's flag (shelf_flags), whichever actor stands there, and its
+# price is the goods list's actor's, the same for each. At most SHELF_TIER_MOST such shelves in one map (each multiplies
+# its files by its family's size); the others show their own item. (Tried before this: all the tiers' actors in the map,
+# each there by a flag of its own, Presence. The keeper made the game fall as he was talked to, seen without a window
+# 2026-11-16, whatever the actors' hashes, links and flags: the map's own two copies of a shelf, before and after the
+# Deku Tree, are what the keepers find. So the map keeps its shape, and only the shelf's actor and its place change.)
+SHELF_FAMILIES = (("Item_BombBag_Small", "Item_BombBag_Medium", "Item_BombBag_Large"),
+                  ("Item_Range_Bow", "Item_Quiver_Medium", "Item_Quiver_Large"),
+                  ("Item_Range_SlingShot", "Item_BulletBag_Medium", "Item_BulletBag_Large"),
+                  ("Item_Hookshot", "Item_Longshot"),
+                  ("Item_Gauntlet_Goron", "Item_Gauntlet_Silver", "Item_Gauntlet_Gold"),
+                  ("Item_Scale_Silver", "Item_Scale_Gold"),
+                  ("Item_Wallet_Medium", "Item_Wallet_Large"),
+                  ("Item_StickBag_Small", "Item_StickBag_Medium", "Item_StickBag_Large"),
+                  ("Item_NutBag_Small", "Item_NutBag_Medium", "Item_NutBag_Large"))
+SHELF_TIERS, SHELF_TIER_DIR, SHELF_TIER_MOST = "shelf_tiers.txt", "shelf_tiers", 3
+
+
+def shelf_family(item):
+    """the family (SHELF_FAMILIES) an item on a shelf is of, or None"""
+    return next((f for f in SHELF_FAMILIES if item in f), None)
+
+
+def shelf_tier_maps(data, on_shelf, tiers, lifts=None, scales=None, turns=None):
+    """A map file's versions for the tiers of its shelves of a family: on_shelf as shelf_actors' sells, tiers {a shelf's
+    actor: [its family's actors, smallest first]}. Returns ([the shelves' actors in this map that have tiers, in order],
+    {"<k>_<k>...": the map file written with those tiers' actors}); ([], {}) when the map has none of them."""
+    here = [(key, new) for key, new in on_shelf.items() if new in tiers and shelf_actors(data, {key: new})[1]][:SHELF_TIER_MOST]
+    if not here:
+        return [], {}
+    versions = {}
+    for combo in itertools.product(*[range(len(tiers[new])) for _, new in here]):
+        chosen = dict(on_shelf)
+        for (key, new), k in zip(here, combo):
+            chosen[key] = tiers[new][k]
+        versions["_".join(str(k) for k in combo)] = shelf_actors(data, chosen, lifts, scales, turns)[0]
+    return [new for _, new in here], versions
 
 
 def shop_price(rng, mode):
@@ -3821,7 +3871,7 @@ def remove_old(mod):
     n = 0
     with open(listing, encoding="utf-8") as f:
         rels = [line.strip() for line in f if line.strip()]
-    for rel in rels + ["spoiler.txt", TRACKER, CHECKS, SHELF_FLAGS, "rando_stamp.txt", "rando_manifest.txt"]:
+    for rel in rels + ["spoiler.txt", TRACKER, CHECKS, SHELF_FLAGS, SHELF_TIERS, "rando_stamp.txt", "rando_manifest.txt"]:
         path = os.path.normpath(os.path.join(mod, rel))
         if not path.startswith(os.path.normpath(mod) + os.sep) or not os.path.isfile(path):   # (only inside the mod's folder)
             continue
@@ -4642,6 +4692,7 @@ def main():
 
     # ---- Shops: the shelves that take part sell what the shuffle put there, once ----
     shop_files, shop_packs, shop_new, shop_sizes, shop_parts = {}, {}, set(), {}, set()
+    tier_files, tier_maps = {}, []   # (a shelf of a family: its map for each tier, SHELF_TIERS)
     if shelves:
         def pack(name):
             rel = "Pack/Actor/%s.pack.zs" % name
@@ -4654,10 +4705,32 @@ def main():
         try:
             # (a shelf actor for each shelf: its item, at its price)
             on_sale = collections.OrderedDict((shop_actor("%s_%d" % (shop.key, index)), (gives[h], shelf_prices[h])) for h, (shop, index, _) in shelves.items())
+            tiers = {}   # (with Progressive items, a shelf of a family: an actor for each of it, SHELF_FAMILIES)
+            for actor, (item, price) in list(on_sale.items()) if a.progressive and os.environ.get("RANDO_TEST_SHELF_TIERS") != "0" else ():
+                family = shelf_family(item)
+                if family:   # (the shuffled item's tier is the shelf's own actor, the one its goods list names)
+                    tiers[actor] = [actor if each == item else "%s_%d" % (actor, k) for k, each in enumerate(family)]
+                    on_sale.update((tier, (each, price)) for tier, each in zip(tiers[actor], family) if tier != actor)
             base, sample, names = pack(SHOP_BASE), pack(SHOP_SAMPLE), {}
-            for actor, (item, price) in on_sale.items():
-                new, parts, names[actor] = shop_pack(item, unpack(open(os.path.join(romfs, "Pack", "Actor", item + ".pack.zs"), "rb").read(), zs, dicts),
-                                                     base, sample, price, pouch_changed, actor)
+            for actor, (item, price) in list(on_sale.items()):
+                if actor not in on_sale:   # (a family's taken out below)
+                    continue
+                try:
+                    new, parts, names[actor] = shop_pack(item, unpack(open(os.path.join(romfs, "Pack", "Actor", item + ".pack.zs"), "rb").read(), zs, dicts),
+                                                         base, sample, price, pouch_changed, actor)
+                except (OSError, ValueError) as e:
+                    owner = next((o for o, t in tiers.items() if actor in t), None)
+                    if owner is None:
+                        raise
+                    print("a shelf of a family, %s: %s has no shelf actor (%s): the shelf shows its own item" % (owner, item, e))
+                    for t in tiers.pop(owner):
+                        if t == owner:
+                            continue
+                        on_sale.pop(t, None)
+                        names.pop(t, None)
+                        shop_files.pop("Pack/Actor/%s.pack.zs" % t, None)
+                        shop_packs.pop("Pack/Actor/%s.pack" % t, None)
+                    continue
                 shop_files["Pack/Actor/%s.pack.zs" % actor] = new
                 shop_packs["Pack/Actor/%s.pack" % actor] = len(new)
                 shop_new.update(parts)
@@ -4719,8 +4792,15 @@ def main():
                         new, count = shelf_actors(data, on_shelf, lifts, scales, turns)
                         if new is not None:
                             changed[rel] = new
-                            sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
+                            sized = rel[:-3] if rel.lower().endswith(".zs") else rel
+                            sizes[sized] = len(new)
                             found += count
+                            held, versions = shelf_tier_maps(data, on_shelf, tiers, lifts, scales, turns)
+                            if held:   # (the map once for each choice of its shelves' tiers: the game opens the one for what Link has)
+                                for combo, version in versions.items():
+                                    tier_files["%s.%s" % (rel, combo)] = version
+                                    sizes[sized] = max(sizes[sized], len(version))
+                                tier_maps.append((rel, [on_sale[actor][0] for actor in held]))
                 if found < len(sells):
                     raise ValueError("%s: the map files have %d of its %d shelves" % (shop.name, found, len(sells)))
             folder = os.path.join(romfs, "Mals")   # (the words under an item's name, in every language)
@@ -5014,6 +5094,16 @@ def main():
         with open(out, "wb") as f:
             f.write(zs.ZstdCompressor(level=9).compress(data) if rel.lower().endswith(".zs") else data)
         written.append("romfs/" + rel)
+    for rel, data in tier_files.items():   # (outside romfs: the game's side gives one of them in place of the map, SHELF_TIERS)
+        out = os.path.join(mod, SHELF_TIER_DIR, *rel.split("/"))
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        with open(out, "wb") as f:
+            f.write(zs.ZstdCompressor(level=9).compress(data))
+        written.append(SHELF_TIER_DIR + "/" + rel)
+    if tier_maps:   # (a map's path in the game's files, then the items its shelves of a family sell, in its versions' order)
+        with open(os.path.join(mod, SHELF_TIERS), "w", encoding="utf-8", newline="\n") as f:
+            f.write("".join("%s|%s\n" % (rel, ",".join(items)) for rel, items in tier_maps))
+        print("Progressive items: %d map file%s of shops with shelves of a family, written for each tier" % (len(tier_maps), "" if len(tier_maps) == 1 else "s"))
     with open(os.path.join(mod, "spoiler.txt"), "w", encoding="utf-8") as f:
         f.write("seed %d, chests setting %d, dungeon keys setting %d\n(area: chest type, position, what it held -> what it holds now)\n" % (
             seed, which, keys_mode) + "\n".join(spoiler) + "\n")

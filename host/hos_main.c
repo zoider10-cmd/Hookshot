@@ -848,6 +848,7 @@ static int oot_gamedata_bool(Ctx *c, uint32_t hash, int *value);
 static int oot_gamedata_set_bool(Ctx *c, uint32_t hash, int value);
 static int oot_gamedata_string(Ctx *c, uint32_t hash, char *buf, size_t size);
 
+static void oot_family_levels_refresh(Ctx *c);   /* (below: the shelves of a family, hos_oot_shelf_map) */
 static void oot_inventory_refresh(Ctx *c, int64_t now) {
     void rx_option_set(int id, int value);
     static int64_t next;
@@ -875,6 +876,7 @@ static void oot_inventory_refresh(Ctx *c, int64_t now) {
             if (strcmp(line, logged)) hos_log("map: %s", line), snprintf(logged, sizeof logged, "%s", line);
         }
     }
+    if (loaded) oot_family_levels_refresh(c);
     if (!probed && oot_pouch_count(c, "Item_DekuSeed") >= 0) {
         probed = 1;   /* (one line naming every count, both spellings: which names the pouch knows) */
         static const char *const probes[] = {OOT_CHEAT_ITEM_PROBES};
@@ -3077,6 +3079,208 @@ void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made) {
     hos_log("rando: progressive: a chest's %s shows and gives %s", name, give);
 #else
     (void)c; (void)self; (void)made;
+#endif
+}
+
+/* (the randomizer's fork) Progressive items, what a gift or a shop's sale shows and says. A character's gift, a
+   Business Scrub's sale, a quest's reward and a shop's sale name their item in their event (the seed's rewrite of the
+   flow: GetInEvent_<...>(ActorName "Item_...")), and the scene's steps take it from there: Link holds up the item of
+   that name (Player_Event's EventCreateShowItemFromActorFileName: the AI node ExecuteEventCreateShowItem, f_826ca590,
+   its name's input at +0x38 when the numbers at +0x28 and +0x30 are -1), and the window's words are those of the String64
+   flag UI_MessageTargetActorName, set before it opens (PouchSystemActor's EventTriggerSetForGetWindow: the AI node
+   OneShotSetNonStructGameDataString64, f_8295a4b0, the flag's name's input at +0x30, its value's at +0x40). The pouch's
+   add (hos_oot_pouch_add) gives the family's next. Each input is a pointer (its two low bits a tag) to where the name's
+   string pointer is kept; that is pointed at a kept string with the family's next, in the spelling a chest shows
+   (oot_show_as, oot_no_show), so the steps after read it too. What is shown is chosen once an event (the event manager's
+   current event): a step after the add would otherwise show the tier after. kind 0 the flag's node, 1 the show item's.
+   Called at the nodes' start (nx2/oot_patches.py patch_get_name). HOS_OOT_GET_NAME=0 turns it off. */
+#if defined(_WIN32) || defined(__linux__)
+static int oot_guest_string(Ctx *c, uint64_t at, char *out, int size) {
+    int n = 0;
+    if (!at) return 0;
+    for (; n + 1 < size; n++) {
+        out[n] = (char)recomp_load8(c, at + n);
+        if (!out[n]) break;
+    }
+    out[n] = 0;
+    return n + 1 < size;
+}
+#endif
+
+void hos_oot_get_name(Ctx *c, uint64_t node, int kind) {
+#if defined(_WIN32) || defined(__linux__)
+    static int on = -1;
+    if (on < 0) { const char *e = getenv("HOS_OOT_GET_NAME"); on = !(e && *e == '0'); }
+    if (!on || !node || !hos_rando_on()) return;
+    uint64_t slot = 0;
+    char name[96];
+    if (kind == 0) {
+        const uint64_t key_slot = recomp_load64(c, node + 0x30) & ~3ULL;
+        char key[64];
+        if (!key_slot || !oot_guest_string(c, recomp_load64(c, key_slot), key, sizeof key)) return;
+        const int window = !strcmp(key, "UI_MessageTargetActorName"), shop = !strcmp(key, "Shop_SelectItemName");
+        if (!window && !shop) return;
+        slot = recomp_load64(c, node + 0x40) & ~3ULL;
+        if (!slot || !oot_guest_string(c, recomp_load64(c, slot), name, sizeof name)) return;
+        static char last[2][96];   /* (each value once in the log, to learn what the shops set) */
+        if (strcmp(last[shop], name)) {
+            snprintf(last[shop], sizeof last[shop], "%s", name);
+            hos_log("rando: progressive: %s set to %s", key, name);
+        }
+        if (shop) return;
+    } else {
+        const uint64_t a = recomp_load64(c, node + 0x28) & ~3ULL, b = recomp_load64(c, node + 0x30) & ~3ULL;
+        if (!a || !b || (int32_t)recomp_load32(c, a) != -1 || (int32_t)recomp_load32(c, b) != -1) return;
+        slot = recomp_load64(c, node + 0x38) & ~3ULL;
+        if (!slot || !oot_guest_string(c, recomp_load64(c, slot), name, sizeof name)) return;
+    }
+    if (!hos_rando_progressive()) return;
+    int spelling = 0;
+    const int family = oot_family_of(name, &spelling);
+    if (family < 0) return;
+    /* (once an event: the family's choice kept with the event it was made in) */
+    static struct { uint64_t event; int family; const char *give; } chosen[4];
+    const uint64_t events = oot_singleton(c, OOT_EVENTMGR_SLOT);
+    const uint64_t event = events ? recomp_load64(c, events + 104) : 0;
+    const char *give = NULL;
+    int found = 0;
+    for (int i = 0; i < 4 && !found; i++)
+        if (event && chosen[i].event == event && chosen[i].family == family) give = chosen[i].give, found = 1;
+    if (!found) {
+        uint64_t saved[31];
+        memcpy(saved, c->x, sizeof saved);   /* (oot_pouch_count calls the game) */
+        give = oot_progressive_give(c, name);
+        memcpy(c->x, saved, sizeof saved);
+        if (give)
+            for (size_t i = 0; i < sizeof oot_show_as / sizeof oot_show_as[0]; i++)
+                if (!strcmp(give, oot_show_as[i][0])) give = oot_show_as[i][1];
+        if (give)
+            for (size_t i = 0; i < sizeof oot_no_show / sizeof oot_no_show[0]; i++)
+                if (!strcmp(give, oot_no_show[i])) give = NULL;
+        if (event) {
+            static int turn;
+            chosen[turn].event = event, chosen[turn].family = family, chosen[turn].give = give;
+            turn = (turn + 1) % 4;
+        }
+        hos_log("rando: progressive: %s's %s %s", kind ? "a show item" : "a get window", name,
+                give ? (strcmp(give, name) ? "is shown as the family's next" : "is the family's next") : "is shown as it is");
+        if (give && strcmp(give, name)) hos_log("rando: progressive: shown: %s", give);
+    }
+    if (!give || !strcmp(give, name)) return;
+    const uint64_t kept = oot_kept_name(give);
+    if (kept) recomp_store64(c, slot, kept);
+    (void)spelling;
+#else
+    (void)c; (void)node; (void)kind;
+#endif
+}
+
+/* (the randomizer's fork) Progressive items, what a shelf shows. A shelf's look, name and the keeper's words are its
+   actor's, which its map file names; the seed writes a shop's map once for each choice of tiers of its shelves of a
+   family, and lists them in <seed>/shelf_tiers.txt ("<the map's path>|<item>,<item>...": the items the shuffle put on
+   those shelves, in the order of the versions' names; tools/rando/rando_seed.py SHELF_FAMILIES). As the game opens such a
+   map (host/mods.c hos_mods_romfs) it is given <seed>/shelf_tiers/<the map's path>.<k>_<k>..., k the tier of each shelf:
+   the family's next for what Link has, or the shelf's own item when he has the family whole. What he has is what
+   oot_inventory_refresh last read (every half second, a save loaded). The game keeps a map it has opened (seen: the
+   Kokiri Forest's was not opened again after the Lost Woods and back), and opens the first one before anything here has
+   read the pouch: the levels last read are kept in <user>/<save folder>/family_levels.txt for it. So a shelf shows what
+   Link had when the map was first opened in a session; it still gives what the pouch's add gives.
+   HOS_OOT_SHELF_TIERS=0 turns it off. */
+static volatile int oot_family_level[OOT_FAMILIES + 1] = {[0 ... OOT_FAMILIES] = -1};
+
+static void oot_family_levels_path(char *out, size_t cap) {
+    extern const char *hos_user_dir;
+    const char *hos_save_folder(void);
+    snprintf(out, cap, "%s/%s/family_levels.txt", hos_user_dir ? hos_user_dir : "user", hos_save_folder());
+}
+
+static void oot_family_levels_refresh(Ctx *c) {
+    int changed = 0;
+    for (int f = 0; f < OOT_FAMILIES; f++) {
+        int tiers = 0, level = 0;
+        while (tiers < 3 && oot_families[f][tiers][0]) tiers++;
+        for (int t = tiers - 1; t >= 0 && !level; t--)
+            for (int a = 0; a < 2 && !level; a++)
+                if (oot_families[f][t][a] && oot_pouch_count(c, oot_families[f][t][a]) > 0) level = t + 1;
+        changed |= __atomic_exchange_n(&oot_family_level[f], level, __ATOMIC_RELAXED) != level;
+    }
+    if (changed && hos_rando_on() && hos_rando_progressive()) {
+        char path[MAX_PATH + 64], line[OOT_FAMILIES + 2];
+        oot_family_levels_path(path, sizeof path);
+        for (int f = 0; f < OOT_FAMILIES; f++) line[f] = (char)('0' + __atomic_load_n(&oot_family_level[f], __ATOMIC_RELAXED));
+        line[OOT_FAMILIES] = 10, line[OOT_FAMILIES + 1] = 0;   /* (a line's end) */
+        FILE *out = fopen(path, "wb");
+        if (out) fputs(line, out), fclose(out);
+    }
+}
+
+int hos_oot_shelf_map(const char *rel, char *out, size_t cap) {
+#if defined(_WIN32) || defined(__linux__)
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static int loaded, on = -1, count;
+    static struct { char rel[160]; char items[3][40]; int n; } maps[64];
+    if (on < 0) { const char *e = getenv("HOS_OOT_SHELF_TIERS"); on = !(e && *e == '0'); }
+    if (!on || !rel || _strnicmp(rel, "Banc/", 5) || !hos_rando_on() || !hos_rando_progressive()) return 0;
+    AcquireSRWLockExclusive(&lock);
+    if (!loaded) {
+        loaded = 1;
+        char path[MAX_PATH + 64], line[512];
+        FILE *f = oot_game_file(path, sizeof path, "mods/rando-seed/shelf_tiers.txt") ? fopen(path, "rb") : NULL;
+        while (f && count < 64 && fgets(line, sizeof line, f)) {
+            line[strcspn(line, "\r\n")] = 0;
+            char *bar = strchr(line, '|');
+            if (!bar || bar - line >= (int)sizeof maps[0].rel) continue;
+            *bar = 0;
+            snprintf(maps[count].rel, sizeof maps[count].rel, "%s", line);
+            int n = 0;
+            for (char *item = strtok(bar + 1, ","); item && n < 3; item = strtok(NULL, ","))
+                snprintf(maps[count].items[n++], sizeof maps[count].items[0], "%s", item);
+            maps[count].n = n;
+            if (n) count++;
+        }
+        if (f) fclose(f);
+        if (count) hos_log("rando: progressive: %d shop map(s) with shelves of a family (shelf_tiers.txt)", count);
+        oot_family_levels_path(path, sizeof path);   /* (the last levels read, for a map opened before the pouch is read) */
+        f = count && __atomic_load_n(&oot_family_level[0], __ATOMIC_RELAXED) < 0 ? fopen(path, "rb") : NULL;
+        const char *test = getenv("HOS_OOT_FAMILY_LEVELS");   /* (a test's: those digits in place of the file's) */
+        if (test && strlen(test) < sizeof line) snprintf(line, sizeof line, "%s", test);
+        if (((test && *test) || (f && fgets(line, sizeof line, f))) && strspn(line, "0123") >= (size_t)OOT_FAMILIES) {
+            for (int k = 0; k < OOT_FAMILIES; k++) __atomic_store_n(&oot_family_level[k], line[k] - '0', __ATOMIC_RELAXED);
+            hos_log("rando: progressive: the families' levels last read, until the pouch is read: %.*s", OOT_FAMILIES, line);
+        }
+        if (f) fclose(f);
+    }
+    int found = -1;
+    for (int i = 0; i < count && found < 0; i++)
+        if (!_stricmp(maps[i].rel, rel)) found = i;
+    char combo[16] = "";
+    int ok = found >= 0;
+    for (int k = 0; ok && k < maps[found].n; k++) {
+        const int f = oot_family_of(maps[found].items[k], NULL);
+        const int level = f >= 0 ? __atomic_load_n(&oot_family_level[f], __ATOMIC_RELAXED) : -1;
+        if (level < 0) { ok = 0; break; }
+        int tiers = 0, own = 0;
+        while (tiers < 3 && oot_families[f][tiers][0]) tiers++;
+        for (int t = 0; t < tiers; t++)
+            for (int a = 0; a < 2; a++)
+                if (oot_families[f][t][a] && !strcmp(oot_families[f][t][a], maps[found].items[k])) own = t;
+        const size_t used = strlen(combo);
+        snprintf(combo + used, sizeof combo - used, "%s%d", k ? "_" : "", level < tiers ? level : own);
+    }
+    int given = 0;
+    if (ok) {
+        char tail[260];
+        snprintf(tail, sizeof tail, "mods/rando-seed/shelf_tiers/%s.%s", maps[found].rel, combo);
+        if (oot_game_file(out, cap, tail) && GetFileAttributesA(out) != INVALID_FILE_ATTRIBUTES) given = 1;
+        hos_log("rando: progressive: the shop's map %s %s its shelves' tiers %s", rel, given ? "is given with" : "has no file for", combo);
+    } else if (found >= 0) {
+        hos_log("rando: progressive: the shop's map %s is the seed's own (what Link has not read yet)", rel);
+    }
+    ReleaseSRWLockExclusive(&lock);
+    return given;
+#else
+    (void)rel; (void)out; (void)cap;
+    return 0;
 #endif
 }
 

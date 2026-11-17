@@ -144,8 +144,38 @@ def main():
     check('if (!strcmp(name, "Item_BombBag_Small") && c->x[30] == 0x828d50acULL && (uint32_t)c->x[4] == 2 && !(c->x[7] & 1)) {' in add and
           "if (!hos_rando_on()) return 0;" in add and add.index("if (!hos_rando_on()) return 0;") < add.index('"Item_BombBag_Small") && c->x[30]'),
           "the Bomb Bag the game gives with bombs is given in a seed, or is kept back with the randomizer off, or a chest's own bag is")
+    # ---- what a gift and a shelf show (bug 21) ----
+    for head, kind in oot_patches.GET_NAME_HEADS:
+        src = '#include "a64.h"\n' + head + "    /* nop/hint */\n}\n"
+        made = oot_patches.patch_get_name(src)
+        check(made is not None and made.count(oot_patches.GET_NAME_HOOK % kind) == 1 and head + oot_patches.GET_NAME_HOOK % kind in made and
+              made.count("extern void hos_oot_get_name(Ctx *c, uint64_t node, int kind);") == 1 and oot_patches.patch_get_name(made) == made,
+              "the gift's name hook %d is not put at its function's start once" % kind)
+    check(oot_patches.patch_get_name('#include "a64.h"\nvoid f_8295a4b1(Ctx *__restrict A64_NOESC c) {\n}\n') is None and
+          'done[GET_NAME_COUNTS[0]] = 0' in patches and 'done[GET_NAME_COUNTS[1]] = 0' in patches and
+          "get = patch_get_name(out) if protect_hearts else None" in patches, "the gift's name hooks are not counted, or patch another function")
+    get = host[host.index("void hos_oot_get_name(Ctx *c, uint64_t node, int kind) {"):host.index("static volatile int oot_family_level[")]
+    check('!strcmp(key, "UI_MessageTargetActorName")' in get and "recomp_load64(c, node + 0x40) & ~3ULL" in get and
+          "recomp_load64(c, node + 0x38) & ~3ULL" in get and "chosen[i].event == event && chosen[i].family == family" in get and
+          "if (!hos_rando_progressive()) return;" in get and "recomp_store64(c, slot, kept);" in get,
+          "a gift's window or show item is not given the family's next, once an event")
+    mods = (ROOT / "host" / "mods.c").read_text(encoding="utf-8")
+    shelf = host[host.index("int hos_oot_shelf_map(const char *rel, char *out, size_t cap) {"):host.index("int hos_oot_pouch_add(Ctx *c) {")]
+    check("if (hos_oot_shelf_map(rel, out, cap)) return 1;" in mods and '"mods/rando-seed/shelf_tiers.txt"' in shelf and
+          '"mods/rando-seed/shelf_tiers/%s.%s"' in shelf and "level < tiers ? level : own" in shelf and
+          "if (loaded) oot_family_levels_refresh(c);" in host and "family_levels.txt" in host,
+          "a shop's map is not given for the tiers Link has")
+    first = {f[0][0] for f in families}
+    check(all(f[0] in first or any(f[0] in g[0] for g in families) for f in seed.SHELF_FAMILIES) and
+          all(any(list(f) == [t[0] for t in g] for g in families) for f in seed.SHELF_FAMILIES),
+          "a shelf's family is not one of the game's, in its order")
+    check(seed.shelf_family("Item_Quiver_Large") == seed.SHELF_FAMILIES[1] and seed.shelf_family("Item_Boomerang") is None and
+          seed.SHELF_TIERS == "shelf_tiers.txt" and "SHELF_TIERS, \"rando_stamp.txt\"" in script and
+          '[actor if each == item else "%s_%d" % (actor, k) for k, each in enumerate(family)]' in script and
+          "held, versions = shelf_tier_maps(data, on_shelf, tiers, lifts, scales, turns)" in script,
+          "shelf_family, the list's name, or the maps' versions")
     side = (ROOT / "host" / "oot_rando.c").read_text(encoding="utf-8")
-    header = (ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
+    header =(ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
     check("int hos_rando_progressive(void) { return rando_active && rando.v[OOT_RANDO_PROGRESSIVE] != 0; }" in side and
           'X(PROGRESSIVE, "Progressive items", "rando_progressive", \\' in header, "the setting is not in the table, or is read with the randomizer off")
     print("PASS: Progressive items")

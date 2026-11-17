@@ -200,6 +200,8 @@ int hos_mods_romfs(const char *rel, char *out, size_t cap) {
     snprintf(key, sizeof key, "%s", rel);
     lower_slash(key);
     int hos_prompts_romfs(const char *key, const char *mod, char *out, size_t cap);   /* prompts.c: the button prompts */
+    int hos_oot_shelf_map(const char *rel, char *out, size_t cap);   /* (the randomizer's fork) hos_main.c: a shop's map for what Link has */
+    if (hos_oot_shelf_map(rel, out, cap)) return 1;
     Entry *e = table_n ? find(key) : NULL;
     if (!e || e->is_dir) return hos_prompts_romfs(key, NULL, out, cap);
     const int merged = hos_prompts_romfs(key, e->host, out, cap);   /* (the size table: the prompts' entries merged in) */

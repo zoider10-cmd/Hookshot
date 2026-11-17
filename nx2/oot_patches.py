@@ -274,6 +274,31 @@ def patch_drop_name(source):
         '#include "a64.h"\n', '#include "a64.h"\nextern void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made);\n', 1)
 
 
+# Progressive items, what a gift or a shop shows and says (the randomizer's fork: host/hos_main.c hos_oot_get_name). Two
+# nodes of the game's AI ask the host at their start, with the node (x0):
+#  - f_8295a4b0, OneShotSetNonStructGameDataString64's run: a String64 flag set (its name's input at +0x30, its value's at
+#    +0x40). The "item got" window's name (UI_MessageTargetActorName) is set so before the window opens;
+#  - f_826ca590, ExecuteEventCreateShowItem's update: the item Link holds up (EventCreateShowItemFromActorFileName, its
+#    name's input at +0x38 when the two numbers at +0x28 and +0x30 are -1).
+GET_NAME_HEADS = (("void f_8295a4b0(Ctx *__restrict A64_NOESC c) {\n", 0), ("void f_826ca590(Ctx *__restrict A64_NOESC c) {\n", 1))
+GET_NAME_COUNTS = ("progressive gift window name", "progressive gift show item")
+GET_NAME_HOOK = "    hos_oot_get_name(c, c->x[0], %d);   /* (nx2/oot_patches.py: progressive items, what a gift shows) */\n"
+
+
+def patch_get_name(source):
+    """the hooks above; None when this file has neither function"""
+    found = False
+    for head, kind in GET_NAME_HEADS:
+        if source.count(head) != 1:
+            continue
+        found = True
+        if head + GET_NAME_HOOK % kind not in source:
+            source = source.replace(head, head + GET_NAME_HOOK % kind, 1)
+            if "extern void hos_oot_get_name(" not in source:
+                source = source.replace('#include "a64.h"\n', '#include "a64.h"\nextern void hos_oot_get_name(Ctx *c, uint64_t node, int kind);\n', 1)
+    return source if found else None
+
+
 def patch_flight_rotation(source):
     start = source.find(WARP_HEAD)
     if start < 0:
@@ -1079,7 +1104,15 @@ def patch_file(s, name, protect_hearts=False):
             lines.append("oot_patches: progressive items, a chest's name, in " + name)
         out = drop
         counts["progressive chest name"] += 1
-    bone = patch_bone_fallback(out) if protect_hearts else None   # (the randomizer's fork: Link's bones on another model)
+    get = patch_get_name(out) if protect_hearts else None   # (the randomizer's fork: what a gift shows)
+    if get is not None:
+        if get != out:
+            lines.append("oot_patches: progressive items, a gift's name, in " + name)
+        out = get
+        for head, kind in GET_NAME_HEADS:
+            if head + GET_NAME_HOOK % kind in get:
+                counts[GET_NAME_COUNTS[kind]] += 1
+    bone =patch_bone_fallback(out) if protect_hearts else None   # (the randomizer's fork: Link's bones on another model)
     if bone is not None:
         if bone != out:
             lines.append("oot_patches: Link's bones answered by another model's in " + name)
@@ -1167,6 +1200,8 @@ def report(paths, counts, protect_hearts=False):
         done["disable camera centering"] = 0
         done["progressive items"] = 0
         done["progressive chest name"] = 0
+        done[GET_NAME_COUNTS[0]] = 0
+        done[GET_NAME_COUNTS[1]] = 0
         done["model swap guards"] = 0
         done["bone fallback"] = 0
         done["scene format"] = 0
