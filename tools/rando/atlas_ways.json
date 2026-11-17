@@ -1,0 +1,1601 @@
+{
+"source": "Ocarina Atlas by antonioalvromero (MIT), src/data/oot.json and src/lib/lichii-server.ts at 9fea3c8: see ATLAS_NOTICE.txt",
+"ways": {
+"02974596f92cf375": {
+"age": "adult",
+"id": "agua-gs-04",
+"name": "Rolling boulder waterfall",
+"night": false,
+"way": "In the north basement, reached with the Longshot, cross the Tektite room and the block puzzle room, and in the next one step on the switch and hop across the geysers to the other door. Behind it is a channel where boulders roll down from a waterfall, right next to the Boss Key room. Take cover from the boulders in the side corridor, where a Shell Blade is waiting, and from there look toward the waterfall, to the west: the Gold Skulltula is on that wall. The Longshot reaches it without getting close and brings you the token."
+},
+"02974596f92cf377": {
+"age": "adult",
+"id": "agua-gs-04",
+"name": "Rolling boulder waterfall",
+"night": false,
+"way": "In the north basement, reached with the Longshot, cross the Tektite room and the block puzzle room, and in the next one step on the switch and hop across the geysers to the other door. Behind it is a channel where boulders roll down from a waterfall, right next to the Boss Key room. Take cover from the boulders in the side corridor, where a Shell Blade is waiting, and from there look toward the waterfall, to the west: the Gold Skulltula is on that wall. The Longshot reaches it without getting close and brings you the token."
+},
+"032f42f523be6425": {
+"age": "both",
+"id": "cementerio-gs-01",
+"name": "Graveyard wall",
+"night": true,
+"way": "At night, in the narrow alley between Dampé's Hut and the stone wall with the iron fence, by the Graveyard entrance, a Gold Skulltula comes out high up. During the day you'll see a golden web in that spot marking where it will appear. Defeat it with the Hookshot or the Boomerang and bring the token back with it."
+},
+"032f42f523be6427": {
+"age": "both",
+"id": "cementerio-gs-01",
+"name": "Graveyard wall",
+"night": true,
+"way": "At night, in the narrow alley between Dampé's Hut and the stone wall with the iron fence, by the Graveyard entrance, a Gold Skulltula comes out high up. During the day you'll see a golden web in that spot marking where it will appear. Defeat it with the Hookshot or the Boomerang and bring the token back with it."
+},
+"0341f2c03598c861": {
+"age": "child",
+"id": "coloso-gs-01",
+"name": "Bugs in the soft soil by the temple",
+"night": false,
+"way": "As a child, play the Requiem of Spirit to travel to the Desert Colossus and walk from the arrival platform to the steps of the Spirit Temple: the patch of soft soil is just to the left of the entrance, up against the rock wall. In that patch, which is also where you plant the Magic Bean, release the Bugs from a bottle and the Gold Skulltula will come out right away: defeat it with your sword and collect the token."
+},
+"0341f2c03598c863": {
+"age": "child",
+"id": "coloso-gs-01",
+"name": "Bugs in the soft soil by the temple",
+"night": false,
+"way": "As a child, play the Requiem of Spirit to travel to the Desert Colossus and walk from the arrival platform to the steps of the Spirit Temple: the patch of soft soil is just to the left of the entrance, up against the rock wall. In that patch, which is also where you plant the Magic Bean, release the Bugs from a bottle and the Gold Skulltula will come out right away: defeat it with your sword and collect the token."
+},
+"04be4a8ff29f2099": {
+"age": "child",
+"id": "lonlon-gs-01",
+"name": "Tree on the way to the corral",
+"night": false,
+"way": "As soon as you enter Lon Lon Ranch, in the side yard to the left, there's a tree with a Gold Skulltula hidden in it: roll into the trunk to knock it to the ground, defeat it and grab the Gold Skulltula Token."
+},
+"04be4a8ff29f209b": {
+"age": "child",
+"id": "lonlon-gs-01",
+"name": "Tree on the way to the corral",
+"night": false,
+"way": "As soon as you enter Lon Lon Ranch, in the side yard to the left, there's a tree with a Gold Skulltula hidden in it: roll into the trunk to knock it to the ground, defeat it and grab the Gold Skulltula Token."
+},
+"04e03ac27985e328": {
+"age": "both",
+"id": "sendero-gs-02",
+"name": "Cracked wall near Kakariko",
+"night": false,
+"way": "Leaving Kakariko Village toward the mountain, before you reach Dodongo's Cavern, there's a wall of cracked rocks on the right side of the trail that doesn't match the rest: you can hear the Skulltula behind it. Open the wall with a Bomb or, as an adult, with the Megaton Hammer, step into the alcove and defeat the Gold Skulltula, which sits on the back wall at sword height."
+},
+"04e03ac27985e32a": {
+"age": "both",
+"id": "sendero-gs-02",
+"name": "Cracked wall near Kakariko",
+"night": false,
+"way": "Leaving Kakariko Village toward the mountain, before you reach Dodongo's Cavern, there's a wall of cracked rocks on the right side of the trail that doesn't match the rest: you can hear the Skulltula behind it. Open the wall with a Bomb or, as an adult, with the Megaton Hammer, step into the alcove and defeat the Gold Skulltula, which sits on the back wall at sword height."
+},
+"07e6e21142cc54d9": {
+"age": "child",
+"id": "goron-gs-01",
+"name": "Boulder maze",
+"night": false,
+"way": "The boulder maze room is on Goron City's top floor, the one with the entrance from Death Mountain Trail, and as a child you cross it by blasting a path through the blocks with Bombs. At the far end, next to two chests, there's a wooden crate with the Gold Skulltula inside: roll into the crate to break it, defeat the Skulltula with your sword and collect the token."
+},
+"07e6e21142cc54db": {
+"age": "child",
+"id": "goron-gs-01",
+"name": "Boulder maze",
+"night": false,
+"way": "The boulder maze room is on Goron City's top floor, the one with the entrance from Death Mountain Trail, and as a child you cross it by blasting a path through the blocks with Bombs. At the far end, next to two chests, there's a wooden crate with the Gold Skulltula inside: roll into the crate to break it, defeat the Skulltula with your sword and collect the token."
+},
+"09ecb6a0150fee97": {
+"age": "adult",
+"id": "sendero-heart-01",
+"name": "Ledge above Dodongo's Cavern",
+"night": false,
+"way": "Above the entrance to Dodongo's Cavern is the ledge with this Piece of Heart, in plain sight in a nook in the rock. You need to plant a Magic Bean in the soft soil as a child. As an adult, ride the bean plant and hop off when it passes by the ledge to grab the Piece of Heart."
+},
+"0a564328faf93c71": {
+"age": "both",
+"id": "crater-heart-02",
+"name": "Domed rock in the Crater",
+"night": false,
+"way": "As a child, play the Bolero of Fire on the ocarina and, once in the Crater, plant a bean in the soft soil next to the platform. Come back as an adult wearing the Goron Tunic, ride the leaf and hop off when it passes over one of the tall rocks: the piece is waiting up top."
+},
+"0af4d6f063d3ae9d": {
+"age": "adult",
+"id": "lago-gs-05",
+"name": "Tree on the big island",
+"night": true,
+"way": "On the biggest island in the lake, the one with the Serenade of Water platform, there is a huge tree with a hollow crown. As an adult, aim the Longshot at the top of the tree to pull yourself up to the crown; the Hookshot won't reach. The Gold Skulltula only comes out at night, inside the crown: if it's daytime, play the Sun's Song right there and it will appear. Defeat it with your sword and collect the token."
+},
+"0af4d6f063d3ae9f": {
+"age": "adult",
+"id": "lago-gs-05",
+"name": "Tree on the big island",
+"night": true,
+"way": "On the biggest island in the lake, the one with the Serenade of Water platform, there is a huge tree with a hollow crown. As an adult, aim the Longshot at the top of the tree to pull yourself up to the crown; the Hookshot won't reach. The Gold Skulltula only comes out at night, inside the crown: if it's daytime, play the Sun's Song right there and it will appear. Defeat it with your sword and collect the token."
+},
+"0b8e43abfa0b5f84": {
+"age": "adult",
+"id": "sendero-gs-04",
+"name": "Falling-rocks path",
+"night": true,
+"way": "Past Dodongo's Cavern, the trail climbs to the stretch where volcanic rocks rain down and ends at the net wall that leads to the summit. This Gold Skulltula appears at the foot of that wall, as an adult and at night. Facing the wall, on the right as you climb, next to the rock arch, there's a pile of rocks that Bombs can't break: hit it with the Megaton Hammer and, with the rocks in pieces, finish off the Skulltula and collect the token."
+},
+"0b8e43abfa0b5f86": {
+"age": "adult",
+"id": "sendero-gs-04",
+"name": "Falling-rocks path",
+"night": true,
+"way": "Past Dodongo's Cavern, the trail climbs to the stretch where volcanic rocks rain down and ends at the net wall that leads to the summit. This Gold Skulltula appears at the foot of that wall, as an adult and at night. Facing the wall, on the right as you climb, next to the rock arch, there's a pile of rocks that Bombs can't break: hit it with the Megaton Hammer and, with the rocks in pieces, finish off the Skulltula and collect the token."
+},
+"0d53e429a1ef383d": {
+"age": "adult",
+"id": "dodongos-gs-05",
+"name": "Scarecrow's ledge",
+"night": false,
+"way": "As an adult, having already learned the Scarecrow's Song, go back to the Baby Dodongo corridor, the same one as the Skulltula behind the wall. Stay near the start of the corridor, facing a high ledge on the wall. There, play the Scarecrow's Song so Pierre appears on the ledge: Hookshot over to him, climb up, kill the Gold Skulltula with your sword and grab the Gold Skulltula Token."
+},
+"0d53e429a1ef383f": {
+"age": "adult",
+"id": "dodongos-gs-05",
+"name": "Scarecrow's ledge",
+"night": false,
+"way": "As an adult, having already learned the Scarecrow's Song, go back to the Baby Dodongo corridor, the same one as the Skulltula behind the wall. Stay near the start of the corridor, facing a high ledge on the wall. There, play the Scarecrow's Song so Pierre appears on the ledge: Hookshot over to him, climb up, kill the Gold Skulltula with your sword and grab the Gold Skulltula Token."
+},
+"10434342a3917ebd": {
+"age": "both",
+"id": "dodongos-gs-01",
+"name": "Behind the Baby Dodongos' wall",
+"night": false,
+"way": "After dealing with the Beamos, blow up the cracked wall on the right side of the main hall with a Bomb Flower and you'll enter the Baby Dodongo corridor, with another cracked wall on the right as soon as you start. Open it with a Bomb or lure a Baby Dodongo over and kill it right up against the wall, since its explosion breaks it too. Inside are some Keese and the Gold Skulltula."
+},
+"10434342a3917ebf": {
+"age": "both",
+"id": "dodongos-gs-01",
+"name": "Behind the Baby Dodongos' wall",
+"night": false,
+"way": "After dealing with the Beamos, blow up the cracked wall on the right side of the main hall with a Bomb Flower and you'll enter the Baby Dodongo corridor, with another cracked wall on the right as soon as you start. Open it with a Bomb or lure a Baby Dodongo over and kill it right up against the wall, since its explosion breaks it too. Inside are some Keese and the Gold Skulltula."
+},
+"165fc0bc0aca1f6c": {
+"age": "adult",
+"id": "hielo-gs-03",
+"name": "Ice block room",
+"night": false,
+"way": "In the room where you have to push an ice block, kill the Ice Keese and turn back toward the entrance: the Gold Skulltula is high on the wall, to the left of the door as you come in. It's easier to spot from the stone pillars; bring it down with the Hookshot from the floor and pick up the token."
+},
+"165fc0bc0aca1f6e": {
+"age": "adult",
+"id": "hielo-gs-03",
+"name": "Ice block room",
+"night": false,
+"way": "In the room where you have to push an ice block, kill the Ice Keese and turn back toward the entrance: the Gold Skulltula is high on the wall, to the left of the door as you come in. It's easier to spot from the stone pillars; bring it down with the Hookshot from the floor and pick up the token."
+},
+"1bf5f0176ef03bd8": {
+"age": null,
+"id": "bosque-gs-03",
+"name": "Balcony above the stained-glass door",
+"night": false,
+"way": "From the landing by the stained-glass door, in the area where the water channel comes out, in the Forest Temple, you need to play the Scarecrow's Song: Pierre appears on the small balcony above the door. Hookshot over to him, kill the Gold Skulltula on the balcony floor and grab the Gold Skulltula Token."
+},
+"1bf5f0176ef03bda": {
+"age": null,
+"id": "bosque-gs-03",
+"name": "Balcony above the stained-glass door",
+"night": false,
+"way": "From the landing by the stained-glass door, in the area where the water channel comes out, in the Forest Temple, you need to play the Scarecrow's Song: Pierre appears on the small balcony above the door. Hookshot over to him, kill the Gold Skulltula on the balcony floor and grab the Gold Skulltula Token."
+},
+"1df0dbf50c1732b7": {
+"age": "adult",
+"id": "cementerio-heart-04",
+"name": "Ledge on the wall",
+"night": false,
+"way": "High up on the left wall of the Graveyard, above Dampé's Grave and the soft soil, there is a ledge with the Piece of Heart in plain sight on a stone pillar, and you can't reach it from below without help. If you plant a Magic Bean in that soft soil as a child, when you come back as an adult climb onto the leaf and let it carry you up to the ledge. Once up there, grab the piece from the pillar."
+},
+"1e38e8d23596eecd": {
+"age": "both",
+"id": "llanura-gs-01",
+"name": "Lone pine in the east",
+"night": false,
+"way": "In the east of Hyrule Field, between Zora's River and Kokiri Forest, a lone pine stands on top of a knoll next to a stream. A Gold Skulltula hides in it. Roll into the trunk to knock it to the ground, finish it off with your sword and grab the Gold Skulltula Token."
+},
+"1e38e8d23596eecf": {
+"age": "both",
+"id": "llanura-gs-01",
+"name": "Lone pine in the east",
+"night": false,
+"way": "In the east of Hyrule Field, between Zora's River and Kokiri Forest, a lone pine stands on top of a knoll next to a stream. A Gold Skulltula hides in it. Roll into the trunk to knock it to the ground, finish it off with your sword and grab the Gold Skulltula Token."
+},
+"22c0f7dff5ebb86d": {
+"age": "child",
+"id": "castillo-gs-01",
+"name": "Tree in the hedge garden",
+"night": false,
+"way": "You can only explore the Hyrule Castle grounds as a child. Go up the path toward the castle and, to one side, step into the garden of hedges and flowers in front of you. Cross it westward to the far corner, by the castle wall, where there is a lone tree. Roll into the trunk to knock the Gold Skulltula down; defeat it and collect the token."
+},
+"22c0f7dff5ebb86f": {
+"age": "child",
+"id": "castillo-gs-01",
+"name": "Tree in the hedge garden",
+"night": false,
+"way": "You can only explore the Hyrule Castle grounds as a child. Go up the path toward the castle and, to one side, step into the garden of hedges and flowers in front of you. Cross it westward to the far corner, by the castle wall, where there is a lone tree. Roll into the trunk to knock the Gold Skulltula down; defeat it and collect the token."
+},
+"25e6072d4df023b1": {
+"age": "adult",
+"id": "lonlon-gs-02",
+"name": "Crate in the grotto south of the ranch",
+"night": false,
+"way": "For this Gold Skulltula to appear as an adult, child Link must read the Fairy Thought in the underground grotto southeast of Lon Lon Ranch, near the pond, and defeat the regular Skulltula. Once that's done, come back as an adult. At the back, against the wall, there's a wooden crate. Break it by rolling into it and a Gold Skulltula will come out: defeat it with your sword and grab the Gold Skulltula Token. As a curiosity, the Fairy Thought will have changed."
+},
+"25e6072d4df023b3": {
+"age": "adult",
+"id": "lonlon-gs-02",
+"name": "Crate in the grotto south of the ranch",
+"night": false,
+"way": "For this Gold Skulltula to appear as an adult, child Link must read the Fairy Thought in the underground grotto southeast of Lon Lon Ranch, near the pond, and defeat the regular Skulltula. Once that's done, come back as an adult. At the back, against the wall, there's a wooden crate. Break it by rolling into it and a Gold Skulltula will come out: defeat it with your sword and grab the Gold Skulltula Token. As a curiosity, the Fairy Thought will have changed."
+},
+"292e3ed6acacbe44": {
+"age": "child",
+"id": "llanura-heart-02",
+"name": "Paradox of the chest from the past",
+"night": false,
+"way": "At the western end of Hyrule Field, near the entrance to Gerudo Valley, the ground turns to reddish dirt. Head down the slope into a hollow beneath a rock overhang and look for the chest at the back. It has to be as a child: as an adult the chest is already open and empty, and a Fairy Thought explains that it was never locked. Open the chest as a child and the Piece of Heart is yours."
+},
+"2aa39f00aaa2d331": {
+"age": "adult",
+"id": "bosque-gs-05",
+"name": "Rotating room in the basement",
+"night": false,
+"way": "With the four Poe Sisters defeated, the elevator in the central hall takes you down to the basement, a room of rotating walls that leads to the boss door. You don't need to move the walls for this Gold Skulltula: follow the circular corridor as soon as you step off the elevator and go into the open alcove with the pots. A Big Skulltula drops from the ceiling; finish it off and look high on the wall, where the gold one waits. Knock it down with the Hookshot, which also brings you the Gold Skulltula Token."
+},
+"2aa39f00aaa2d333": {
+"age": "adult",
+"id": "bosque-gs-05",
+"name": "Rotating room in the basement",
+"night": false,
+"way": "With the four Poe Sisters defeated, the elevator in the central hall takes you down to the basement, a room of rotating walls that leads to the boss door. You don't need to move the walls for this Gold Skulltula: follow the circular corridor as soon as you step off the elevator and go into the open alcove with the pots. A Big Skulltula drops from the ceiling; finish it off and look high on the wall, where the gold one waits. Knock it down with the Hookshot, which also brings you the Gold Skulltula Token."
+},
+"2b702a67d25f1421": {
+"age": "child",
+"id": "dominio-heart-01",
+"name": "Torch chest",
+"night": false,
+"way": "Behind the waterfall on the bottom floor of Zora's Domain, a chest with the piece appears when, as a child, you light all its torches at the same time: light a Deku Stick on one of the torches in King Zora's chamber. Go down and light the one at the foot of the stairs first, which doesn't go out, then the four short-lived ones, using each torch to relight the stick. They're the one in front of the Zora Shop, the one at the pond with the circle of rocks, and the two behind the waterfall, which you reach by hugging the wall."
+},
+"2df265292516bdf0": {
+"age": "adult",
+"id": "kakariko-gs-06",
+"name": "Above Impa's House",
+"night": true,
+"way": "You have to come back as an adult and at night for this Gold Skulltula, which is on the rock wall right next to the blue roof of Impa's House, the big house on the southern edge of the village. You need the Hookshot. Go around the house on one side to the rock wall behind it, which has vines, and climb them up to the blue roof. From up there you'll see the Skulltula on the rock, next to the roof: take it down with the Hookshot, which also brings you the token."
+},
+"2df265292516bdf2": {
+"age": "adult",
+"id": "kakariko-gs-06",
+"name": "Above Impa's House",
+"night": true,
+"way": "You have to come back as an adult and at night for this Gold Skulltula, which is on the rock wall right next to the blue roof of Impa's House, the big house on the southern edge of the village. You need the Hookshot. Go around the house on one side to the rock wall behind it, which has vines, and climb them up to the blue roof. From up there you'll see the Skulltula on the rock, next to the roof: take it down with the Hookshot, which also brings you the token."
+},
+"35fb354fac262d34": {
+"age": "child",
+"id": "pozo-gs-03",
+"name": "Like Like room",
+"night": false,
+"way": "Follow the outer corridor that rings the center of the well to the northeast corner, where there's a door with a sign warning: \"Watch your step!\" Heed it, because right below is a trap that drops you to the bottom if you don't avoid it. The next room has hidden holes in the floor, so put on the Lenses of Truth and cross while watching where you step. Take out the Fire Keese with the Boomerang and blow up the Beamos with a bomb. The door on the other side leads to the Like Like room: once you beat it, the Gold Skulltula is on the back wall, between two torches, within Boomerang range, and it brings you the token too."
+},
+"35fb354fac262d36": {
+"age": "child",
+"id": "pozo-gs-03",
+"name": "Like Like room",
+"night": false,
+"way": "Follow the outer corridor that rings the center of the well to the northeast corner, where there's a door with a sign warning: \"Watch your step!\" Heed it, because right below is a trap that drops you to the bottom if you don't avoid it. The next room has hidden holes in the floor, so put on the Lenses of Truth and cross while watching where you step. Take out the Fire Keese with the Boomerang and blow up the Beamos with a bomb. The door on the other side leads to the Like Like room: once you beat it, the Gold Skulltula is on the back wall, between two torches, within Boomerang range, and it brings you the token too."
+},
+"3a23b59eaedc0510": {
+"age": "child",
+"id": "rio-heart-02",
+"name": "Ledge by the waterfall",
+"night": false,
+"way": "At the end of Zora's River, beside the waterfall that hides the entrance to Zora's Domain, there's a free-standing platform with the piece. Grab the Cucco at the start of the river, next to the Bean Seller, and carry it upriver with you. Once by the waterfall, climb to the highest point, jump with it and glide to the platform."
+},
+"3c2b585ac5c0443c": {
+"age": "adult",
+"id": "perdido-gs-03",
+"name": "Ledge by the Forest Stage",
+"night": true,
+"way": "Reaching the high ledge where this Gold Skulltula sits takes some groundwork as a child, because the only way up is the plant in the lone-tree clearing. To get to the clearing, turn right, left, right, left and left in the Lost Woods, then plant the bean in the soft soil on the right, next to a Business Scrub. When you come back as an adult at night, ride the plant up to the ledge and defeat the Skulltula with your sword."
+},
+"3c2b585ac5c0443e": {
+"age": "adult",
+"id": "perdido-gs-03",
+"name": "Ledge by the Forest Stage",
+"night": true,
+"way": "Reaching the high ledge where this Gold Skulltula sits takes some groundwork as a child, because the only way up is the plant in the lone-tree clearing. To get to the clearing, turn right, left, right, left and left in the Lost Woods, then plant the bean in the soft soil on the right, next to a Business Scrub. When you come back as an adult at night, ride the plant up to the ledge and defeat the Skulltula with your sword."
+},
+"3d0de5adaeb73cc9": {
+"age": "adult",
+"id": "agua-gs-05",
+"name": "Behind the cracked wall underwater",
+"night": false,
+"way": "This Gold Skulltula is in a room on the east side of the first floor. With the water at the middle level, after playing Zelda's Lullaby in front of the Triforce in the central pillar, put on the Iron Boots and go down the flooded east corridor to a cracked wall underwater: break it with Bombs or the Megaton Hammer. Behind it is a room with enemies. The Skulltula is on a mosaic on the wall, next to the stairs and at sword height: knock it down with a sword strike and pick up the token."
+},
+"3d0de5adaeb73ccb": {
+"age": "adult",
+"id": "agua-gs-05",
+"name": "Behind the cracked wall underwater",
+"night": false,
+"way": "This Gold Skulltula is in a room on the east side of the first floor. With the water at the middle level, after playing Zelda's Lullaby in front of the Triforce in the central pillar, put on the Iron Boots and go down the flooded east corridor to a cracked wall underwater: break it with Bombs or the Megaton Hammer. Behind it is a room with enemies. The Skulltula is on a mosaic on the wall, next to the stairs and at sword height: knock it down with a sword strike and pick up the token."
+},
+"3f5b150f16d84601": {
+"age": "both",
+"id": "dodongos-gs-03",
+"name": "Pillar surrounded by Dodongos",
+"night": false,
+"way": "On the first floor, as you leave the Bomb Bag chest room, blow up the cracked wall with a Bomb and keep going to the ledge overlooking the central room. There's another cracked wall there near the giant skull: open it with a Bomb and go into that cave full of Dodongos. The Gold Skulltula is on a rock pillar in the middle of the room, surrounded by Dodongos. Dodge them or take them out, and knock the Skulltula down with your sword to claim the Gold Skulltula Token."
+},
+"3f5b150f16d84603": {
+"age": "both",
+"id": "dodongos-gs-03",
+"name": "Pillar surrounded by Dodongos",
+"night": false,
+"way": "On the first floor, as you leave the Bomb Bag chest room, blow up the cracked wall with a Bomb and keep going to the ledge overlooking the central room. There's another cracked wall there near the giant skull: open it with a Bomb and go into that cave full of Dodongos. The Gold Skulltula is on a rock pillar in the middle of the room, surrounded by Dodongos. Dodge them or take them out, and knock the Skulltula down with your sword to claim the Gold Skulltula Token."
+},
+"41811f125b1eedd5": {
+"age": null,
+"id": "espiritu-heart-01",
+"name": "Heart Container - Twinrova",
+"night": false,
+"way": "Against Twinrova, first reflect Koume's fire back at Kotake and Kotake's ice at Koume. When they merge, absorb three shots of the same element in a row and fire them at Twinrova; when she falls, hit her with your sword. The Heart Container appears in the center of the platform."
+},
+"4696b2730de0516c": {
+"age": "adult",
+"id": "espiritu-gs-05",
+"name": "Northwest ledge of the statue room",
+"night": false,
+"way": "The Gold Skulltula is on the high northwest ledge of the big goddess statue room, in the corner where a scarecrow appears. As an adult, Longshot onto the target on the statue's wrist to climb onto its palm. From there, play the Scarecrow's Song: the scarecrow appears on top of the ledge and you can Longshot onto him. Up there, the Skulltula is on the floor next to him; kill it with your sword and pick up the token."
+},
+"4696b2730de0516e": {
+"age": "adult",
+"id": "espiritu-gs-05",
+"name": "Northwest ledge of the statue room",
+"night": false,
+"way": "The Gold Skulltula is on the high northwest ledge of the big goddess statue room, in the corner where a scarecrow appears. As an adult, Longshot onto the target on the statue's wrist to climb onto its palm. From there, play the Scarecrow's Song: the scarecrow appears on top of the ledge and you can Longshot onto him. Up there, the Skulltula is on the floor next to him; kill it with your sword and pick up the token."
+},
+"4ccffbd5778b67e2": {
+"age": "adult",
+"id": "cementerio-heart-02",
+"name": "Race against Dampé",
+"night": false,
+"way": "Dampé's Grave is the headstone with flowers that has smoke coming out of it, in the fenced area on the left, up a few steps. As an adult and at night, pull on it to open the hole and go down into the catacombs. Down there, follow his ghost to the end without losing sight of him; the first race gives you the Hookshot. The Piece of Heart comes with the second. Leave with the Hookshot through the target above the broken stairs (you'll come out in the Kakariko Windmill), go back to the Graveyard, go down the hole again, which stays open, and reach the finish in one minute or less."
+},
+"4d1b7e35ca0c6484": {
+"age": "adult",
+"id": "fuego-gs-04",
+"name": "Octagonal room at the top",
+"night": false,
+"way": "Climb to the top of the grate you reach with the scarecrow, the one with this area's other Gold Skulltula, and go through the door at the top. It opens onto a big octagonal room full of lava, with a platform of three chests ringed by fire. Just look to the right as you walk in to find it: it's on the wall, a few steps from the door, next to the lava. Kill it with the Hookshot and grab the token."
+},
+"4d1b7e35ca0c6486": {
+"age": "adult",
+"id": "fuego-gs-04",
+"name": "Octagonal room at the top",
+"night": false,
+"way": "Climb to the top of the grate you reach with the scarecrow, the one with this area's other Gold Skulltula, and go through the door at the top. It opens onto a big octagonal room full of lava, with a platform of three chests ringed by fire. Just look to the right as you walk in to find it: it's on the wall, a few steps from the door, next to the lava. Kill it with the Hookshot and grab the token."
+},
+"4e13cc311cd04df4": {
+"age": "adult",
+"id": "castillo-gs-03",
+"name": "Ruined archway",
+"night": false,
+"way": "As an adult, the right-hand path outside Ganon's Castle, the one that leads to the Great Fairy's Fountain, passes under a ruined stone archway that used to be the entrance to Hyrule Castle. Go through the archway and turn around: the Gold Skulltula is high up on its back face, out of your sword's reach. Take it down with the Hookshot."
+},
+"4e13cc311cd04df6": {
+"age": "adult",
+"id": "castillo-gs-03",
+"name": "Ruined archway",
+"night": false,
+"way": "As an adult, the right-hand path outside Ganon's Castle, the one that leads to the Great Fairy's Fountain, passes under a ruined stone archway that used to be the entrance to Hyrule Castle. Go through the archway and turn around: the Gold Skulltula is high up on its back face, out of your sword's reach. Take it down with the Hookshot."
+},
+"5262cea56c53554d": {
+"age": "child",
+"id": "dodongos-heart-01",
+"name": "Heart Container - King Dodongo",
+"night": false,
+"way": "You don't need the Boss Key to enter King Dodongo's lair: after the Armos cave, go back to the block room and push one onto the big floor switch to open the barred door. In the next room, break the pots, which hold Bombs, and blow up the cracked patch of floor to drop down. Every time it opens its mouth to breathe in, throw a Bomb inside and, once it's stunned, lay into it with your sword. If it curls up and rolls, step aside or block with your shield, and grab the Heart Container before stepping into the blue warp."
+},
+"58c75badf059ca54": {
+"age": "child",
+"id": "crater-gs-02",
+"name": "Bugs in the soft soil by the Bolero platform",
+"night": false,
+"way": "This Gold Skulltula forces you to travel through time, because it only comes out as a child and the Bolero of Fire is learned as an adult. As a child, playing that song is the only way to reach its soft soil, a few steps from the Bolero platform. You appear on the platform: release the bugs in the soft soil beside it, defeat the Skulltula and collect the token without dawdling, because the heat keeps draining your hearts."
+},
+"58c75badf059ca56": {
+"age": "child",
+"id": "crater-gs-02",
+"name": "Bugs in the soft soil by the Bolero platform",
+"night": false,
+"way": "This Gold Skulltula forces you to travel through time, because it only comes out as a child and the Bolero of Fire is learned as an adult. As a child, playing that song is the only way to reach its soft soil, a few steps from the Bolero platform. You appear on the platform: release the bugs in the soft soil beside it, defeat the Skulltula and collect the token without dawdling, because the heat keeps draining your hearts."
+},
+"5e3ae6a7cf3ac290": {
+"age": "adult",
+"id": "fuego-gs-01",
+"name": "Time Block room",
+"night": false,
+"way": "At the top of the stairs in the main hall, the door on the right opens with a Small Key and leads to the big lava room. On its left side there's a Time Block at the top of a wall: stand on the platform right in front of it, step onto the engraved slab on the floor and play the Song of Time. The block will come down and you can climb it to the door above. Inside, shield yourself from the tiles that fly at you and finish off the Like Like: if it grabs you, it steals your Hylian Shield (you get it back when you beat it). Then knock the Gold Skulltula down from the wall."
+},
+"5e3ae6a7cf3ac292": {
+"age": "adult",
+"id": "fuego-gs-01",
+"name": "Time Block room",
+"night": false,
+"way": "At the top of the stairs in the main hall, the door on the right opens with a Small Key and leads to the big lava room. On its left side there's a Time Block at the top of a wall: stand on the platform right in front of it, step onto the engraved slab on the floor and play the Song of Time. The block will come down and you can climb it to the door above. Inside, shield yourself from the tiles that fly at you and finish off the Like Like: if it grabs you, it steals your Hylian Shield (you get it back when you beat it). Then knock the Gold Skulltula down from the wall."
+},
+"61576befd16c4998": {
+"age": "child",
+"id": "lago-gs-01",
+"name": "Bugs in the soft soil by the laboratory",
+"night": false,
+"way": "Up against the wall of the Lakeside Laboratory, next to some barrels and sacks, there is a patch of soft soil. As a child, at any time of day, the Gold Skulltula comes out as soon as you open a bottle of Bugs over the patch of soil: the bugs crawl into the hole and it climbs out of the ground. Your sword is enough to defeat it and keep the token."
+},
+"61576befd16c499a": {
+"age": "child",
+"id": "lago-gs-01",
+"name": "Bugs in the soft soil by the laboratory",
+"night": false,
+"way": "Up against the wall of the Lakeside Laboratory, next to some barrels and sacks, there is a patch of soft soil. As a child, at any time of day, the Gold Skulltula comes out as soon as you open a bottle of Bugs over the patch of soil: the bugs crawl into the hole and it climbs out of the ground. Your sword is enough to defeat it and keep the token."
+},
+"62c340f0b876c195": {
+"age": "adult",
+"id": "kokiri-gs-03",
+"name": "Back of the House of the Twins",
+"night": true,
+"way": "This Gold Skulltula requires coming back to Kokiri Forest as an adult, at night, because it clings high up on the back of the House of the Twins, the one with the twin-peaked roof near the path to the Great Deku Tree's Meadow. Your sword can't reach that high, but the Hookshot takes it out from below, and a second shot at the token brings it down to you."
+},
+"62c340f0b876c197": {
+"age": "adult",
+"id": "kokiri-gs-03",
+"name": "Back of the House of the Twins",
+"night": true,
+"way": "This Gold Skulltula requires coming back to Kokiri Forest as an adult, at night, because it clings high up on the back of the House of the Twins, the one with the twin-peaked roof near the path to the Great Deku Tree's Meadow. Your sword can't reach that high, but the Hookshot takes it out from below, and a second shot at the token brings it down to you."
+},
+"63446d12663daa81": {
+"age": "child",
+"id": "fuente-gs-01",
+"name": "Wall above the sunken arch",
+"night": true,
+"way": "As soon as you enter Zora's Fountain from Zora's Domain, follow the shore to a ruined stone arch, half sunk in the water and set against the rock wall with vines. Climb to the top of the arch: at night, a Gold Skulltula appears on that wall, and as a child you can reach it with the Boomerang."
+},
+"63446d12663daa83": {
+"age": "child",
+"id": "fuente-gs-01",
+"name": "Wall above the sunken arch",
+"night": true,
+"way": "As soon as you enter Zora's Fountain from Zora's Domain, follow the shore to a ruined stone arch, half sunk in the water and set against the rock wall with vines. Climb to the top of the arch: at night, a Gold Skulltula appears on that wall, and as a child you can reach it with the Boomerang."
+},
+"63701a2cf70b201c": {
+"age": "adult",
+"id": "hielo-gs-01",
+"name": "Spinning blade room",
+"night": false,
+"way": "Kill the Freezards in the first room to open the grate and go on to the big round room with the spinning ice blade. Find the corner with the ice stalagmites, the one with the hidden Silver Rupee: the Gold Skulltula is up on the wall, between the sheets of ice and above a stalagmite. Kill it with the Hookshot."
+},
+"63701a2cf70b201e": {
+"age": "adult",
+"id": "hielo-gs-01",
+"name": "Spinning blade room",
+"night": false,
+"way": "Kill the Freezards in the first room to open the grate and go on to the big round room with the spinning ice blade. Find the corner with the ice stalagmites, the one with the hidden Silver Rupee: the Gold Skulltula is up on the wall, between the sheets of ice and above a stalagmite. Kill it with the Hookshot."
+},
+"6689bdebc95368e9": {
+"age": "adult",
+"id": "lago-gs-04",
+"name": "Crate at the bottom of the laboratory pool",
+"night": false,
+"way": "The pool in the Lakeside Laboratory hides a wooden crate at the bottom with a Gold Skulltula inside. To reach it as an adult, put on the Iron Boots and drop into the water. Once down there, roll into the crate to break it, finish off the Skulltula, and collect the token with the Hookshot."
+},
+"6689bdebc95368eb": {
+"age": "adult",
+"id": "lago-gs-04",
+"name": "Crate at the bottom of the laboratory pool",
+"night": false,
+"way": "The pool in the Lakeside Laboratory hides a wooden crate at the bottom with a Gold Skulltula inside. To reach it as an adult, put on the Iron Boots and drop into the water. Once down there, roll into the crate to break it, finish off the Skulltula, and collect the token with the Hookshot."
+},
+"6789388e9fb9c92c": {
+"age": "child",
+"id": "pozo-gs-01",
+"name": "Left room off the central area",
+"night": false,
+"way": "You need the Lenses of Truth, found in the basement, and a Small Key. With the Lenses on, hidden chests appear in alcoves in the well's walls, and one of them holds a key. You enter the central area through the false wall opposite the entrance, and you have to go around the X on the floor, which is a hole. Open the locked door on the left, kill the Deku Baba in the middle of the room and look for the Gold Skulltula high on the wall, above a niche with candles: the Boomerang knocks it down and comes back with the token."
+},
+"6789388e9fb9c92e": {
+"age": "child",
+"id": "pozo-gs-01",
+"name": "Left room off the central area",
+"night": false,
+"way": "You need the Lenses of Truth, found in the basement, and a Small Key. With the Lenses on, hidden chests appear in alcoves in the well's walls, and one of them holds a key. You enter the central area through the false wall opposite the entrance, and you have to go around the X on the floor, which is a hole. Open the locked door on the left, kill the Deku Baba in the middle of the room and look for the Gold Skulltula high on the wall, above a niche with candles: the Boomerang knocks it down and comes back with the token."
+},
+"6a8d9b2373d08fc9": {
+"age": "child",
+"id": "kakariko-gs-02",
+"name": "Tree at the entrance",
+"night": true,
+"way": "The big pine tree near the entrance from Hyrule Field, in the lower part of the village, hides a Gold Skulltula at night that drops to the ground as a child if you roll into the pine's trunk. Once it's down, finish it off and collect the token."
+},
+"6a8d9b2373d08fcb": {
+"age": "child",
+"id": "kakariko-gs-02",
+"name": "Tree at the entrance",
+"night": true,
+"way": "The big pine tree near the entrance from Hyrule Field, in the lower part of the village, hides a Gold Skulltula at night that drops to the ground as a child if you roll into the pine's trunk. Once it's down, finish it off and collect the token."
+},
+"6f736fc80f7b0aca": {
+"age": "adult",
+"id": "fuente-heart-02",
+"name": "Bottom of the fountain",
+"night": false,
+"way": "This Piece of Heart waits at the bottom of Zora's Fountain, among a pile of Green Rupees. As an adult you need two things: the Zora Tunic, which King Zora gives you when you free him, to breathe underwater, and the Iron Boots, to sink. With the Zora Tunic on, get into the water, put on the Iron Boots and sink to the bottom, grab the piece, and take the boots off to float back up."
+},
+"70b0fca66ca48088": {
+"age": "adult",
+"id": "espiritu-gs-04",
+"name": "Behind the Time Block in the rolling boulder room",
+"night": false,
+"way": "The adult part of the temple starts by shoving aside the big block in the entrance hall with the Silver Gauntlets. In the round room that follows, kill the Beamos (one Bombchu is enough) and hit the crystal switch on the ceiling with the Hookshot to open the doors. The door on the right leads to the rolling boulder room. Dodge them until you reach the two Time Blocks in the recesses in the wall: the first hides nothing, but play the Song of Time next to the second and, when it moves aside, it reveals the Gold Skulltula at the back of its recess. Kill it with your sword and pick up the token."
+},
+"70b0fca66ca4808a": {
+"age": "adult",
+"id": "espiritu-gs-04",
+"name": "Behind the Time Block in the rolling boulder room",
+"night": false,
+"way": "The adult part of the temple starts by shoving aside the big block in the entrance hall with the Silver Gauntlets. In the round room that follows, kill the Beamos (one Bombchu is enough) and hit the crystal switch on the ceiling with the Hookshot to open the doors. The door on the right leads to the rolling boulder room. Dodge them until you reach the two Time Blocks in the recesses in the wall: the first hides nothing, but play the Song of Time next to the second and, when it moves aside, it reveals the Gold Skulltula at the back of its recess. Kill it with your sword and pick up the token."
+},
+"738f5746cc517700": {
+"age": "child",
+"id": "valle-gs-02",
+"name": "Bugs in the soft soil by the cow",
+"night": false,
+"way": "At the foot of the big waterfall, on the upper stretch of the river, there is a corner with a cow, a Gerudo, and a patch of soft soil. As a child, you get there by gliding with the Cucco at the edge of the cliff, to the left of the big bridge (you can stop on a ledge and jump again), or by jumping into the river and swimming out. Once there, release the Bugs from the bottle onto the soft soil and defeat the Gold Skulltula that comes out to collect the token."
+},
+"738f5746cc517702": {
+"age": "child",
+"id": "valle-gs-02",
+"name": "Bugs in the soft soil by the cow",
+"night": false,
+"way": "At the foot of the big waterfall, on the upper stretch of the river, there is a corner with a cow, a Gerudo, and a patch of soft soil. As a child, you get there by gliding with the Cucco at the edge of the cliff, to the left of the big bridge (you can stop on a ledge and jump again), or by jumping into the river and swimming out. Once there, release the Bugs from the bottle onto the soft soil and defeat the Gold Skulltula that comes out to collect the token."
+},
+"758ce7b4868447f9": {
+"age": "both",
+"id": "dodongos-gs-02",
+"name": "Vines on the big staircase",
+"night": false,
+"way": "The big staircase in the left wing, in the room full of Bomb Flowers, doesn't come down until you place the loose Bomb Flower in the gap in the row so they all go off in a chain, so start there. Go up the stairs, climb the ladder and follow the ledge to the door at the back. Before you reach it there's a climbable mesh wall with a regular Skulltula and the gold one: take out both with the Slingshot (as an adult, with the Fairy Bow or the Hookshot) and climb up for the Gold Skulltula Token."
+},
+"758ce7b4868447fb": {
+"age": "both",
+"id": "dodongos-gs-02",
+"name": "Vines on the big staircase",
+"night": false,
+"way": "The big staircase in the left wing, in the room full of Bomb Flowers, doesn't come down until you place the loose Bomb Flower in the gap in the row so they all go off in a chain, so start there. Go up the stairs, climb the ladder and follow the ledge to the door at the back. Before you reach it there's a climbable mesh wall with a regular Skulltula and the gold one: take out both with the Slingshot (as an adult, with the Fairy Bow or the Hookshot) and climb up for the Gold Skulltula Token."
+},
+"781e0de8eed42371": {
+"age": "child",
+"id": "lago-gs-03",
+"name": "Cave on the west shore",
+"night": false,
+"way": "As a child, follow the west shore of Lake Hylia south all the way to the end, where a nook in the rock holds some pots, a barrel, and a Fairy Thought on the wall. From there, get into the water and swim to the shore next to it: in the rock wall you'll see a low gap with a stone lintel. Crawl through that gap and you'll come to a small, dark cave. The Gold Skulltula is on the wall opposite; defeat it with your sword and collect the token."
+},
+"781e0de8eed42373": {
+"age": "child",
+"id": "lago-gs-03",
+"name": "Cave on the west shore",
+"night": false,
+"way": "As a child, follow the west shore of Lake Hylia south all the way to the end, where a nook in the rock holds some pots, a barrel, and a Fairy Thought on the wall. From there, get into the water and swim to the shore next to it: in the rock wall you'll see a low gap with a stone lintel. Crawl through that gap and you'll come to a small, dark cave. The Gold Skulltula is on the wall opposite; defeat it with your sword and collect the token."
+},
+"78ae4fd90b3cfaa8": {
+"age": "child",
+"id": "rio-gs-02",
+"name": "Wall by the waterfall",
+"night": true,
+"way": "At the end of Zora's River, by the waterfall, this Gold Skulltula only comes out at night, as a child. From the grassy ledge next to the waterfall, climb down the rock to the shore below, by the water. The Skulltula is on the wall of the low rock on that shore. Get close and attack with your sword."
+},
+"78ae4fd90b3cfaaa": {
+"age": "child",
+"id": "rio-gs-02",
+"name": "Wall by the waterfall",
+"night": true,
+"way": "At the end of Zora's River, by the waterfall, this Gold Skulltula only comes out at night, as a child. From the grassy ledge next to the waterfall, climb down the rock to the shore below, by the water. The Skulltula is on the wall of the low rock on that shore. Get close and attack with your sword."
+},
+"7a74bc651f9fe024": {
+"age": "adult",
+"id": "sombra-gs-04",
+"name": "High ledge in the boat room",
+"night": false,
+"way": "As soon as you enter the boat room, pull the block on the left and push it along the groove in the floor to the wooden walkway, then climb up it. The Gold Skulltula is on the wall of a grated ledge next to it. You have to play the Scarecrow's Song on the walkway and Longshot onto Pierre: it drops you on the ledge, next to the Skulltula, and you knock it down with your sword."
+},
+"7a74bc651f9fe026": {
+"age": "adult",
+"id": "sombra-gs-04",
+"name": "High ledge in the boat room",
+"night": false,
+"way": "As soon as you enter the boat room, pull the block on the left and push it along the groove in the floor to the wooden walkway, then climb up it. The Gold Skulltula is on the wall of a grated ledge next to it. You have to play the Scarecrow's Song on the walkway and Longshot onto Pierre: it drops you on the ledge, next to the Skulltula, and you knock it down with your sword."
+},
+"7c1a05315f83c34d": {
+"age": "child",
+"id": "ciudadela-gs-01",
+"name": "Guard House",
+"night": false,
+"way": "Next to the drawbridge, at the entrance to Hyrule Castle Town, is the guard house, a building full of pots with a Gold Skulltula hidden inside a wooden crate. Go to the back wall and roll into the crate farthest to the right, the one to the right of the soldier as you face him."
+},
+"7c1a05315f83c34f": {
+"age": "child",
+"id": "ciudadela-gs-01",
+"name": "Guard House",
+"night": false,
+"way": "Next to the drawbridge, at the entrance to Hyrule Castle Town, is the guard house, a building full of pots with a Gold Skulltula hidden inside a wooden crate. Go to the back wall and roll into the crate farthest to the right, the one to the right of the soldier as you face him."
+},
+"7d8ec14bdd1f6341": {
+"age": "child",
+"id": "lonlon-gs-04",
+"name": "Inside the stone tower",
+"night": true,
+"way": "The stone tower at the back of Lon Lon Ranch, behind the corral, holds a Gold Skulltula inside at night. Go in through the tower door and look up: it's high on the wall, above the clump of hay hanging below the window. Only the Boomerang can reach it: throw it from the tower floor and it defeats the Skulltula and brings you the Gold Skulltula Token in the same throw. The Slingshot kills it, but the token stays up there."
+},
+"7d8ec14bdd1f6343": {
+"age": "child",
+"id": "lonlon-gs-04",
+"name": "Inside the stone tower",
+"night": true,
+"way": "The stone tower at the back of Lon Lon Ranch, behind the corral, holds a Gold Skulltula inside at night. Go in through the tower door and look up: it's high on the wall, above the clump of hay hanging below the window. Only the Boomerang can reach it: throw it from the tower floor and it defeats the Skulltula and brings you the Gold Skulltula Token in the same throw. The Slingshot kills it, but the token stays up there."
+},
+"7f28485fa5d3688d": {
+"age": "child",
+"id": "castillo-gs-02",
+"name": "Song of Storms grotto",
+"night": false,
+"way": "To avoid the guard at the Hyrule Castle gate, climb the vines and drop into the moat by the entrance bridge. Swim east under the bridge and come out up the stone steps: right there, by the outer wall, is a tree with a circle of dirt at its base. Play the Song of Storms on that circle to open a hole. The grotto has cracked walls you can blow open with Bombs: behind one of them is the Gold Skulltula. The Boomerang kills it and brings you the token."
+},
+"7f28485fa5d3688f": {
+"age": "child",
+"id": "castillo-gs-02",
+"name": "Song of Storms grotto",
+"night": false,
+"way": "To avoid the guard at the Hyrule Castle gate, climb the vines and drop into the moat by the entrance bridge. Swim east under the bridge and come out up the stone steps: right there, by the outer wall, is a tree with a circle of dirt at its base. Play the Song of Storms on that circle to open a hole. The grotto has cracked walls you can blow open with Bombs: behind one of them is the Gold Skulltula. The Boomerang kills it and brings you the token."
+},
+"7f498ada1c2e9c78": {
+"age": "adult",
+"id": "fuego-gs-03",
+"name": "Grate behind the Scarecrow",
+"night": false,
+"way": "When you leave the room with the wall of fire that chases you, the door at the top takes you back to the boulder maze, this time from above. Stand on the platform right in front of the door and play the Scarecrow's Song so Pierre appears on the high platform. Hookshot over to him and, from there, shoot the target next to it, on a platform that rises on its own like an elevator. Go through the door and climb the grates: as soon as you reach the top, the Gold Skulltula waits on the wall and you knock it down with the Hookshot."
+},
+"7f498ada1c2e9c7a": {
+"age": "adult",
+"id": "fuego-gs-03",
+"name": "Grate behind the Scarecrow",
+"night": false,
+"way": "When you leave the room with the wall of fire that chases you, the door at the top takes you back to the boulder maze, this time from above. Stand on the platform right in front of the door and play the Scarecrow's Song so Pierre appears on the high platform. Hookshot over to him and, from there, shoot the target next to it, on a platform that rises on its own like an elevator. Go through the door and climb the grates: as soon as you reach the top, the Gold Skulltula waits on the wall and you knock it down with the Hookshot."
+},
+"8186bcb07d6c2cf9": {
+"age": "child",
+"id": "perdido-gs-01",
+"name": "Bugs in the soft soil by the bridge",
+"night": false,
+"way": "Past the flute-playing Skull Kid, the first path on the left as you come in from Kokiri Forest, turn left again and you'll reach the area with the bridge to Hyrule Field. You'll recognize it by the Gossip Stone and the Business Scrub at the back who sells the bigger Deku Stick bag. The soft soil is right by the path as you arrive: pour a bottle of bugs onto it and, when the Gold Skulltula surfaces, finish it off with your sword and grab the Gold Skulltula Token."
+},
+"8186bcb07d6c2cfb": {
+"age": "child",
+"id": "perdido-gs-01",
+"name": "Bugs in the soft soil by the bridge",
+"night": false,
+"way": "Past the flute-playing Skull Kid, the first path on the left as you come in from Kokiri Forest, turn left again and you'll reach the area with the bridge to Hyrule Field. You'll recognize it by the Gossip Stone and the Business Scrub at the back who sells the bigger Deku Stick bag. The soft soil is right by the path as you arrive: pour a bottle of bugs onto it and, when the Gold Skulltula surfaces, finish it off with your sword and grab the Gold Skulltula Token."
+},
+"81ed4ed76699e3d8": {
+"age": "adult",
+"id": "fortaleza-gs-02",
+"name": "Upper rooftop",
+"night": true,
+"way": "At night, the Gold Skulltula appears on the side rooftops of Gerudo's Fortress, a few steps from the Piece of Heart chest: it's on the brick wall of the block that rises next to the cliff rock. To get up there, as an adult, go in through the door to the kitchen corridor, cross it without being seen, and use the high exit at the back, which leads out onto the rooftops. Stand in front of that wall and shoot the Hookshot at it, or jump at it with your sword, to collect the token."
+},
+"81ed4ed76699e3da": {
+"age": "adult",
+"id": "fortaleza-gs-02",
+"name": "Upper rooftop",
+"night": true,
+"way": "At night, the Gold Skulltula appears on the side rooftops of Gerudo's Fortress, a few steps from the Piece of Heart chest: it's on the brick wall of the block that rises next to the cliff rock. To get up there, as an adult, go in through the door to the kitchen corridor, cross it without being seen, and use the high exit at the back, which leads out onto the rooftops. Stand in front of that wall and shoot the Hookshot at it, or jump at it with your sword, to collect the token."
+},
+"8325fea55edfbe95": {
+"age": "adult",
+"id": "rio-gs-04",
+"name": "Above the bridge",
+"night": true,
+"way": "Above the last bridge on Zora's River, in the cave leading to the Zora's Domain waterfall, there's a very tall rock wall where a Gold Skulltula settles at night. Hit it with the Hookshot from the bridge itself and collect the token."
+},
+"8325fea55edfbe97": {
+"age": "adult",
+"id": "rio-gs-04",
+"name": "Above the bridge",
+"night": true,
+"way": "Above the last bridge on Zora's River, in the cave leading to the Zora's Domain waterfall, there's a very tall rock wall where a Gold Skulltula settles at night. Hit it with the Hookshot from the bridge itself and collect the token."
+},
+"8389cafb1277d318": {
+"age": null,
+"id": "fuego-heart-01",
+"name": "Heart Container - Volvagia",
+"night": false,
+"way": "Volvagia pokes its head out of the holes in the platform: as soon as it does, hit it with the Megaton Hammer and finish with your sword or the hammer itself while it's stunned. When it takes flight, dodge its flames and the falling rocks by watching their shadows. Once you beat it, the Heart Container appears next to the blue warp."
+},
+"845ba51dc18c855c": {
+"age": "adult",
+"id": "fuente-gs-03",
+"name": "Cave behind the Zora-marked blocks",
+"night": true,
+"way": "As an adult, go to the far southeast end of Zora's Fountain, where two black stone blocks with Zora markings cover the entrance to a cave. Lift them with the Silver Gauntlets and go in. Inside, invisible Skulltulas hang from the ceiling; dodge them, or see them with the Lenses of Truth. At the back, climb the vines and come out onto an outdoor ledge. The Gold Skulltula only comes out at night. It appears above the mouth of a cave on the ledge, and you can knock it down with the Hookshot and collect the token."
+},
+"845ba51dc18c855e": {
+"age": "adult",
+"id": "fuente-gs-03",
+"name": "Cave behind the Zora-marked blocks",
+"night": true,
+"way": "As an adult, go to the far southeast end of Zora's Fountain, where two black stone blocks with Zora markings cover the entrance to a cave. Lift them with the Silver Gauntlets and go in. Inside, invisible Skulltulas hang from the ceiling; dodge them, or see them with the Lenses of Truth. At the back, climb the vines and come out onto an outdoor ledge. The Gold Skulltula only comes out at night. It appears above the mouth of a cave on the ledge, and you can knock it down with the Hookshot and collect the token."
+},
+"853b892663c0215d": {
+"age": "adult",
+"id": "dominio-gs-01",
+"name": "Frozen waterfall",
+"night": true,
+"way": "As an adult, with Zora's Domain frozen over, the Gold Skulltula comes out at night at the top of the frozen waterfall, where the diving game was as a child. You get there through the corridor on King Zora's floor, which opens onto a high gallery. Look over the edge and to your left: it's on a column covered in frozen plants, up against the wall. Reach it with the Hookshot or knock it down with an arrow to claim the token."
+},
+"853b892663c0215f": {
+"age": "adult",
+"id": "dominio-gs-01",
+"name": "Frozen waterfall",
+"night": true,
+"way": "As an adult, with Zora's Domain frozen over, the Gold Skulltula comes out at night at the top of the frozen waterfall, where the diving game was as a child. You get there through the corridor on King Zora's floor, which opens onto a high gallery. Look over the edge and to your left: it's on a column covered in frozen plants, up against the wall. Reach it with the Hookshot or knock it down with an arrow to claim the token."
+},
+"8588aaeeac14eed7": {
+"age": "both",
+"id": "cementerio-heart-03",
+"name": "Grave near the Royal Family's Tomb",
+"night": false,
+"way": "Near the Royal Family's Tomb, in the upper part of the Graveyard: stand with your back to the tomb, facing the exit, and among the headstones on your left it's the first one starting from the left. As an adult it always opens; as a child, only at night (during the day the boy who watches over the graves stops you; the Sun's Song saves you the wait). Pull on the headstone and go down the hole: the chest with the Piece of Heart is at the back of the crypt, with no enemies guarding it."
+},
+"858f5000ad57b2cc": {
+"age": "child",
+"id": "kokiri-gs-02",
+"name": "Bugs in the soft soil by the shop",
+"night": false,
+"way": "Right behind the Kokiri Shop there is a patch of soft soil that hides a Gold Skulltula as a child, and all it takes to bring it out is a bottle of bugs. As soon as you empty the bottle of bugs onto the patch, the Skulltula pops out of the ground: defeat it with your sword and grab the Gold Skulltula Token. It works at any time of day."
+},
+"858f5000ad57b2ce": {
+"age": "child",
+"id": "kokiri-gs-02",
+"name": "Bugs in the soft soil by the shop",
+"night": false,
+"way": "Right behind the Kokiri Shop there is a patch of soft soil that hides a Gold Skulltula as a child, and all it takes to bring it out is a bottle of bugs. As soon as you empty the bottle of bugs onto the patch, the Skulltula pops out of the ground: defeat it with your sword and grab the Gold Skulltula Token. It works at any time of day."
+},
+"88358af5b5300aa9": {
+"age": "child",
+"id": "lonlon-heart-01",
+"name": "Stone tower at the back",
+"night": false,
+"way": "At the back of Lon Lon Ranch, right behind the horse corral, there's a stone tower that serves as a silo. In one of its corners, some crates cover an opening: push the crates aside and crawl through the opening to the end, where the Piece of Heart awaits."
+},
+"8c8bb95471d20d00": {
+"age": "both",
+"id": "espiritu-gs-03",
+"name": "Above the staircase door",
+"night": false,
+"way": "In the child's part of the temple, the block room is solved by moving the block with the sun face into the beam of light: a chest appears with a Small Key, the one for the chained door at the top of the next staircase. As you go through the door to that staircase, you can already hear the Skulltula. Don't go up without looking back: turn around and you'll see it above the door you just came through. As a child, the Boomerang kills it and brings you the token, and as an adult the Hookshot does the same."
+},
+"8c8bb95471d20d02": {
+"age": "both",
+"id": "espiritu-gs-03",
+"name": "Above the staircase door",
+"night": false,
+"way": "In the child's part of the temple, the block room is solved by moving the block with the sun face into the beam of light: a chest appears with a Small Key, the one for the chained door at the top of the next staircase. As you go through the door to that staircase, you can already hear the Skulltula. Don't go up without looking back: turn around and you'll see it above the door you just came through. As a child, the Boomerang kills it and brings you the token, and as an adult the Hookshot does the same."
+},
+"8e87908cb035e950": {
+"age": "adult",
+"id": "sombra-gs-05",
+"name": "Inside the giant skulls",
+"night": false,
+"way": "When the boat sinks, burn the web over the door with a Fire Arrow and cross the Floormaster room with the Lenses of Truth to the door with the Sheikah eye. Inside are the giant skulls. Climb the ladder to the balcony and throw bombs into the skulls: when the second one bursts, the Gold Skulltula Token drops out."
+},
+"8e87908cb035e952": {
+"age": "adult",
+"id": "sombra-gs-05",
+"name": "Inside the giant skulls",
+"night": false,
+"way": "When the boat sinks, burn the web over the door with a Fire Arrow and cross the Floormaster room with the Lenses of Truth to the door with the Sheikah eye. Inside are the giant skulls. Climb the ladder to the balcony and throw bombs into the skulls: when the second one bursts, the Gold Skulltula Token drops out."
+},
+"8f5f3d3321aeb7cd": {
+"age": "both",
+"id": "crater-heart-01",
+"name": "Hole in the Crater wall",
+"night": false,
+"way": "Entering the Crater from the summit of Death Mountain, the entrance ledge overlooks a great wall that drops down toward the Bolero of Fire platform. Some climbing nets hang from the edge of that ledge: climb down them and, a little lower, you'll find the piece in a hole in the wall, between two nets. As a child, the heat will burn you up quickly. As an adult, with the Goron Tunic there's no rush."
+},
+"9222e742b73d3d2c": {
+"age": "child",
+"id": "espiritu-gs-01",
+"name": "Metal fence in the Keese room",
+"night": false,
+"way": "As a child, you get in by talking to Nabooru and squeezing through the small hole in the entrance hall. Further on, you reach the room with the Keese and the Wallmaster. Collect the Silver Rupees so the fence lowers and becomes a bridge: on the other side, the Gold Skulltula is on the wire mesh of the right wall. The Boomerang kills it and brings you the token."
+},
+"9222e742b73d3d2e": {
+"age": "child",
+"id": "espiritu-gs-01",
+"name": "Metal fence in the Keese room",
+"night": false,
+"way": "As a child, you get in by talking to Nabooru and squeezing through the small hole in the entrance hall. Further on, you reach the room with the Keese and the Wallmaster. Collect the Silver Rupees so the fence lowers and becomes a bridge: on the other side, the Gold Skulltula is on the wire mesh of the right wall. The Boomerang kills it and brings you the token."
+},
+"92feab9a9810c619": {
+"age": "adult",
+"id": "coloso-heart-01",
+"name": "Stone arch by the temple",
+"night": false,
+"way": "Near the entrance to the Spirit Temple there is a stone arch that only the magic plant can reach, so the job starts as a child. Travel to the Desert Colossus with the Requiem of Spirit and plant a Magic Bean in the soft soil to the left of the temple entrance. The leaf ride, as an adult, passes over two rock platforms and ends above the arch: when you're over it, jump off and grab the Piece of Heart."
+},
+"97824c2ffeaa877c": {
+"age": "adult",
+"id": "rio-gs-03",
+"name": "Above the raised grottos",
+"night": true,
+"way": "High up on the rock wall above the plateau with the grottos, in the middle of Zora's River, a Gold Skulltula comes out at night, and the Hookshot only reaches it if you climb onto the plateau itself. As an adult, you climb up the wall of vines between the rocks, next to the water. Up top, walk to the edge and fire the Hookshot at the top of the wall to defeat it and bring back the token."
+},
+"97824c2ffeaa877e": {
+"age": "adult",
+"id": "rio-gs-03",
+"name": "Above the raised grottos",
+"night": true,
+"way": "High up on the rock wall above the plateau with the grottos, in the middle of Zora's River, a Gold Skulltula comes out at night, and the Hookshot only reaches it if you climb onto the plateau itself. As an adult, you climb up the wall of vines between the rocks, next to the water. Up top, walk to the edge and fire the Hookshot at the top of the wall to defeat it and bring back the token."
+},
+"984021bc20419ebc": {
+"age": "adult",
+"id": "bosque-gs-04",
+"name": "West courtyard ledge",
+"night": false,
+"way": "Once you've straightened the twisted corridor and taken the Boss Key, drop through the hole in that room's floor to the water room below, go up its stairs and come out onto the stone walkway high above the west courtyard. At the end of the walkway, just before the door, drop down to the mossy stone platform on the left. Look up: the Gold Skulltula is on the wall, ready for the Hookshot, which also brings you the Gold Skulltula Token. With the Longshot you can reach it from the courtyard floor."
+},
+"984021bc20419ebe": {
+"age": "adult",
+"id": "bosque-gs-04",
+"name": "West courtyard ledge",
+"night": false,
+"way": "Once you've straightened the twisted corridor and taken the Boss Key, drop through the hole in that room's floor to the water room below, go up its stairs and come out onto the stone walkway high above the west courtyard. At the end of the walkway, just before the door, drop down to the mossy stone platform on the left. Look up: the Gold Skulltula is on the wall, ready for the Hookshot, which also brings you the Gold Skulltula Token. With the Longshot you can reach it from the courtyard floor."
+},
+"99ca89963485df11": {
+"age": "adult",
+"id": "bosque-gs-01",
+"name": "Entrance vines",
+"night": false,
+"way": "The temple's first room is out in the open, with two trees and a pair of Wolfos that come at you, and the Gold Skulltula waits up high, near the Small Key chest. Take out the Wolfos, climb the vines on the right to the top of the tree and, from the branch, kill it with the Hookshot (the Fairy Bow or a Bomb also work); the Hookshot itself brings you the Gold Skulltula Token."
+},
+"99ca89963485df13": {
+"age": "adult",
+"id": "bosque-gs-01",
+"name": "Entrance vines",
+"night": false,
+"way": "The temple's first room is out in the open, with two trees and a pair of Wolfos that come at you, and the Gold Skulltula waits up high, near the Small Key chest. Take out the Wolfos, climb the vines on the right to the top of the tree and, from the branch, kill it with the Hookshot (the Fairy Bow or a Bomb also work); the Hookshot itself brings you the Gold Skulltula Token."
+},
+"9ae3d0ac392e6cd8": {
+"age": "adult",
+"id": "coloso-gs-02",
+"name": "Top of the big rock",
+"night": true,
+"way": "A big rock rises near the Great Fairy's Fountain, and its top, with a crater-shaped hollow, is the second platform the Magic Bean plant from the Spirit Temple's soft soil passes over. As an adult, ride the leaf and, when it reaches that rock, jump onto the top and drop into the hollow. The Gold Skulltula only comes out there at night: if it's daytime, play the Sun's Song and it will appear. Kill it with your sword and grab the Gold Skulltula Token."
+},
+"9ae3d0ac392e6cda": {
+"age": "adult",
+"id": "coloso-gs-02",
+"name": "Top of the big rock",
+"night": true,
+"way": "A big rock rises near the Great Fairy's Fountain, and its top, with a crater-shaped hollow, is the second platform the Magic Bean plant from the Spirit Temple's soft soil passes over. As an adult, ride the leaf and, when it reaches that rock, jump onto the top and drop into the hollow. The Gold Skulltula only comes out there at night: if it's daytime, play the Sun's Song and it will appear. Kill it with your sword and grab the Gold Skulltula Token."
+},
+"9c95fd41b89c0588": {
+"age": "child",
+"id": "jabu-gs-02",
+"name": "Basement of the big room, lower one",
+"night": false,
+"way": "With the Boomerang in hand, go back to the big room with the holes where you met Ruto. Once the green tentacle is defeated, the pillar covering its hole, at the back on the right, pulls away: drop down that hole, throwing Ruto down first if you're carrying her. Jellyfish drift around below, and there are two Gold Skulltulas on two adjoining walls; this is the lower one. Since you can't lock on to them, aim the Boomerang manually: it knocks it down and brings you the Gold Skulltula Token on the way back."
+},
+"9c95fd41b89c058a": {
+"age": "child",
+"id": "jabu-gs-02",
+"name": "Basement of the big room, lower one",
+"night": false,
+"way": "With the Boomerang in hand, go back to the big room with the holes where you met Ruto. Once the green tentacle is defeated, the pillar covering its hole, at the back on the right, pulls away: drop down that hole, throwing Ruto down first if you're carrying her. Jellyfish drift around below, and there are two Gold Skulltulas on two adjoining walls; this is the lower one. Since you can't lock on to them, aim the Boomerang manually: it knocks it down and brings you the Gold Skulltula Token on the way back."
+},
+"9efabd5b0516c341": {
+"age": "child",
+"id": "rio-heart-01",
+"name": "Pillar in the middle of the river",
+"night": false,
+"way": "The piece is on a tall platform surrounded by water, in the middle of Zora's River, and as a child you reach it by gliding with a Cucco from the wooded area next to it. You climb up to that area by vines, without a Cucco in your arms, but up top, among the ferns on the left, a hole leads to a grotto with a chest and a Cucco. Leave the grotto through the flower with the Cucco in your arms, run to the edge and jump to glide over to the platform. As an adult you get there by riding the bean plant or with the Hover Boots."
+},
+"9fc92497f014dbd5": {
+"age": "child",
+"id": "jabu-gs-01",
+"name": "Water switch room",
+"night": false,
+"way": "Drop down the same hole as Ruto and follow the basement rooms to the one with the pool and the water switch. The Gold Skulltula is on the wall, in a nook at the top of the vines, above a ledge with three pots. Leave Ruto sitting on the switch so the water rises. Swim to the vines, climb up to the ledge and kill the Skulltula with your sword to claim the Gold Skulltula Token."
+},
+"9fc92497f014dbd7": {
+"age": "child",
+"id": "jabu-gs-01",
+"name": "Water switch room",
+"night": false,
+"way": "Drop down the same hole as Ruto and follow the basement rooms to the one with the pool and the water switch. The Gold Skulltula is on the wall, in a nook at the top of the vines, above a ledge with three pots. Leave Ruto sitting on the switch so the water rises. Swim to the vines, climb up to the ledge and kill the Skulltula with your sword to claim the Gold Skulltula Token."
+},
+"a017ce09904c2dcc": {
+"age": "adult",
+"id": "valle-gs-04",
+"name": "Rock arch across from the tent",
+"night": true,
+"way": "On the path from the carpenters' tent to Gerudo's Fortress, there is a big natural arch of reddish rock, with two piles of dark rocks at its foot. At night, a Gold Skulltula climbs the inner face of the arch. Stand between the piles of rocks, look up at the top of the arch until you spot it, and shoot the Hookshot at it to knock it down: when you kill it, the Hookshot itself brings the token to you."
+},
+"a017ce09904c2dce": {
+"age": "adult",
+"id": "valle-gs-04",
+"name": "Rock arch across from the tent",
+"night": true,
+"way": "On the path from the carpenters' tent to Gerudo's Fortress, there is a big natural arch of reddish rock, with two piles of dark rocks at its foot. At night, a Gold Skulltula climbs the inner face of the arch. Stand between the piles of rocks, look up at the top of the arch until you spot it, and shoot the Hookshot at it to knock it down: when you kill it, the Hookshot itself brings the token to you."
+},
+"a0973706f6415ecd": {
+"age": "adult",
+"id": "agua-gs-03",
+"name": "Inside the central pillar",
+"night": false,
+"way": "With Zelda's Lullaby, lower the temple's water to its lowest or middle level and go through the door at the base of the central pillar. Inside, on the ground floor, Longshot onto the target on the wall to reach a ledge halfway up. From there, look high up the wall: that's where the Gold Skulltula is, and the same Longshot kills it and brings you the token. You don't need to raise the pillar's water first, but you can climb as needed."
+},
+"a0973706f6415ecf": {
+"age": "adult",
+"id": "agua-gs-03",
+"name": "Inside the central pillar",
+"night": false,
+"way": "With Zelda's Lullaby, lower the temple's water to its lowest or middle level and go through the door at the base of the central pillar. Inside, on the ground floor, Longshot onto the target on the wall to reach a ledge halfway up. From there, look high up the wall: that's where the Gold Skulltula is, and the same Longshot kills it and brings you the token. You don't need to raise the pillar's water first, but you can climb as needed."
+},
+"a1632e322c612b95": {
+"age": "child",
+"id": "kakariko-gs-04",
+"name": "House by the mountain gate",
+"night": true,
+"way": "On your way up to the Death Mountain gate, in the upper part of the village, you'll see a house right next to it, past the watchtower. As a child and at night, go around it along the grassy path at the back and check its walls until you find the Gold Skulltula. It's at ground level, so you can take it down with your sword and claim the token without needing any items."
+},
+"a1632e322c612b97": {
+"age": "child",
+"id": "kakariko-gs-04",
+"name": "House by the mountain gate",
+"night": true,
+"way": "On your way up to the Death Mountain gate, in the upper part of the village, you'll see a house right next to it, past the watchtower. As a child and at night, go around it along the grassy path at the back and check its walls until you find the Gold Skulltula. It's at ground level, so you can take it down with your sword and claim the token without needing any items."
+},
+"a6a4e87da18fa678": {
+"age": "both",
+"id": "llanura-gs-02",
+"name": "Stone circle grotto by the ranch",
+"night": false,
+"way": "In the grove southwest of Lon Lon Ranch, next to the exit toward Lake Hylia, a circle of stones on the ground covers a grotto. Open it with a Bomb or a Megaton Hammer strike on the circle and drop down the hole. As soon as you enter, a Big Skulltula drops from the ceiling: defeat it with your sword. The gold one is on the wall; reach it with the Hookshot or the Boomerang, which also bring the Gold Skulltula Token to you."
+},
+"a6a4e87da18fa67a": {
+"age": "both",
+"id": "llanura-gs-02",
+"name": "Stone circle grotto by the ranch",
+"night": false,
+"way": "In the grove southwest of Lon Lon Ranch, next to the exit toward Lake Hylia, a circle of stones on the ground covers a grotto. Open it with a Bomb or a Megaton Hammer strike on the circle and drop down the hole. As soon as you enter, a Big Skulltula drops from the ceiling: defeat it with your sword. The gold one is on the wall; reach it with the Hookshot or the Boomerang, which also bring the Gold Skulltula Token to you."
+},
+"a8d6182a5c956e14": {
+"age": "child",
+"id": "pozo-gs-02",
+"name": "High corner of the pit room",
+"night": false,
+"way": "The locked door on the right of the central area, which you enter through the false wall opposite the entrance, leads to a room with Keese and a big pit. You need a Small Key, like the one from the coffin in the Gibdo room, and the Lenses of Truth. Kill the Keese and put on the Lenses to see the Gold Skulltula in a high corner, next to a torch. Use the Boomerang to catch it."
+},
+"a8d6182a5c956e16": {
+"age": "child",
+"id": "pozo-gs-02",
+"name": "High corner of the pit room",
+"night": false,
+"way": "The locked door on the right of the central area, which you enter through the false wall opposite the entrance, leads to a room with Keese and a big pit. You need a Small Key, like the one from the coffin in the Gibdo room, and the Lenses of Truth. Kill the Keese and put on the Lenses to see the Gold Skulltula in a high corner, next to a torch. Use the Boomerang to catch it."
+},
+"ab4dd26b0113ac53": {
+"age": "adult",
+"id": "fortaleza-heart-02",
+"name": "Rooftop chest",
+"night": false,
+"way": "The chest is on the highest rooftop of Gerudo's Fortress, up against the rock wall, across a gap. From the inner corridors, a ladder next to your cell takes you out onto a rock ledge above the rooftops; follow it to the edge from which you can see the chest. From there, aim the Longshot at the chest to reach the loot."
+},
+"abad0e9f0d471154": {
+"age": "child",
+"id": "rio-gs-01",
+"name": "Bugs in the soft soil by the Bean Seller",
+"night": false,
+"way": "Next to the Bean Seller, at the start of Zora's River, there's a soft soil patch hiding a Gold Skulltula, and you need a bottle of bugs to bring it out. Empty the bottle of bugs onto the soft soil: the Skulltula will poke out of the ground. Defeat it with your sword and collect the token."
+},
+"abad0e9f0d471156": {
+"age": "child",
+"id": "rio-gs-01",
+"name": "Bugs in the soft soil by the Bean Seller",
+"night": false,
+"way": "Next to the Bean Seller, at the start of Zora's River, there's a soft soil patch hiding a Gold Skulltula, and you need a bottle of bugs to bring it out. Empty the bottle of bugs onto the soft soil: the Skulltula will poke out of the ground. Defeat it with your sword and collect the token."
+},
+"ac2e26b5ec7da3a2": {
+"age": "adult",
+"id": "fuente-heart-01",
+"name": "Farthest ice floe",
+"night": false,
+"way": "The piece sits on top of the farthest ice floe in the frozen Zora's Fountain, away from the path to the Ice Cavern. As an adult, you enter the fountain through the passage behind the frozen King Zora's throne. Jump from block to block all the way to the last one: they're slippery ice blocks, so judge each jump carefully. If you fall in the water, swim back to the start and climb up again."
+},
+"b0f77b17cfb37458": {
+"age": "adult",
+"id": "fuego-gs-02",
+"name": "Wall in the boulder maze",
+"night": false,
+"way": "This Gold Skulltula hides behind a stretch of wall in the rolling boulder maze. You get there by climbing the metal grate; from there, stick to the outer wall, dodging the rolling boulders, until you reach a cracked stretch of rock at the end of a passage, very close to a Goron's cell. That stretch is plainly visible, so there's no need to feel around: set a Bomb or a Bombchu against it and, in the tunnel that opens behind it, knock down the Gold Skulltula. Take the chance to free the Goron in the cell next door."
+},
+"b0f77b17cfb3745a": {
+"age": "adult",
+"id": "fuego-gs-02",
+"name": "Wall in the boulder maze",
+"night": false,
+"way": "This Gold Skulltula hides behind a stretch of wall in the rolling boulder maze. You get there by climbing the metal grate; from there, stick to the outer wall, dodging the rolling boulders, until you reach a cracked stretch of rock at the end of a passage, very close to a Goron's cell. That stretch is plainly visible, so there's no need to feel around: set a Bomb or a Bombchu against it and, in the tunnel that opens behind it, knock down the Gold Skulltula. Take the chance to free the Goron in the cell next door."
+},
+"b3d9f353599eea51": {
+"age": "both",
+"id": "espiritu-gs-02",
+"name": "Floor of the big statue room",
+"night": false,
+"way": "Once you reach the room with the big statue, go down the side stairs to the lower floor and go around behind the statue. In the narrow passage between its side and the wall, on the east side, the Gold Skulltula is on the wall, at floor level. One sword strike is enough to defeat it and pick up the token."
+},
+"b3d9f353599eea53": {
+"age": "both",
+"id": "espiritu-gs-02",
+"name": "Floor of the big statue room",
+"night": false,
+"way": "Once you reach the room with the big statue, go down the side stairs to the lower floor and go around behind the statue. In the narrow passage between its side and the wall, on the east side, the Gold Skulltula is on the wall, at floor level. One sword strike is enough to defeat it and pick up the token."
+},
+"b4ece769e6f3a204": {
+"age": "adult",
+"id": "fortaleza-gs-01",
+"name": "Archery range target",
+"night": true,
+"way": "With the Gerudo Token you can enter the horseback archery range, and at night there is a Gold Skulltula on the big round target on a post at the end of the course. Ride or walk the whole course, with Epona or on foot, to the circular area at the far end. Shoot the Hookshot at it once you have a clear shot to kill the Skulltula and bring back the token; if you can't see it from the front, go around the target."
+},
+"b4ece769e6f3a206": {
+"age": "adult",
+"id": "fortaleza-gs-01",
+"name": "Archery range target",
+"night": true,
+"way": "With the Gerudo Token you can enter the horseback archery range, and at night there is a Gold Skulltula on the big round target on a post at the end of the course. Ride or walk the whole course, with Epona or on foot, to the circular area at the far end. Shoot the Hookshot at it once you have a clear shot to kill the Skulltula and bring back the token; if you can't see it from the front, go around the target."
+},
+"b9d0070b468f26d2": {
+"age": "adult",
+"id": "kakariko-heart-02",
+"name": "Windmill",
+"night": false,
+"way": "Inside the Windmill, at the back of the village, the piece waits up top, on a piece of furniture on the upper walkway. As an adult you get there through Dampé's Grave, in the Graveyard. When his race is over, the exit stairs are broken: fire the Hookshot at the target above the door and follow the corridor. You come out at the top of the Windmill, next to the spinning platform; climb onto the furniture against the wall and grab the piece."
+},
+"baec91d6ed8dd96b": {
+"age": "adult",
+"id": "lago-heart-02",
+"name": "Laboratory roof",
+"night": false,
+"way": "As a child, plant a Magic Bean in the soft soil next to the Lakeside Laboratory at Lake Hylia, and come back as an adult. Ride the leaf: it loops over the lake and drops you on the wooden balcony of the laboratory tower. Climb the ladder to the lookout at the top, where the Piece of Heart is."
+},
+"bc85efca2b222cd9": {
+"age": "adult",
+"id": "valle-gs-03",
+"name": "Behind the tent",
+"night": true,
+"way": "Past the bridge, on the side of the valley facing Gerudo's Fortress, is the carpenters' tent. To cross as an adult, jumping the broken bridge with Epona is enough; the Longshot or the repaired bridge, if you rescued the carpenters, also work. At night, go around the tent to the ruins behind it. The Gold Skulltula climbs the carved stone wall, halfway up: knock it down with the Hookshot, which brings you the token while it's at it."
+},
+"bc85efca2b222cdb": {
+"age": "adult",
+"id": "valle-gs-03",
+"name": "Behind the tent",
+"night": true,
+"way": "Past the bridge, on the side of the valley facing Gerudo's Fortress, is the carpenters' tent. To cross as an adult, jumping the broken bridge with Epona is enough; the Longshot or the repaired bridge, if you rescued the carpenters, also work. At night, go around the tent to the ruins behind it. The Gold Skulltula climbs the carved stone wall, halfway up: knock it down with the Hookshot, which brings you the token while it's at it."
+},
+"bce05898ce61f1c0": {
+"age": "child",
+"id": "deku-gs-01",
+"name": "Compass room",
+"night": false,
+"way": "The Compass room, on the top floor of the Deku Tree, keeps this Gold Skulltula in an out-of-the-way corner. Step on the switch to raise the platforms and, instead of going for the Compass, jump into the side alcove on the left. On the back wall, behind the small chest, it's within easy reach: kill it with your sword and grab the Gold Skulltula Token."
+},
+"bce05898ce61f1c2": {
+"age": "child",
+"id": "deku-gs-01",
+"name": "Compass room",
+"night": false,
+"way": "The Compass room, on the top floor of the Deku Tree, keeps this Gold Skulltula in an out-of-the-way corner. Step on the switch to raise the platforms and, instead of going for the Compass, jump into the side alcove on the left. On the back wall, behind the small chest, it's within easy reach: kill it with your sword and grab the Gold Skulltula Token."
+},
+"bdfe13c37f356829": {
+"age": "both",
+"id": "dodongos-gs-04",
+"name": "Armos room past the mouth",
+"night": false,
+"way": "From the bridge on the second floor, drop a Bomb into each eye of the giant skull in the main hall so it opens its mouth, and go in through it. Pass the Fire Keese room and go up to the block corridor. Push the blocks to climb onto the wooden beams and drop down into the fenced-off area at the back. There, open the cracked wall with Bombs and follow the tunnel. An Armos awaits, waking up as you approach, and the Gold Skulltula is on the wall behind it."
+},
+"bdfe13c37f35682b": {
+"age": "both",
+"id": "dodongos-gs-04",
+"name": "Armos room past the mouth",
+"night": false,
+"way": "From the bridge on the second floor, drop a Bomb into each eye of the giant skull in the main hall so it opens its mouth, and go in through it. Pass the Fire Keese room and go up to the block corridor. Push the blocks to climb onto the wooden beams and drop down into the fenced-off area at the back. There, open the cracked wall with Bombs and follow the tunnel. An Armos awaits, waking up as you approach, and the Gold Skulltula is on the wall behind it."
+},
+"c03f282ff60942b4": {
+"age": "child",
+"id": "jabu-gs-03",
+"name": "Basement of the big room, upper one",
+"night": false,
+"way": "Below the big room with the holes, in the basement you drop into through the hole the green tentacle was covering, there are two Gold Skulltulas on adjoining walls, to the north and northwest. We recommend getting both at once, since they both need the Boomerang. The one you're after here is the upper one, so aim the Boomerang at it manually, since you can't lock on to it either, and when it falls throw it again to bring back the Gold Skulltula Token."
+},
+"c03f282ff60942b6": {
+"age": "child",
+"id": "jabu-gs-03",
+"name": "Basement of the big room, upper one",
+"night": false,
+"way": "Below the big room with the holes, in the basement you drop into through the hole the green tentacle was covering, there are two Gold Skulltulas on adjoining walls, to the north and northwest. We recommend getting both at once, since they both need the Boomerang. The one you're after here is the upper one, so aim the Boomerang at it manually, since you can't lock on to it either, and when it falls throw it again to bring back the Gold Skulltula Token."
+},
+"c1858a4fcd84a28c": {
+"age": "child",
+"id": "lago-gs-02",
+"name": "Laboratory wall",
+"night": true,
+"way": "A bridge leads out from behind the Lakeside Laboratory. As a child, at night, as soon as you step onto it, look to the right: on the round tower of the building, next to a pipe, is this Gold Skulltula, too high for your sword. From the bridge itself, throw the Boomerang at it: it knocks it down and brings you the token."
+},
+"c1858a4fcd84a28e": {
+"age": "child",
+"id": "lago-gs-02",
+"name": "Laboratory wall",
+"night": true,
+"way": "A bridge leads out from behind the Lakeside Laboratory. As a child, at night, as soon as you step onto it, look to the right: on the round tower of the building, next to a pipe, is this Gold Skulltula, too high for your sword. From the bridge itself, throw the Boomerang at it: it knocks it down and brings you the token."
+},
+"c3c68d0ac4b85831": {
+"age": "child",
+"id": "kakariko-gs-01",
+"name": "House under construction",
+"night": true,
+"way": "While the carpenters are building the house under construction, as a child and at night, the Gold Skulltula hangs on the brick wall of the site, above the ground. Go up the plank ramp to the scaffolding walkway and you'll have it right in front of you, on the wall. Your sword is enough to kill it, so you don't need anything else to claim the token."
+},
+"c3c68d0ac4b85833": {
+"age": "child",
+"id": "kakariko-gs-01",
+"name": "House under construction",
+"night": true,
+"way": "While the carpenters are building the house under construction, as a child and at night, the Gold Skulltula hangs on the brick wall of the site, above the ground. Go up the plank ramp to the scaffolding walkway and you'll have it right in front of you, on the wall. Your sword is enough to kill it, so you don't need anything else to claim the token."
+},
+"c835e1d03656bf46": {
+"age": null,
+"id": "agua-heart-01",
+"name": "Heart Container - Morpha",
+"night": false,
+"way": "With the Boss Key and the water at its highest, go up to the third floor (3F) and Longshot onto the target on the golden column on the north side. Climb the stairs and head up the water-filled ramp, dodging the spike traps sliding down. Step on the platforms in the center to make Morpha appear and get back to the outer edge of the room right away, away from the water, because its tentacles grab you. Pull its nucleus out with the Longshot, hit it with your sword and, after the fight, pick up the Heart Container before stepping into the blue warp."
+},
+"c8db3346f78ea319": {
+"age": "adult",
+"id": "prado-gs-01",
+"name": "Right-hand wall before the stairs",
+"night": false,
+"way": "The maze of the Sacred Forest Meadow hides this Gold Skulltula, though it only appears as an adult. Make your way through while dodging the Moblins and, when you reach the midpoint, look at the wall on the right. Hit the Skulltula with the Hookshot and fire it again to pull in the Gold Skulltula Token."
+},
+"c8db3346f78ea31b": {
+"age": "adult",
+"id": "prado-gs-01",
+"name": "Right-hand wall before the stairs",
+"night": false,
+"way": "The maze of the Sacred Forest Meadow hides this Gold Skulltula, though it only appears as an adult. Make your way through while dodging the Moblins and, when you reach the midpoint, look at the wall on the right. Hit the Skulltula with the Hookshot and fire it again to pull in the Gold Skulltula Token."
+},
+"cc175a90e0014905": {
+"age": "adult",
+"id": "fuego-gs-05",
+"name": "Behind the entrance hall statue",
+"night": false,
+"way": "Save this one for last, once you have the Megaton Hammer and the last Small Key, the one from the Goron in the Time Block room past the hammer. That Goron tells you there's a secret door behind the three-block stone statue at the entrance: on the right side of the entrance hall, smash the statue with the hammer and open the door with the key. In the first room, kill the Torch Slugs to open the next one. In the second, guard against the flying tiles, defeat the Like Like, and break the pile of rocks hiding the Gold Skulltula with the hammer."
+},
+"cc175a90e0014907": {
+"age": "adult",
+"id": "fuego-gs-05",
+"name": "Behind the entrance hall statue",
+"night": false,
+"way": "Save this one for last, once you have the Megaton Hammer and the last Small Key, the one from the Goron in the Time Block room past the hammer. That Goron tells you there's a secret door behind the three-block stone statue at the entrance: on the right side of the entrance hall, smash the statue with the hammer and open the door with the key. In the first room, kill the Torch Slugs to open the next one. In the second, guard against the flying tiles, defeat the Like Like, and break the pile of rocks hiding the Gold Skulltula with the hammer."
+},
+"cdb49f5d0a67fcf4": {
+"age": "adult",
+"id": "hielo-gs-02",
+"name": "Compass room",
+"night": false,
+"way": "Collect the Silver Rupees in the spinning blade room to open the way to the map room and fill a bottle with Blue Fire there. Go back to the blade room and melt one of its two red ice walls with it, the one leading to a corridor with spike traps. At the end is the Compass room, full of stalagmites. Kill the Ice Keese and look high up the back wall, next to a block of red ice: that's where the Gold Skulltula is. Use the Hookshot to get it."
+},
+"cdb49f5d0a67fcf6": {
+"age": "adult",
+"id": "hielo-gs-02",
+"name": "Compass room",
+"night": false,
+"way": "Collect the Silver Rupees in the spinning blade room to open the way to the map room and fill a bottle with Blue Fire there. Go back to the blade room and melt one of its two red ice walls with it, the one leading to a corridor with spike traps. At the end is the Compass room, full of stalagmites. Kill the Ice Keese and look high up the back wall, next to a block of red ice: that's where the Gold Skulltula is. Use the Hookshot to get it."
+},
+"ceed596f17934971": {
+"age": "adult",
+"id": "desierto-gs-01",
+"name": "Inside the monument",
+"night": false,
+"way": "To reach the stone monument in the Haunted Wasteland, cross the river of sand as an adult, following the flags. At the monument, go in through the gap between the columns and climb down the ladder to the room below. The Gold Skulltula is on the back wall, above the altar: climb onto the altar and knock it down with your sword. If you light the torches with Fire Arrows or Din's Fire, a chest with a Business Scrub Seed appears."
+},
+"ceed596f17934973": {
+"age": "adult",
+"id": "desierto-gs-01",
+"name": "Inside the monument",
+"night": false,
+"way": "To reach the stone monument in the Haunted Wasteland, cross the river of sand as an adult, following the flags. At the monument, go in through the gap between the columns and climb down the ladder to the room below. The Gold Skulltula is on the back wall, above the altar: climb onto the altar and knock it down with your sword. If you light the torches with Fire Arrows or Din's Fire, a chest with a Business Scrub Seed appears."
+},
+"d0f7e5ffa76ba288": {
+"age": "adult",
+"id": "coloso-gs-03",
+"name": "Rock wall beside the temple",
+"night": true,
+"way": "At night, this Desert Colossus Gold Skulltula appears high up on the rock wall to the right of the Spirit Temple. Find the Skulltula and hit it with the Hookshot to kill it and pull in the Gold Skulltula Token."
+},
+"d0f7e5ffa76ba28a": {
+"age": "adult",
+"id": "coloso-gs-03",
+"name": "Rock wall beside the temple",
+"night": true,
+"way": "At night, this Desert Colossus Gold Skulltula appears high up on the rock wall to the right of the Spirit Temple. Find the Skulltula and hit it with the Hookshot to kill it and pull in the Gold Skulltula Token."
+},
+"d1cef51cf294fb84": {
+"age": "child",
+"id": "kakariko-gs-03",
+"name": "Watchtower",
+"night": true,
+"way": "Halfway up the ladder of the watchtower, in the center of the village, a Gold Skulltula hangs at night that you attack from the bottom: shoot it with the Slingshot or send a Bombchu up the ladder. When it dies, climb the ladder: the token stays on it, halfway up, and you can grab it without going all the way to the top."
+},
+"d1cef51cf294fb86": {
+"age": "child",
+"id": "kakariko-gs-03",
+"name": "Watchtower",
+"night": true,
+"way": "Halfway up the ladder of the watchtower, in the center of the village, a Gold Skulltula hangs at night that you attack from the bottom: shoot it with the Slingshot or send a Bombchu up the ladder. When it dies, climb the ladder: the token stays on it, halfway up, and you can grab it without going all the way to the top."
+},
+"d23a7a2c9eced9cc": {
+"age": "adult",
+"id": "sombra-gs-01",
+"name": "Invisible scythe room",
+"night": false,
+"way": "In the big chasm room, after crossing with the Hover Boots to the Stalfos platform and defeating it, turn left and activate the Lenses of Truth: a path of invisible platforms to a door appears. On the other side is the round room of pots, with scythes you can only see with the Lenses. Dodge them, shoot down the Fire Keese with the bow and finish off the Like Like with your sword: clearing the room opens the door to a small room with the Gold Skulltula on the wall, within sword reach."
+},
+"d23a7a2c9eced9ce": {
+"age": "adult",
+"id": "sombra-gs-01",
+"name": "Invisible scythe room",
+"night": false,
+"way": "In the big chasm room, after crossing with the Hover Boots to the Stalfos platform and defeating it, turn left and activate the Lenses of Truth: a path of invisible platforms to a door appears. On the other side is the round room of pots, with scythes you can only see with the Lenses. Dodge them, shoot down the Fire Keese with the bow and finish off the Like Like with your sword: clearing the room opens the door to a small room with the Gold Skulltula on the wall, within sword reach."
+},
+"d3d86d3d6988ed8c": {
+"age": "child",
+"id": "valle-gs-01",
+"name": "Waterspout by the footbridge",
+"night": true,
+"way": "When you enter Gerudo Valley from Hyrule Field, the first thing you come to is a small wooden footbridge over a pool. At night, the Gold Skulltula is under the planks, on the brick wall next to the spout of water falling into the pool. Drop into the water from one side of the footbridge, climb out onto the stone bank below, and throw the Boomerang at it to knock it down and bring back the token. Then climb back up to the footbridge."
+},
+"d3d86d3d6988ed8e": {
+"age": "child",
+"id": "valle-gs-01",
+"name": "Waterspout by the footbridge",
+"night": true,
+"way": "When you enter Gerudo Valley from Hyrule Field, the first thing you come to is a small wooden footbridge over a pool. At night, the Gold Skulltula is under the planks, on the brick wall next to the spout of water falling into the pool. Drop into the water from one side of the footbridge, climb out onto the stone bank below, and throw the Boomerang at it to knock it down and bring back the token. Then climb back up to the footbridge."
+},
+"d4883a16973b1d04": {
+"age": "child",
+"id": "kakariko-gs-05",
+"name": "House of Skulltula",
+"night": true,
+"way": "The House of Skulltula, home of the cursed family, is the first one on the right as you come in from Hyrule Field, and it has cobwebs over the door. As a child and at night, the Gold Skulltula appears on the front of the house, to the left of the entrance steps, at ground level; during the day you can already see its web there. If it's daytime, play the Sun's Song to bring on the night. Your sword takes care of it in no time, and then all that's left is to collect the token."
+},
+"d4883a16973b1d06": {
+"age": "child",
+"id": "kakariko-gs-05",
+"name": "House of Skulltula",
+"night": true,
+"way": "The House of Skulltula, home of the cursed family, is the first one on the right as you come in from Hyrule Field, and it has cobwebs over the door. As a child and at night, the Gold Skulltula appears on the front of the house, to the left of the entrance steps, at ground level; during the day you can already see its web there. If it's daytime, play the Sun's Song to bring on the night. Your sword takes care of it in no time, and then all that's left is to collect the token."
+},
+"d731ea6a04d0fd01": {
+"age": "adult",
+"id": "agua-gs-02",
+"name": "Whirlpool river",
+"night": false,
+"way": "After the fight with Dark Link, climb the stairs behind the Longshot chest and, in the next room, drop down the grated shaft. Follow the flooded tunnel until you come out into an underground river with whirlpools, and stay clear of them, because they suck you in. In the whirlpool area, put on the Iron Boots and walk along the bottom, dodging the currents. The Gold Skulltula is above the water, high on the rock wall: aim up with the Longshot, which kills it and brings you the token."
+},
+"d731ea6a04d0fd03": {
+"age": "adult",
+"id": "agua-gs-02",
+"name": "Whirlpool river",
+"night": false,
+"way": "After the fight with Dark Link, climb the stairs behind the Longshot chest and, in the next room, drop down the grated shaft. Follow the flooded tunnel until you come out into an underground river with whirlpools, and stay clear of them, because they suck you in. In the whirlpool area, put on the Iron Boots and walk along the bottom, dodging the currents. The Gold Skulltula is above the water, high on the rock wall: aim up with the Longshot, which kills it and brings you the token."
+},
+"d7ffbe169189e50d": {
+"age": "adult",
+"id": "sombra-gs-02",
+"name": "Wall of the cell corridor",
+"night": false,
+"way": "In the room with spikes falling from the ceiling, the Lenses of Truth reveal a block hidden in the wall: drag it under the spikes as an umbrella and climb onto it to reach the upper part. The Gold Skulltula is high on the wall of the cell corridor, and from the walkway the Hookshot reaches it."
+},
+"d7ffbe169189e50f": {
+"age": "adult",
+"id": "sombra-gs-02",
+"name": "Wall of the cell corridor",
+"night": false,
+"way": "In the room with spikes falling from the ceiling, the Lenses of Truth reveal a block hidden in the wall: drag it under the spikes as an umbrella and climb onto it to reach the upper part. The Gold Skulltula is high on the wall of the cell corridor, and from the walkway the Hookshot reaches it."
+},
+"dc0cbd0ac9f0b18a": {
+"age": "both",
+"id": "valle-heart-02",
+"name": "Chest on the canyon ledge",
+"night": false,
+"way": "In Gerudo Valley, past the bridge, on the carpenters' tent side, go to the edge of the canyon next to the piles of dark rocks by the rock arch. Below, halfway down to the river, there is a narrow ledge with a chest. If you're a child, use the Cucco to glide down to the chest. If you're an adult, drop from the edge onto the ledge and open the chest. To get back, follow the ledge and jump into the river: the current carries you to Lake Hylia."
+},
+"dc8113831c56b194": {
+"age": "child",
+"id": "lonlon-gs-03",
+"name": "Window of the house",
+"night": true,
+"way": "If you look up at Talon's house at night, in Lon Lon Ranch next to the entrance arch, you'll see a Gold Skulltula in the upstairs window, too high for your sword. Throw the Boomerang at it from below: it defeats it and brings you the Gold Skulltula Token in the same throw. During the day that wall is empty."
+},
+"dc8113831c56b196": {
+"age": "child",
+"id": "lonlon-gs-03",
+"name": "Window of the house",
+"night": true,
+"way": "If you look up at Talon's house at night, in Lon Lon Ranch next to the entrance arch, you'll see a Gold Skulltula in the upstairs window, too high for your sword. Throw the Boomerang at it from below: it defeats it and brings you the Gold Skulltula Token in the same throw. During the day that wall is empty."
+},
+"ddd260afb6f29898": {
+"age": "child",
+"id": "jabu-gs-04",
+"name": "Vines before the boss",
+"night": false,
+"way": "You reach the room before Barinade from the dungeon's second room, the one with the pit that drops you down when you jump into it, by carrying a crate to the switch that opens the door. First clear out the electric jellyfish with the Boomerang and look for the column of vines that climbs toward the crystal switch: the Gold Skulltula is on it. Kill it with the Boomerang and climb up to grab the Gold Skulltula Token."
+},
+"ddd260afb6f2989a": {
+"age": "child",
+"id": "jabu-gs-04",
+"name": "Vines before the boss",
+"night": false,
+"way": "You reach the room before Barinade from the dungeon's second room, the one with the pit that drops you down when you jump into it, by carrying a crate to the switch that opens the door. First clear out the electric jellyfish with the Boomerang and look for the column of vines that climbs toward the crystal switch: the Gold Skulltula is on it. Kill it with the Boomerang and climb up to grab the Gold Skulltula Token."
+},
+"df73f3739cef4669": {
+"age": null,
+"id": "deku-gs-02",
+"name": "Basement vines",
+"night": false,
+"way": "When you drop onto the big web in the middle of the main room, you'll break through it and land in the water of the basement. In the round pool on the right, this Gold Skulltula waits on the wall of vines that climbs back up to the main room. You have to attack it from a distance, so knock it down with the Slingshot or the Boomerang from the water, then climb the vines up to the Gold Skulltula Token."
+},
+"df73f3739cef466b": {
+"age": null,
+"id": "deku-gs-02",
+"name": "Basement vines",
+"night": false,
+"way": "When you drop onto the big web in the middle of the main room, you'll break through it and land in the water of the basement. In the round pool on the right, this Gold Skulltula waits on the wall of vines that climbs back up to the main room. You have to attack it from a distance, so knock it down with the Slingshot or the Boomerang from the water, then climb the vines up to the Gold Skulltula Token."
+},
+"dfd66c63357cdea7": {
+"age": "both",
+"id": "valle-heart-01",
+"name": "Behind the waterfall",
+"night": false,
+"way": "Behind the big waterfall in Gerudo Valley, on the riverbank at the bottom of the canyon, there is a small chamber carved into the rock, above the water. To get there, go down to the cow's corner at the foot of the waterfall, gliding with the Cucco or jumping into the river and swimming out. From there, follow the bank toward the waterfall, pass the Gossip Stone, and jump across the wet rocks behind the falling water. Then climb the steps carved into the rock up to the chamber, where the Piece of Heart is waiting."
+},
+"e03a2965df9f7b30": {
+"age": "adult",
+"id": "agua-gs-01",
+"name": "Next to the basement grate",
+"night": false,
+"way": "With the temple's water at its lowest, use a Small Key to open the door at the base of the central pillar. Inside, play Zelda's Lullaby in front of the Triforce symbol to raise the water, put on the Iron Boots and sink through the hole in the floor to the basement room. Hit the crystal switch high on the wall with the Hookshot: several enemies appear. Kill them, take off the boots to float up to the chest ledge, and pull down the Gold Skulltula on the wall, next to the grate, with the Hookshot."
+},
+"e03a2965df9f7b32": {
+"age": "adult",
+"id": "agua-gs-01",
+"name": "Next to the basement grate",
+"night": false,
+"way": "With the temple's water at its lowest, use a Small Key to open the door at the base of the central pillar. Inside, play Zelda's Lullaby in front of the Triforce symbol to raise the water, put on the Iron Boots and sink through the hole in the floor to the basement room. Hit the crystal switch high on the wall with the Hookshot: several enemies appear. Kill them, take off the boots to float up to the chest ledge, and pull down the Gold Skulltula on the wall, next to the grate, with the Hookshot."
+},
+"e91f6be796358ffc": {
+"age": "child",
+"id": "cementerio-gs-02",
+"name": "Bugs in the soft soil",
+"night": false,
+"way": "With a bottle of Bugs and as a child, at any time of day, go to the soft soil patch in the left-hand corner of the Graveyard, at the back, by the wall and near Dampé's Grave, and release them on it so a Gold Skulltula comes out. Kill it as soon as it pops up and collect the token."
+},
+"e91f6be796358ffe": {
+"age": "child",
+"id": "cementerio-gs-02",
+"name": "Bugs in the soft soil",
+"night": false,
+"way": "With a bottle of Bugs and as a child, at any time of day, go to the soft soil patch in the left-hand corner of the Graveyard, at the back, by the wall and near Dampé's Grave, and release them on it so a Gold Skulltula comes out. Kill it as soon as it pops up and collect the token."
+},
+"eafe60e592e9a3f9": {
+"age": "adult",
+"id": "sombra-gs-03",
+"name": "Pit in the fan corridor",
+"night": false,
+"way": "Past the giant skull pot room, where a bomb thrown into the skull drops a Small Key, go on to the next room: use the Lenses of Truth to find the target on the ceiling, Hookshot up to the upper level and open the locked door there. Behind it is the fan corridor. Put on the Iron Boots so the wind doesn't blow you away and go on to the pit with the grates: the Gold Skulltula is on the pit wall. Lean over the edge and reach it with the Hookshot, which brings you the token."
+},
+"eafe60e592e9a3fb": {
+"age": "adult",
+"id": "sombra-gs-03",
+"name": "Pit in the fan corridor",
+"night": false,
+"way": "Past the giant skull pot room, where a bomb thrown into the skull drops a Small Key, go on to the next room: use the Lenses of Truth to find the target on the ceiling, Hookshot up to the upper level and open the locked door there. Behind it is the fan corridor. Put on the Iron Boots so the wind doesn't blow you away and go on to the pit with the grates: the Gold Skulltula is on the pit wall. Lean over the edge and reach it with the Hookshot, which brings you the token."
+},
+"ecdc46b409ed7d38": {
+"age": "child",
+"id": "kokiri-gs-01",
+"name": "Behind the House of the Know-It-All Brothers",
+"night": true,
+"way": "The House of the Know-It-All Brothers, on the hill across from the House of the Great Mido and next to the Forest Training Center, hides this Gold Skulltula on the back of its trunk. It only comes out at night, and only as a child. Climb the hill and walk around the house to the back."
+},
+"ecdc46b409ed7d3a": {
+"age": "child",
+"id": "kokiri-gs-01",
+"name": "Behind the House of the Know-It-All Brothers",
+"night": true,
+"way": "The House of the Know-It-All Brothers, on the hill across from the House of the Great Mido and next to the Forest Training Center, hides this Gold Skulltula on the back of its trunk. It only comes out at night, and only as a child. Climb the hill and walk around the house to the back."
+},
+"f0dac245e2fc448c": {
+"age": "child",
+"id": "fuente-gs-02",
+"name": "Pine tree in the southeast corner",
+"night": false,
+"way": "In the southeast corner of Zora's Fountain, the one with the pine trees at the foot of the cliff, next to the wall that hides the Great Fairy's Fountain, there is a tree that hides a Gold Skulltula as a child, at any time of day. No swimming needed: from the offering bowl in front of Lord Jabu-Jabu, go down to the right and follow the dirt path along the shore. Roll into the pine tree to knock the Skulltula down, defeat it with your sword, and grab the token."
+},
+"f0dac245e2fc448e": {
+"age": "child",
+"id": "fuente-gs-02",
+"name": "Pine tree in the southeast corner",
+"night": false,
+"way": "In the southeast corner of Zora's Fountain, the one with the pine trees at the foot of the cliff, next to the wall that hides the Great Fairy's Fountain, there is a tree that hides a Gold Skulltula as a child, at any time of day. No swimming needed: from the offering bowl in front of Lord Jabu-Jabu, go down to the right and follow the dirt path along the shore. Roll into the pine tree to knock the Skulltula down, defeat it with your sword, and grab the token."
+},
+"f1d32c06612da230": {
+"age": "child",
+"id": "sendero-gs-01",
+"name": "Bugs in the soft soil by the cavern",
+"night": false,
+"way": "The soft soil for this Gold Skulltula is in front of Dodongo's Cavern. With the entrance cleared, drop the bugs from the bottle onto the soft soil and, as soon as the Gold Skulltula pops out, defeat it with your sword and collect the token."
+},
+"f1d32c06612da232": {
+"age": "child",
+"id": "sendero-gs-01",
+"name": "Bugs in the soft soil by the cavern",
+"night": false,
+"way": "The soft soil for this Gold Skulltula is in front of Dodongo's Cavern. With the entrance cleared, drop the bugs from the bottle onto the soft soil and, as soon as the Gold Skulltula pops out, defeat it with your sword and collect the token."
+},
+"f2e27d6a27026acd": {
+"age": "child",
+"id": "deku-gs-04",
+"name": "Back room",
+"night": false,
+"way": "On the first basement floor of the Deku Tree, after the Gohma Larvae room, light a Deku Stick on the torch and burn the web on the back wall. Behind it is a tunnel that ends at a wall of vines. Watch out for the Big Skulltula guarding it: wait for it to turn around and strike its back. Then knock the Gold Skulltula down with the Slingshot and climb the vines up to the Gold Skulltula Token."
+},
+"f2e27d6a27026acf": {
+"age": "child",
+"id": "deku-gs-04",
+"name": "Back room",
+"night": false,
+"way": "On the first basement floor of the Deku Tree, after the Gohma Larvae room, light a Deku Stick on the torch and burn the web on the back wall. Behind it is a tunnel that ends at a wall of vines. Watch out for the Big Skulltula guarding it: wait for it to turn around and strike its back. Then knock the Gold Skulltula down with the Slingshot and climb the vines up to the Gold Skulltula Token."
+},
+"f43ccb260f5576dc": {
+"age": null,
+"id": "sombra-heart-01",
+"name": "Heart Container - Bongo Bongo",
+"night": false,
+"way": "In the fight, put on the Hover Boots so you don't bounce on the drum and stun Bongo Bongo's hands with arrows or the Hookshot. Then, with the Lenses active, shoot its eye and hit it with your sword. When it's over, it leaves you the Heart Container."
+},
+"f45f5319d88e7ac7": {
+"age": "child",
+"id": "jabu-heart-01",
+"name": "Heart Container - Barinade",
+"night": false,
+"way": "Barinade's door, at the back of the vine room, is locked by a switch protected by a crystal: climb the wall, lock on to the switch and throw the Boomerang so it curves around behind it. Once inside, use the Boomerang to cut the three tentacles tying it to the ceiling, dodging the electric shocks, and finish off the jellyfish it releases. Then stun it with the Boomerang and hit it with your sword, repeat with the second wave of jellyfish, and don't step into the blue warp without grabbing the Heart Container first."
+},
+"f46b1710ed0620d1": {
+"age": "adult",
+"id": "bosque-gs-02",
+"name": "Central hall",
+"night": false,
+"way": "After the Poe Sisters cutscene you reach the central hall, the big room with the four torches and the elevator. This Gold Skulltula waits to the right of the stairs by the door opposite. Go up those stairs and turn right to see it high on the wall, kill it with the Hookshot and fire it again to bring back the Gold Skulltula Token."
+},
+"f46b1710ed0620d3": {
+"age": "adult",
+"id": "bosque-gs-02",
+"name": "Central hall",
+"night": false,
+"way": "After the Poe Sisters cutscene you reach the central hall, the big room with the four torches and the elevator. This Gold Skulltula waits to the right of the stairs by the door opposite. Go up those stairs and turn right to see it high on the wall, kill it with the Hookshot and fire it again to bring back the Gold Skulltula Token."
+},
+"f5359b24fc86ac20": {
+"age": "adult",
+"id": "sendero-gs-03",
+"name": "Above Dodongo's Cavern",
+"night": true,
+"way": "The railed ledge from which, as a child, you drop the Bomb Flower onto Dodongo's Cavern, next to the turnoff to Goron City, has a few rocks against the wall. This Gold Skulltula appears under them when you come back as an adult, at night. Break the rocks with the Megaton Hammer or a Bomb, the only things that can destroy them, then defeat the Skulltula and collect its token."
+},
+"f5359b24fc86ac22": {
+"age": "adult",
+"id": "sendero-gs-03",
+"name": "Above Dodongo's Cavern",
+"night": true,
+"way": "The railed ledge from which, as a child, you drop the Bomb Flower onto Dodongo's Cavern, next to the turnoff to Goron City, has a few rocks against the wall. This Gold Skulltula appears under them when you come back as an adult, at night. Break the rocks with the Megaton Hammer or a Bomb, the only things that can destroy them, then defeat the Skulltula and collect its token."
+},
+"f6fa6ef0ca152948": {
+"age": "child",
+"id": "perdido-gs-02",
+"name": "Bugs in the soft soil of the lone-tree clearing",
+"night": false,
+"way": "To reach this patch, follow the Lost Woods route right, left, right, left and then, instead of heading for the Sacred Forest Meadow, turn left once more. It's the clearing with the lone tree, two Business Scrubs and a hole in the grass. Once there, drop the bugs on the soft soil to the right, next to one of the Scrubs, and when the Gold Skulltula comes out, defeat it with your sword and grab the Gold Skulltula Token."
+},
+"f6fa6ef0ca15294a": {
+"age": "child",
+"id": "perdido-gs-02",
+"name": "Bugs in the soft soil of the lone-tree clearing",
+"night": false,
+"way": "To reach this patch, follow the Lost Woods route right, left, right, left and then, instead of heading for the Sacred Forest Meadow, turn left once more. It's the clearing with the lone tree, two Business Scrubs and a hole in the grass. Once there, drop the bugs on the soft soil to the right, next to one of the Scrubs, and when the Gold Skulltula comes out, defeat it with your sword and grab the Gold Skulltula Token."
+},
+"f8c7601da7dd887e": {
+"age": "both",
+"id": "kakariko-heart-01",
+"name": "Small roof behind Impa's House",
+"night": false,
+"way": "The piece sits in plain sight on a small red-tiled roof behind Impa's House, up against the mountain. From the blue roof of the house, drop down onto the small roof behind it and pick it up. From there you can get down to the cow's stable. As a child, talk to Kaepora Gaebora at the top of Death Mountain and the owl will drop you on Impa's roof. As an adult you need the Hookshot."
+},
+"f914fa367471a3e3": {
+"age": null,
+"id": "deku-heart-01",
+"name": "Heart Container - Gohma",
+"night": false,
+"way": "After beating the three Deku Scrubs in the order 2, 3, 1, you can enter Queen Gohma's room on the second basement floor, and as soon as you go in, look up at the ceiling, because the boss drops down from there. When her eye turns red, shoot it with the Slingshot or throw a Deku Nut to stun her, then hit her eye with your sword or a Deku Stick. If she climbs to the ceiling to lay eggs, break them before the larvae hatch. When she falls, she leaves the Heart Container."
+},
+"fad8931a0011e1d4": {
+"age": null,
+"id": "deku-gs-03",
+"name": "Basement gate",
+"night": false,
+"way": "On the first basement floor of the Deku Tree there's a water channel that ends in a barred gate, and this Gold Skulltula clings to it. Climb onto the round platform in the water, facing the gate, knock it down with the Slingshot and grab the Gold Skulltula Token."
+},
+"fad8931a0011e1d6": {
+"age": null,
+"id": "deku-gs-03",
+"name": "Basement gate",
+"night": false,
+"way": "On the first basement floor of the Deku Tree there's a water channel that ends in a barred gate, and this Gold Skulltula clings to it. Climb onto the round platform in the water, facing the gate, knock it down with the Slingshot and grab the Gold Skulltula Token."
+},
+"fbbc2d490276c68c": {
+"age": "adult",
+"id": "goron-gs-02",
+"name": "Rock overhang on the ceiling",
+"night": false,
+"way": "As an adult, in Goron City, one floor above the lowest level, go around the platform counterclockwise. Before entering the tunnel, look up: the Gold Skulltula is on the underside of the rock overhang on the ceiling. Knock it down with the Hookshot, which brings you the token while it's at it."
+},
+"fbbc2d490276c68e": {
+"age": "adult",
+"id": "goron-gs-02",
+"name": "Rock overhang on the ceiling",
+"night": false,
+"way": "As an adult, in Goron City, one floor above the lowest level, go around the platform counterclockwise. Before entering the tunnel, look up: the Gold Skulltula is on the underside of the rock overhang on the ceiling. Knock it down with the Hookshot, which brings you the token while it's at it."
+},
+"fcd7f04dcf755e8c": {
+"age": "child",
+"id": "crater-gs-01",
+"name": "Crate at the summit entrance",
+"night": false,
+"way": "If you enter the Crater as a child from the summit of Death Mountain, rather than from Goron City, a few steps from the entrance, on the left, you'll see two wooden crates against the rock wall, next to a pot. The Gold Skulltula is inside the one next to the pot. Break the crates by rolling into them, defeat the Skulltula and collect the token."
+},
+"fcd7f04dcf755e8e": {
+"age": "child",
+"id": "crater-gs-01",
+"name": "Crate at the summit entrance",
+"night": false,
+"way": "If you enter the Crater as a child from the summit of Death Mountain, rather than from Goron City, a few steps from the entrance, on the left, you'll see two wooden crates against the rock wall, next to a pot. The Gold Skulltula is inside the one next to the pot. Break the crates by rolling into them, defeat the Skulltula and collect the token."
+},
+"ff11593a22778e7e": {
+"age": null,
+"id": "bosque-heart-01",
+"name": "Heart Container - Phantom Ganon",
+"night": false,
+"way": "The Boss Key opens the door at the back of the rotating room in the basement; go up the stairs and you'll reach the room of paintings. Phantom Ganon rides his horse into a painting and several riders come out: the real one makes hoofbeat sounds and opens a purple portal when he reaches the frame. When the real one comes out, shoot him with an arrow or hit him with the Hookshot; three arrows will knock him off his horse. Then send his energy balls back at him with your sword or an empty Bottle until one hits and he falls; hit him and repeat until he's finished."
+}
+}
+}

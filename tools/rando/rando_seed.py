@@ -81,7 +81,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 35   # (35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 36   # (36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -3224,6 +3224,39 @@ def tracker_lines(chests, skulls, gifts=None):
 # kLogicItems), with commas; "-" when it asks for nothing. The menu says a check is in logic when Link carries them
 # all. The rules ask for too much, never too little (see RULES): a check not in logic may be within reach.
 CHECKS = "checks.txt"
+# The way to a check, for the Tracker tab (asked for by the game's owner, 2026-11-16): <game folder>\mods\rando-seed\
+# check_ways.txt, "<the check's actor hash, as checks.txt has it>|<words>", for the Gold Skulltulas, Pieces of Heart and
+# Heart Containers that Ocarina Atlas describes (atlas_ways.json beside this script, taken from it under its MIT licence:
+# ATLAS_NOTICE.txt). Its words are the original game's way there, its name for the place, and whether it is there at
+# night only. No json beside the script: an empty file, and the tab says nothing more.
+CHECK_WAYS = "check_ways.txt"
+ATLAS_WAYS = "atlas_ways.json"
+
+
+def check_ways(checks_path):
+    """[(hash, words)] for the lines of checks_path whose actor hash ATLAS_WAYS describes, in the file's order"""
+    import json
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), ATLAS_WAYS), encoding="utf-8") as f:
+            ways = json.load(f)["ways"]
+        with open(checks_path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except (OSError, ValueError, KeyError):
+        return []
+    out, seen = [], set()
+    for line in lines:
+        parts = line.split("|")
+        if line.startswith("#") or len(parts) < 7 or parts[6] in seen or parts[6] not in ways:
+            continue
+        seen.add(parts[6])
+        w = ways[parts[6]]
+        words = "%s. %s" % (w["name"].rstrip("."), w["way"])
+        if w.get("night") and "night" not in w["way"].lower():
+            words += " It comes out at night only."
+        out.append((parts[6], words.replace("|", "/").replace("\r", " ").replace("\n", " ")))
+    return out
+
+
 CHECK_ROWS = 320
 CHECK_NAME = 79   # (a check's name: as many characters as the menu keeps of it)
 CHECK_CODES = collections.OrderedDict((
@@ -4985,6 +5018,9 @@ def main():
                                        for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES] +
                                       [(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name, None, gives[h])
                                        for h, (shop, _, _) in shelves.items() if h in gives])) + "\n")
+    ways = check_ways(os.path.join(mod, CHECKS))   # (the Tracker tab's directions to a check: CHECK_WAYS)
+    with open(os.path.join(mod, CHECK_WAYS), "w", encoding="utf-8", newline="\n") as f:
+        f.write("".join("%s|%s\n" % w for w in ways))
     if shelf_flag:   # (for the game's side: a shelf's name as the checks file has it, its flag's hash, the flag)
         with open(os.path.join(mod, SHELF_FLAGS), "w", encoding="utf-8", newline="\n") as f:
             f.write("".join("%s|%08x|%s\n" % ((gifts[h].name[:1].upper() + gifts[h].name[1:]).replace("|", "/")[:CHECK_NAME],

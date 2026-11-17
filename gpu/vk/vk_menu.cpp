@@ -25,6 +25,8 @@
 #include <iterator>
 #include <mutex>
 #include <string>
+#include <filesystem>
+#include <unordered_map>
 #include <thread>
 #include <system_error>
 #include <vector>
@@ -166,7 +168,12 @@ struct TrackerCheck {
     float stand[3];   // (where Link is put to go to it: a chest's front; its own place where the file has no other)
     char gives[64];   // (the item it gives, the game's name for it: said once it is collected; "" a file without it)
     char needs[192];   // (what the seed's rules ask for: kLogicItems' letters with commas, "-" nothing, "?" a file without it; a rule's ways apart by "/", any one of them enough (placement 5: Zora's Domain by the river or the lake), two of a whole rule of 24 items at most)
+    char hash[20];   // (the check's actor hash as the file has it, "" none: its way in tracker_ways)
 };
+// (the randomizer's fork) The way to a check, by its actor hash: tools/rando/rando_seed.py writes check_ways.txt beside
+// checks.txt, "<hash>|<words>", from Ocarina Atlas's directions (MIT, tools/rando/ATLAS_NOTICE.txt) for the Gold
+// Skulltulas, Pieces of Heart and Heart Containers it describes. tracker_hint says it under the check's state
+std::unordered_map<std::string, std::string> tracker_ways;
 /// A check with what Link carries: 1 in logic (he has all its rule asks for), 0 not (missing, when given: what he has
 /// not, by name), -1 not known (the file does not say, or no save's inventory has been read). Below the inventory's counts
 int tracker_in_logic(const TrackerCheck& k, std::string* missing = nullptr);
@@ -373,7 +380,12 @@ std::string tracker_hint(int row) {
     if (k && tracker_done[k - tracker_checks].load(std::memory_order_relaxed) == 1)
         return k->gives[0] ? "Collected: it gave " + tracker_item_name(k->gives) + "." : std::string("Collected: its item was given to Link here.");
     const int state = k ? tracker_in_logic(*k, &missing) : -1;
-    return state > 0 ? "In logic: Link carries all the seed's rules ask for here." : state == 0 ? "Not in logic. Still asked for: " + missing + "." : "";
+    std::string says = state > 0 ? "In logic: Link carries all the seed's rules ask for here." : state == 0 ? "Not in logic. Still asked for: " + missing + "." : "";
+    if (k && k->hash[0]) {   // (and the way there, where Ocarina Atlas describes it: tracker_ways)
+        const auto way = tracker_ways.find(k->hash);
+        if (way != tracker_ways.end()) says += (says.empty() ? "" : "\n") + std::string("How to get there: ") + way->second;
+    }
+    return says;
 }
 /// A row's hints from a table, the value lo first (nullptr: none for that value)
 const char* hint_in(const char* const* t, int n, int lo, int v, int variant) {
@@ -2338,6 +2350,7 @@ void tracker_load() {
                                                         k.folder, k.ages, &k.pos[0], &k.pos[1], &k.pos[2], k.needs, hash, gives, &k.stand[0], &k.stand[1],
                                                         &k.stand[2]);
             if (got >= 7) {
+                snprintf(k.hash, sizeof k.hash, "%s", got >= 9 ? hash : "");
                 snprintf(k.gives, sizeof k.gives, "%s", got >= 10 && strcmp(gives, "-") ? gives : "");
                 k.gives[strcspn(k.gives, "\r\n")] = 0;
                 if (got < 13) memcpy(k.stand, k.pos, sizeof k.stand);
@@ -2347,6 +2360,29 @@ void tracker_load() {
         fclose(f);
     }
     tracker_check_count = checks;
+    {   // (the checks' ways, read again when the file changes: a new seed)
+        static std::string ways_seen;
+        const std::string ways_path = path.substr(0, path.find_last_of("\\/") + 1) + "check_ways.txt";
+        std::string stamp;
+        std::error_code ec;
+        const auto when = std::filesystem::last_write_time(ways_path, ec);
+        if (!ec && on) stamp = std::to_string((long long)when.time_since_epoch().count()) + ":" + std::to_string((unsigned long long)std::filesystem::file_size(ways_path, ec));
+        if (stamp != ways_seen) {
+            ways_seen = stamp;
+            tracker_ways.clear();
+            if (FILE* f = stamp.empty() ? nullptr : fopen(ways_path.c_str(), "r")) {
+                char way[2048];
+                while (fgets(way, sizeof way, f)) {
+                    char* bar = strchr(way, '|');
+                    if (!bar || way[0] == '#') continue;
+                    *bar = 0;
+                    bar[1 + strcspn(bar + 1, "\r\n")] = 0;
+                    tracker_ways[way] = bar + 1;
+                }
+                fclose(f);
+            }
+        }
+    }
     if (seed && n > kTrackerFirstArea) {
         // The areas' order: the one Link is in, then the ones with a check in logic, then the ones with a check left, then
         // the rest; within each as the file has them (by name). Made when the tab comes on screen and kept while it is.

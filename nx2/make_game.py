@@ -2569,6 +2569,10 @@ def main(a=None):
         try:
             os.makedirs(os.path.join(out, "rando"), exist_ok=True)
             shutil.copy2(rando, os.path.join(out, "rando", "rando_seed.py"))
+            # (and the Tracker tab's directions to the checks it reads, with their licence: rando_seed.py CHECK_WAYS)
+            for data in ("atlas_ways.json", "ATLAS_NOTICE.txt"):
+                if os.path.isfile(os.path.join(ROOT, "tools", "rando", data)):
+                    shutil.copy2(os.path.join(ROOT, "tools", "rando", data), os.path.join(out, "rando", data))
         except OSError as e:
             print("the randomizer's script was not copied (%s): run tools/rando/rando_seed.py by hand" % e, flush=True)
     # (cosmetics: the launcher runs <game folder>/rando/rando_cosmetics.py at Play too; it reads the game's files with

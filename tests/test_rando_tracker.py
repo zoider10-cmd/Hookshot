@@ -270,6 +270,35 @@ def main():
           'return k->gives[0] ? "Collected: it gave " + tracker_item_name(k->gives) + "."' in menu,
           "a check collected does not say what it gave, or one not collected does")
     check('"No seed"' in menu and "now - last < 1000" in menu, "the tab says nothing without a seed, or reads its file every frame")
+    # ---- the way to a check (check_ways.txt, from Ocarina Atlas's directions: rando_seed.py CHECK_WAYS) ----
+    import json
+    import tempfile
+    ways = json.loads((ROOT / "tools" / "rando" / seed.ATLAS_WAYS).read_text(encoding="utf-8"))["ways"]
+    check(len(ways) >= 200 and all(set(w) >= {"name", "way", "age", "night"} for w in ways.values()),
+          "atlas_ways.json does not hold the directions with their names, ages and nights")
+    check((ROOT / "tools" / "rando" / "ATLAS_NOTICE.txt").read_text(encoding="utf-8").count("MIT License") == 1,
+          "the directions' licence notice is not beside them")
+    some = sorted(ways)[:2]
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "checks.txt"
+        path.write_text("# a comment|x|x|x|0 0 0|-|%s\n" % some[0] +
+                        "Area|Gold Skulltula|Folder|C|0 0 0|-|%s|Item\n" % some[0] +
+                        "Area|Chest|Folder|C|0 0 0|-|%s|Item\n" % some[0] +   # (the same hash again: once)
+                        "Area|Chest|Folder|C|0 0 0|-|0000000000000001|Item\n" +   # (a check Atlas has not)
+                        "Area|Piece of Heart|Folder|CA|0 0 0|KS|%s|Item\n" % some[1], encoding="utf-8")
+        said = seed.check_ways(str(path))
+    check([h for h, _ in said] == some, "the ways are not one for each check Atlas describes, in the file's order: %r" % said)
+    check(all(words.startswith(ways[h]["name"].rstrip(".") + ". ") and "|" not in words and "\n" not in words for h, words in said),
+          "a way does not start with its place's name, or has a bar or a line break: %r" % said)
+    check("CHECK_WAYS" in (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8") and
+          'os.path.join(mod, CHECK_WAYS), "w"' in (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8"),
+          "the seed does not write check_ways.txt")
+    check('for data in ("atlas_ways.json", "ATLAS_NOTICE.txt"):' in (ROOT / "nx2" / "make_game.py").read_text(encoding="utf-8"),
+          "the build does not put the directions and their notice beside rando_seed.py")
+    check('"check_ways.txt"' in menu and "tracker_ways[way] = bar + 1;" in menu and
+          'snprintf(k.hash, sizeof k.hash, "%s", got >= 9 ? hash : "");' in menu and
+          'std::string("How to get there: ") + way->second' in menu,
+          "the Tracker tab does not read the ways or say the chosen check's")
     print("PASS: the randomizer's Tracker tab")
 
 
