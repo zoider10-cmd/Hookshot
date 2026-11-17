@@ -100,6 +100,7 @@ static void WaitForSingleObject(HANDLE h, unsigned timeout) {
     ++waited;
 }
 static void load_hookshot_env() {}
+static void record_stutters_env() {}   // (hookshot: the slow-frame recorder's switch, host/hos_main.c)
 static void hos_game_layout() {}   // (host/game_layout.c: the game folder's cache/ and logs/)
 static void driver_cache_room() {}   // (host/hos_main.c: the drivers' shader caches' size, #2033)
 static void driver_cache_folder() {}   // (host/hos_main.c: the folder __GL_SHADER_DISK_CACHE_PATH names, made)
