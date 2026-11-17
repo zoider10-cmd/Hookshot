@@ -42,7 +42,12 @@ SAVE="All Items unlocked" bash .claude/skills/rando-test/scripts/run_headless.sh
 - Checks' places: `$GAME/mods/rando-seed/checks.txt` (folder, ages, x y z per check).
 - **Save copies** the owner made for tests are in `$GAME/user/save_copies/save_rando/` (`ls` it): "Early Save Test"
   (young Link, away from talk), "All Items unlocked" (young; switch age for adult), "Young Link in front of Potion Shop
-  Owner, before bug errand", and others. A test that needs a place or a state no copy has: **ask the owner to make a save
+  Owner, before bug errand", "Before Owl" (no Bomb Bag yet), and others. **Shops** (made 2026-11-16, each loads Link
+  in front of the keeper with the A prompt showing, holding Deku Nuts, the Bow and Deku Sticks where the name says):
+  "Child Kokiri Shop at day ...", "Adult Kokiri Shop ...", "Child Goron Shop ...", "Adult Goron Shop ...", "Child Zora
+  shop ...", "Child Bazaar at Day With Deku Nuts and Bow", "Child Potion Shop at day ...", "Child Bombchu Shop at night
+  ...", "Adult Kakariko Bazzaar Shop ..." (sic), "Adult Kakariko Potion Shop ..." (`ls` for the full names). **The
+  Market from Hyrule Field:** "Child Link In hyrule field in front of market" (walk in to load the Market). A test that needs a place or a state no copy has: **ask the owner to make a save
   there** and a backup copy; they can save almost anywhere. Mind that the autosave overwrites their newest save.
 - A character's talk can catch Link before a teleport (a shop keeper's greeting): start from a copy away from people.
 - The exit line: 124 ran to its end; 139 crashed (the backtrace is printed).
