@@ -624,6 +624,19 @@ bool memory_init() {
     return true;
 }
 
+/// (hookshot) The game's pools, all of them: the list grows while the host fills it. It was 8192 long, and OoT passes that
+/// (8,192 pools in the Ganondorf fight after a few areas and age changes, the owner's route of 2026-11-16): the pools past it
+/// were in neither the pool table nor the captures' ranges, and the fight ran at 42-47 fps with a 63-90 ms "collect" hitch
+/// about every second until the room was reloaded (4,778 pools, 60 fps again)
+int pools_listed(std::vector<std::array<uint64_t, 2>>& list) {
+    for (;;) {
+        const int n = host->gpu_pools(reinterpret_cast<uint64_t(*)[2]>(list.data()), (int)list.size());
+        if (n < (int)list.size() || list.size() >= (1u << 20)) return n;
+        list.resize(list.size() * 2);
+        static std::atomic<int> told{0};
+        if (told.fetch_add(1, std::memory_order_relaxed) < 4) logf("vk: the pool list grows to %zu", list.size());
+    }
+}
 /// Refresh the guest's pool table (no Vulkan work: pools are imported as they are used)
 std::atomic<int64_t> memsync_lock_wait_ns{0};
 std::atomic<int64_t> memsync_part_ns[3];
@@ -640,7 +653,7 @@ void memory_sync() {
     if (g == generation) return;
     generation = g;
     static thread_local std::vector<std::array<uint64_t, 2>> list(8192);
-    const int n = host->gpu_pools(reinterpret_cast<uint64_t(*)[2]>(list.data()), (int)list.size());
+    const int n = pools_listed(list);
     std::vector<GuestPool> next;
     next.reserve(n > 0 ? (size_t)n : 0);
     for (int i = 0; i < n; i++) {
@@ -1145,7 +1158,7 @@ void refresh_pool_ranges_locked() {   // (cap_ranges_mu held)
     if (g == pool_cap_gen && captures_made - pool_cap_built < 64) return;   // (and every 64: the old ones out)
     pool_cap_gen = g, pool_cap_built = captures_made;
     static std::vector<std::array<uint64_t, 2>> list(8192);
-    const int n = host->gpu_pools(reinterpret_cast<uint64_t(*)[2]>(list.data()), (int)list.size());
+    const int n = pools_listed(list);
     std::vector<std::pair<uint64_t, uint64_t>> v;
     std::unordered_map<uint64_t, uint64_t> seen;
     seen.reserve((size_t)std::max(n, 0));
