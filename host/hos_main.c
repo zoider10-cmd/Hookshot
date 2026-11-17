@@ -2445,7 +2445,17 @@ static int oot_cutscene_kept(const char *name) {
     return 0;
 }
 
+static void oot_skip_cutscene_locked(Ctx *c);
+/* (asked from Link's update and from the gameplay camera's view each frame, hos_oot_free_view: a cutscene without Link,
+   the Deku Tree's story of Ganondorf after Gohma (Dm_Kokiri_0090), was asked once at its start and played its 45 s,
+   bug 30: Link's update did not run again until it ended. One caller at a time) */
 static void oot_skip_cutscene(Ctx *c) {
+    static SRWLOCK lock = SRWLOCK_INIT;
+    if (!TryAcquireSRWLockExclusive(&lock)) return;
+    oot_skip_cutscene_locked(c);
+    ReleaseSRWLockExclusive(&lock);
+}
+static void oot_skip_cutscene_locked(Ctx *c) {
     static uint64_t was_event, was_player;
     static int64_t asked_at;
     static int env = -1;
@@ -3548,6 +3558,7 @@ void hos_oot_free_view(Ctx *c, uint64_t view) {
 
     // Camera zero supplies the gameplay view. The same matrix routine also serves other cameras.
     if (oot_gameplay_view(c) != view) return;
+    oot_skip_cutscene(c);   /* (the randomizer's fork: Skip cutscenes, also while Link isn't updated) */
 
     static SRWLOCK lock = SRWLOCK_INIT;
     AcquireSRWLockExclusive(&lock);
