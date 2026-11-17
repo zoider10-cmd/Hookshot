@@ -648,6 +648,24 @@ static DWORD WINAPI watch_thread(void *p) {
         hos_log("watch: done");
     }
 }
+/* (hookshot) A sampled thread's stack, from its TEB (NT_TIB StackBase at +8, StackLimit at +16, the reserve's bottom,
+   DeallocationStack, at +0x1478), for sample_all_thread's walk. Windows' unwinder followed a suspended thread's frames with
+   nothing to keep it on that stack, and once read 0x678 under ntdll and took the game down (a headless run, 2026-11-16):
+   the host runs game threads on fibers, whose switch moves the stack and the TEB's bounds in two steps. 0: not known */
+static int sample_stack_bounds(HANDLE h, uint64_t *lo, uint64_t *hi) {
+    typedef LONG (WINAPI *QueryThread)(HANDLE, int, void *, ULONG, ULONG *);
+    static QueryThread query;
+    if (!query) query = (QueryThread)(void *)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryInformationThread");
+    if (!query) return 0;
+    struct { LONG exit; void *teb; void *cid[2]; ULONG_PTR affinity; LONG prio, base; } info;
+    memset(&info, 0, sizeof info);
+    if (query(h, 0 /* ThreadBasicInformation */, &info, sizeof info, NULL) < 0 || !info.teb) return 0;
+    const uint8_t *teb = (const uint8_t *)info.teb;
+    uint64_t base, limit, bottom;
+    memcpy(&base, teb + 8, 8), memcpy(&limit, teb + 16, 8), memcpy(&bottom, teb + 0x1478, 8);
+    *lo = bottom && bottom < limit ? bottom : limit, *hi = base;
+    return *lo && *hi > *lo;
+}
 static DWORD WINAPI sample_all_thread(void *p) {
     const char *path = (const char *)p;
     char go[MAX_PATH];
@@ -722,6 +740,8 @@ static DWORD WINAPI sample_all_thread(void *p) {
             CONTEXT ctx = {0};
             ctx.ContextFlags = CONTEXT_CONTROL | CONTEXT_INTEGER;
             const BOOL got = GetThreadContext(th[i], &ctx);
+            uint64_t stack_lo = 0, stack_hi = 0;   /* (hookshot: the walk stays on the thread's own stack) */
+            const int bounded = got && sample_stack_bounds(th[i], &stack_lo, &stack_hi);
             char line[1024];
             int len = snprintf(line, sizeof line, "%ld %s|", ms, tn[i]);
             for (int depth = 0; got && depth < 16 && ctx.Rip && len < (int)sizeof line - 96; depth++) {
@@ -740,12 +760,16 @@ static DWORD WINAPI sample_all_thread(void *p) {
                 }
                 len += snprintf(line + len, sizeof line - len, "%s%s+%llx", depth ? ";" : "", mi < 0 ? "?" : modname[mi],
                                 (unsigned long long)(ctx.Rip - (uint64_t)m));
+                /* (hookshot) unwound only from code in a module, with the stack pointer on the thread's own stack: else the
+                   innermost frames already written are what this sample has */
+                if (!m || !bounded || ctx.Rsp < stack_lo || ctx.Rsp >= stack_hi) break;
                 DWORD64 image = 0;
                 PRUNTIME_FUNCTION f = RtlLookupFunctionEntry(ctx.Rip, &image, NULL);
                 if (!f) break;
                 void *hd;
                 DWORD64 frame;
                 RtlVirtualUnwind(UNW_FLAG_NHANDLER, image, ctx.Rip, f, &ctx, &hd, &frame, NULL);
+                if (ctx.Rsp < stack_lo || ctx.Rsp >= stack_hi) break;
             }
             ResumeThread(th[i]);
             if (ring) hos_slow_sample(sweep_ns, strchr(line, ' ') + 1);
