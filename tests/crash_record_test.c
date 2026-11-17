@@ -141,6 +141,8 @@ void hos_log_flush(void) {}
 static void log_flush(void) {}
 void hos_backtrace(void) {}
 void hos_hostcall_stats(void) {}
+/* (host/log_redact.c's, as it is for a run with no home folder in its lines) */
+static size_t hos_log_redact(char *out, size_t cap, const char *line) { snprintf(out, cap, "%s", line); return strlen(out); }
 /* HOS_LOG */
 /* HOS_FATAL */
 void rx_close_asked(void) {}

@@ -115,6 +115,14 @@ The fields are the ones the relay takes (Hookshot-api's `telemetry/crash/report.
   and `%USERPROFILE%`, and the user's name elsewhere, as a word of its own (three letters or more), `<user>`. The relay
   does it again, as a second line of defence.
 
+The saved logs themselves leave the user's name out too, so a log attached by hand is as safe as the report: the game
+writes its own lines without it (host/hos_thread.c through host/log_redact.c), and once the game is gone the helper
+rewrites that run's `hookshot_log.txt` in place with the same rule (the home folder `~` or `%USERPROFILE%`, the name
+as a folder of any path `<user>`), for what the Vulkan loader, SDL or a printf wrote to stderr themselves. It does so only
+for its own run (the log's `run_id:` line) and locked, so a start that rotates the log meanwhile, and cleans the rotated
+`hookshot_log.1.txt` itself for a run that had no helper, never writes over it. One rule for the log, the crash window
+and the Insert menu's Bug report: `gpu/vk/compat/hookshot_redact.h`.
+
 ### The release flag
 
 `release` is true when the version is a channel's (`X.Y.Z`, `X.Y.Z-rc.N`, `nightly-N-<hex>`:

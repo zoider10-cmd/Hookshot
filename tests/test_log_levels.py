@@ -49,6 +49,7 @@ CODE = r"""
 #include <cstring>
 #include <string>
 #include "hos_report_prefixes.h"
+#include "../gpu/vk/compat/hookshot_redact.h"
 %(hos_enum)s
 struct HosThread { const char* name; };
 HosThread* cur;
@@ -56,6 +57,10 @@ volatile int hos_control_on;
 void hos_control_log(const char*) {}
 std::string queued;
 static int log_queue(const char* line) { queued = line; return 1; }
+// (host/log_redact.c's, for a player whose home folder is /home/al)
+static size_t hos_log_redact(char* out, size_t cap, const char* line) {
+    return hookshot_redact_line(out, cap, line, std::strlen(line), "/home/al", "al", 0);
+}
 std::string fatal_reason;
 int fatal_calls;
 static void hos_crash_record_fatal(const uint64_t*, const char* reason) {
@@ -94,6 +99,8 @@ int main() {
     want(queued, "[hos host] vk: device 1\n", "host: an info line as it was");
     host_line(HOS_LOG_TRACE, "vk: program %%s", "x");
     want(queued, "[hos host] [trace] vk: program x\n", "host: trace after the thread's tag");
+    host_line(HOS_LOG_INFO, "saves: %%s and /run/media/al/SD", "/home/al/Games/Longshot/user");
+    want(queued, "[hos host] saves: ~/Games/Longshot/user and /run/media/<user>/SD\n", "host: the line without the user name");
     HosThread main_thread{"Main"};
     cur = &main_thread;
     host_line(HOS_LOG_DEBUG, "codec: y");

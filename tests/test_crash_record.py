@@ -52,7 +52,10 @@ def source_contract():
     assert replay.index('logf("vk: FATAL:') < replay.index("std::_Exit(3)")
     assert 'strstr(buf, "VK_ERROR_DEVICE_LOST") ? "device lost"' in threads
     logger = block(threads, "static void hos_vlog(")
-    assert logger.index("hos_crash_record_fatal(") < logger.index("snprintf(line,")
+    assert logger.index("hos_crash_record_fatal(") < logger.index("snprintf(raw,")
+    # (the line without the player's user name before anything has it: host/log_redact.h)
+    assert logger.index("snprintf(raw,") < logger.index("hos_log_redact(line, sizeof line, raw);") < logger.index("log_queue(line)")
+    assert "hos_log_redact(clean, sizeof clean, buf);" in fatal
     for marker in ("void hos_log(", "void hos_log_at("):
         wrapper = block(threads, marker)
         assert "hos_vlog(" in wrapper and "hos_crash_record_fatal(" not in wrapper

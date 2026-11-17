@@ -1,6 +1,7 @@
 // The Insert menu's Bug report: what is read and how it is written (vk_bug_report.h). No Vulkan and no menu here:
 // tests/test_bug_report.py compiles this file alone.
 #include "vk_bug_report.h"
+#include "compat/hookshot_redact.h"
 
 #include <algorithm>
 #include <atomic>
@@ -50,11 +51,6 @@ constexpr const char* kForm = "https://github.com/Shakoquo/Mako/issues/new";
 constexpr size_t kLinkMax = 2000;
 
 bool is_sep(char c) { return c == '/' || c == '\\'; }
-/// (a character a file or folder name has: a name ends at any other)
-bool name_char(char c) {
-    const unsigned char u = (unsigned char)c;
-    return std::isalnum(u) || c == '.' || c == '_' || c == '-' || u >= 0x80;
-}
 bool same_char(char a, char b, bool windows) {
     if (is_sep(a) && is_sep(b)) return windows || a == b;
     return windows ? std::tolower((unsigned char)a) == std::tolower((unsigned char)b) : a == b;
@@ -292,29 +288,9 @@ std::string url_part(const std::string& s) {
 }  // namespace
 
 std::string redact(const std::string& line, const std::string& home, const std::string& user, bool windows) {
-    std::string h = home;
-    while (h.size() > 1 && is_sep(h.back())) h.pop_back();
-    const bool with_home = h.size() > 1;
-    std::string out;
-    out.reserve(line.size());
-    for (size_t i = 0; i < line.size();) {
-        const size_t after_home = i + h.size(), after_user = i + user.size();
-        // (the home folder as a whole: not inside a longer name, not the end of another path)
-        if (with_home && (i == 0 || (!name_char(line[i - 1]) && !is_sep(line[i - 1]))) && matches_at(line, i, h, windows) &&
-            (after_home >= line.size() || !name_char(line[after_home]))) {
-            out += windows ? "%USERPROFILE%" : "~";
-            i = after_home;
-            continue;
-        }
-        // (the user's name as a folder of any path: /run/media/<user>, D:\Users\<user>, /var/home/<user>)
-        if (!user.empty() && i > 0 && is_sep(line[i - 1]) && matches_at(line, i, user, windows) &&
-            (after_user >= line.size() || !name_char(line[after_user]))) {
-            out += "<user>";
-            i = after_user;
-            continue;
-        }
-        out += line[i++];
-    }
+    // (one implementation with the host's log and crash window: compat/hookshot_redact.h)
+    std::string out(line.size() * 7 + 1, '\0');
+    out.resize(hookshot_redact_line(out.data(), out.size(), line.data(), line.size(), home.c_str(), user.c_str(), windows));
     return out;
 }
 

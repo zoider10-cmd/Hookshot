@@ -4306,6 +4306,7 @@ static int game_main(int argc, char **argv) {
     }
 #endif
     void hos_crash_record_prepare(const char *log_path);
+    int hos_log_redact_file(const char *path, const char *run_id);   /* (host/log_redact.h) */
     {   // (started from its icon the game has nowhere to log to: hookshot_log.txt in the game folder's logs/ (host/game_layout.c), for players to send in)
 #ifdef _WIN32
         {   /* (started again by the Insert menu's Restart now (host/hos_relaunch.c): the run before still has its log open until
@@ -4339,6 +4340,9 @@ static int game_main(int argc, char **argv) {
                 memcpy(to, path, n), snprintf(to + n, 32, "hookshot_log.%d.txt", k);
                 MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING);
             }
+            /* (hookshot) the run before's log without the player's user name: its own lines were written so, and what wrote to
+               stderr itself (the Vulkan loader, SDL) is redacted here when its crash watch did not (host/log_redact.h) */
+            hos_log_redact_file(to, NULL);
 #if !defined(_WIN32) && !defined(A64_MEM_ZERO)
             startup_stderr = fcntl(STDERR_FILENO, F_DUPFD_CLOEXEC, 0);
 #endif

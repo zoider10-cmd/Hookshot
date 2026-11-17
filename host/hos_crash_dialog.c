@@ -27,6 +27,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include "hos_crash_dialog.h"
 #include "hos_crash_record.h"
+#include "log_redact.h"
 #include "options_path.h"
 #include "../gpu/vk/crash_window_api.h"
 #include "../gpu/vk/compat/hookshot_env.h"
@@ -1666,7 +1667,12 @@ static int helper(const HosCrashArgs *a) {
     }
     HosCrashRecord r;
     hos_crash_record_parse(record ? record : "", &r);
-    if (find_run_log(log, a->log, run_id)) read_log(log, &s.who);
+    if (find_run_log(log, a->log, run_id)) {
+        /* (the game is gone: its log without the player's user name, what other code wrote to stderr itself too, before a player
+           sends it in; only this run's, which a start since may have moved to .1: host/log_redact.h) */
+        hos_log_redact_file(log->path, run_id);
+        read_log(log, &s.who);
+    }
     s.verdict = hos_crash_verdict(&r, &log->facts, have_exit, code, 0);
     if (a->mode == 2 && r.kind != 1 && !r.oom) s.verdict = HOS_CRASH_QUIET;
 #ifdef _WIN32

@@ -16,6 +16,15 @@ make_game = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(make_game)
 
 
+def saved(text):
+    """text as the log file holds it: the console's, without the home folder and the user's name (nx2/log_redact.py)"""
+    out = io.StringIO()
+    lines = make_game._log_redact.RedactedLines(out)
+    lines.write(text)
+    lines.close()
+    return out.getvalue()
+
+
 class BuildLogTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="hookshot-log-")
@@ -81,7 +90,7 @@ class BuildLogTests(unittest.TestCase):
         self.assertIn("error: authored failure", stdout)
         self.assertIn("@@error ", stdout)
         self.assertEqual(stderr, "")
-        self.assertEqual(self.log.read_text(encoding="utf-8"), stdout)
+        self.assertEqual(self.log.read_text(encoding="utf-8"), saved(stdout))
 
     def test_nonfatal_shader_output_stays_on_stderr_and_is_logged(self):
         def build(args):
@@ -95,7 +104,7 @@ class BuildLogTests(unittest.TestCase):
         self.assertEqual(stdout, "@@done fixture\n")
         self.assertIn("shader out", stderr)
         self.assertIn("shader err", stderr)
-        self.assertEqual(self.log.read_text(encoding="utf-8"), stderr + stdout)
+        self.assertEqual(self.log.read_text(encoding="utf-8"), saved(stderr + stdout))
 
     def test_unexpected_exception_includes_traceback_and_error(self):
         def build(args):
@@ -106,7 +115,7 @@ class BuildLogTests(unittest.TestCase):
         self.assertIn("Traceback", stdout)
         self.assertIn("RuntimeError: authored exception", stdout)
         self.assertIn("@@error ", stdout)
-        self.assertEqual(self.log.read_text(encoding="utf-8"), stdout + stderr)
+        self.assertEqual(self.log.read_text(encoding="utf-8"), saved(stdout + stderr))
 
     def test_system_exit_message_is_logged(self):
         def build(args):
@@ -116,7 +125,28 @@ class BuildLogTests(unittest.TestCase):
         self.assertEqual(code, 1)
         # (said in the builder's protocol, as #434 has it: a library's SystemExit text is an @@error line)
         self.assertEqual(stdout, "@@error authored toolchain failure\n")
-        self.assertEqual(self.log.read_text(encoding="utf-8"), stdout + stderr)
+        self.assertEqual(self.log.read_text(encoding="utf-8"), saved(stdout + stderr))
+
+    def test_the_file_leaves_out_the_user_name_and_the_console_keeps_it(self):
+        here = make_game._log_redact.who()
+        home = here[0]
+        self.assertTrue(home, "no home folder in the environment")
+        sep = "\\" if here[3] else "/"
+        line = "compiling " + home + sep + "Games" + sep + "x.c\n"
+
+        def build(args):
+            print(line, end="")
+            print("cut across", end="")
+            print(" two writes " + home + sep + "y")
+
+        code, stdout, stderr, _ = self.invoke(build)
+        self.assertEqual(code, 0, stdout + stderr)
+        self.assertIn(home, stdout)   # (the console, which a launcher reads, as it was)
+        text = self.log.read_text(encoding="utf-8")
+        self.assertNotIn(home, text)
+        w = "%USERPROFILE%" if here[3] else "~"
+        self.assertIn("compiling " + w + sep + "Games" + sep + "x.c\n", text)
+        self.assertIn("cut across two writes " + w + sep + "y\n", text)
 
     def test_unwritable_destination_stops_before_build(self):
         self.log = self.root / "missing parent" / "build.log"
@@ -148,7 +178,7 @@ class BuildLogTests(unittest.TestCase):
                 self.assertIn("needs --out", ran.stdout)
                 if not jobs:
                     self.assertIn("compilers at once", ran.stdout)
-                self.assertEqual(self.log.read_text(encoding="utf-8"), ran.stdout + ran.stderr)
+                self.assertEqual(self.log.read_text(encoding="utf-8"), saved(ran.stdout + ran.stderr))
 
 
 if __name__ == "__main__":
