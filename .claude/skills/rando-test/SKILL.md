@@ -50,7 +50,8 @@ SAVE="All Items unlocked" bash .claude/skills/rando-test/scripts/run_headless.sh
   Market from Hyrule Field:** "Child Link In hyrule field in front of market" (walk in to load the Market). **The royal
   tomb:** "Adult Sun Song Tombs" (adult, for the Sun's Song lesson, bug 61). **Great Fairies:** "Adult Death Mountain Great Fariy
   Fountain" (sic; adult, in front of the fountain: the reward needs Zelda's Lullaby played, by input or by asking for
-  the fairy's event by name, as the boss teleports do). A test that needs a place or a state no copy has: **ask the owner to make a save
+  the fairy's event by name, as the boss teleports do). **The Deku Tree's end:** "Child Deku Tree Heart Container"
+  (before Gohma's container) and "Child Deku Tree Blue warp" (at the blue warp: the story after Gohma). A test that needs a place or a state no copy has: **ask the owner to make a save
   there** and a backup copy; they can save almost anywhere. Mind that the autosave overwrites their newest save.
 - A character's talk can catch Link before a teleport (a shop keeper's greeting): start from a copy away from people.
 - The exit line: 124 ran to its end; 139 crashed (the backtrace is printed).
