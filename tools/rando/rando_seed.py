@@ -84,6 +84,14 @@ KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__Chec
 # them the player is shut in. The Forest Temple's Stalfos room: no way out without the Bow or a key, and the warp
 # songs do not work in it. Placement 2 kept their items; since then FIXES gives their rooms a way out.
 LOCKED_ROOMS = ("ForestTemple_GetBow",)
+# Dampe's race (bug 62, placement 12): its prize chests sit at one spot under the Graveyard (Graveyard_Adult_Static), each
+# shown by the race's own state (MiniGame_DampeRace: Minigame_DampeRace_TreasureBoxState, set by its clear count and
+# its HookShot_Event63 flag, not by the pouch) and opened through its GetEventName MiniGame_DampeRace_OpenGoalTBox,
+# which sets the state and gives nothing itself; the Piece of Heart won is the tomb's map logic's flag
+# (UnderTheGrave_DampeRace_HeartGeted, Logic/UnderTheGrave_Prefab_6971), not the item. So the Piece of Heart chest
+# takes part. The Hookshot chest stays: the rules have no Hookshot (an adult is taken to have it from here) and the tomb
+# can't be left without it; shuffling it needs the Hookshot as a gating item in every rule that leans on it.
+DAMPE_RACE_CHESTS = frozenset((0x4ccffbd5778b67e2,))
 # Changes to the map that a shuffled game needs, written with every seed (and so only with the randomizer on):
 # {an actor's hash: {a key of its Dynamic block: the truth value it gets}}.
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
@@ -1626,6 +1634,8 @@ def stays_why(c, events, placement=PLACEMENT):
     kept = [k for k in KEEP_IF if k in c.params]
     if placement >= 12 and kept == ["Drop__CheckActor", "Drop__DropActor_Substitute"]:
         kept = []   # (SUBSTITUTE_CHESTS: a chest that gives another item when Link has one already takes part)
+    if placement >= 12 and c.hash in DAMPE_RACE_CHESTS:
+        return None   # (Dampe's race's Piece of Heart chest takes part: DAMPE_RACE_CHESTS)
     if "GetEventName" in kept and (c.event in PLAIN_EVENTS or events and not c.event.startswith("MiniGame")):
         kept.remove("GetEventName")
     if kept == ["GetEventName"]:
