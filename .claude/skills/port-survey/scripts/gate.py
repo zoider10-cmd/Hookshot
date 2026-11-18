@@ -34,6 +34,15 @@ def main(a):
             print("%-40s %s" % (os.path.basename(os.path.dirname(f)),
                                 "no good run" if r is None else "%.1f fps, 1%% low %.1f, worst %.1f ms (%d frames)" % (r["fps"], r["low1"], r["worst"], r["n"])))
             res[v].append(r)
+    def upscaler(v):   # (what the runs' logs say the build has: two sides built differently are not comparable)
+        out = set()
+        for f in glob.glob(os.path.join(P, "%s_%s_*" % (name, v), "stdout.txt")):
+            t = open(f, encoding="utf-8", errors="replace").read()
+            out.add("no FSR 4" if "this build has no FSR 4" in t else "FSR 4" if "AMD FSR 4" in t else "?")
+        return out
+    ua, ub = upscaler(A), upscaler(B)
+    if ua != ub:
+        print("FAIL: not comparable: %s ran %s, %s ran %s (build both the same way: HOOKSHOT_FSR=1)" % (A, sorted(ua), B, sorted(ub))); return 1
     if not res[A] or not res[B] or None in res[A] + res[B]:
         print("FAIL: a run is missing or did not play"); return 1
     verdict = "NOISE"

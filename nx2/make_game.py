@@ -2322,6 +2322,8 @@ def main(a=None):
         env["A64_HOT_FUNCS"] = os.path.join(work, "hot_funcs.txt")
     if os.path.exists(os.path.join(work, "hookshot_pieces.prof")) and profile_readable(os.path.join(work, "hookshot_pieces.prof")):
         env["RX_PGO"] = os.path.join(work, "hookshot_pieces.prof")
+    if os.environ.get("RX_PGO"):   # (set by hand: the profile-counting build, RX_PGO=gen, or another profile to try)
+        env["RX_PGO"] = os.environ["RX_PGO"]
 
     say("stage", "lift", "Translating the game to PC code")
     # (the same game, tools and settings as the lift before: its C is what this lift would write, and nothing recompiles from it. A
