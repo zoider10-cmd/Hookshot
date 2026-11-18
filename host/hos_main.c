@@ -1533,6 +1533,31 @@ static int oot_gamedata_enum(Ctx *c, uint32_t hash, uint32_t *value, int set) {
     return 0;
 }
 
+/* A whole number of the list of flags (Data.Int: PlayerStatus.MaxLife, in quarter hearts), read or written directly:
+   the Ints are kept as the Enums are, from GameDataMgr+0xc8 (host/oot_state_tap.c state_kind): +0xd0 how many, +0xd8
+   the entries of 40 bytes with the value at +0x1c, +0xe0 the (hash, index) table and +0xec its size. 1 when found. */
+static int oot_gamedata_int(Ctx *c, uint32_t hash, int32_t *value, int set) {
+    const uint64_t mgr = oot_singleton(c, OOT_GAMEDATA_SLOT);
+    if (!mgr) return 0;
+    const uint64_t table = recomp_load64(c, mgr + 0xe0);
+    const uint32_t size = recomp_load32(c, mgr + 0xec);
+    if (!table || !size) return 0;
+    for (uint32_t probe = 0, slot = hash % size; probe < size; probe++, slot = (slot + 1) % size) {
+        const uint32_t key = recomp_load32(c, table + slot * 8ULL);
+        if (!key) return 0;
+        if (key != hash) continue;
+        const uint32_t index = recomp_load32(c, table + slot * 8ULL + 4), count = recomp_load32(c, mgr + 0xd0);
+        if (index >= count) return 0;
+        const uint64_t entry = recomp_load64(c, mgr + 0xd8) + index * 40ULL;
+        if (set) {
+            if (recomp_load32(c, entry + 0x20) == recomp_load32(c, entry + 0x1c)) recomp_store32(c, entry + 0x20, (uint32_t)*value);
+            recomp_store32(c, entry + 0x1c, (uint32_t)*value);
+        } else *value = (int32_t)recomp_load32(c, entry + 0x1c);
+        return 1;
+    }
+    return 0;
+}
+
 /* What the game knows by an actor's hash (the list of flags' Bool64bitKey: a chest, a shelf that sells out): found in
    the running game by looking for known hashes in its memory. GameDataMgr+0xc58 is how many there are, +0xc60 their
    table, sorted by the hash, of 16 bytes each (the hash, then its reset type in the low half of the next word), and
@@ -1901,6 +1926,16 @@ static void oot_tracker_item(const char *name) {
 #define OOT_CONTAINER "Obj_Heart_Container"
 #define OOT_PIECE_WAIT 600   /* (the player's updates a piece counted late is waited for: some seconds) */
 static int oot_piece_back;   /* (a piece to take back out of the pouch: the updates it is still waited for) */
+/* (bug 31: a boss's Heart Container that gives the seed's item still made a heart, seen without a window: five hearts
+   became six with the add renamed. Its own taking raises PlayerStatus.MaxLife, as a piece's counts the piece. So the
+   max is followed at each update (oot_max_was: what it was before its last rise, oot_max_rose: when), and after the
+   renamed add it is put back for some seconds to what it was before the container: oot_container_max) */
+#define OOT_MAX_LIFE 0xfbe01da1u   /* (PlayerStatus.MaxLife, Int, quarter hearts: host/oot_state_tap.c) */
+#define OOT_LIFE 0x31ab5580u       /* (PlayerStatus.Life) */
+#define OOT_MAX_RECENT 5000000000LL
+static int32_t oot_max_now = -1, oot_max_was = -1, oot_container_max = -1;
+static int64_t oot_max_rose;
+static int oot_container_back;   /* (the updates the container's heart is still taken back for) */
 /* (a piece that gives another item still healed Link, as a piece does: bug 4, reported 2026-11-13. Until this time
    Link's life is not let rise over what it was before the piece: oot_piece_heal, in the player's update. The heal is
    not the life write that patch_life hooks (tried: no heal went through it, and Link was healed all the same)) */
@@ -1912,6 +1947,19 @@ static void oot_piece_heal(Ctx *c, int64_t now, uint64_t actor) {
     const uint64_t life_at = recomp_load64(c, actor + 7184);
     if (life_at < HOS_HEAP_BASE || (life_at & 7)) return;   /* (not made yet: seen 0x2f) */
     const uint32_t life = recomp_load32(c, life_at + 8);
+    /* (bug 31: the boss container's heart in Link's own max life too, which the hearts shown and the heals go by: the
+       actor's +7192, as its life is +7184 (the heal's clamp in f_804bd8c0). PlayerStatus.MaxLife alone was put back
+       and six hearts were still shown) */
+    const int32_t keep = __atomic_load_n(&oot_container_max, __ATOMIC_RELAXED);
+    const uint64_t max_at = recomp_load64(c, actor + 7192);
+    if (keep > 0 && __atomic_load_n(&oot_container_back, __ATOMIC_ACQUIRE) > 0 && max_at >= HOS_HEAP_BASE && !(max_at & 7)) {
+        const uint32_t max = recomp_load32(c, max_at + 8);
+        if (max > (uint32_t)keep) {
+            recomp_store32(c, max_at + 8, (uint32_t)keep);
+            if (life > (uint32_t)keep) recomp_store32(c, life_at + 8, (uint32_t)keep);
+            hos_log("rando: the boss's Heart Container's heart is taken back from Link (max life %u -> %d quarters)", max, keep);
+        }
+    }
     static int told;
     if (!told && getenv("HOS_OOT_PIECES")) told = 1, hos_log("rando: Link's life read: %u quarters (at 0x%llx)", life, (unsigned long long)life_at);
     if (now >= __atomic_load_n(&oot_no_heal_until, __ATOMIC_ACQUIRE)) {
@@ -2640,6 +2688,24 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
             const int result = oot_pouch_change(c, OOT_PIECE, -1);
             __atomic_store_n(&oot_piece_back, 0, __ATOMIC_RELEASE);
             hos_log("rando: the Piece of Heart counted with the seed's item is taken out (%d)", result);
+        }
+    }
+    {   /* (bug 31: Link's max life followed, and a boss container's heart taken back: oot_container_back) */
+        int32_t max;
+        if (oot_gamedata_int(c, OOT_MAX_LIFE, &max, 0)) {
+            if (max > oot_max_now && oot_max_now >= 0) oot_max_was = oot_max_now, oot_max_rose = hos_now_ns();
+            oot_max_now = max;
+            const int32_t keep = __atomic_load_n(&oot_container_max, __ATOMIC_RELAXED);
+            if (__atomic_load_n(&oot_container_back, __ATOMIC_ACQUIRE) > 0) {
+                __atomic_sub_fetch(&oot_container_back, 1, __ATOMIC_RELEASE);
+                if (keep > 0 && max > keep) {
+                    int32_t life, was = max, to = keep;
+                    oot_gamedata_int(c, OOT_MAX_LIFE, &to, 1);
+                    if (oot_gamedata_int(c, OOT_LIFE, &life, 0) && life > keep) oot_gamedata_int(c, OOT_LIFE, &to, 1);
+                    oot_max_now = keep;
+                    hos_log("rando: the boss's Heart Container's heart is taken back (max life %d -> %d quarters)", was, keep);
+                }
+            }
         }
     }
     if (getenv("HOS_OOT_PIECES")) {   /* (a test's: the count as it changes) */
@@ -3460,6 +3526,12 @@ int hos_oot_pouch_add(Ctx *c) {
             /* (bug 31: a boss's Heart Container that the seed made another item gives that item. The container's add
                gives its heart by itself and the pouch keeps none, so the add renamed gives no heart: nothing to take back) */
             hos_log("rando: the boss's Heart Container here is the seed's %s: that is given", gives);
+            /* (and the heart its taking makes is taken back: before the add when it rose just now, else after it) */
+            const int recent = oot_max_was >= 0 && hos_now_ns() - oot_max_rose < OOT_MAX_RECENT;
+            __atomic_store_n(&oot_container_max, recent ? oot_max_was : oot_max_now, __ATOMIC_RELAXED);
+            __atomic_store_n(&oot_container_back, OOT_PIECE_WAIT, __ATOMIC_RELEASE);
+            hos_log("rando: Link's max life %d quarters at the add%s: kept at %d", oot_max_now, recent ? " (it rose just now)" : "",
+                    recent ? oot_max_was : oot_max_now);
             view = oot_pouch_name(c, view, gives);
             snprintf(name, sizeof name, "%s", gives);
         }

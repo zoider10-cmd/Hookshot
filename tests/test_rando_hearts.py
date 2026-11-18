@@ -114,6 +114,12 @@ def main():
     check('} else if (!strcmp(name, OOT_CONTAINER) && c->x[30] != 0x828d50acULL && oot_piece_gives(gives, sizeof gives, 1)) {' in block and
           block.index("oot_piece_gives(gives, sizeof gives, 1)") < block.index("oot_tracker_item(name);"),
           "a boss's container that the seed made another item does not give it, or a chest's container is renamed")
+    # (the container's own taking still makes a heart, seen without a window: five became six. It is put back in the
+    #  saved max and in Link's own, the one the hearts shown go by)
+    check("#define OOT_MAX_LIFE 0xfbe01da1u" in host and "__atomic_store_n(&oot_container_back, OOT_PIECE_WAIT, __ATOMIC_RELEASE);" in block and
+          "oot_gamedata_int(c, OOT_MAX_LIFE, &to, 1);" in host and "const uint64_t max_at = recomp_load64(c, actor + 7192);" in host and
+          "recomp_store32(c, max_at + 8, (uint32_t)keep);" in host,
+          "the heart a boss's container makes is not taken back when it gives another item")
     print("PASS: Heart Pieces")
 
 
