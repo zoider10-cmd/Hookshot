@@ -263,6 +263,15 @@ def main():
     check(got["customdelete"] == "" and "Third" not in got["customnames"], "a save made beyond the ten, deleted, is still in the list: %r" % got)
     check("delete.Click += (o, e) => OnDelete();" in src and 'MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;\n        string error = SaveSlots.Delete(dir, folder, n);' in src.replace("\r\n", "\n"),
           "the window to choose has no Delete button, or it does not ask first")
+    # (2026-11-17, the owner: the button that makes a save the one played is named for what it does, and the save played
+    #  can be deleted, another made the one played first; a Select that fails deletes nothing)
+    flat = src.replace("\r\n", "\n")
+    check('Style(play, "Use this save",' in flat and '"Play this save"' not in flat and
+          "delete.Enabled = n != null && (n != current || list.Items.Count > 1);" in flat and
+          "string moved = SaveSlots.Select(dir, saveFolder, next);" in flat and
+          "if (moved != null) { Say(moved, MessageBoxIcon.Warning); Fill(n); return; }" in flat and
+          flat.index("string moved = SaveSlots.Select(dir, saveFolder, next);") < flat.index("string error = SaveSlots.Delete(dir, saveFolder, n);"),
+          "the save played cannot be deleted, is deleted before another is chosen, or the button still says Play")
     first, second = "vsync=1;rando_on=1;rando_seed=111;rando_chests=3;options_version=2|first seed", "vsync=1;rando_on=1;rando_seed=222;rando_chests=3;options_version=2|second seed"
     check(got["seedto"] == "" and got["seedtaken"] == second and got["seeddiffers"] == "True" and got["seedsame"] == "False",
           "a save without a seed of its own does not take the seed there is, or a seed changed since a save's Play is not told: %r" % got["seedtaken"])

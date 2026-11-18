@@ -597,7 +597,7 @@ class SaveSlotsForm : Form {
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
         list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (playing)", n => SaveSlots.Shown(n, empty.Contains(n)),
                                                            n => saveFolder == "save_rando" && !empty.Contains(n) ? SaveSlots.SeedTag(dir, n) : "");
-        Style(play, "Play this save", 16, 264, 150); Style(delete, "Delete", 176, 264, 100); Style(copy, "Copy", 284, 264, 100);
+        Style(play, "Use this save", 16, 264, 150);   // (it makes the save the one the game plays; the game is started from the main window) Style(delete, "Delete", 176, 264, 100); Style(copy, "Copy", 284, 264, 100);
         Style(close, "Close", 394, 264, 110);
         var mid = new Label { Text = "A name (or none), for a new save or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 312) };
         name.SetBounds(16, 338, 248, 26); name.MaxLength = 80;
@@ -625,7 +625,8 @@ class SaveSlotsForm : Form {
 
     void Buttons() {
         string n = list.SelectedIndex >= 0 ? (string)list.SelectedItem : null;
-        play.Enabled = delete.Enabled = n != null && n != current;
+        play.Enabled = n != null && n != current;
+        delete.Enabled = n != null && (n != current || list.Items.Count > 1);   // (the one played too: another is chosen first, OnDelete)
         rename.Enabled = n != null;
         copy.Enabled = n != null && !empty.Contains(n);
     }
@@ -686,11 +687,25 @@ class SaveSlotsForm : Form {
     void OnDelete() {
         if (list.SelectedIndex < 0) return;
         string n = (string)list.SelectedItem;
-        if (MessageBox.Show(this, "Delete the save \"" + n + "\" and all its progress? It cannot be brought back.", "Saves",
-                            MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
+        // (the save being played can be deleted too, asked for 2026-11-17: another is made the one played first, the first
+        //  other save with progress in the list, else the first empty one: a new game when it is played)
+        string next = null;
+        if (n == current) {
+            if (Running()) return;
+            foreach (string o in list.Items) if (o != n && !empty.Contains(o)) { next = o; break; }
+            if (next == null) foreach (string o in list.Items) if (o != n) { next = o; break; }
+            if (next == null) { Say("This is the only save: make a new one first.", MessageBoxIcon.Information); return; }
+        }
+        string ask = "Delete the save \"" + n + "\" and all its progress? It cannot be brought back." +
+                     (next != null ? "\n\nIt is the save being played: \"" + SaveSlots.Shown(next, empty.Contains(next)).Trim() + "\" becomes the one played." : "");
+        if (MessageBox.Show(this, ask, "Saves", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
+        if (next != null) {
+            string moved = SaveSlots.Select(dir, saveFolder, next);
+            if (moved != null) { Say(moved, MessageBoxIcon.Warning); Fill(n); return; }   // (nothing deleted: the saves as they were)
+        }
         string error = SaveSlots.Delete(dir, saveFolder, n);
         if (error != null) Say(error, MessageBoxIcon.Warning);
-        Fill(null);
+        Fill(next);
     }
 }
 
