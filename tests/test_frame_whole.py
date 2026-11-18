@@ -9,7 +9,7 @@ as the step (carry), hos_frame_whole adds the amount to the counter's own remain
 60/144 are 60; an amount of 1 or more keeps its fraction too; two counters keep their own remainders; NaN and amounts below zero
 give 0. Without it, the amount is cut as the game cuts it (60 fps as before). The water renderer (f_800672e0) runs its ripple
 simulation (int)step times a frame the same way, its remainder kept per water object: forty surfaces stepped in turn each still
-count their 60 frames a second. The patch replaces the one cut of each site, once,
+count their 60 frames a second (its substeps are carried rather than its frames: tests/test_water_substeps.py). The patch replaces the one cut of each site, once,
 declares the hook, and leaves a file patched before and a function whose code differs as they are.
 
 python -I -B tests/test_frame_whole.py
@@ -87,10 +87,14 @@ class FrameWholeTests(unittest.TestCase):
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
     def test_patch_replaces_the_cut_once(self):
-        for lifted, (_, old, key) in zip(LIFTED, oot_patches.WHOLE_SITES):
+        for lifted, (head, old, key) in zip(LIFTED, oot_patches.WHOLE_SITES):
             out, n = oot_patches.patch_whole_frames(lifted)
             self.assertEqual(n, 1)
-            self.assertEqual(out.count("=hos_frame_whole(%s, (uint32_t)c->vreg[0][0]);" % key), 1)
+            if head in oot_patches.WHOLE_TIMES:   # (the water's substeps: tests/test_water_substeps.py runs them)
+                self.assertEqual(out.count("=hos_frame_whole_times(%s, (uint32_t)c->vreg[0][0], " % key), 1)
+                self.assertIn(oot_patches.WHOLE_TIMES_DECL, out)
+            else:
+                self.assertEqual(out.count("=hos_frame_whole(%s, (uint32_t)c->vreg[0][0]);" % key), 1)
             self.assertNotIn("recomp_fp_to_int", out)
             self.assertIn(oot_patches.WHOLE_DECL, out)
             self.assertEqual(oot_patches.patch_whole_frames(out), (out, 0))   # (patched before: as it is)

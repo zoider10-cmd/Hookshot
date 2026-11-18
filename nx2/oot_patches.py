@@ -861,6 +861,8 @@ def patch_loop_pose(s):
 # - f_800672e0, the water renderer: its ripple simulation runs (int)step times the water's substeps (+76 of the pass) each frame.
 #   Cut to 0, the rings Link and the actors make in water stood still above 60 fps. Found by atk3001 for Lichii (zortos293/
 #   Lichii#1152), as ported to Fritchii (Frizti/Fritchii d389685a4, 063dbb741): its remainder is kept per water object (x21).
+#   Whole frames carried, a frame ran all its substeps or none (0 or 4 at 108 fps), and the rings stood still for a frame and
+#   then jumped (issue 1199): the substeps are carried instead (WHOLE_TIMES), 2 or 3 every frame.
 # - f_803edf70, the time of day: each frame it adds (int)(2 * step) game seconds (+60) to the seconds of the day (+40, a day of
 #   86400, then the day count +44). Cut, it added 1 a frame below 120 fps (the day slower: 83% at 100) and 0 above 120, where
 #   the clock stood still and the sun swung back and forth over the frozen hour.
@@ -875,15 +877,17 @@ def patch_loop_pose(s):
 #   (https://github.com/NotRexed/Hookshot/issues/2667). Its remainder is kept per web (+2296), before the clamp.
 # hos_frame_whole carries the fractions per counter while the frames' own time is the step, so each moves at the game's rate;
 # otherwise it cuts as the game does. A site is added here once it is seen to misbehave in game. (A site's function, its code to
-# replace, and the counter's address for its remainder.)
+# replace, and the counter's address for its remainder.) A site of WHOLE_TIMES multiplies the whole frames by a whole number of
+# substeps (the register it loaded them into): hos_frame_whole_times hands out the whole substeps and the register becomes 1.
 WHOLE_SITES = (
     # (the cut alone, the function's one: the multiply before it is a64_fpx_hot_mul32_fma32 in a lift where the function is
     # among A64_HOT_FUNCS)
     ("void f_80a87e50(Ctx *__restrict A64_NOESC c) {@",
      "    c->x[12]=recomp_fp_to_int(c->vreg[0][0]&UINT64_C(0xffffffff),32,32,1,3,c->fpcr,&c->fpsr);@",
      "c->x[19] + 864"),
-    # (the cut alone, the function's one)
+    # (the substeps' load and the cut, the function's one: x8 * x9 substeps follow)
     ("void f_800672e0(Ctx *__restrict A64_NOESC c) {@",
+     "    c->x[8]=recomp_load32(c,c->x[19] + 76);@"
      "    c->x[9]=recomp_fp_to_int(c->vreg[0][0]&UINT64_C(0xffffffff),32,32,1,3,c->fpcr,&c->fpsr);@",
      "c->x[21]"),
     # (the cut with the store after it: the function cuts into x8 the same way once more, in the branch that sets
@@ -911,36 +915,56 @@ WHOLE_SITES = (
 WHOLE_SITES = tuple((h.replace("@", "\n"), o.replace("@", "\n"), k) for h, o, k in WHOLE_SITES)
 WHOLE_MARK = "/* (the step's whole frames: nx2/oot_patches.py) */"
 WHOLE_DECL = "extern uint32_t hos_frame_whole(uint64_t at, uint32_t amount_bits);\n"
+WHOLE_TIMES_DECL = "extern uint32_t hos_frame_whole_times(uint64_t at, uint32_t amount_bits, uint32_t times);\n"
+WHOLE_TIMES = {"void f_800672e0(Ctx *__restrict A64_NOESC c) {\n": "c->x[8]"}   # (the water's substeps, issue 1199)
 
 
-def whole_new(old, key):
-    """old with its cut to whole frames (the one recomp_fp_to_int) made hos_frame_whole's for the counter at key"""
+def whole_new(old, key, times=None):
+    """old with its cut to whole frames (the one recomp_fp_to_int) made hos_frame_whole's for the counter at key; with times
+    (the register of the substeps it multiplies by), hos_frame_whole_times's whole substeps, and the register 1"""
     lines = old.split("\n")
     for i, line in enumerate(lines):
         if "recomp_fp_to_int(c->vreg[0][0]" in line:
             reg = line.split("=", 1)[0]
-            lines[i] = "%s=hos_frame_whole(%s, (uint32_t)c->vreg[0][0]);   %s" % (reg, key, WHOLE_MARK)
+            if times:
+                lines[i] = "%s=hos_frame_whole_times(%s, (uint32_t)c->vreg[0][0], (uint32_t)%s); %s=1;   %s" % (
+                    reg, key, times.strip(), times.strip(), WHOLE_MARK)
+            else:
+                lines[i] = "%s=hos_frame_whole(%s, (uint32_t)c->vreg[0][0]);   %s" % (reg, key, WHOLE_MARK)
     return "\n".join(lines)
 
 
 def patch_whole_frames(s):
     """The counters of WHOLE_SITES take hos_frame_whole's whole frames: (s, the sites patched here). A file without the function,
-    one patched before, or one whose code differs (another game version) is left as it is."""
+    one patched before, or one whose code differs (another game version) is left as it is. A site of WHOLE_TIMES that an earlier
+    build patched with the whole frames alone (a work folder keeps its lift) takes the substeps now."""
     done = 0
+    times_done = 0
     for head_text, old, key in WHOLE_SITES:
         head = s.find(head_text)
         if head < 0:
             continue
         end = s.find("\n}\n", head)
         body = s[head:end if end >= 0 else len(s)]
-        new = whole_new(old, key)
-        if new in body or body.count(old) != 1:
+        times = WHOLE_TIMES.get(head_text)
+        new = whole_new(old, key, times)
+        if new in body:
             continue
-        at = head + body.index(old)
-        s = s[:at] + new + s[at + len(old):]
+        earlier = whole_new(old, key) if times else None
+        if body.count(old) == 1:
+            replaced = old
+        elif earlier and body.count(earlier) == 1:
+            replaced = earlier
+        else:
+            continue
+        at = head + body.index(replaced)
+        s = s[:at] + new + s[at + len(replaced):]
         done += 1
+        times_done += bool(times)
     if done and WHOLE_DECL not in s:
         s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + WHOLE_DECL, 1)
+    if times_done and WHOLE_TIMES_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + WHOLE_TIMES_DECL, 1)
     return s, done
 
 
