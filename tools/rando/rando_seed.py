@@ -97,7 +97,7 @@ DAMPE_RACE_CHESTS = frozenset((0x4ccffbd5778b67e2,))
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 42   # (42: before Death Mountain Trail's and Goron City's intros were left to play (their arrivals take the Fire quest a step), and an adult's first visit to Goron City went on to the rolling Goron, goron_arrival_fix. 41: before an empty child's sword slot was given the Kokiri Sword on the way back, era_sword_fix. 40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 43   # (43: before the cucco lady's game wanted one cucco, CUCCO_LOGIC. 42: before Death Mountain Trail's and Goron City's intros were left to play (their arrivals take the Fire quest a step), and an adult's first visit to Goron City went on to the rolling Goron, goron_arrival_fix. 41: before an empty child's sword slot was given the Kokiri Sword on the way back, era_sword_fix. 40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -2873,6 +2873,66 @@ def bombchu_door_open(data):
     return bytes(out)
 
 
+# The cucco lady's game wants one cucco (asked 2026-11-17, every seed from fixes 43). Her pen's logic
+# (CUCCO_LOGIC) compares the count in the pen with a fixed 7 (an OperateCompareInt's unlinked Int_A, its one fixed
+# number), and her flow (CUCCO_FLOW) counts "how many are left" from 7 for her lines (Captured_Npc_Hylia_CalcRemainCount
+# sets Npc_Hylia_049_Child_HowManyCuccos to 7 and takes the pen's count from it; a question asks whether it is still 7,
+# none caught). All three 7s are made 1. Not seen in play yet.
+CUCCO_LOGIC = "Logic/MiniGame_CatchCucco_c69b.logic.module.ainb"
+CUCCO_FLOW = "Event/EventFlow/Minigame_CatchCucco.bfevfl.zs"
+CUCCO_COUNT = "Npc_Hylia_049_Child_HowManyCuccos"
+CUCCOS = 1
+
+
+def cucco_logic_one(data, want=CUCCOS):
+    """The cucco pen's logic (CUCCO_LOGIC) with its fixed 7 made `want`: the new bytes, of the same size. An input
+    is 16 bytes (its name's place, the node it takes (0xffff: none), flags, its value). ValueError: not the file."""
+    u32 = lambda at: struct.unpack_from("<I", data, at)[0]
+    if data[:4] != b"AIB " or u32(4) != 0x408 or b"MiniGame_CatchCucco_InFenceCount" not in data:
+        raise ValueError("not the cucco pen's AI file this was written for")
+    pool = u32(0x24)
+    name = lambda off: data[pool + off:].split(bytes(1))[0] if 0 < off < len(data) - pool else b""
+    hits = [at for at in range(0x74, pool - 16, 4) if name(u32(at)) == b"Int_A" and u32(at + 4) & 0xFFFF == 0xFFFF and
+            u32(at + 8) == 0x01800000 and u32(at + 12) == 7]
+    if len(hits) != 1:
+        raise ValueError("%d fixed 7s where one was expected" % len(hits))
+    out = bytearray(data)
+    struct.pack_into("<i", out, hits[0] + 12, want)
+    return bytes(out)
+
+
+def cucco_flow_one(data, want=CUCCOS):
+    """The cucco lady's flow (CUCCO_FLOW) with its count of 7 cuccos made `want` (the set and the question of
+    CUCCO_COUNT): the new bytes, of the same size. ValueError: not the file, or not two such steps."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+    if data[:6] != b"BFEVFL" or u16(0x20) != 1:
+        raise ValueError("not an event flow file of one flowchart")
+    chart = u64(u64(0x28))
+    count, events = u16(chart + 0x16), u64(chart + 0x30)
+    text = lambda ptr: bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if 0 < ptr < len(data) - 2 else ""
+
+    def items(at):   # (a step's parameters: {name: the place of its value's record})
+        keys = u64(at + 8) if at else 0
+        return {text(u64(keys + 8 + 16 * (k + 1) + 8)): u64(at + 0x10 + 8 * k) for k in range(u16(at + 2) if at and keys else 0)}
+    out, done = bytearray(data), 0
+    for i in range(count):
+        e = events + 0x30 * i
+        if data[e + 8] not in (0, 1):
+            continue
+        got = items(u64(e + 0x10))
+        name, value = got.get("GameDataName"), got.get("Value")
+        if name is None or value is None or data[name] not in (0, 5) or text(u64(name + 0x10)) != CUCCO_COUNT or data[value] != 2:
+            continue
+        if struct.unpack_from("<i", data, value + 0x10)[0] != 7:
+            raise ValueError("a step of %s whose value is not 7" % CUCCO_COUNT)
+        struct.pack_into("<i", out, value + 0x10, want)
+        done += 1
+    if done != 2:
+        raise ValueError("%d steps of %s where two were expected" % (done, CUCCO_COUNT))
+    return bytes(out)
+
+
 def sword_prompt_open(data):
     """The adult's Master Sword logic (SWORD_PROMPT_LOGIC) with its attention's Logic_Delete input unlinked: the new
     bytes, of the same size. The input (name, node, its output, flags, default) took node 1, InvBool of the Forest
@@ -5050,6 +5110,12 @@ def main():
     except (OSError, ValueError, struct.error) as e:
         sys.exit("%s: %s. Nothing written." % (ARRIVE_FLOW, e))
     print("Goron City's first visit: an adult goes on to the rolling Goron's scene")
+    try:   # (the cucco lady's count of cuccos left starts at one: CUCCO_FLOW)
+        was = gift_files[CUCCO_FLOW] if CUCCO_FLOW in gift_files else unpack(open(os.path.join(romfs, *CUCCO_FLOW.split("/")), "rb").read(), zs, dicts)
+        gift_files[CUCCO_FLOW] = cucco_flow_one(was)
+        gift_sizes[CUCCO_FLOW[:-3]] = len(gift_files[CUCCO_FLOW])
+    except (OSError, ValueError, struct.error) as e:
+        sys.exit("%s: %s. Nothing written." % (CUCCO_FLOW, e))
     # ---- the songs: each lesson gives the song the shuffle put there, and who asks about a lesson asks for that song ----
     song_parts = set()
     if lessons:
@@ -5467,6 +5533,11 @@ def main():
     except (OSError, ValueError, struct.error) as e:
         sys.exit("%s: %s. Nothing written." % (BOMBCHU_DOOR_LOGIC, e))
     print("the Bombchu Shop's door opens at night from a new game's start")
+    try:   # (every seed: the cucco lady's game wants one cucco, CUCCO_LOGIC; her flow's count with the flows above)
+        flag_files[CUCCO_LOGIC] = cucco_logic_one(unpack(open(os.path.join(romfs, *CUCCO_LOGIC.split("/")), "rb").read(), zs, dicts))
+    except (OSError, ValueError, struct.error) as e:
+        sys.exit("the cucco lady's game: %s. Nothing written." % e)
+    print("the cucco lady's game wants one cucco")
     if a.open_door:   # (the adult's "A" at the sword from the start, SWORD_PROMPT_LOGIC)
         try:
             flag_files[SWORD_PROMPT_LOGIC] = sword_prompt_open(unpack(open(os.path.join(romfs, *SWORD_PROMPT_LOGIC.split("/")), "rb").read(), zs, dicts))
