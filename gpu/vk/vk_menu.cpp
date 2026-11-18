@@ -2291,6 +2291,31 @@ std::string ini_path() {
     std::string dir(exe, n);
     return dir.substr(0, dir.find_last_of("\\/") + 1) + "hookshot_options.ini";
 }
+/// (hookshot) Moves save()'s finished part over path in one step, so a crash or a kill while the options are written leaves
+/// the old file or the new one, never an empty or cut one (fopen "w" emptied it first, and the next start took what was left
+/// for the player's settings). From HeyListen 7cec25ab / Longshot 524d5520. True when path holds the part's bytes
+bool replace_file(const std::string& part, const std::string& path) {
+#ifdef _WIN32
+    auto wide = [](const std::string& u) {   // (UTF-8, the game's one code page)
+        std::wstring w(MultiByteToWideChar(CP_UTF8, 0, u.c_str(), -1, nullptr, 0), L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, u.c_str(), -1, w.data(), (int)w.size());
+        w.resize(wcslen(w.c_str()));
+        return w;
+    };
+    const std::wstring wpart = wide(part), wpath = wide(path);
+    for (int i = 0; i < 5; i++) {   // (a reader that has the file open, the host's or the launcher's, holds the move off a moment)
+        if (MoveFileExW(wpart.c_str(), wpath.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return true;
+        Sleep(20);
+    }
+    const bool copied = CopyFileW(wpart.c_str(), wpath.c_str(), FALSE) != 0;   // (written in place, as before, rather than lost)
+    DeleteFileW(wpart.c_str());
+    return copied;
+#else
+    if (rename(part.c_str(), path.c_str()) == 0) return true;
+    unlink(part.c_str());
+    return false;
+#endif
+}
 /// The Tracker tab's rows from the seed's file, or one row saying there is none; read again at most once a second
 void tracker_load() {
     static ULONGLONG last = 0, called = 0;
@@ -2562,7 +2587,9 @@ void save() {
         }
         fclose(f);
     }
-    if (FILE* f = fopen(ini_path().c_str(), "w")) {
+    // (written beside the file, <ini>.new, and moved over it whole: replace_file)
+    const std::string ini = ini_path(), part = ini + ".new";
+    if (FILE* f = fopen(part.c_str(), "w")) {
         for (const Row& r : rows) {
             if (r.value == &opts.output_res) {   // (the size itself: host/nn_applet.c reads it)
                 const int v = saved_value(r.value);
@@ -2602,7 +2629,9 @@ void save() {
             if (i < HOS_SW_N) fprintf(f, "toggle_%s=%d\n", bind_names[i], (opts.hold_toggle >> i) & 1);
             fprintf(f, "key_%s=%d,%d\n", bind_names[i], host->binding(HOS_BIND_KEY, i, 0), host->binding(HOS_BIND_KEY, i, 1));
         }
-        fclose(f);
+        const bool written = fflush(f) == 0 && !ferror(f);   // (a full disk: the old file stays)
+        if (fclose(f) == 0 && written) replace_file(part, ini);
+        else remove(part.c_str());
     }
 }
 

@@ -96,6 +96,11 @@ constexpr int kRows = sizeof rows / sizeof rows[0];
 /* INI_KEY */
 std::string ini_file, mic_want;
 std::string ini_path() { return ini_file; }
+// (the menu's replace_file moves save()'s part over the file in one step; here the same end, the part's bytes at the path)
+bool replace_file(const std::string& part, const std::string& path) {
+    std::remove(path.c_str());
+    return std::rename(part.c_str(), path.c_str()) == 0;
+}
 std::string mic_key(const char* v) { return v; }
 void mic_tell_host() {}
 void refresh_mics() {}

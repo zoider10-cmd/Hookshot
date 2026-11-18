@@ -80,6 +80,11 @@ Row rows[] = {
 };
 std::string ini_file;
 std::string ini_path() { return ini_file; }
+// (the menu's replace_file moves save()'s part over the file in one step; here the same end, the part's bytes at the path)
+bool replace_file(const std::string& part, const std::string& path) {
+    std::remove(path.c_str());
+    return std::rename(part.c_str(), path.c_str()) == 0;
+}
 std::string mic_want;
 uint64_t auto_for = 0, auto_tuned = 0;   // (the Quality preset Auto (this PC)'s fingerprints, which save() writes)
 struct { int steps = 0; bool went_down = false; } auto_tuning;   // (and its tuning's steps)
