@@ -504,7 +504,9 @@ HLE(_ZN2nn2fs9WriteFileENS0_10FileHandleElPKvmRKNS0_11WriteOptionE) {
             RET(R_OUT_OF_MEMORY);
             return;
         }
+        const int away = hos_vcore_away();   /* (as the reads: a write can wait for the disk, the dirty pages' writeback) */
         WriteFile(fh->h, GP(ARG(2)), (DWORD)ARG(3), &put, &ov);
+        if (away) hos_vcore_back();
     }
     RET(put == ARG(3) ? 0 : 0x2EE202);
 }
@@ -516,7 +518,15 @@ HLE(_ZN2nn2fs11SetFileSizeENS0_10FileHandleEl) {
     SetEndOfFile(fh->h);
     RET(0);
 }
-HLE(_ZN2nn2fs9FlushFileENS0_10FileHandleE) { FlushFileBuffers(get_handle(c, ARG(0))->h); RET(0); }
+/* (the save's flush is an fdatasync on Linux, FlushFileBuffers on Windows: tens of ms or more on a busy disk, no core
+   held meanwhile) */
+HLE(_ZN2nn2fs9FlushFileENS0_10FileHandleE) {
+    Handle *fh = get_handle(c, ARG(0));
+    const int away = hos_vcore_away();
+    FlushFileBuffers(fh->h);
+    if (away) hos_vcore_back();
+    RET(0);
+}
 HLE(_ZN2nn2fs9CloseFileENS0_10FileHandleE) {
     Handle *fh = get_handle(c, ARG(0));
     CloseHandle(fh->h);
