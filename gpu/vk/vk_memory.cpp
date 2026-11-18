@@ -736,23 +736,36 @@ void cap_view_bump();   // (defined with cap_view_gen below)
 const std::vector<std::pair<uint64_t, uint64_t>>& capture_ranges_merged();
 void shadow_written(const uint32_t* pages, int64_t n);   // (the write-back's diff, below: pages the captures took)
 void shadow_written_collected(const uint32_t* pages, int64_t n);   // (the write-back's diff, below: pages the collection found)
+// (Longshot 95475b67 #1083, via HeyListen 26e0f0a6) memory_collect_written takes every page's write mark, then marks the pages in
+// the captured ranges again for the next capture. A submit's capture made on the game's thread in between (capture_make's scan)
+// found those pages unmarked and left them out, and the work it was taken for read an older capture's copy of them: Kokiri
+// Forest's ground mist gone for a frame. The collection holds collect_mu over the window and the capture's scan takes it: a
+// capture that comes then waits for the collection. Lock order: collect_mu, then cap_ranges_mu (capture_ranges_merged) and the
+// host's map lock (collect_written, gpu_ptr). capture_make takes collect_mu with none of those held
+std::mutex collect_mu;
 void memory_collect_written() {
     uint32_t* pages = nullptr;
-    const int64_t n = host->collect_written(&pages);
-    if (n > 0) {
-        const uint32_t g = ++gen_now;
-        // (the captured ranges once a call: a lock, a pool-list refresh and three searches for every dirty page cost the
-        // replay thousands of lock cycles a submit, the cost that retired gpu_pages' lock below)
-        RangeWalk in_capture{capture_ranges_merged()};
-        for (int64_t i = 0; i < n; i++) {
-            const uint64_t guest = (uint64_t)pages[i] << kPageShift;
-            if (in_capture.in(guest)) {   // (written after its submit's capture: the next capture takes it, as it is then)
-                uint64_t avail = 0;
-                if (const uint8_t* q = host->gpu_ptr(guest, &avail)) host->mark_written(q, 4096);
-                continue;
+    int64_t n = 0;
+    {   // (from taking the marks to marking the captured pages again: no capture scans in between, collect_mu)
+        std::lock_guard lk(collect_mu);
+        n = host->collect_written(&pages);
+        if (n > 0) {
+            const uint32_t g = ++gen_now;
+            // (the captured ranges once a call: a lock, a pool-list refresh and three searches for every dirty page cost the
+            // replay thousands of lock cycles a submit, the cost that retired gpu_pages' lock below)
+            RangeWalk in_capture{capture_ranges_merged()};
+            for (int64_t i = 0; i < n; i++) {
+                const uint64_t guest = (uint64_t)pages[i] << kPageShift;
+                if (in_capture.in(guest)) {   // (written after its submit's capture: the next capture takes it, as it is then)
+                    uint64_t avail = 0;
+                    if (const uint8_t* q = host->gpu_ptr(guest, &avail)) host->mark_written(q, 4096);
+                    continue;
+                }
+                stamp_page(pages[i], g);
             }
-            stamp_page(pages[i], g);
         }
+    }
+    if (n > 0) {
         pages_collected += (uint64_t)n;
         cap_view_bump();
         // (hookshot) every page the CPU wrote, captured later or not: unknown to the write-back diff's shadows before this
@@ -1824,6 +1837,14 @@ void memory_capture_submit() {
     std::lock_guard lk(cap_mu);
     captures.push_back(std::move(c));
 }
+/// (capture_make, the game's thread) The pages the CPU wrote in the captured ranges since they were last taken, their marks
+/// cleared: *pages is the host's list, to be freed with host->free_pages when it is not null. Not while the replay's collection
+/// is marking some of those pages again (collect_mu, memory_collect_written; Longshot 95475b67, #1083)
+int64_t capture_scan(const std::vector<std::pair<uint64_t, uint64_t>>& ranges, uint32_t** pages) {
+    if (ranges.empty() || !host->collect_written_in) return 0;
+    std::lock_guard lk(collect_mu);
+    return host->collect_written_in(reinterpret_cast<const uint64_t(*)[2]>(ranges.data()), (int)ranges.size(), pages);
+}
 /// (the pages the CPU wrote since the last capture, copied now: a submit's capture, or memory_capture_now's)
 std::unique_ptr<Capture> capture_make() {
     if (!capture_on()) return nullptr;
@@ -1875,8 +1896,7 @@ std::unique_ptr<Capture> capture_make() {
     captures_seen.store(true, std::memory_order_relaxed);
     const auto t_lock = std::chrono::steady_clock::now();
     uint32_t* pages = nullptr;
-    const int64_t n = mirrored.empty() || !host->collect_written_in ? 0
-                    : host->collect_written_in(reinterpret_cast<const uint64_t(*)[2]>(mirrored.data()), (int)mirrored.size(), &pages);
+    const int64_t n = capture_scan(mirrored, &pages);
     const auto t_scan = std::chrono::steady_clock::now();
     // (hookshot) A page the CPU wrote that a submission still on the GPU writes back: the copy waits for that write-back.
     // OoT's exposure meter page is written by both: the GPU adds the frame's light into it and the CPU sets the sums back to
