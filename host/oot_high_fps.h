@@ -41,7 +41,16 @@
    while her body went over it (more often the higher the frame rate; around 60 to 90 fps, only when no frame's step reached
    1). The step is compared with this frame's own step instead (the game's time object, +0x10: 1 at 60 fps): a step that is
    the whole frame's is not slow motion, and a step under it still takes the game's branch. At a cap of 60, and on a frame
-   slower than 60 fps, the game's own test decides. */
+   slower than 60 fps, the game's own test decides.
+
+   A moving floor's carry (f_80159dc0, f_8015d490 and f_838baa40, three characters' update modules): a character standing on a
+   moving floor is carried by the floor's velocity, but each module first tests the physics time object's 1/dt (+0x28) and,
+   above 100 (a frame under 10 ms: at 60 fps, time slowed below 0.6 of real time), carries the character by a tenth of it.
+   Above 100 fps every frame is under 10 ms: on the Shadow Temple's barge Link and the enemies kept a tenth of its velocity and
+   slid to its back (issue 439; the share moved from all to a tenth at 1/dt 100, at any step either side of it). Above a
+   cap of 60, on a frame shorter than a 60 fps one, 1/dt times the frame's step (the game's time object, +0x10: 0.5 at 120 fps)
+   is tested instead: the game's test as it would be at 60 fps, so time slowed below 0.6 still takes the tenth. At a cap of
+   60, and on a frame of a 60 fps one or longer, the game's own test decides. */
 #pragma once
 #include <math.h>
 #include <stdint.h>
@@ -121,4 +130,14 @@ static inline int oot_horse_whole_step(uint32_t step_bits, uint32_t frame_step_b
     const float step = oot_bits_float(step_bits), frame = oot_bits_float(frame_step_bits);
     if (!timed || !(frame > 0.0f) || !(frame < 1.0f) || !(step > 0.0f)) return 0;
     return step >= frame * 0.999f;
+}
+
+/* A moving floor's carry: 1 when the modules' slow-time test stands (asked once the game's, 1/dt over 100, held), 0 when the
+   frame is short and not slow, so the floor's velocity carries in full. inv_dt_bits: the physics time object's 1/dt;
+   frame_step_bits: this frame's step from the game's time object (0 when it has none). On a frame of a 60 fps one or longer
+   (a step of 1 or more) 1/dt times the step is at least 1/dt: the game's verdict */
+static inline int oot_floor_carry_slow(uint32_t inv_dt_bits, uint32_t frame_step_bits, int timed) {
+    const float inv_dt = oot_bits_float(inv_dt_bits), step = oot_bits_float(frame_step_bits);
+    if (!timed || !(step > 0.0f)) return 1;   /* (the game's own test decides) */
+    return inv_dt * step > 100.0f;
 }

@@ -1,6 +1,6 @@
-/* (hookshot) The sound manager's job at 60 Hz, the physics solver's steps rounded up and a horse's jump blend, under a Frame rate
-   cap above 60: the lifted f_80435300, f_83373400, f_838ceb80, f_838cfc10 and f_82c59eb0 call these (nx2/oot_patches.py);
-   host/oot_high_fps.h has why and the logic.
+/* (hookshot) The sound manager's job at 60 Hz, the physics solver's steps rounded up, a horse's jump blend and a moving floor's
+   carry, under a Frame rate cap above 60: the lifted f_80435300, f_83373400, f_838ceb80, f_838cfc10, f_82c59eb0, f_80159dc0,
+   f_8015d490 and f_838baa40 call these (nx2/oot_patches.py); host/oot_high_fps.h has why and the logic.
    HOS_FPS_LOG (on, by the switches' rule: =0 is off): what they do, every 600 calls. */
 #include "hos.h"
 #include "oot_high_fps.h"
@@ -115,4 +115,22 @@ int hos_oot_horse_whole_step(uint32_t step_bits, uint64_t slot) {
                     "the frame's %.3f)", (long long)s, (long long)n, oot_bits_float(step_bits), oot_bits_float(frame));
     }
     return whole;
+}
+
+/* f_80159dc0's, f_8015d490's and f_838baa40's slow-time test before they carry a character by a tenth of its floor's velocity
+   (inv_dt_bits: the physics' 1/dt, which was over 100; slot as for the horse's step): 1, the tenth (the game's verdict) */
+int hos_oot_floor_carry_slow(uint32_t inv_dt_bits, uint64_t slot) {
+    const uint64_t object = G64(slot);
+    const uint64_t time = object ? G64(object) : 0;
+    const uint32_t frame = time ? *(const uint32_t *)GP(time + 0x10) : 0;
+    const int slow = oot_floor_carry_slow(inv_dt_bits, frame, timed());
+    if (fps_log()) {
+        static volatile LONG64 calls, kept;
+        const LONG64 k = slow ? InterlockedIncrement64(&kept) : kept;
+        const LONG64 n = InterlockedIncrement64(&calls);
+        if (n % 600 == 0)
+            hos_log("oot: a moving floor's carry: the slow-time tenth kept %lld of %lld times (1/dt %.1f, the frame's step %.3f)",
+                    (long long)k, (long long)n, oot_bits_float(inv_dt_bits), oot_bits_float(frame));
+    }
+    return slow;
 }

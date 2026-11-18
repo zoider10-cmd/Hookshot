@@ -925,6 +925,24 @@ HORSE_BRANCH = "if (!c->n) { goto L_82c5ae48; }\n"
 HORSE_SKIP = ("    if (hos_oot_horse_whole_step((uint32_t)c->vreg[10][0], " + SOUND_SLOT + " + 2192)) { goto L_82c5ae48; }"
               "   /* (nx2/oot_patches.py: a horse's jump blend above 60 fps) */\n")
 HORSE_DECL = "extern int hos_oot_horse_whole_step(uint32_t step_bits, uint64_t slot);\n"
+# Three characters' update modules (f_80159dc0, f_8015d490, f_838baa40) carry a character that stands on a moving floor by the
+# floor's velocity, but first test the physics time object's 1/dt (its +40) against 100, and above it (a frame under 10 ms: at
+# 60 fps, time slowed below 0.6) carry it by a tenth of it. Above 100 fps every frame is under 10 ms, so Link and the enemies
+# slid to the back of the Shadow Temple's barge (issue 439). Each module's branch to the tenth (its own label) asks
+# hos_oot_floor_carry_slow too: above a 60 fps cap, on a frame under a 60 fps one, it is 1/dt times the frame's step (the time
+# object's, [[slot]]+0x10) over 100, the game's test as it would be at 60 fps (host/oot_high_fps.h).
+FLOOR_SITES = (("void f_80159dc0(Ctx *__restrict A64_NOESC c) {\n", "L_8015a39c"),
+               ("void f_8015d490(Ctx *__restrict A64_NOESC c) {\n", "L_8015dad4"),
+               ("void f_838baa40(Ctx *__restrict A64_NOESC c) {\n", "L_838baf24"))
+FLOOR_TEST = ("    { { uint64_t _v=recomp_load32(c,(c->x[8]+40ULL)); a64_vset64(c->vreg[0],_v); } }\n"
+              "    c->x[8] = 0x42c80000ULL;\n"
+              "    c->x[8] &= 0xFFFFFFFFULL;\n"
+              "    { a64_vset64(c->vreg[1],0); memcpy(&c->vreg[1][0],&c->x[8],4); }\n")
+FLOOR_FCMP = "    { if (!a64_fcmp32(c,c->vreg[0],c->vreg[1])) "   # (its line goes on, then the branch)
+FLOOR_BRANCH = "if ((c->n == c->v) && !c->z) { goto %s; }\n"
+FLOOR_NEW = ("if ((c->n == c->v) && !c->z && hos_oot_floor_carry_slow((uint32_t)c->vreg[0][0], " + SOUND_SLOT + " + 2192)) "
+             "{ goto %s; }   /* (nx2/oot_patches.py: a moving floor's carry above 60 fps) */\n")
+FLOOR_DECL = "extern int hos_oot_floor_carry_slow(uint32_t inv_dt_bits, uint64_t slot);\n"
 
 
 def _function(s, head_text):
@@ -1062,6 +1080,34 @@ def patch_horse_jump(s):
     if HORSE_DECL not in s:
         s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + HORSE_DECL, 1)
     return s, 1
+
+
+def patch_floor_carry(s):
+    """The floor carry's slow-time test through the host in the three modules: (s, how many of them are in s with it, made
+    now or before); a module whose test and branch are not found once, as written, is left as it is"""
+    done = 0
+    for head_text, label in FLOOR_SITES:
+        at = _function(s, head_text)
+        if at is None:
+            continue
+        head, end = at
+        body = s[head:end]
+        old, new = FLOOR_BRANCH % label, FLOOR_NEW % label
+        if body.count(new) == 1 and old not in body:
+            done += 1
+            continue
+        if body.count(FLOOR_TEST) != 1 or body.count(old) != 1:
+            continue
+        fcmp = body.index(FLOOR_TEST) + len(FLOOR_TEST)
+        line_end = body.find("\n", fcmp)
+        if not body.startswith(FLOOR_FCMP, fcmp) or line_end < 0 or not body.startswith(old, line_end + 1):
+            continue
+        body = body[:line_end + 1] + new + body[line_end + 1 + len(old):]
+        s = s[:head] + body + s[end:]
+        done += 1
+    if done and FLOOR_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + FLOOR_DECL, 1)
+    return s, done
 
 
 # f_8263e8e0, the steering update: after applying a turn it clamps the saved rate (+36) to the turn's magnitude times
@@ -1577,6 +1623,11 @@ def patch_file(s, name, protect_hearts=False):
     if horse != out:
         lines.append("oot_patches: a horse's jump blend above 60 fps in " + name)
     out = horse
+    floor, found = patch_floor_carry(out)
+    counts["floor carry"] += found
+    if floor != out:
+        lines.append("oot_patches: a moving floor's carry above 60 fps in " + name)
+    out = floor
     return out, counts, lines
 
 
@@ -1641,6 +1692,8 @@ def report(paths, counts, protect_hearts=False):
     expected = {"shelf actor hook": len(SHELF_ACTOR_SITES)}   # (its own warning above; one a site)
     if total["horse jump step"] != 1:   # (without it, above 60 fps Epona gallops through the fences she jumps)
         print("oot_patches: WARNING: the horse's jump step test was found %d times, not once" % total["horse jump step"])
+    if total["floor carry"] != len(FLOOR_SITES):   # (without them, above 100 fps a moving floor leaves Link and enemies behind)
+        print("oot_patches: WARNING: a moving floor's carry was found at %d of %d places" % (total["floor carry"], len(FLOOR_SITES)))
     for what, n in done.items():
         if n != expected.get(what, 1):
             print("oot_patches: WARNING: the %s was found %d times" % (what, n))
