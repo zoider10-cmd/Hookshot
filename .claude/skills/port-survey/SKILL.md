@@ -14,7 +14,8 @@ Windows 11). Read only from the other ports; port the ideas here, one change at 
   firmware.
 - **License:** a port's code is copied only when its license is GPL-3.0-or-later compatible (all the forks so far
   are). The commit names where the idea came from (`(HeyListen 504f8362)`).
-- **Merge only when the owner says.** The weekly check reports; it changes nothing. Upstream Mako is report only.
+- **The weekly check reports; it changes nothing.** A survey and its ports start when the owner asks. Upstream Mako
+  (remote `upstream`, our own line) is merged whole when it moves, not picked from, then gated like any port.
 - **Never while the owner plays** (`tasklist`: hookshot.exe or the launcher): no bench, no install.
 - **Nothing made from the game leaves the PC.** Commit locally; push to `origin` only when asked; never to `forge`.
 
@@ -66,6 +67,10 @@ bash .claude/skills/port-survey/scripts/bench.sh <name> base <variant> [reps=3] 
 - **Kakariko is the steadiest scene** (child, by day: same-build runs within ~1.5%, the Market's spread ~7%):
   `STEPS="72:GO -41.7 79.7 11.4 KakarikoVillage CA;30:0:LUP/3000;10:0:LLEFT/2000;10:0:LUP/3000"`. The Market stays the
   scene for the renderer's replay (it is replay-bound there; elsewhere the replay is about half the frame).
+- From Mako's `measure` skill (its PR and forge parts don't apply here): every run uses one pinned options file
+  (`F:/Games/perf-ab/bench_options.ini`, `HOS_OPTIONS_FILE`), each side gets a warm-up run that isn't counted
+  (`WARMUP=0` skips it), and `gate.py` reads from each run's log what it actually used (upscaler, output and scene size,
+  frame generation) and refuses to compare sides that differ.
 - Keep the PC quiet during a bench (no browser, Discord, games): they spoil runs.
 - The test copy of the game (`F:/Games/perf-ab/game`) loads its newest save, teleports to the Market's fountain by
   day and walks, uncapped, headless; A and B interleave.

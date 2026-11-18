@@ -1,5 +1,5 @@
 {
- "_note": "Other ports of the same game, read for ideas. 'surveyed' is the commit last read; check_updates.py compares it with the repo's head. 'kind': fork = a Hookshot fork (port code); emulator = read the graphics side for ideas only; randomizer = another randomizer for the game (ideas for ours); upstream = our own line (merge only when the owner asks).",
+ "_note": "Other ports of the same game, read for ideas. 'surveyed' is the commit last read; check_updates.py compares it with the repo's head. 'kind': fork = a Hookshot fork (port code); emulator = read the graphics side for ideas only; randomizer = another randomizer for the game (ideas for ours); upstream = our own line (merged whole from the 'upstream' remote when it moves, then gated like any port).",
  "sources": [
   {
    "name": "HeyListen",
@@ -63,7 +63,7 @@
    "url": "https://github.com/Shakoquo/Mako",
    "kind": "upstream",
    "license": "GPL-3.0-or-later",
-   "base": "our own line (remote 'upstream'): report only, merge when the owner asks",
+   "base": "our own line (remote 'upstream'): merge it whole when it moves, then the gate, guard and shop run",
    "surveyed": ""
   },
   {

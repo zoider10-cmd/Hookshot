@@ -5,7 +5,7 @@ frame. FAIL when the median mean-fps or 1% low drops more than 2% and B loses
 nearly every pair of runs (Mann-Whitney, U <= 16% of pairs), or drops more than 5% at all; PASS when one rises more
 than 2% and B wins nearly every pair. A same-build A/A on this PC spread 67-73 fps: use 5 reps a side. Prints a table and PASS, FAIL or NOISE (no clear change either way, which also passes the gate:
 'no worse'). A run with fewer than 500 frames (crashed, did not load) makes it FAIL."""
-import sys, os, glob, statistics as st
+import sys, os, glob, re, statistics as st
 
 P = "F:/Games/perf-ab/runs"
 
@@ -34,13 +34,18 @@ def main(a):
             print("%-40s %s" % (os.path.basename(os.path.dirname(f)),
                                 "no good run" if r is None else "%.1f fps, 1%% low %.1f, worst %.1f ms (%d frames)" % (r["fps"], r["low1"], r["worst"], r["n"])))
             res[v].append(r)
-    def upscaler(v):   # (what the runs' logs say the build has: two sides built differently are not comparable)
+    def upscaler(v):   # (what each side's runs actually used, from their logs: two sides set up differently are not comparable)
         out = set()
         for f in glob.glob(os.path.join(P, "%s_%s_*" % (name, v), "stdout.txt")):
             t = open(f, encoding="utf-8", errors="replace").read()
-            out.add("no FSR 4" if "this build has no FSR 4" in t else "FSR 4" if "AMD FSR 4" in t else "?")
+            up = "no FSR 4" if "this build has no FSR 4" in t else "FSR 4" if "AMD FSR 4" in t else "?"
+            res = re.search(r"output resolution (\d+x\d+)", t)
+            draw = re.search(r"draws OoT's upscale: (\d+x\d+) -> (\d+x\d+)", t)
+            fg = "framegen" if re.search(r"frame generation (on|is on|: on)", t, re.I) else "no framegen"
+            out.add("%s, output %s, scene %s, %s" % (up, res.group(1) if res else "?", draw.group(1) if draw else "?", fg))
         return out
     ua, ub = upscaler(A), upscaler(B)
+    print("ran: %s %s | %s %s" % (A, sorted(ua), B, sorted(ub)))
     if ua != ub:
         print("FAIL: not comparable: %s ran %s, %s ran %s (build both the same way: HOOKSHOT_FSR=1)" % (A, sorted(ua), B, sorted(ub))); return 1
     if not res[A] or not res[B] or None in res[A] + res[B]:
