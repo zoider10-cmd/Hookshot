@@ -2016,6 +2016,42 @@ static int oot_fill_adds[OOT_FILLS];   /* (the adds made) */
    added from 0x828d50ac with x4 2 and x7 0, as the Bomb Bag given with a chest's bombs is. Such a bag is not filled:
    hos_oot_pouch_add sets this for the add it is in) */
 static int oot_fill_quiet;
+/* (the randomizer's fork) Ammo pick-ups and Rupees fill the wallet (launcher settings, asked for 2026-11-17): a pick-up
+   lying in the world or dropped by grass, pots and enemies comes into the pouch from 0x80c8f7e8 (seen without a window:
+   Hyrule Field's Deku Nut, "pouch add Obj_DekuNut x1 (lr 0x80c8f7e8", as Pieces of Heart and the bosses' containers
+   do), not from a chest's (0x828d50ac) nor a shop's. Ammo: 5 each raises the add's count to 5; Fill the bag fills what
+   it holds the way a bag found is filled (oot_fills), without giving a bag Link has not. Rupees: the wallet filled. */
+static const char *const oot_pickup_ammo[][2] = {   /* a pick-up's name (its start), and what it adds to */
+    {"Obj_Bomb", "Item_Bomb"}, {"Obj_DekuNut", "Item_DekuNut"}, {"Obj_DekuSeed", "Item_DekuSeed"},
+    {"Obj_DekuStick", "Item_DekuStick"}, {"Obj_ArrowBundle_", "Item_Arrow_Normal"},
+};
+static void oot_fill_start(const char *holds, const char *why) {
+    for (int k = 0; k < (int)OOT_FILLS; k++)
+        if (!strcmp(oot_fills[k][1], holds)) {
+            oot_fill_last[k] = -1, oot_fill_adds[k] = 0, oot_fill_bagged[k] = 1;   /* (no bag given: oot_fill_bags) */
+            __atomic_store_n(&oot_fill_wait[k], OOT_FILL_WAIT, __ATOMIC_RELEASE);
+            hos_log("rando: %s: %s will be filled", why, holds);
+            return;
+        }
+}
+int hos_rando_ammo_pickups(void);   /* host/oot_rando.c */
+int hos_rando_rupee_fill(void);
+static void oot_pickup_qol(Ctx *c, const char *name) {
+    if (c->x[30] != 0x80c8f7e8ULL || (int32_t)c->x[3] <= 0) return;
+    const int ammo = hos_rando_ammo_pickups();
+    for (unsigned k = 0; ammo && k < sizeof oot_pickup_ammo / sizeof oot_pickup_ammo[0]; k++) {
+        if (strncmp(name, oot_pickup_ammo[k][0], strlen(oot_pickup_ammo[k][0])) || (!strcmp(oot_pickup_ammo[k][0], "Obj_Bomb") && strcmp(name, "Obj_Bomb")))
+            continue;
+        if (ammo == 1 && (int32_t)c->x[3] < 5) {
+            hos_log("rando: ammo pick-up %s x%d: 5 given", name, (int)(int32_t)c->x[3]);
+            c->x[3] = 5;
+        } else if (ammo == 2) {
+            oot_fill_start(oot_pickup_ammo[k][1], name);
+        }
+        return;
+    }
+    if (hos_rando_rupee_fill() && !strncmp(name, "Obj_Rupee_", 10)) oot_fill_start(OOT_FILL_RUPEES, name);
+}
 static void oot_fill_note(const char *item) {
     for (int k = 0; k < (int)OOT_FILLS; k++)
         if (!strncmp(item, oot_fills[k][0], strlen(oot_fills[k][0]))) {
@@ -3537,6 +3573,7 @@ int hos_oot_pouch_add(Ctx *c) {
         }
         oot_tracker_item(name);
     }
+    oot_pickup_qol(c, name);   /* (Ammo pick-ups, Rupees fill the wallet) */
     if ((int32_t)c->x[3] <= 0) return 0;
     if (!hos_rando_progressive()) {
         oot_fill_note(name);   /* (a bag found is a full bag) */

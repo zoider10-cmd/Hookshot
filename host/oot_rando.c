@@ -38,6 +38,18 @@ int hos_rando_open_door(void) {
     if (test < 0) { const char *e = getenv("HOS_OOT_OPEN_DOOR"); test = e && *e == '1'; }
     return rando_active && (test || rando.v[OOT_RANDO_OPEN_DOOR] != 0);
 }
+/* Ammo pick-ups (0 as the game has it, 1 five each, 2 the bag filled) and Rupees fill the wallet: on with the randomizer
+   (hos_main.c oot_pickup_qol). A test's: HOS_OOT_AMMO=<0-2> and HOS_OOT_RUPEE_FILL=<0|1> over the options */
+int hos_rando_ammo_pickups(void) {
+    const char *e = getenv("HOS_OOT_AMMO");
+    if (e && *e >= '0' && *e <= '2') return rando_active ? *e - '0' : 0;
+    return rando_active ? rando.v[OOT_RANDO_AMMO_PICKUPS] : 0;
+}
+int hos_rando_rupee_fill(void) {
+    const char *e = getenv("HOS_OOT_RUPEE_FILL");
+    if (e && (*e == '0' || *e == '1')) return rando_active && *e == '1';
+    return rando_active && rando.v[OOT_RANDO_RUPEE_FILL] != 0;
+}
 /* Skip cutscenes: on with the randomizer (hos_main.c oot_skip_cutscene) */
 int hos_rando_skip_cutscenes(void) { return rando_active && rando.v[OOT_RANDO_SKIP_CUTSCENES] != 0; }
 
