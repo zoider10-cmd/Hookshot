@@ -197,7 +197,18 @@ void hos_region_free(uint64_t addr) {
         }
     }
     UNLOCK();
-    if (freed_size) discard_pages(freed, freed_size);
+    if (freed_size) {
+        /* (hookshot) The discard is a kernel call that touches no guest state, and for the regions a change of area frees it
+           runs for milliseconds at a time: the thread's virtual core is given up for it, as for a file read (nn_fs.c read_at).
+           OoT's Resource_Memory thread was in it for 14% of the 11.6 s after arriving on Death Mountain Trail, holding a core
+           all the while: it was the thread running in 160 of the 240 waits of 2 ms or more that ModuleSystemWorker1, which
+           runs on one core only, had for a core there. HOS_DISCARD_HOLDS_CORE=1: the core kept, as before */
+        static int holds = -1;
+        if (holds < 0) holds = env_on("HOS_DISCARD_HOLDS_CORE");
+        const int away = holds ? 0 : hos_vcore_away();
+        discard_pages(freed, freed_size);
+        if (away) hos_vcore_back();
+    }
 }
 
 /* ---- nn::os memory -------------------------------------------------------------------------------------- */
