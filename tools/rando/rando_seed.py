@@ -84,7 +84,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 40   # (40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 41   # (41: before an empty child's sword slot was given the Kokiri Sword on the way back, era_sword_fix. 40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -2791,6 +2791,8 @@ def scene_steps(data):
         if kind == 0:
             s["next"] = e + 0x0a
             s["name"] = param(u64(e + 0x10), "GameDataName")   # (what a game-data step sets, or None)
+            if s["what"] == "EventTriggerSetGameDataString64":
+                s["value"] = param(u64(e + 0x10), "Value")   # (the text it sets)
             if s["what"] == "EventTalk":
                 s["choices"] = choices(u64(e + 0x10))
             elif s["what"] == "EventTransition":
@@ -2875,6 +2877,28 @@ def potion_errand_skip(data):
     struct.pack_into("<H", out, steps[gone]["next"], calm)
     struct.pack_into("<H", out, steps[calm]["next"], cleared)
     return bytes(out)
+
+
+# Bug 68 (the owner, 2026-11-17): back to a child, Link held a usable sword he never got. The game's swap of the two
+# ages' gear, the flow ReplaceEquipmentForEraChange (called by the Temple of Time's AdultToChild and ChildToAdult), puts
+# the Kokiri Sword in the child's slot whenever that slot is empty on the way back (its step: an adult, and
+# PlayerStatus.AnotherEraEquipWeapon empty -> set it to Weapon_Sword_Kokiri), with no question of the pouch: the
+# original game's child always had it. Read in the game's file, not taken from elsewhere. With that step passed over the
+# slot stays empty: a child who had the Kokiri Sword in hand when he went gets it back as before (the slot is not
+# empty), one who never had it comes back with no sword, and one who owned it but held none equips it from the menu.
+ERA_FLOW = SCENE_FLOWS + "/ReplaceEquipmentForEraChange.bfevfl.zs"
+
+
+def era_sword_fix(data):
+    """ReplaceEquipmentForEraChange with the step that gives an empty child's slot the Kokiri Sword passed over
+    (lead_past): the new bytes, of the same size. ValueError: not the flow this was written for (no such step, or more
+    than one)."""
+    steps, firsts, _ = scene_steps(data)
+    kokiri = [i for i, s in enumerate(steps) if s["kind"] == 0 and s["what"] == "EventTriggerSetGameDataString64" and
+              s.get("name") == "PlayerStatus.AnotherEraEquipWeapon" and s.get("value") == "Weapon_Sword_Kokiri"]
+    if len(kokiri) != 1:
+        raise ValueError("the swap of the ages' gear does not set the child's slot to the Kokiri Sword once (%d)" % len(kokiri))
+    return lead_past(data, steps, firsts, set(kokiri), {})
 
 
 def quiet_scene(data, entries=None):
@@ -4701,6 +4725,14 @@ def main():
     except (OSError, ValueError, struct.error) as e:
         sys.exit("%s: %s. Nothing written." % (POTION_FLOW, e))
     print("the Potion Shop keeper's errand: the bug passed over, the shop open after his gift")
+    # (bug 68: back to a child, no Kokiri Sword put in an empty slot: era_sword_fix)
+    try:
+        was = gift_files[ERA_FLOW] if ERA_FLOW in gift_files else unpack(open(os.path.join(romfs, *ERA_FLOW.split("/")), "rb").read(), zs, dicts)
+        gift_files[ERA_FLOW] = era_sword_fix(was)
+        gift_sizes[ERA_FLOW[:-3]] = len(gift_files[ERA_FLOW])
+    except (OSError, ValueError, struct.error) as e:
+        sys.exit("%s: %s. Nothing written." % (ERA_FLOW, e))
+    print("back to a child: an empty sword slot stays empty (no Kokiri Sword Link never got)")
     # ---- the songs: each lesson gives the song the shuffle put there, and who asks about a lesson asks for that song ----
     song_parts = set()
     if lessons:
