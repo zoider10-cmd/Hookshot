@@ -74,7 +74,7 @@ def main():
     check("{h: heart_asks(h) for h in pieces}, fixed, token=HEART," in script and
           "(skull_asks(h), item) for h, item in skull_drops.items() if item in PROGRESSION]" in script,
           "the pieces are not placed by the rules with the Skulltulas' gating items counted")
-    check('named("Piece of Heart", h, pieces[h][0], pieces[h][1]), h,' in script and "heart_drops.get(h, own(h))) for h in pieces]," in script,
+    check('named("Piece of Heart", h, pieces[h][0], pieces[h][1]), h,' in script and "heart_drops.get(h, piece_own(h))) for h in pieces]," in script,
           "the pieces are not written with the checks")
     header = (ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
     check('X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \\' in header and "The 14 Pieces of Heart lying in the world and the 8 Heart Containers the bosses leave take part as chests do: each can give any item of the shuffle but keys and songs. It still looks like a Piece of Heart or a Heart Container" in header,
@@ -105,6 +105,8 @@ def main():
     check(len(S.BOSS_HEARTS) == 8 and {k for k, _ in S.BOSS_HEARTS.values()} == {g.key for g in S.REWARDS} and
           all(S.boss_need(f) == next(g.need for g in S.REWARDS if g.key == S.BOSS_HEARTS[f][0]) for f in S.BOSS_HEARTS),
           "a boss's container does not ask for what its dungeon's reward asks for")
+    check("heart_asks = lambda h: (skull_door if h in bosses else door)(" in script,
+          "a boss's container's weapons are taken for the forest's way out (Gohma's asked for nothing with Open forest exit)")
     check(not S.piece_holds(S.CONTAINER) and "piece_may | {CONTAINER} if h in bosses else piece_may" in script and
           "any(not (piece_holds(i) or h in bosses and i == CONTAINER) for h, i in heart_drops.items())" in script,
           "a piece may give a container, or a container's spot may not give its own")

@@ -4816,10 +4816,12 @@ def main():
     skull_door = skull_door if placement >= 8 else door
     skull_asks = lambda h, at=None: (lambda area: skull_door(step((lambda n: song_need(n, area) if a.songs else n)(
         quest_need(skulltula_rule(h, area), area, placement >= 12) if a.quests else skulltula_rule(h, area))), h, area))(at or skulls[h][0])
-    heart_asks = lambda h: door(step((lambda n: song_need(n, pieces[h][0]) if a.songs else n)(
+    # (a boss's container: without Open forest exit's step, as a Skulltula's: its CHILD is the weapons to beat the boss.
+    #  Seen 2026-11-18: Gohma's asked for nothing)
+    heart_asks = lambda h: (skull_door if h in bosses else door)(step((lambda n: song_need(n, pieces[h][0]) if a.songs else n)(
         (lambda n: quest_need(n, pieces[h][0], placement >= 12) if a.quests else n)(
             boss_need(bosses[h]) if h in bosses else heart_rule(h, pieces[h][0])))), h, pieces[h][0])
-    own = lambda h: CONTAINER if h in bosses else HEART   # (what a piece's or a container's spot holds of its own)
+    piece_own = lambda h: CONTAINER if h in bosses else HEART   # (what a piece's or a container's spot holds of its own)
     # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags)
     lesson_safe, lesson_only = frozenset(), {}
     if a.songs == 2:
@@ -4851,7 +4853,7 @@ def main():
     if placement >= SHUFFLED_FROM:
         joined.update((h, [skulls[h][0], TOKEN, None, None, "skulltula", skulls[h][1], ""]) for h in able)
         if a.heart_pieces:
-            joined.update((h, [pieces[h][0], own(h), None, None, "piece", pieces[h][1], ""]) for h in pieces)
+            joined.update((h, [pieces[h][0], piece_own(h), None, None, "piece", pieces[h][1], ""]) for h in pieces)
         kinds = {s[1] for s in spots.values()} | {s[1] for s in joined.values()}
         skull_may = frozenset(i for i in kinds if skulltula_holds(i, PROGRESSION))
         piece_may = frozenset(i for i in kinds if piece_holds(i))
@@ -4884,7 +4886,7 @@ def main():
         del spots[h]
         if s[4] == "skulltula" and item != TOKEN:
             skull_drops[h] = item
-        elif s[4] == "piece" and item != own(h):
+        elif s[4] == "piece" and item != piece_own(h):
             heart_drops[h] = item
     if joined and any(not skulltula_holds(i, PROGRESSION) for i in skull_drops.values()) | any(not (piece_holds(i) or h in bosses and i == CONTAINER) for h, i in heart_drops.items()):
         sys.exit("a Gold Skulltula or a Piece of Heart was given what it may not hold: nothing written")
@@ -5655,7 +5657,7 @@ def main():
                                        for h in took] +
                                       [(pieces[h][0], pieces[h][1], check_ages(maps[h]), heart_asks(h),
                                         "Heart Container, " + BOSS_HEARTS[bosses[h]][1] if h in bosses else named("Piece of Heart", h, pieces[h][0], pieces[h][1]), h,
-                                        heart_drops.get(h, own(h))) for h in pieces],
+                                        heart_drops.get(h, piece_own(h))) for h in pieces],
                                       [(g.area, GIFT_PLACES[g.key][1], GIFT_PLACES[g.key][0], needs[h], g.name, gift_key[h], gives[h])
                                        for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES] +
                                       [(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name, None, gives[h])
