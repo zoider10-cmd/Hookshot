@@ -7,6 +7,12 @@ a core another thread held, for the rest of its life. A hos_vcore_back without i
 too: a flag left up while the thread holds a core would make an inner block's away answer 1 and take a core in the
 middle of the outer block.
 
+A waiter that only waits because better threads keep the core it is pinned to (they take it in turns at every block, or
+one runs on and never blocks) is starved, not deadlocked, and must not escape (issue 262): after HOS_VCORE_STARVE_US (1 s)
+it goes before every other waiter at the next release of its core and asks the holder to give the core up, whatever the
+holder's priority, so its wait ends in a grant. The same fixture with HOS_VCORE_STARVE_US=0 (the old rule) escapes after
+2 s in both cases. Before the starved time nothing changes: the better waiter still gets the core first.
+
 python -I -B tests/test_vcore_escape.py [--cxx clang++]
 """
 import argparse
@@ -32,6 +38,7 @@ def block(source, marker):
 
 
 HARNESS = r"""
+#define _CRT_SECURE_NO_WARNINGS   /* (the vcore block reads its switches with getenv: the MSVC CRT warns of it) */
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -54,11 +61,14 @@ static int escapes_logged;
 static void hos_log(const char *fmt, ...) { if (strstr(fmt, "ran without a core")) escapes_logged++; }
 static int hos_cores(void) { return 2; }
 static int sleeps;
-/* (no other thread runs here: a wait for a core only lets the clock go on, 1 ms a look, as the real one times out) */
+static void (*on_sleep)(void);   /* (what the other threads do during one look: only the test sets it) */
+/* (no other thread runs here, except what on_sleep does: a wait for a core lets the clock go on, 1 ms a look, as the real one
+   times out) */
 static BOOL SleepConditionVariableSRW(PCONDITION_VARIABLE cv, PSRWLOCK lk, DWORD ms, unsigned long f) {
     (void)cv, (void)lk, (void)f;
     now_ns += (int64_t)(ms ? ms : 1) * 1000000;
     sleeps++;
+    if (on_sleep) on_sleep();
     return 1;
 }
 static void WakeConditionVariable(PCONDITION_VARIABLE cv) { (void)cv; }
@@ -86,7 +96,72 @@ static void escape(HosThread *t, HosThread *h0, HosThread *h1) {
     cur = h1; check(hos_vcore_away() == 1, "a holder gives its core up for a block");
     cur = t;
 }
-int main(void) {
+/* issue 262: a thread pinned to core 1 waits behind better ones. sa (16) and sb (17) are better than sw (28). */
+static HosThread sa, sb, sw;
+static int replaced, picked_better;
+static void enqueue(HosThread *t) { t->vc_since = now_ns; t->vc_queued = 1; vc_queue[vc_nq++] = t; }
+static void reset(uint64_t sa_mask) {
+    memset(vc_owner, 0, sizeof vc_owner), vc_nq = 0, memset(&vc_st, 0, sizeof vc_st);
+    on_sleep = NULL, sleeps = replaced = picked_better = 0, escapes_logged = 0;
+    thread(&sa, "better0", 16, sa_mask), thread(&sb, "better1", 17, 2), thread(&sw, "starved", 28, 2);
+    cur = &sw;
+}
+/* the holder of core 1 blocks and is back at once: a release, then a new wait behind the others */
+static void take_turns(void) {
+    HosThread *old = vc_owner[1];
+    vc_release(old);
+    if (vc_owner[1] != &sw) enqueue(old), replaced++;
+}
+/* the holder runs on, and gives the core up when asked, at its next checkpoint (hos_vcore_checkpoint) */
+static void checkpoint(void) {
+    HosThread *saved = cur;
+    cur = vc_owner[1];
+    hos_vcore_checkpoint();
+    cur = saved;
+}
+/* before the starved time the better waiter still gets the core: one release at look 300, one at 301 */
+static void order(void) {
+    if (sleeps == 300) vc_release(vc_owner[1]), picked_better = vc_owner[1] == &sb;
+    else if (sleeps == 301 && vc_owner[1] == &sb) vc_release(&sb);
+}
+static void starvation(int off) {
+    reset(2);   /* better threads take the core in turns */
+    vc_take(&sa, 1), enqueue(&sb);
+    on_sleep = take_turns;
+    hos_vcore_back();
+    check(replaced > 100, "the better threads took the core in turns while sw waited");
+    if (off) {
+        check(escapes_logged == 1 && !sw.vc_held && sleeps > 2000, "turn taking: without the boost sw escapes after 2 s");
+    } else {
+        check(escapes_logged == 0 && sw.vc_held == 2, "turn taking: the starved thread gets the core, no escape");
+        check(sleeps > 1000 && sleeps < 1100, "and not before it has waited 1 s");
+    }
+
+    reset(3);   /* a better thread runs on, and answers a request at its checkpoints */
+    vc_take(&sa, 1);
+    on_sleep = checkpoint;
+    hos_vcore_back();
+    if (off) {
+        check(escapes_logged == 1 && !sw.vc_held && sa.vc_held == 2, "holder runs on: without the boost sw escapes");
+    } else {
+        check(escapes_logged == 0 && sw.vc_held == 2, "a holder that runs on gives the core to the starved thread");
+        check(sa.vc_held == 1 && sleeps > 1000 && sleeps < 1100, "and takes the other core after it, not before 1 s");
+    }
+
+    reset(2);   /* before the starved time nothing changes: the better waiter first */
+    vc_take(&sa, 1), enqueue(&sb);
+    on_sleep = order;
+    hos_vcore_back();
+    check(picked_better && escapes_logged == 0 && sw.vc_held == 2,
+          "before the starved time the better waiter gets the core first and the waiter after it");
+    on_sleep = NULL;
+}
+int main(int argc, char **argv) {
+    if (argc > 1) {   /* the old rule: HOS_VCORE_STARVE_US=0 */
+        starvation(1);
+        if (!bad) puts("ok");
+        return bad;
+    }
     HosThread h0, h1, t, u;
     thread(&h0, "holder0", 16, 1), thread(&h1, "holder1", 16, 2), thread(&t, "waiter", 16, 3);
 
@@ -144,6 +219,7 @@ int main(void) {
     thread(&u, "never-held", 16, 3);   /* a thread that holds no core and never escaped: nothing to take after a block */
     cur = &u;
     check(hos_vcore_away() == 0, "a thread that never escaped and holds no core takes none after a block");
+    starvation(0);
     if (!bad) puts("ok");
     return bad;
 }
@@ -172,8 +248,13 @@ def main():
                        timeout=120)
         result = subprocess.run([str(exe)], capture_output=True, text=True, timeout=30)
         print(result.stdout, end="")
+        old = subprocess.run([str(exe), "old"], capture_output=True, text=True, timeout=30,
+                             env={**os.environ, "HOS_VCORE_STARVE_US": "0"})
+        print(old.stdout, end="")
         if result.returncode or "ok" not in result.stdout:
-            raise SystemExit("an escaped thread does not take a core again after its block (issue 1929)")
+            raise SystemExit("a starved thread escapes, or an escaped thread does not take a core again (issues 262, 1929)")
+        if old.returncode or "ok" not in old.stdout:
+            raise SystemExit("with HOS_VCORE_STARVE_US=0 the fixture no longer shows the old escape (issue 262)")
 
 
 if __name__ == "__main__":
