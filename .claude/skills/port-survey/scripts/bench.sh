@@ -21,6 +21,8 @@ put() { swap_cache "$1"; cp "$V/base/hookshot.exe" "$V/base/hookshot_vk.dll" "$G
 run() {  # run <label>
   local R=$P/runs/$1; rm -rf "$R"; mkdir -p "$R/shots" "$R/user"; cp -r "$G/user/save_rando" "$R/user/save_rando"
   : > "$R/live.txt"; ( IFS=";"; for s in ${STEPS:-$ROUTE}; do sleep "${s%%:*}"; w="${s#*:}"; case "$w" in GO\ *) echo "${w#GO }" > "$G/rando/goto_check.txt"; echo "!cheat 5" >> "$R/live.txt";; *) echo "$w" >> "$R/live.txt";; esac; done ) &
+  # (BENCH_PRIO=<AboveNormal|High> in a variant's env.txt: the game process's Windows priority, set once it runs)
+  case "$VENV" in *BENCH_PRIO=*) pr=$(echo "$VENV" | sed -E 's/.*BENCH_PRIO=([A-Za-z]+).*/\1/'); ( sleep 8; powershell -NoProfile -Command "Get-Process hookshot -ErrorAction SilentlyContinue | ForEach-Object { \$_.PriorityClass = '$pr' }" ) & ;; esac
   ( cd "$G" && HOS_HEADLESS=1 HOS_AUDIO=0 HOOKSHOT_NO_UPDATE_CHECK=1 HOS_NO_SAVE_FOLDER=1 RX_VK_FRAMEGEN=0 HOS_FPS_MAX=1000 \
     RX_VK_FRAME_LOG="$(cygpath -w "$R/frames.csv")" RX_VK_SHOTS="$(cygpath -w "$R/shots")" RX_VK_SHOT_EVERY=${EVERY:-1200} \
     RX_VK_SHOT_W=960 RX_VK_SHOT_H=540 HOS_INPUT_LIVE="$(cygpath -w "$R/live.txt")" HOS_INPUT_SCRIPT_BACKGROUND=1 \
