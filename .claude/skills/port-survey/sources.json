@@ -1,0 +1,77 @@
+{
+ "_note": "Other ports of the same game, read for ideas. 'surveyed' is the commit last read; check_updates.py compares it with the repo's head. 'kind': fork = a Hookshot fork (port code); emulator = read the graphics side for ideas only; randomizer = another randomizer for the game (ideas for ours); upstream = our own line (merge only when the owner asks).",
+ "sources": [
+  {
+   "name": "HeyListen",
+   "url": "https://github.com/Sacrappy/HeyListen",
+   "kind": "fork",
+   "license": "GPL-3.0-or-later",
+   "base": "engine/ is Hookshot by subtree at a2e65052 (our tree has it): diff a2e65052 HEAD:engine",
+   "surveyed": ""
+  },
+  {
+   "name": "ProjectReLink",
+   "url": "https://github.com/pixl27/ProjectReLink",
+   "kind": "fork",
+   "license": "GPL-3.0-or-later",
+   "base": "squashed history: diff trees",
+   "surveyed": "a7bfee59"
+  },
+  {
+   "name": "Longshot",
+   "url": "https://git.magicbean.dev/MagicBeanDev/Longshot",
+   "kind": "fork",
+   "license": "GPL-3.0-or-later",
+   "base": "shares our history up to 1be60eae: compare commit titles",
+   "surveyed": "c9e3e542"
+  },
+  {
+   "name": "Reborn engine",
+   "url": "https://github.com/misterrageguy-cyber/OoT2026-PC-Recomp",
+   "kind": "fork",
+   "license": "GPL-3.0-or-later",
+   "base": "engine/ = Hookshot v2.2.0-rc.1 plus patches",
+   "surveyed": "5b4f6200"
+  },
+  {
+   "name": "Triforce",
+   "url": "https://git.triforceproject.com/triforce/source",
+   "kind": "fork",
+   "license": "GPL-3.0-or-later",
+   "base": "one squashed commit per release: diff trees",
+   "surveyed": "93eeb714"
+  },
+  {
+   "name": "Fritchii",
+   "url": "https://github.com/Frizti/Fritchii",
+   "kind": "emulator",
+   "license": "GPL-3.0-or-later",
+   "base": "Eden/yuzu family: graphics ideas only; download no releases, keys or firmware",
+   "surveyed": "f66ea633"
+  },
+  {
+   "name": "LICHII",
+   "url": "",
+   "kind": "emulator",
+   "license": "",
+   "base": "an emulator in the Reddit comparison; link not known yet (ask the owner)",
+   "surveyed": ""
+  },
+  {
+   "name": "Mako (upstream)",
+   "url": "https://github.com/Shakoquo/Mako",
+   "kind": "upstream",
+   "license": "GPL-3.0-or-later",
+   "base": "our own line (remote 'upstream'): report only, merge when the owner asks",
+   "surveyed": ""
+  },
+  {
+   "name": "OOTRR (REALAZK)",
+   "url": "https://github.com/REALAZK/ootrr",
+   "kind": "randomizer",
+   "license": "GPL-3.0-or-later after v0.4.0 (MIT up to it; OoTR logic MIT)",
+   "base": "its own Rust project: read for randomizer mechanisms (flags, flows); compared in share/ootrr-azk-comparison.md",
+   "surveyed": "efc5841"
+  }
+ ]
+}
