@@ -1149,13 +1149,16 @@ struct PipeEntry {
     std::shared_ptr<JobClaim> claim;   // (hookshot: its build, which a draw that must wait runs itself if no worker took it yet)
     std::atomic<uint8_t> how{0};   // (the census: how play made it, UseCounters::made_how; 0: before play, or not made)
     std::atomic<uint8_t> quick{0};   // (hookshot: quick_pipeline's, before the full build: quick_pipe.h's kNone, kMaking, kTried)
+    std::atomic<const Program*> prog{nullptr};   // (the program object whose stages and layout it was built from: graphics_pipeline)
 };
 std::unordered_map<uint64_t, std::unique_ptr<PipeEntry>> pipelines;   // (the replay thread's)
 // (hookshot) Pipelines made ahead of their first draw by the load at a program's create call (vk_programs.cpp), by their keys.
 // `pipelines` is the replay's own and has no lock outside the parallel replay, so a background job puts what it made here and
 // the draw's lookup takes it the first time it asks for that key (graphics_pipeline)
+// (with the program object it was made from: graphics_pipeline draws it only with that one)
+struct KeptPipe { VkPipeline pipeline; const Program* prog; };
 std::mutex kept_ready_mu;
-std::unordered_map<uint64_t, VkPipeline> kept_ready;
+std::unordered_map<uint64_t, KeptPipe> kept_ready;
 std::atomic<size_t> kept_ready_n{0};
 int64_t st_draws, st_skipped, st_dispatches, st_passes, st_mesh, st_pending_skips, st_waits;
 // (hookshot) skips by the line that made them, reported with the frame statistics (draw_skip_report)
@@ -2415,17 +2418,38 @@ PipeEntry* graphics_pipeline(const Program& p, const NvnState& s, const Targets&
         std::memcpy(f.blend, blend, sizeof blend);
         return e;
     };
-    const uint64_t key = pipeline_key(p, s, at, topo);
+    // (Hookshot 65e2cb91 / 8b1e96ad, via HeyListen 1ae91a2d: a pipeline belongs to the program object it was built from.) The key
+    // names a program by its code and its variant's hash, and two program objects can have both the same: the one the precompile
+    // or a load at a create call built a pipeline from (program_find, kept_ready) and the one a draw picks. A draw then ran one
+    // program's shaders under the other's layout, descriptors and constants; with the scene's lit programs a light loop read
+    // garbage for its count and the GPU never finished the draw (device lost: RX 7800 XT 4 of 4 starts; near water on NVIDIA).
+    // Another object with the same key gets a pipeline of its own, under a key of its own (not noted: it holds an address); a
+    // thread's map is by key and object too. RX_VK_PIPE_BY_PROGRAM=0: shared by the key alone, as before
+    static const bool by_program = [] { const char* e = getenv("RX_VK_PIPE_BY_PROGRAM"); return !(e && env_value_off(e)); }();
+    uint64_t key = pipeline_key(p, s, at, topo);
+    const uint64_t own = mix(key, (uint64_t)(uintptr_t)&p);
+    const uint64_t mkey = by_program ? own : key;   // (a thread's map: by key and object)
     static thread_local std::unordered_map<uint64_t, PipeEntry*> mine;   // (entries live as long as the cache)
-    if (auto m = mine.find(key); m != mine.end()) return FINE_X(FC_PIPE_MAP, 1), remember(m->second);
+    if (auto m = mine.find(mkey); m != mine.end()) return FINE_X(FC_PIPE_MAP, 1), remember(m->second);
     PROF_EXACT();   // (new to this thread, or new: rare, and a pipeline made can take milliseconds)
     ParLock lk;
     auto it = pipelines.find(key);
-    if (it != pipelines.end()) return remember(mine[key] = it->second.get());
+    bool own_key = false;
+    const auto made_for_another = [&](const Program* made_for) {   // (true: this draw goes on under its own key)
+        if (!by_program || own_key || !made_for || made_for == &p) return false;
+        static std::atomic<int> told{0};
+        if (told++ < 12)
+            logf("vk: pipeline %016llx was made for another program object of %016llx (variant %016llx): this one gets its own",
+                 (unsigned long long)key, (unsigned long long)p.key, (unsigned long long)p.variant);
+        key = own, own_key = true;
+        it = pipelines.find(key);
+        return true;
+    };
+    if (it != pipelines.end()) made_for_another(it->second->prog.load(std::memory_order_acquire));
+    if (it != pipelines.end()) return remember(mine[mkey] = it->second.get());
     pcache_init();
-    PipeEntry* e = pipelines.emplace(key, std::make_unique<PipeEntry>()).first->second.get();
-    if (kept_ready_n.load(std::memory_order_acquire)) {   // (made at its program's create call: ready, as one the precompile built)
-        VkPipeline kept = VK_NULL_HANDLE;
+    if (!own_key && kept_ready_n.load(std::memory_order_acquire)) {   // (made at its program's create call: ready, as one the precompile built)
+        KeptPipe kept{VK_NULL_HANDLE, nullptr};
         {
             std::lock_guard kl(kept_ready_mu);
             if (const auto k = kept_ready.find(key); k != kept_ready.end()) {
@@ -2434,16 +2458,22 @@ PipeEntry* graphics_pipeline(const Program& p, const NvnState& s, const Targets&
                 kept_ready_n.store(kept_ready.size(), std::memory_order_release);
             }
         }
-        if (kept) {
-            e->pipeline = kept;
-            e->ready.store(true, std::memory_order_release);
+        if (kept.pipeline) {   // (the key's entry: the kept pipeline, with the object it was made from)
+            PipeEntry* ke = pipelines.emplace(key, std::make_unique<PipeEntry>()).first->second.get();
+            ke->prog.store(kept.prog, std::memory_order_release);
+            ke->pipeline = kept.pipeline;
+            ke->ready.store(true, std::memory_order_release);
             census.pipes_taken++;
-            return remember(e);
+            if (!made_for_another(kept.prog)) return remember(ke);
+            if (it != pipelines.end()) return remember(mine[mkey] = it->second.get());
         }
     }
+    PipeEntry* e = pipelines.emplace(key, std::make_unique<PipeEntry>()).first->second.get();
+    e->prog.store(&p, std::memory_order_release);
     use_counters.pipes_new++, census.play_pipes_new++;
-    // (new to the notes and one the preparation predicted: only the prediction put it in a cache. Counted once made, by how)
-    const bool fresh = pipeline_note(key, p, s, at, topo, color_types);
+    // (new to the notes and one the preparation predicted: only the prediction put it in a cache. Counted once made, by how.
+    // Under its own key it holds an address: nothing to note)
+    const bool fresh = !own_key && pipeline_note(key, p, s, at, topo, color_types);
     const bool predicted = fresh && predicted_key(key);
     static const bool sync = env_on("RX_VK_SYNC_PIPELINES");
     if (sync) {
@@ -9372,7 +9402,7 @@ void precompile_at_create() {
                 if (r->variant != p.variant || !pipe_note_at(in, r->at, note.get())) continue;
                 bool cold = false;
                 // (from the caches alone, as a load at a create call: what none has is made when it is first drawn)
-                if (const VkPipeline pl = pipeline_from_caches(p, *note, &cold)) kept_pipes += pipeline_keep_ready(r->key, pl);
+                if (const VkPipeline pl = pipeline_from_caches(p, *note, &cold)) kept_pipes += pipeline_keep_ready(r->key, pl, &p);
                 else kept_cold++;
             }
         }
@@ -9536,6 +9566,7 @@ void precompile_run(void (*progress)(size_t done, size_t total)) {
                     auto it = pipelines.find(n.key);
                     if (it == pipelines.end()) {
                         auto e = std::make_unique<PipeEntry>();
+                        e->prog.store(p, std::memory_order_release);   // (whose pipeline it is: graphics_pipeline)
                         e->pipeline = made;
                         e->ready.store(true, std::memory_order_release);
                         pipelines.emplace(n.key, std::move(e));
@@ -10715,11 +10746,11 @@ VkPipeline compute_pipeline_by_module_id(const Program& p, const uint8_t* id, ui
     ask_start_first = false;
     return made ? pl : VK_NULL_HANDLE;
 }
-bool pipeline_keep_ready(uint64_t key, VkPipeline pl) {
+bool pipeline_keep_ready(uint64_t key, VkPipeline pl, const Program* prog) {
     if (!pl) return false;
     {
         std::lock_guard lk(kept_ready_mu);
-        if (kept_ready.emplace(key, pl).second) {
+        if (kept_ready.emplace(key, KeptPipe{pl, prog}).second) {
             kept_ready_n.store(kept_ready.size(), std::memory_order_release);
             return true;
         }

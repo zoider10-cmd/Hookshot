@@ -246,7 +246,7 @@ void load_work(LoadJob& job) {
                 for (const NoteAt& n : notes->second) {
                     if (n.variant != p->variant || !pipe_note_at(notes_in, n.at, note.get())) continue;
                     bytes += (int64_t)sizeof(PipeNote);
-                    if (const VkPipeline pl = source.graphics(*p, *note)) census.load_pipes += pipeline_keep_ready(n.key, pl);
+                    if (const VkPipeline pl = source.graphics(*p, *note)) census.load_pipes += pipeline_keep_ready(n.key, pl, p.get());
                     else census.load_pipes_cold++;   // (its first draw makes it, as before)
                 }
             }

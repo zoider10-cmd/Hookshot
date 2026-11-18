@@ -15,6 +15,8 @@
 using VkPipeline = uint64_t;
 constexpr VkPipeline VK_NULL_HANDLE = 0;
 using VkPrimitiveTopology = unsigned;
+struct JobClaim;
+struct Program {};
 #include "pipe_entry.inc"
 static thread_local bool note_locked = false;
 struct CacheMutex {
@@ -26,7 +28,6 @@ static std::unordered_map<uint64_t, std::unique_ptr<PipeEntry>> pipelines;
 static std::unordered_map<VkPipeline, unsigned> destroyed;
 static std::unordered_set<VkPipeline> live, in_flight;
 static struct { unsigned device = 7; } dev;
-struct Program {};
 struct PipeNote { uint64_t key = 42; unsigned s = 3, topo = 4; };
 struct Pre { std::mutex first_graphics; std::atomic<bool> graphics_begun{false}; };
 static std::mutex gate_mu;
