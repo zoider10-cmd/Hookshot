@@ -228,6 +228,7 @@ FLAGS_RUNTIME = r"""
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "oot_high_fps.h"
 typedef struct { uint64_t x[32]; uint64_t vreg[32][2]; } Ctx;
@@ -249,6 +250,7 @@ typedef long long LONG64;
 static LONG64 InterlockedIncrement64(volatile LONG64 *p) { return ++*p; }
 static void hos_log(const char *f, ...) { (void)f; }
 static int env_on(const char *name) { (void)name; return 0; }
+static int env_value_off(const char *v) { (void)v; return 0; }
 volatile uint32_t hos_frame_seconds_bits;
 static uint64_t recomp_load64(Ctx *c, uint64_t a) { (void)c; return G64(a); }
 static uint64_t recomp_load32(Ctx *c, uint64_t a) { uint32_t v; (void)c; memcpy(&v, guest(a), 4); return v; }

@@ -1,6 +1,8 @@
 /* (hookshot) The sound manager's job at 60 Hz, the physics solver's steps rounded up, a horse's jump blend and a moving floor's
-   carry, under a Frame rate cap above 60: the lifted f_80435300, f_83373400, f_838ceb80, f_838cfc10, f_82c59eb0, f_80159dc0,
-   f_8015d490 and f_838baa40 call these (nx2/oot_patches.py); host/oot_high_fps.h has why and the logic.
+   carry, under a Frame rate cap above 60, the cloth's time below 60 fps and its solves above 60: the lifted f_80435300,
+   f_83373400, f_838ceb80, f_838cfc10, f_82c59eb0, f_80159dc0, f_8015d490, f_838baa40, f_81b3aa48 and f_81b47080 call these
+   (nx2/oot_patches.py);
+   host/oot_high_fps.h has why and the logic.
    HOS_FPS_LOG (on, by the switches' rule: =0 is off): what they do, every 600 calls. */
 #include "hos.h"
 #include "oot_high_fps.h"
@@ -11,6 +13,7 @@
 #include "../gpu/vk/compat/hookshot_env.h" /* (env_on: the switches' one rule) */
 
 extern volatile uint32_t hos_frame_seconds_bits;   /* (host/nn_vi.c: the frame's seconds, 0 at a cap of 60) */
+extern volatile uint64_t hos_step_probe;           /* (host/nn_vi.c: f_80706be0's object, its +0xd58 the game clock in 60ths) */
 
 static int timed(void) { return __atomic_load_n(&hos_frame_seconds_bits, __ATOMIC_RELAXED) != 0; }
 static int fps_log(void) {
@@ -133,4 +136,54 @@ int hos_oot_floor_carry_slow(uint32_t inv_dt_bits, uint64_t slot) {
                     (long long)k, (long long)n, oot_bits_float(inv_dt_bits), oot_bits_float(frame));
     }
     return slow;
+}
+
+/* The time f_81b3aa48 loads from the cloth's step context, times the game's frame step below 60 fps (floats' bits). HOS_FPS_CLOTH=0
+   (or off, false, no): the game's, a 60th a frame */
+uint32_t hos_oot_cloth_seconds(uint32_t seconds_bits, uint32_t step_bits) {
+    static int on = -1;   /* (read by the game's threads) */
+    int v = __atomic_load_n(&on, __ATOMIC_RELAXED);
+    if (v < 0) {
+        const char *e = getenv("HOS_FPS_CLOTH");
+        v = !(e && *e && env_value_off(e));
+        __atomic_store_n(&on, v, __ATOMIC_RELAXED);
+    }
+    const uint32_t seconds = oot_cloth_seconds(seconds_bits, step_bits, v);
+    if (fps_log()) {
+        static volatile LONG64 calls;
+        const LONG64 n = InterlockedIncrement64(&calls);
+        if (n % 600 == 1)
+            hos_log("oot: cloth time %.2f ms (the game's %.2f ms: frame step %.3f%s; %lld setups)", oot_bits_float(seconds) * 1000.0f,
+                    oot_bits_float(seconds_bits) * 1000.0f, oot_bits_float(step_bits), v ? "" : ", HOS_FPS_CLOTH=0", (long long)n);
+    }
+    return seconds;
+}
+
+static OotClothGate cloth_gate = OOT_CLOTH_GATE_INIT;
+static long long cloth_calls, cloth_solves;   /* (HOS_FPS_LOG's counts, under cloth_lock) */
+static SRWLOCK cloth_lock = SRWLOCK_INIT;     /* (the solve jobs run on the game's job workers, several at once) */
+
+/* f_81b47080's head, the cloth's solve job: step_bits the game's frame step (the float f_83b6ea90 writes). 0: the job returns at
+   once, the cloth held this frame. HOS_FPS_CLOTH_60=1 (by the switches' rule): at most 60 solves a second above a cap of 60 */
+int hos_oot_cloth_solve(uint32_t step_bits) {
+    static int on = -1;   /* (read by the game's threads) */
+    int v = __atomic_load_n(&on, __ATOMIC_RELAXED);
+    if (v < 0) v = env_on("HOS_FPS_CLOTH_60"), __atomic_store_n(&on, v, __ATOMIC_RELAXED);
+    const int t = timed();
+    if (!v || !t) return 1;   /* (off, or a cap of 60: every job solves, and no lock taken) */
+    double clock = NAN;   /* (no clock: the gate stands aside) */
+    const uint64_t probe = __atomic_load_n(&hos_step_probe, __ATOMIC_RELAXED);
+    if (probe) memcpy(&clock, GP(probe + 0xd58), 8);
+    const float step = oot_bits_float(step_bits);
+    long long solved = -1, calls = 0;
+    AcquireSRWLockExclusive(&cloth_lock);
+    const int solve = oot_cloth_gate(&cloth_gate, clock, step, v, t);
+    if (fps_log()) {
+        cloth_solves += solve;
+        if (!(++cloth_calls % 600)) solved = cloth_solves, calls = cloth_calls, cloth_solves = 0;
+    }
+    ReleaseSRWLockExclusive(&cloth_lock);
+    if (solved >= 0)
+        hos_log("oot: cloth solved %lld of the last 600 solve jobs (step %.3f, HOS_FPS_CLOTH_60; %lld jobs)", solved, step, calls);
+    return solve;
 }

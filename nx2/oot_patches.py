@@ -944,6 +944,27 @@ FLOOR_NEW = ("if ((c->n == c->v) && !c->z && hos_oot_floor_carry_slow((uint32_t)
              "{ goto %s; }   /* (nx2/oot_patches.py: a moving floor's carry above 60 fps) */\n")
 FLOOR_DECL = "extern int hos_oot_floor_carry_slow(uint32_t inv_dt_bits, uint64_t slot);\n"
 
+# Below 60 fps, Havok cloth (Link's cap, romfs Phive/Cloth): the simulate operator's per-frame setup, f_81b3aa48, loads its step
+# context's time (x22 + 8) and stores it with a substep's (+44, +48 of its frame data). The time is a 60th whatever the frame, so the
+# cloth runs slow (0.3 of the clock at 18 fps: Link's cap swings out and settles slowly). hos_oot_cloth_seconds multiplies it by the
+# game's frame step while that is over 1: the float f_83b6ea90 writes at 0x84d61fc8 (host/oot_high_fps.h).
+CLOTH_HEAD = "void f_81b3aa48(Ctx *__restrict A64_NOESC c) {\n"
+CLOTH_OLD = "    { { uint64_t _v=recomp_load64(c,(c->x[22]+8ULL)); a64_vset64(c->vreg[0],_v); } }\n"
+CLOTH_NEW = ("    { { uint64_t _v=recomp_load64(c,(c->x[22]+8ULL)); _v=(_v&0xffffffff00000000ULL)|hos_oot_cloth_seconds((uint32_t)_v, "
+             "(uint32_t)recomp_load32(c,g_module_base + 0x84d61fc8ULL)); a64_vset64(c->vreg[0],_v); } }"
+             "   /* (nx2/oot_patches.py: the cloth's time below 60 fps) */\n")
+CLOTH_DECL = "extern uint32_t hos_oot_cloth_seconds(uint32_t seconds_bits, uint32_t step_bits);\n"
+
+# Above 60 fps (HOS_FPS_CLOTH_60=1), the cloth's solve job, f_81b47080 (run by the job runner f_8016b620, once a frame for each
+# cloth near the camera), at most 60 times a second: hos_oot_cloth_solve says, from the game clock, whether this frame solves;
+# a held frame returns at once with the job's own result (0), before its first line saves anything (host/oot_high_fps.h).
+CLOTH_SOLVE_HEAD = "void f_81b47080(Ctx *__restrict A64_NOESC c) {\n"
+CLOTH_SOLVE_OLD = ("    { uint64_t _b=c->x[31]; int64_t _o=-128; { uint64_t _v=0; memcpy(&_v,&c->vreg[10][0],8); "
+                   "recomp_store64(c,(_b+_o),_v); } c->x[31]=_b+_o; }\n")
+CLOTH_SOLVE_NEW = ("    if (!hos_oot_cloth_solve((uint32_t)recomp_load32(c,g_module_base + 0x84d61fc8ULL))) { c->x[0] = 0; return; }"
+                   "   /* (nx2/oot_patches.py: the cloth's solves above 60 fps) */\n")
+CLOTH_SOLVE_DECL = "extern int hos_oot_cloth_solve(uint32_t step_bits);\n"
+
 
 def _function(s, head_text):
     """(start, end) of the function whose head is head_text, or None"""
@@ -1108,6 +1129,45 @@ def patch_floor_carry(s):
     if done and FLOOR_DECL not in s:
         s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + FLOOR_DECL, 1)
     return s, done
+
+
+def patch_cloth_time(s):
+    """The cloth setup's time through the host: (s, 1) when f_81b3aa48 is in s with it (made now or before), (s, 0) when it is
+    not here or its code differs (another game version: left as it is)"""
+    at = _function(s, CLOTH_HEAD)
+    if at is None:
+        return s, 0
+    head, end = at
+    body = s[head:end]
+    if body.count(CLOTH_NEW) == 1:
+        return s, 1
+    if body.count(CLOTH_OLD) != 1:
+        return s, 0
+    s = s[:head] + body.replace(CLOTH_OLD, CLOTH_NEW, 1) + s[end:]
+    if CLOTH_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + CLOTH_DECL, 1)
+    return s, 1
+
+
+def patch_cloth_solve(s):
+    """The cloth's solve job gated through the host: (s, 1) when f_81b47080 is in s with it (made now or before), (s, 0) when it
+    is not here or its first line differs (another game version: left as it is)"""
+    at = _function(s, CLOTH_SOLVE_HEAD)
+    if at is None:
+        return s, 0
+    head, end = at
+    body = s[head:end]
+    if body.count(CLOTH_SOLVE_NEW) == 1:
+        return s, 1
+    if body.count(CLOTH_SOLVE_OLD) != 1:
+        return s, 0
+    first = body.index(CLOTH_SOLVE_OLD)
+    if body[:first].count("\n") > 2:   # (the first store is the job's own first line, after the head and a hint)
+        return s, 0
+    s = s[:head] + body[:first] + CLOTH_SOLVE_NEW + body[first:] + s[end:]
+    if CLOTH_SOLVE_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + CLOTH_SOLVE_DECL, 1)
+    return s, 1
 
 
 # f_8263e8e0, the steering update: after applying a turn it clamps the saved rate (+36) to the turn's magnitude times
@@ -1602,6 +1662,16 @@ def patch_file(s, name, protect_hearts=False):
     if solver != out:
         lines.append("oot_patches: the solver steps rounded up above 60 fps in " + name)
     out = solver
+    cloth, found = patch_cloth_time(out)
+    counts["cloth time"] += found
+    if cloth != out:
+        lines.append("oot_patches: the cloth's time below 60 fps in " + name)
+    out = cloth
+    solve, found = patch_cloth_solve(out)
+    counts["cloth solve"] += found
+    if solve != out:
+        lines.append("oot_patches: the cloth's solves above 60 fps in " + name)
+    out = solve
     turn, found = patch_turn_rate(out)
     counts["saved turn rate"] += found
     if turn != out:
@@ -1694,6 +1764,10 @@ def report(paths, counts, protect_hearts=False):
         print("oot_patches: WARNING: the horse's jump step test was found %d times, not once" % total["horse jump step"])
     if total["floor carry"] != len(FLOOR_SITES):   # (without them, above 100 fps a moving floor leaves Link and enemies behind)
         print("oot_patches: WARNING: a moving floor's carry was found at %d of %d places" % (total["floor carry"], len(FLOOR_SITES)))
+    if total["cloth time"] != 1:   # (without it, below 60 fps Link's cap and the other cloth run slow: they swing out and settle slowly)
+        print("oot_patches: WARNING: the cloth's time was found %d times, not once" % total["cloth time"])
+    if total["cloth solve"] != 1:   # (without it, above 60 fps with HOS_FPS_CLOTH_60=1 the cloth is still solved every frame)
+        print("oot_patches: WARNING: the cloth's solve job was found %d times, not once" % total["cloth solve"])
     for what, n in done.items():
         if n != expected.get(what, 1):
             print("oot_patches: WARNING: the %s was found %d times" % (what, n))

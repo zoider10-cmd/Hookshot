@@ -50,7 +50,34 @@
    slid to its back (issue 439; the share moved from all to a tenth at 1/dt 100, at any step either side of it). Above a
    cap of 60, on a frame shorter than a 60 fps one, 1/dt times the frame's step (the game's time object, +0x10: 0.5 at 120 fps)
    is tested instead: the game's test as it would be at 60 fps, so time slowed below 0.6 still takes the tenth. At a cap of
-   60, and on a frame of a 60 fps one or longer, the game's own test decides. */
+   60, and on a frame of a 60 fps one or longer, the game's own test decides.
+
+   Below 60 fps, the game's Havok cloth (Link's cap, the .bphcl files in romfs Phive/Cloth): the simulate operator's per-frame
+   setup (f_81b3aa48, the instance's frame-time mode: its fixed 1/60 mode, f_81b3a964, is left as it is) takes the frame's time
+   from its step context (+8) and splits it into the context's count (+24) x the config's subSteps x the operator's own count of
+   substeps. That time is a 60th of a second whatever the frame (16.67 ms at 18 fps, about 45 setups a frame at 18 and at 60 fps),
+   so the cloth runs at fps / 60 of the real time while Link moves at the game's: at 18 fps (a step of 3.3) his cap swings far
+   out, its anchor moving 3.3 times as far each cloth step, and takes about a second to settle. The time does not follow the
+   game's own rate either, so the console would step the cloth the same way when its frame-rate controller drops to 30, 20 or 15.
+   While the game's frame step (the float f_83b6ea90 writes, 60 / its frame rate) is over 1, the context's time is multiplied by
+   it (oot_cloth_seconds): the cloth keeps the clock with the same number of solves, each substep that much longer, and at 18 fps
+   the cap settles faster and flares less, much as at 60. Above 60 fps (a step under 1) the cloth still steps a 60th a frame and
+   runs fast; that is not changed here. (Substeps of a 60th's length instead, the count multiplied by the step, looked the same
+   at 18 fps and cost every cloth's solve that many times: about +11 ms of CPU a frame on a desktop CPU in Kokiri Forest at four.)
+
+   Above 60 fps, with HOS_FPS_CLOTH_60=1 (off by default for now), the cloth is solved at most 60 times a second. Its solve runs
+   as a job on the game's job workers (f_81b47080, under the job runner f_8016b620), once a frame for each cloth near the camera,
+   and each solve steps a 60th: at 240 fps four solves where the console makes one, so the cloth ran four times too fast and cost
+   four times the CPU. Near King Zora in Zora's Domain (his robe) that held the frame at about 55 fps under a cap of 240, the
+   main thread waiting for the workers (issue #1485: the solve 45.7 % of the workers' game code there, about 10.5 ms of CPU a
+   frame, against 15 % and about 2 ms on the path below). On a frame whose step is under 1, the job solves only when the game
+   clock (the double f_80706be0 adds each frame's step to, in 60ths: hos_step_probe + 0xd58) has crossed a whole 60th since the
+   frame before (oot_cloth_gate); otherwise it returns at once with its own result, 0, before it saves anything, and the cloth
+   keeps its last pose. Every job that sees one clock value makes the same choice, so the cloth of one frame solves or holds
+   together. A clock that went back (a load) solves and starts again. At a step of 1 or more (60 fps and below, #1384's case),
+   at a cap of 60 and for a step that is not a number, every frame solves, as the game has it. The solve job calls only the
+   cloth's own code, timer scopes (nn::os::GetSystemTick), thread-local lookups and a scratch buffer of its own: no job is
+   started or signalled from it and no memory the setup made is freed in it (read from the lift). */
 #pragma once
 #include <math.h>
 #include <stdint.h>
@@ -140,4 +167,34 @@ static inline int oot_floor_carry_slow(uint32_t inv_dt_bits, uint32_t frame_step
     const float inv_dt = oot_bits_float(inv_dt_bits), step = oot_bits_float(frame_step_bits);
     if (!timed || !(step > 0.0f)) return 1;   /* (the game's own test decides) */
     return inv_dt * step > 100.0f;
+}
+
+/* The cloth's time: seconds_bits (the step context's time, a float), step_bits (the game's frame step, a float), on (HOS_FPS_CLOTH:
+   0 the game's). A step of 1 or less (60 fps and above), or not a number, 0, below 0 or over 8, keeps the game's */
+static inline uint32_t oot_cloth_seconds(uint32_t seconds_bits, uint32_t step_bits, int on) {
+    const float step = oot_bits_float(step_bits);
+    if (!on || !(step > 1.0f && step <= 8.0f)) return seconds_bits;   /* (the host's longest step is 4) */
+    return oot_float_bits(oot_bits_float(seconds_bits) * step);
+}
+
+typedef struct {
+    double clock;   /* (the game clock of the last frame seen, in 60ths) */
+    int solve;      /* (that frame's choice, for its other jobs) */
+    int have;       /* (0: no frame seen since the gate last stood aside) */
+} OotClothGate;
+#define OOT_CLOTH_GATE_INIT {0.0, 1, 0}
+
+/* 1: solve the cloth now, 0: hold it this frame. clock (the game clock, 60ths), step (the game's frame step), on
+   (HOS_FPS_CLOTH_60), timed (a cap above 60: the frame's own time given) */
+static inline int oot_cloth_gate(OotClothGate *g, double clock, float step, int on, int timed) {
+    if (!on || !timed || !(step > 0.0f && step < 1.0f) || !(clock == clock)) {   /* (as the game has it: every frame) */
+        g->have = 0;
+        return 1;
+    }
+    if (g->have && clock == g->clock) return g->solve;   /* (another job of the same frame) */
+    const int solve = !g->have || clock < g->clock || floor(clock) != floor(g->clock);
+    g->clock = clock;
+    g->solve = solve;
+    g->have = 1;
+    return solve;
 }
