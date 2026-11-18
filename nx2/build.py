@@ -451,7 +451,8 @@ def tree_headers(*roots, skip=()):
 # says which headers it read. The next build names the object by those of them under the same folders, their names and
 # contents (renderer_deps), and the blob stays for a file with no depfile yet or one that cannot be read. What a file reads from
 # elsewhere (the Vulkan and SPIR-V headers, the compiler's) counts as before: by the flags and the system headers' stamp.
-HEADER_EXTS = (".h", ".hpp", ".inc")
+# (and a .def table a header includes: gpu/vk/switches.def, whose new row alone left the renderer's switch table as it was)
+HEADER_EXTS = (".h", ".hpp", ".inc", ".def")
 _HEADER_DIGESTS = {}   # (a header's path -> its name and content's sha1, once a run: many files read the same headers)
 DEPFILE_DEPS = b"depfile:"   # (what renderer_deps' dependency text starts with when it comes from a depfile)
 DEPFILE_PENDING = "depfile-pending"   # (the stamp of an object compiled now from a depfile key, until rekey_depfiles keys it)
