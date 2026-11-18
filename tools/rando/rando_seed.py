@@ -2054,6 +2054,41 @@ SKULLTULA_NEVER = frozenset(("Item_Scale_Silver", "Item_Scale_Gold", "Item_Walle
                              "Obj_Armor_Goron", "Obj_Armor_Zora", "Obj_Heart_Piece", "Obj_Heart_Container") + SKULLTULA_ITEMS_NOT_YET)
 
 
+# Gold Skulltulas by day (rando_skulltulas_day, asked for 2026-11-17): 30 of the game's Gold Skulltulas come out only
+# at night, by their actor's Dynamic Enemy_Skulltula_Gold_Nocturnal (true in each of theirs, absent in the others').
+# With the setting on it is made false in the seed's copies of their map files, in place (a true/false is a whole
+# word of its entry: the file keeps its size). The rules never asked for the night (it comes by waiting, or the Sun's
+# Song), so no rule changes. NOT SEEN YET: whether the flag alone is what keeps them to the night.
+NOCTURNAL = "Enemy_Skulltula_Gold_Nocturnal"
+
+
+def skulltulas_by_day(data):
+    """a map file with its night-only Gold Skulltulas out by day too (NOCTURNAL made false): (the new bytes or None
+    when it has none, how many)"""
+    if data[:2] != b"YB" or NOCTURNAL.encode() not in data:
+        return None, 0
+    key_at, _, root = struct.unpack_from("<III", data, 4)
+    keys = table(data, key_at)
+    out, count, seen = bytearray(data), 0, set()
+    for name, kind, value, _ in entries(data, root, keys):
+        if name != "Actors" or kind != 0xC0:
+            continue
+        n = int.from_bytes(data[value + 1:value + 4], "little")
+        vals = value + 4 + (n + 3 & ~3)
+        for i in range(n):
+            if data[value + 4 + i] != 0xC1:
+                continue
+            fields = {k: (t, v) for k, t, v, _ in entries(data, struct.unpack_from("<I", data, vals + 4 * i)[0], keys)}
+            if fields.get("Gyaml", (0, -1))[0] != 0xA0 or fields.get("Dynamic", (0,))[0] != 0xC1:
+                continue
+            for k, t, v, where in entries(data, fields["Dynamic"][1], keys):
+                if k == NOCTURNAL and t == 0xD0 and v and where not in seen:
+                    struct.pack_into("<I", out, where, 0)
+                    seen.add(where)
+                    count += 1
+    return (bytes(out), count) if count else (None, 0)
+
+
 def skulltula_holds(item, gating):
     """whether a Gold Skulltula may drop this item (placement 12, see above); gating: the seed's gating items"""
     if item in SKULLTULA_NEVER or item.startswith("Item_Melody_") or item in DUNGEON_ITEMS:
@@ -3548,7 +3583,7 @@ def settings(game):
            "rando_skip_intro": 0, "rando_skip_cutscenes": 0, "rando_skulltulas": 0, "rando_quests": 0, "rando_frogs": 0, "rando_light_arrows": 0,
            "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
            "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0, "rando_open_door": 0,
-           "rando_ammo_pickups": 0, "rando_rupee_fill": 0}   # (the last two: the game's side's alone, host/hos_main.c oot_pickup_qol)
+           "rando_ammo_pickups": 0, "rando_rupee_fill": 0, "rando_skulltulas_day": 0}   # (the last two: the game's side's alone, host/hos_main.c oot_pickup_qol)
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -4468,6 +4503,7 @@ def main():
     p.add_argument("--shop-shelves", type=int, choices=(0, 1), help="in place of rando_shop_shelves: with Shops, 0 four shelves of each shop, 1 every shelf (shop_slots)")
     p.add_argument("--sword-shield", type=int, choices=(0, 1), help="in place of rando_sword_shield: 0 the Kokiri Sword stays in its chest and the Deku Shield on "
                                                                      "its shelf, 1 both take part (the chest with Major items, the shelf with Shops)")
+    p.add_argument("--skulltulas-day", action="store_true", help="as rando_skulltulas_day=1: the night-only Gold Skulltulas are out by day too (NOCTURNAL)")
     p.add_argument("--heart-pieces", action="store_true", help="as rando_heart_pieces=1: the Pieces of Heart lying in the world change places with "
                                                                 "the chests' items a pick-up can be, and may hold a gating item (from placement 12: take "
                                                                 "part as chests do, piece_holds)")
@@ -4507,6 +4543,7 @@ def main():
     a.dungeon_rewards = a.dungeon_rewards if a.dungeon_rewards is not None else ini["rando_dungeon_rewards"]
     a.dungeon_rewards = 1 if a.dungeon_rewards in (1, 2) and REWARDS_READY else 0
     a.heart_pieces = a.heart_pieces or ini["rando_heart_pieces"] != 0
+    a.skulltulas_day = a.skulltulas_day or ini["rando_skulltulas_day"] != 0
     # (the songs gate the game: with them shuffled the logic places them, whatever Major items says)
     logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic
     # (the options file's rando_open_deku and rando_open_forest too, so that the launcher's run at Play keeps them)
@@ -4577,7 +4614,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 7" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" talks skipped" if a.skip_cutscenes else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + " checks 10" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + (" skulltulas by day" if a.skulltulas_day else "") + " checks 10" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -5457,6 +5494,26 @@ def main():
     except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
         sys.exit("the bombs' lifting grade: %s. Nothing written." % e)
     print("bombs can be lifted without the Goron's Bracelet (%d packs)" % len(BOMB_PACKS))
+
+    # ---- Gold Skulltulas by day (rando_skulltulas_day): the night-only ones out by day too ----
+    if a.skulltulas_day:
+        day = 0
+        try:
+            for top, dirs, names in os.walk(os.path.join(romfs, "Banc")):
+                dirs.sort()
+                for n in sorted(names):
+                    if ".bcett.byml" not in n.lower():
+                        continue
+                    rel = os.path.relpath(os.path.join(top, n), romfs).replace("\\", "/")
+                    data = changed[rel] if rel in changed else unpack(open(os.path.join(top, n), "rb").read(), zs, dicts)
+                    new, count = skulltulas_by_day(data)
+                    if new is not None:
+                        changed[rel] = new
+                        sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
+                        day += count
+        except (OSError, ValueError, struct.error, IndexError) as e:
+            sys.exit("Gold Skulltulas by day: %s. Nothing written." % e)
+        print("Gold Skulltulas by day: %d night-only ones are out by day too" % day)
 
     def shop_table(tbl):
         """the size table with the shops' files: the new packs and their own files added, the keepers' packs' goods

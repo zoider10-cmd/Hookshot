@@ -29,7 +29,7 @@ def main():
           '"As the game has it", "5 each", "Fill the bag")' in rows,
           "the two settings are not appended after the others, or Ammo pick-ups has not its three choices")
     seed = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_ammo_pickups": 0, "rando_rupee_fill": 0}' in seed, "the seed tool does not know the two settings' keys")
+    check('"rando_ammo_pickups": 0, "rando_rupee_fill": 0,' in seed, "the seed tool does not know the two settings' keys")
     rando = (ROOT / "host" / "oot_rando.c").read_text(encoding="utf-8")
     check("rando.v[OOT_RANDO_AMMO_PICKUPS]" in rando and "rando.v[OOT_RANDO_RUPEE_FILL]" in rando and
           'getenv("HOS_OOT_AMMO")' in rando and 'getenv("HOS_OOT_RUPEE_FILL")' in rando,

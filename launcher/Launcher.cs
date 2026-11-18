@@ -2219,6 +2219,8 @@ class LauncherForm : Form {
             "Bombs, Deku Nuts, Deku Seeds, Deku Sticks and arrows lying in the world or dropped by grass, pots and enemies. As the game has it: what the pick-up says. 5 each: at least 5. Fill the bag: the bag is filled to what it holds. Not chests or shops." },
         new object[] { "rando_rupee_fill", "Rupees fill the wallet", new[] { "Off", "On" }, new[] { 0, 1 },
             "A rupee lying in the world or dropped by grass, pots and enemies fills the wallet to what it holds. Not chests, shops or prizes." },
+        new object[] { "rando_skulltulas_day", "Gold Skulltulas by day", new[] { "Off", "On" }, new[] { 0, 1 },
+            "The 30 Gold Skulltulas that come out only at night are there by day too. Moves no item." },
     };
     // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and
