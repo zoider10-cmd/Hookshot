@@ -777,6 +777,82 @@ def patch_movie_frames(s):
     return s if MOVIE_DECL in s else s.replace('#include "a64.h"\n', '#include "a64.h"\n' + MOVIE_DECL, 1)
 
 
+# A looping animation one frame long (the frozen Zoras under the ice in adult Zora's Domain: start 0, end 1) is one pose. At the
+# console's 60 fps the clock's step is 1 and each update lands on the same phase. Under a Frame rate cap above 60 the step is the
+# frame's own time (0.36 at 165 fps), the phase moved by it each frame, and each frame drew another phase: the pose twitched (issue
+# 988). The time a skeleton is drawn at comes from two places, and both are patched to hos_loop_step / hos_loop_pose (host/loop_step.h):
+# - f_802cfca0 advances the clock of each animation entry ([x20]: flags +0, time +4, speed +12, start +16, end +20) and copies it
+#   to the skeleton's time. Its two advances multiply the step (vreg 8) by the definition's speed first: a loop of one frame or less
+#   takes the step as whole frames, carried per entry; longer loops keep the fractional step.
+# - f_80944aa0 writes the time the skeletons are drawn at (x22: the value +0, the range it is kept in +4, +8) from a clock of its
+#   own that also moved by the fractional step: a range of one frame or less is drawn at its start, the phase of a clock that
+#   moves in whole frames.
+# A cap of 60 (hos_frame_seconds_bits 0) leaves both as the game has them.
+LOOP_HEAD = "void f_802cfca0(Ctx *__restrict A64_NOESC c) {\n"
+LOOP_MUL = ("    {uint64_t _a=0,_b=0,_z,_v;memcpy(&_a,c->vreg[8],4);memcpy(&_b,c->vreg[%d],4);_z=(_a^_b)&0x80000000ULL;\n")
+LOOP_SITES = (
+    ("if (((c->x[9] >> 3) & 1)) { goto L_802d077c; }\n", 1),
+    ("if (((c->x[9] >> 3) & 1)) { goto L_802d07f4; }\n", 0),
+)
+LOOP_MARK = "/* (nx2/oot_patches.py: a loop of one frame by whole frames) */"
+LOOP_DECL = "extern uint32_t hos_loop_step(uint64_t at, uint32_t step_bits, uint32_t start_bits, uint32_t end_bits);\n"
+
+
+def _loop_new(mul):
+    return mul.replace("memcpy(&_a,c->vreg[8],4);",
+                       "memcpy(&_a,c->vreg[8],4); _a=hos_loop_step(c->x[20], (uint32_t)_a, (uint32_t)recomp_load32(c,c->x[20] + 16), "
+                       "(uint32_t)recomp_load32(c,c->x[20] + 20));   " + LOOP_MARK + "\n    ", 1)
+
+
+def patch_loop_steps(s):
+    """(s, the sites patched here): f_802cfca0's two clock advances take hos_loop_step's step; a file without the function, one
+    patched before, or one whose code differs is left as it is"""
+    head = s.find(LOOP_HEAD)
+    if head < 0:
+        return s, 0
+    end = s.find("\nvoid f_", head + len(LOOP_HEAD))
+    body = s[head:end if end >= 0 else len(s)]
+    done = 0
+    for before, reg in LOOP_SITES:
+        old = before + LOOP_MUL % reg
+        new = before + _loop_new(LOOP_MUL % reg)
+        if new in body or body.count(old) != 1:
+            continue
+        at = head + body.index(old)
+        s = s[:at] + new + s[at + len(old):]
+        end = s.find("\nvoid f_", head + len(LOOP_HEAD))
+        body = s[head:end if end >= 0 else len(s)]
+        done += 1
+    if done and LOOP_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + LOOP_DECL, 1)
+    return s, done
+
+
+POSE_HEAD = "void f_80944aa0(Ctx *__restrict A64_NOESC c) {\n"
+POSE_OLD = "    { { uint64_t _v=0; memcpy(&_v,&c->vreg[0][0],4); recomp_store32(c,(c->x[22]+0ULL),_v); } }\n"
+POSE_NEW = ("    { { uint64_t _v=0; memcpy(&_v,&c->vreg[0][0],4); _v=hos_loop_pose((uint32_t)_v, (uint32_t)recomp_load32(c,c->x[22] + 4), "
+            "(uint32_t)recomp_load32(c,c->x[22] + 8));   /* (nx2/oot_patches.py: a loop of one frame by its start) */ "
+            "recomp_store32(c,(c->x[22]+0ULL),_v); } }\n")
+POSE_DECL = "extern uint32_t hos_loop_pose(uint32_t time_bits, uint32_t start_bits, uint32_t end_bits);\n"
+
+
+def patch_loop_pose(s):
+    """(s, 1 if patched): the one store f_80944aa0 makes of a skeleton's time (the call that wraps it into its range, then the
+    store); a file without the function, one patched before, or one whose code differs is left as it is"""
+    head = s.find(POSE_HEAD)
+    if head < 0:
+        return s, 0
+    end = s.find("\nvoid f_", head + len(POSE_HEAD))
+    body = s[head:end if end >= 0 else len(s)]
+    if POSE_NEW in body or body.count(POSE_OLD) != 1:
+        return s, 0
+    at = head + body.index(POSE_OLD)
+    s = s[:at] + POSE_NEW + s[at + len(POSE_OLD):]
+    if POSE_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + POSE_DECL, 1)
+    return s, 1
+
+
 # Counters that add the frame step, or the step times a whole number, cut to whole frames (host/frame_whole.h). At 60 fps the step
 # is 1; under a Frame rate cap above 60 it is the frame's own time, under 1 (0.42 at 144 fps), and the cut is 0 every frame:
 # - f_80a87e50, the pick-up indicator above Link's head (a rupee, a Deku Stick): the count it shows (+864) moves toward the
@@ -1565,6 +1641,12 @@ def patch_file(s, name, protect_hearts=False):
         if movie != out:
             lines.append("oot_patches: the movie's frame count by the frames' time in " + name)
         out = movie
+    out, loops = patch_loop_steps(out)
+    if loops:
+        lines.append("oot_patches: %d animation clock(s) with whole frames for a loop of one frame in %s" % (loops, name))
+    out, poses = patch_loop_pose(out)
+    if poses:
+        lines.append("oot_patches: the drawn time of a loop of one frame by its start in " + name)
     ocw = patch_ocarina_wait(out)
     if ocw is not None:
         if OC_ENTRY_NEW in ocw:   # (made now, or by an earlier run over this file)

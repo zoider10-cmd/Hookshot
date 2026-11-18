@@ -432,6 +432,32 @@ uint32_t hos_frame_whole(uint64_t at, uint32_t amount_bits) {
     ReleaseSRWLockExclusive(&frame_whole_lock);
     return whole;
 }
+/* (the same for a counter that runs `times` substeps a frame: the whole substeps, so a frame above 60 fps runs some of them
+   instead of all or none) */
+uint32_t hos_frame_whole_times(uint64_t at, uint32_t amount_bits, uint32_t times) {
+    AcquireSRWLockExclusive(&frame_whole_lock);
+    const uint32_t whole = frame_whole_times(&frame_whole_state, at, amount_bits, times,
+                                             __atomic_load_n(&hos_frame_seconds_bits, __ATOMIC_RELAXED) != 0);
+    ReleaseSRWLockExclusive(&frame_whole_lock);
+    return whole;
+}
+/* (nx2/oot_patches.py patch_loop_steps, patch_loop_pose) the step of an animation entry's clock, and the time a skeleton is drawn at,
+   for a loop of one frame or less while the frames' own time is the step: whole frames, and the loop's start (host/loop_step.h,
+   issue 988: the frozen Zoras twitched above a 60 cap). Anything else, and a cap of 60, as the game has it. */
+#include "loop_step.h"
+static LoopStep loop_step_state;
+static SRWLOCK loop_step_lock = SRWLOCK_INIT;   /* (the game's update threads) */
+uint32_t hos_loop_step(uint64_t at, uint32_t step_bits, uint32_t start_bits, uint32_t end_bits) {
+    const int timed = __atomic_load_n(&hos_frame_seconds_bits, __ATOMIC_RELAXED) != 0;
+    if (!timed || !loop_is_pose(start_bits, end_bits)) return step_bits;   /* (most entries: no lock) */
+    AcquireSRWLockExclusive(&loop_step_lock);
+    const uint32_t whole = loop_step(&loop_step_state, at, step_bits, start_bits, end_bits, timed);
+    ReleaseSRWLockExclusive(&loop_step_lock);
+    return whole;
+}
+uint32_t hos_loop_pose(uint32_t time_bits, uint32_t start_bits, uint32_t end_bits) {
+    return loop_pose(time_bits, start_bits, end_bits, __atomic_load_n(&hos_frame_seconds_bits, __ATOMIC_RELAXED) != 0);
+}
 volatile uint64_t hos_res_module = 0;   /* (f_831f3200's object, whose +0xe5c is the 3D's scale: nx2/oot_patches.py) */
 /* Quantize the time step to the engine's integer nominal rate. Keep debt from a short frame even when the minimum
    step is 1/60: discarding it made alternating short/long frames advance more game time than elapsed wall time.
