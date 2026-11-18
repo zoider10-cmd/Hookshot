@@ -750,6 +750,8 @@ SHOP_CHILD, SHOP_CHILD_MORE = 200, 0.15
 # (seen in play: seven of a seed's 48 shelves, four of them Gold Skulltula tokens, and asked about). 2, the square,
 # is gentler (its owner's word, 2026-11-13): 1 rupee on one shelf in 25, six in ten within the child's wallet.
 SHOP_LOW_POWER = 2
+SHOP_TENS_FROM = 12      # (the placement from which prices are in tens: shop_price)
+SHOP_AFFORDABLE = 10     # (Shops: Affordable, every shelf's price)
 WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,))))
 
 
@@ -989,16 +991,22 @@ def shelf_tier_maps(data, held, tiers, lifts=None, scales=None, turns=None):
     return versions
 
 
-def shop_price(rng, mode):
+def shop_price(rng, mode, placement=PLACEMENT):
     """A shelf's price, 1 to SHOP_PRICE_MAX. mode 1: most of them low (an even roll to the power SHOP_LOW_POWER: about
     six in ten within the child's wallet, one in seven past the Adult's), in fives from 10 up; 2: any price as likely as
     another, but for the child's wallet's, which come up a little more often (about four in ten). In both, SHOP_CHILD_MORE
-    of the prices are rolled within the child's wallet alone."""
+    of the prices are rolled within the child's wallet alone. From placement SHOP_TENS_FROM every price is in tens, 10 at
+    least (asked for 2026-11-16: the wallets' 200, 500 and 750 are tens, so no shelf asks for a bigger wallet than it
+    did); mode 3, Affordable: every shelf SHOP_AFFORDABLE (the rolls made all the same, so the seed's other choices stay)."""
     most = SHOP_CHILD if rng.random() < SHOP_CHILD_MORE else SHOP_PRICE_MAX
     if mode == 2:
-        return rng.randint(1, most)
-    price = 1 + int((most - 1) * rng.random() ** SHOP_LOW_POWER)
-    return price if price < 10 else min(SHOP_PRICE_MAX, 5 * round(price / 5))
+        price = rng.randint(1, most)
+    else:
+        price = 1 + int((most - 1) * rng.random() ** SHOP_LOW_POWER)
+        price = price if price < 10 else min(SHOP_PRICE_MAX, 5 * round(price / 5))
+    if mode == 3:
+        return SHOP_AFFORDABLE
+    return price if placement < SHOP_TENS_FROM else min(most, max(10, 10 * round(price / 10)))
 
 
 def wallet_need(price):
@@ -4498,8 +4506,8 @@ def main():
     p.add_argument("--frogs", action="store_true", help="not used any more: with Quest rewards the frogs of Zora's River always take part")
     p.add_argument("--light-arrows", action="store_true", help="as rando_light_arrows=1: with Quest rewards, Zelda's Light Arrows take part too")
     p.add_argument("--scrubs", action="store_true", help="as rando_scrubs=1: the Business Scrubs' four one-time sales take part with the chests (SCRUBS)")
-    p.add_argument("--shops", type=int, choices=(0, 1, 2), help="in place of rando_shops: four shelves of each shop sell a shuffled item, once (SHOPS). "
-                                                               "2: with rolled prices")
+    p.add_argument("--shops", type=int, choices=(0, 1, 2, 3), help="in place of rando_shops: four shelves of each shop sell a shuffled item, once (SHOPS). "
+                                                               "1: low prices, 2: any price, 3: Affordable, every shelf 10 rupees (shop_price)")
     p.add_argument("--shop-shelves", type=int, choices=(0, 1), help="in place of rando_shop_shelves: with Shops, 0 four shelves of each shop, 1 every shelf (shop_slots)")
     p.add_argument("--sword-shield", type=int, choices=(0, 1), help="in place of rando_sword_shield: 0 the Kokiri Sword stays in its chest and the Deku Shield on "
                                                                      "its shelf, 1 both take part (the chest with Major items, the shelf with Shops)")
@@ -4556,7 +4564,7 @@ def main():
     a.scrubs = a.scrubs or ini["rando_scrubs"] != 0
     a.progressive = a.progressive or ini["rando_progressive"] != 0
     a.shops = a.shops if a.shops is not None else ini["rando_shops"]
-    a.shops = a.shops if 0 <= a.shops <= 2 else 0
+    a.shops = a.shops if 0 <= a.shops <= 3 else 0
     a.shop_shelves = (a.shop_shelves if a.shop_shelves is not None else ini["rando_shop_shelves"]) == 1 and a.shops != 0
     a.sword_shield = (a.sword_shield if a.sword_shield is not None else ini["rando_sword_shield"]) == 1
     shield_shelf = a.sword_shield and a.shops != 0   # (the Deku Shield's shelf takes part: with Shops)
@@ -4796,7 +4804,7 @@ def main():
         roll = random.Random("shop prices:%d:%d" % (seed, a.shops))
         for shop in shops(placement):
             for k, (index, actor) in enumerate(shop_slots(shop, a.shop_shelves, shield_shelf)):
-                price = shop_price(roll, a.shops)
+                price = shop_price(roll, a.shops, placement)
                 g = Gift("shop_%s_%d" % (shop.key, index), "", (), shelf_item(actor), shop.areas[0],
                          "%s: shelf %d, %d rupee%s" % (shop.name if placement < 4 or shop.key != "bombchu" else "the Bombchu Shop (at night)", k + 1, price, "" if price == 1 else "s"),
                          shop_need(shop, placement, a.open_forest) | wallet_need(price), "shops", None)
@@ -5377,7 +5385,7 @@ def main():
         except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
             sys.exit("the shops: %s. Nothing written." % e)
         print("Shops (%s): %d shelves of %d shops take part, each sold once; %d within the child's wallet, %d ask for the Adult's, %d for the Giant's" % (
-            "any price" if a.shops == 2 else "most prices low", len(shelves), len(shops(placement)),
+            "any price" if a.shops == 2 else "every shelf 10 rupees" if a.shops == 3 else "most prices low", len(shelves), len(shops(placement)),
             *(sum(1 for p in shelf_prices.values() if wallet_need(p) == need) for _, need in WALLETS)))
 
     # ---- Open Door of Time: the door out of the way, in the child's Market and the adult's ----

@@ -57,8 +57,8 @@
       "The 14 Pieces of Heart lying in the world and the 8 Heart Containers the bosses leave take part as chests do: each can give any item of the shuffle but keys and songs. It still looks like a Piece of Heart or a Heart Container and its scene says so, but the item is what Link gets, and the heart is somewhere else. Pieces given by a character or held by a chest are not these.", \
       "Off", "On") \
     X(SHOPS, "Shops", "rando_shops", \
-      "Four shelves of each shop sell a shuffled item, once each, at a rolled price of 1 to 750 rupees. The wallets are shuffled too: a price asks for one that holds it. Needs Chests.", \
-      "Off", "Low prices", "Any price") \
+      "Four shelves of each shop sell a shuffled item, once each, at a rolled price of 10 to 750 rupees, in tens. Affordable: every shelf costs 10 rupees. The wallets are shuffled too: a price asks for one that holds it. Needs Chests.", \
+      "Off", "Low prices", "Any price", "Affordable") \
     X(SCRUBS, "Deku Scrubs", "rando_scrubs", \
       "The Business Scrubs' one-time sales (two Pieces of Heart, the Deku Stick and Deku Nut upgrades) take part with the chests. Needs Chests.", \
       "Off", "On") \
