@@ -51,12 +51,13 @@ def resource_fixture():
 #include <cstdlib>
 #include <memory>
 #include <vector>
+using VkPipeline = uintptr_t;   // (the compute pipeline is read and published through std::atomic_ref<VkPipeline>)
 constexpr uintptr_t VK_NULL_HANDLE = 0;
 struct Program {
     bool failed = false;
     std::atomic<bool> ready{false};
     std::atomic<int> compute_state{0};
-    uintptr_t compute_pipeline = 0;
+    VkPipeline compute_pipeline = 0;
     std::vector<uintptr_t> fallback_compute;
 };
 struct PipeEntry { uintptr_t pipeline = 0; std::atomic<bool> ready{false}; };
