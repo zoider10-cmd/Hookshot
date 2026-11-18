@@ -29,6 +29,16 @@ zstandard and Pillow). Their files go to `$WORK` (default `$TEMP/rando-test`); t
 
 The build's "button prompts of other controllers were not made" (an AssertionError) is old and harmless.
 
+**A change to the seed tool's placement: write whole seeds into a scratch game folder** before installing. `--dry-run`
+returns before the files and `checks.txt` are written, so a crash there is missed (seen 2026-11-18). The owner's seed is
+not touched:
+
+```bash
+G="/f/Games/OOT Remake Rando"; T=/f/Games/perf-ab/seedtest; mkdir -p $T && cp "$G/hookshot_options.ini" $T/
+(cd $T && py -I /c/Users/beerc/Hookshot/tools/rando/rando_seed.py "$(cygpath -w "$G/romfs")" --game "$(cygpath -w $T)" --seed 4242)
+# read $T/mods/rando-seed/checks.txt and spoiler.txt, then rm -rf $T
+```
+
 ## 2. Run it without a window
 
 ```bash
