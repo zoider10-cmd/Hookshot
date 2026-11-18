@@ -48,6 +48,9 @@ def main():
          "an ASTC upload does not check scratch allocation with its resize mode")
     need("if (!bc_scratch_layout(cmd, dst->bc_resized)) return false;" in copy,
          "a BC3 copy does not check scratch allocation with its destination resize mode")
+    guard = "if (!dst->bc_resized && (((w & 3) && dx + w != ow) || ((h & 3) && dy + h != oh))) return false;"
+    need(guard in copy and copy.index(guard) < copy.index("bc_scratch_layout("),
+         "a BC3 copy region that is not whole blocks and does not reach the level's edge is copied in")
     need("bc_have = false" in block(tex, "void bc_scratch_idle("), "the scratch given back is still taken for made")
     need("dead.push_back" in block(tex, "void bc_scratch_idle("), "the scratch is freed with no wait for the GPU")
     need("total_bytes -= std::min(total_bytes, tex.bytes + tex.pad)" in tex, "a texture leaves the budget by its texels only")

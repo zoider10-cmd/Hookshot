@@ -3179,6 +3179,10 @@ bool texture_copy_into_bc(VkCommandBuffer cmd, Texture* src, uint32_t src_level,
             return false;
         }
     }
+    // (Longshot 21ad3104, via HeyListen f2bebddd: the blocks are copied in with the region's extent, which must be whole 4x4
+    // blocks or reach the level's edge (VUID 00207/00208, undefined on AMD and Intel). A region of another size, from an ASTC
+    // 6x6 or 10x10 source, is left to the copy's other paths)
+    if (!dst->bc_resized && (((w & 3) && dx + w != ow) || ((h & 3) && dy + h != oh))) return false;
     if (!bc_scratch_layout(cmd, dst->bc_resized)) return false;
     for (uint32_t l0 = 0; l0 < layers; l0 += bc_layers()) {   // (a run is the scratch's layers: one, as an upload's)
         const uint32_t n = std::min(bc_layers(), layers - l0);
