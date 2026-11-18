@@ -173,8 +173,9 @@ class NoScriptTests(unittest.TestCase):
 class AppImageDlssTests(unittest.TestCase):
     def test_build_and_appimage_package_dlss_sources(self):
         build_py = (ROOT / "nx2" / "build.py").read_text(encoding="utf-8")
-        self.assertIn('return "" if NGX_SDK or FSR else os.environ.get("HOOKSHOT_VK_PREBUILT", "")', build_py)
-        self.assertIn('vk_prebuilt = prebuilt_renderer()', build_py)
+        # (with DLSS or without, the back end is compiled from the sources: no prebuilt one to set aside)
+        self.assertIn("build_vk = a.standalone and vk_headers and spirv_headers and vma_headers", build_py)
+        self.assertIn("NGX_SDK = ngx_sdk(", build_py)
         appimage = (ROOT / "scripts" / "linux" / "appimage.sh").read_text(encoding="utf-8")
         for piece in ("cp scripts/ngx_sdk.py", "cp -a gpu/vk gpu/compat gpu/third_party", "third_party/imgui"):
             self.assertIn(piece, appimage)

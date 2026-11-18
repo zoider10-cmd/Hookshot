@@ -98,7 +98,8 @@ def main():
     # (no on/off switch read the old way, set-means-on: a game switch (RX_, HOS_, HOOKSHOT_, EDEN_, NVN_) whose every read in
     # host/ or gpu/ only asks whether it is set: getenv(name) != NULL / == NULL, !getenv(name), getenv(name) followed by ?,
     # && or ||, or alone between ( or && / || and ) or && / || or the line's end. A line that reads the name twice reads its
-    # value too (getenv(x) ? atoi(getenv(x)) : ...), and a getenv inside a call (atoi(getenv(x)), parse(getenv(x))) is a value)
+    # value too (getenv(x) ? atoi(getenv(x)) : ...), as does one that also asks env_on(x) (getenv(x) ? env_on(x) : a default),
+    # and a getenv inside a call (atoi(getenv(x)), parse(getenv(x))) is a value)
     name = r'(?:std::)?getenv\("((?:RX|HOS|HOOKSHOT|EDEN|NVN)_[A-Z0-9_]+)"\)'
     forms = [re.compile(name + r"\s*[!=]=\s*(?:nullptr|NULL)"), re.compile(r"!\s*" + name),
              re.compile(name + r"\s*(?:\?|&&|\|\|)"),
@@ -114,7 +115,8 @@ def main():
             for m in re.finditer(name, line):
                 n = m.group(1)
                 reads[n] = reads.get(n, 0) + 1
-                if line.count('getenv("%s")' % n) == 1 and any(f.group(1) == n for form in forms for f in form.finditer(line)):
+                if line.count('getenv("%s")' % n) == 1 and 'env_on("%s")' % n not in line and \
+                        any(f.group(1) == n for form in forms for f in form.finditer(line)):
                     presence.setdefault(n, []).append("%s:%d" % (rel, number))
     old = sorted(n for n, where in presence.items() if len(where) == reads.get(n, 0))
     if old:

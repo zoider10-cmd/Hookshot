@@ -56,6 +56,11 @@ FIXTURE = r"""
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "FAIL %%d %%s\n", __LINE__, #x); return 1; } } while (0)
 %(options)s
 Options opts;
+bool debug_warning = false;
+int debug_warning_choice = 0;
+void sync_transition_autosave() {}
+bool menu_refresh = false;
+
 %(tabs)s
 %(row)s
 int saves = 0, presets = 0;
@@ -63,10 +68,7 @@ void save() { saves++; }
 void apply_pad_layout(int) {}
 int detect_pad_layout() { return opts.pad_layout; }
 void apply_preset(int) { presets++; }
-void sync_preset_budgets(int) {}
 void env_release(const int*) {}   // (the environment's hold on a row: none here)
-void vram_budget_sync() {}
-constexpr int kVramMinimumOnly = 1;
 /* (stand-ins for the rest of set_row, which the Rumble strength row never reaches: the Upscaler's rows, the restart offer) */
 bool row_fixed(const int*) { return false; }
 int upscaler() { return 0; }
@@ -87,9 +89,14 @@ struct { void note(const int*) {} } restart_state;
 %(is_slider)s
 %(stops)s
 %(snap)s
+int monitor_pick; // Declared before the extracted ini_key() as well as set_row().
 %(ini_key)s
 /* (the Microphone row's hook in set_row: no microphones here) */
 bool can_mic() { return false; }
+int output_pick;
+bool output_forced() { return false; }
+void output_chosen() {}   // Playback selection is covered by test_audio_output_devices.py.
+void monitor_chosen() {}  // Fullscreen selection is covered by test_fullscreen_monitor_menu.py.
 /* (the Upscaler row's choices, which set_row steps through: the game's own only, here) */
 unsigned upscalers_available() { return 1; }
 void mic_chosen() {}

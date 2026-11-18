@@ -33,7 +33,7 @@ def main():
     assert len(entries) >= 18
     assert '{TAB_GAMEPLAY, "Damage taken"' not in table
     assert sum('"Damage taken"' in entry for entry in entries) == 1
-    source = '#include <cassert>\n#include <cstring>\n#include <iterator>\n'
+    source = '#include <atomic>\n#include <cassert>\n#include <cstring>\n#include <iterator>\n'
     source += block(header, "struct Options {") + ';\nOptions opts;\n'
     source += block(menu, "enum MenuTab {") + ';\n'
     source += block(menu, "struct Row {") + ';\n'
@@ -47,6 +47,7 @@ def main():
     source += 'constexpr int kRows = sizeof rows / sizeof rows[0];\n'
     source += '''
 bool cheats_env = false;
+bool quick_debug = false;
 bool reflex_available() { return false; }
 bool antilag_available() { return false; }
 bool intel_compiler_row() { return false; }   // (not Intel graphics on Windows: the Developer section's rows as before)
@@ -54,6 +55,7 @@ bool intel_compiler_row() { return false; }   // (not Intel graphics on Windows:
 int tracker_count = 0;
 bool tracker_row_hidden(int) { return false; }
 void tracker_load() {}
+bool laptop_row() { return false; }   // (a dedicated card: no Set up for a weak laptop button)
 int upscalers_available() { return 1; }
 constexpr int DLSS_OK = 0;
 int dlss_why() { return 1; }
@@ -62,30 +64,78 @@ bool upscaler_shown(int n) { return n > 1; }
 bool model_shown(bool available) { return available; }
 }
 '''
-    for name in ("bool cheats_on(", "bool row_shown(", "int tab_row_count(", "int tab_row_to_global(",
+    for name in ("bool cheats_on(", "bool is_laptop_row(", "bool row_shown(", "int tab_row_count(", "int tab_row_to_global(",
                  "int menu_damage_taken("):
         source += block(menu, name) + '\n'
+    source += re.search(r"std::atomic<bool> transition_autosave_enabled\{[^}]+\};", menu).group() + '\n'
+    for name in ("void sync_transition_autosave(", "int menu_transition_autosave("):
+        source += block(menu, name) + '\n'
     source += menu[menu.index("struct DebugGroup {"):menu.index("/// (hookshot) The Debug tab's rows from top down")]
+    warning = block(menu, "if (open_now.load() && debug_warning) {")
+    source += '''
+std::atomic<bool> open_now{true};
+bool debug_warning = true, changed = false, mouse = false, moved = false;
+int debug_warning_choice = 0, mx = 0, my = 0, saves = 0;
+bool press[8]{};
+struct { int pressed; } ptr{};
+enum { HOS_MOUSE_LEFT = 1, HOS_MOUSE_RIGHT = 2 };
+namespace menu_hit { constexpr int kButton = 1; }
+struct {
+    struct Hit { int part, index; } hit{};
+    Hit at(float, float) const { return hit; }
+} hits;
+void save() { ++saves; }
+void warning_input() {
+''' + warning + '''
+}
+'''
     source += r'''
 int main() {
+    opts.debug_tools = 0;
+    opts.transition_autosave = 1;
+    sync_transition_autosave();
+    press[7] = true;
+    warning_input();
+    assert(!debug_warning && opts.debug_tools == 0 && menu_transition_autosave() == 1 && saves == 0);
+    press[7] = false;
+    debug_warning = true;
+    press[4] = true;
+    warning_input();
+    assert(debug_warning_choice == 1);
+    warning_input();
+    assert(debug_warning_choice == 0);
+    press[4] = false;
+    press[3] = true;
+    warning_input();
+    assert(debug_warning_choice == 1);
+    press[3] = false;
+    press[7] = true;
+    warning_input();
+    assert(!debug_warning && opts.debug_tools == 1 && opts.transition_autosave == 0);
+    assert(menu_transition_autosave() == 0 && saves == 1);
     int order[64], dev, heading;
-    const char* expected[] = {"Debug tools", "Heart protection", "Damage taken", "No-clip flight",
+    const char* expected[] = {"Debug tools", "Autosave:", "Heart protection", "Damage taken", "No-clip flight",
         "Movement speed", "Switch age", "Inventory", "Teleport", "Mark position", "Return to mark",
         "Free camera", "Set time"};
     for (int env = 0; env < 2; ++env) for (int enabled = 0; enabled < 2; ++enabled) {
         cheats_env = env;
         opts.debug_tools = enabled;
         opts.damage_taken = 3;
+        for (int autosave = 0; autosave < 2; ++autosave) {
+            opts.transition_autosave = autosave;
+            sync_transition_autosave();
+            assert(menu_transition_autosave() == autosave);
+        }
         const int n = debug_rows(order, &dev, &heading);
         assert(heading >= 0);
-        assert(dev == (env || enabled ? (int)std::size(expected) : 1));
-        assert(n == dev + 5); // Only the existing Developer rows follow.
+        assert(dev == (env || enabled ? (int)std::size(expected) : kDebugGeneralRows));
+        assert(n == dev + 7); // Only the existing Developer rows follow (Frame pacing and Threaded rendering among them).
         for (int i = 0; i < dev; ++i) {
             const Row& row = rows[tab_row_to_global(TAB_DEBUG, order[i])];
             assert(!std::strcmp(row.name, expected[i]));
             assert(debug_step(order[i], 1) == order[i + 1]);
             assert(debug_step(order[i + 1], -1) == order[i]);
-            if (i == 2) {
+            if (i == 3) {
                 assert(row.value == &opts.damage_taken && row.cheat == -1);
                 assert(row.lo == 0 && row.hi == 3 && row.step == 1);
                 assert(!row.restart && row.preset_exempt);
@@ -111,7 +161,7 @@ int main() {
         cpp.write_text(source, encoding="utf-8")
         subprocess.run([args.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror", str(cpp), "-o", str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
-    print("PASS: Debug Player order, visibility, choices, default and keyboard traversal")
+    print("PASS: Debug navigation, visibility, and autosave behavior when enabling or cancelling")
 
 
 if __name__ == "__main__":

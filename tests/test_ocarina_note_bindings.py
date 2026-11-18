@@ -84,6 +84,13 @@ static const char *ini_dir;
 #endif
 static DWORD GetModuleFileNameA(void *m, char *b, DWORD n) { (void)m; return (DWORD)snprintf(b, n, "%s" EXE_SEP "hookshot.exe", ini_dir); }
 #define hos_game_path_a(b,n) GetModuleFileNameA(0,b,n)
+static const char *hos_options_file(void) {   /* (host/options_path.c: here, beside the exe) */
+    static char p[600];
+    DWORD n = GetModuleFileNameA(0, p, 560);
+    while (n && p[n - 1] != 92 && p[n - 1] != 47) n--;
+    snprintf(p + n, sizeof p - n, "hookshot_options.ini");
+    return p;
+}
 """
 
 MAIN = r"""

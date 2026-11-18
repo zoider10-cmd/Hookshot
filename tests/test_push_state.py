@@ -16,20 +16,13 @@ import argparse
 import subprocess
 import tempfile
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: python -I leaves this folder off the path)
+from srccut import block   # noqa: E402
 
 RUN_ALL_ARGS = ["--cxx", "{cxx}", "--headers", "{vulkan_headers}"]
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def block(text, marker):
-    start = text.index(marker)
-    end = text.index("{", start) + 1
-    depth = 1
-    while depth:
-        depth += (text[end] == "{") - (text[end] == "}")
-        end += 1
-    return text[start:end]
 
 
 FIXTURE = r'''#define VK_NO_PROTOTYPES
@@ -96,6 +89,8 @@ void vkCmdBindDescriptorSets(VkCommandBuffer, VkPipelineBindPoint, VkPipelineLay
 }
 const char* getenv(const char*) { return nullptr; }
 bool env_on(const char*) { return false; }
+bool ub_snapshot_wanted() { return false; }   // (the uniform copies' sharing off: the Arc B580's push of every uniform buffer is not on)
+int ub_snap_dedup_mode() { return 0; }
 @PUSHED@;
 std::array<Pushed, 2>& pushed() { static std::array<Pushed, 2> p; return p; }
 @BIND@
@@ -222,6 +217,9 @@ def main():
         ("vkCmdPushDescriptorSetWithTemplateKHR(cmd, tmpl, p.layout, 0, wr.data.data())", "a whole push is not through the template"),
         ("vkUpdateDescriptorSetWithTemplate(dev.device, set, tmpl, wr.data.data())", "a pooled set is not written through the template"),
         ('getenv("RX_VK_DESC_DELTA")', "the delta's switch is gone"),
+        ("ub_snapshot_wanted() && ub_snap_dedup_mode() == 1", "the shared uniform copies' rule (Arc B580) is gone"),
+        ("again(b) || std::memcmp(", "a delta push leaves unchanged uniform buffers out with the shared copies on (Arc B580)"),
+        ("!any_again && !std::memcmp(", "a draw with only shared uniform buffers pushes nothing (Arc B580)"),
     ):
         if needle not in bind:
             raise SystemExit("bind_descriptors: " + why + " (not found: " + needle + ")")

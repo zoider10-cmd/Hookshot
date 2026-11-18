@@ -59,6 +59,9 @@ enum { HOS_CHAIN_WAIT = 1, HOS_CHAIN_WOKE, HOS_CHAIN_SIGNAL, HOS_CHAIN_SLEEP, HO
 #define HOS_CHAIN(kind, key) ((void)(kind), (void)(key))   /* (HOS_CHAIN off: host/hos.h) */
 static int escapes_logged;
 static void hos_log(const char *fmt, ...) { if (strstr(fmt, "ran without a core")) escapes_logged++; }
+/* (host/profiling.c: the profiling mode off, so a long wait is no event) */
+static const char *hos_profiling_dir(void) { return 0; }
+static void hos_profiling_event(const char *fmt, ...) { (void)fmt; }
 static int hos_cores(void) { return 2; }
 static int sleeps;
 static void (*on_sleep)(void);   /* (what the other threads do during one look: only the test sets it) */

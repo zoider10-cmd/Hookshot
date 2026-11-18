@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { publicGameText, publicProgressItem } from '../src/lib/public-copy.ts';
+import { GAME_BRANDING, publicGameText, publicProgressItem } from '../src/lib/public-copy.ts';
 
 test('public descriptions use neutral game, platform, place and character wording', () => {
   for (const text of ['The Legend of Zelda: Ocarina of Time', 'Nintendo Switch 2', 'OoT',
-    'Kokiri Forest', 'the Great Deku Tree', 'Hyrule Field', 'Kakariko Village',
+    'Kokiri Forest', 'the Great Deku Tree', 'Deku Stick', 'Deku Sticks', 'Hyrule Field', 'Kakariko Village',
     'Navi waking Link', 'Navi', 'Kokiri camera turns', 'adult Link', 'Nintendo (Def)', 'Switch Pro controllers', 'the Switch', 'Auto, Switch, Xbox']) {
     assert.doesNotMatch(publicGameText(text), /zelda|ocarina|nintendo|\boot\b|kokiri|deku|hyrule|kakariko|navi|\bLink\b|\bSwitch\b/i);
   }
@@ -32,4 +32,20 @@ test('activity exports neutralize title and search copy without altering source 
   assert.equal(result.url, item.url);
   assert.equal(result.report, item.report);
   assert.match(item.originalTitle, /OoT/);
+});
+
+test('players\' issue titles come out with no name the site check rejects', () => {
+  assert.equal(publicGameText('[AMD/Linux] Blocky shadow/light artifacts around Link when entering Zora River water'),
+    '[AMD/Linux] Blocky shadow/light artifacts around Link when entering the water region water');
+  assert.equal(publicGameText('Watefall to zora rivers missing textures'), 'Watefall to the water region missing textures');
+  for (const text of ['Zora River', "Zora's Domain", 'Zoras', 'Goron', 'Gorons', 'Ganon', 'Ganondorf', 'Deku Nut',
+    'navi', 'EPONA', 'Triforce', 'Joy-Con', 'nintendo switch 2']) {
+    assert.doesNotMatch(publicGameText(text), GAME_BRANDING, text);
+  }
+});
+
+
+test('new report titles neutralize alternate location spelling and item names', () => {
+  assert.equal(publicGameText('Zora River water; Zora’s Domain'), 'the water region water; the water region');
+  assert.equal(publicGameText('Deku Stick preview'), 'wooden stick preview');
 });

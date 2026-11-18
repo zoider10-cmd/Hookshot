@@ -1,5 +1,5 @@
 # A test run of the standalone build (mkw-recomp's work/run-vk.ps1, for hookshot.exe): the Vulkan back end
-# (RX_BACKEND=vulkan), headless unless -Window (then it never takes focus), High priority (-Priority), muted unless
+# (the only renderer), headless unless -Window (then it never takes focus), High priority (-Priority), muted unless
 # -Sound, screenshots every -ShotEvery presents into work\runs\<name>\shots. Extra environment: -Env "A=1;B=2".
 #
 # Guards (the PC is the user's, and one game runs at a time): no run while Rainbow Six Siege is open, nor while
@@ -28,7 +28,6 @@ $user = Join-Path $root "work\sa\user"
 $out = Join-Path $root "work\runs\$Name"
 $shots = Join-Path $out "shots"
 New-Item -ItemType Directory -Force $out, $user, $shots | Out-Null
-$env:RX_BACKEND = "vulkan"
 if ($Window) { Remove-Item Env:HOS_HEADLESS -ErrorAction SilentlyContinue; $env:HOS_WINDOW_NOACTIVATE = "1" } else { $env:HOS_HEADLESS = "1" }
 $env:RX_VK_SHOTS = $shots
 $env:RX_VK_SHOT_EVERY = "$ShotEvery"

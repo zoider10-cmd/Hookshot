@@ -27,6 +27,7 @@ static int failures;
     fprintf(stderr, "FAIL: %s (line %d)\n", what, __LINE__); failures++; } } while (0)
 
 static int headless, event_calls, thread_calls, close_calls, flush_calls, exit_calls, renderer_calls;
+static int stop_calls, stop_result;
 static HANDLE event_result, thread_result, closed_handle;
 static DWORD error_result, exit_code;
 static ThreadProc thread_proc;
@@ -52,6 +53,11 @@ int CloseHandle(HANDLE handle) { close_calls++; closed_handle = handle; return 1
 DWORD GetLastError(void) { return error_result; }
 void ExitProcess(unsigned int code) { exit_calls++; exit_code = code; longjmp(process_exit, 1); }
 int rx_start(void *window) { (void)window; renderer_calls++; return 1; }
+int hos_windows_stop_start(void) {
+    CHECK("stop handlers installed after renderer console setup", renderer_calls == 1);
+    stop_calls++;
+    return stop_result;
+}
 void hos_log(const char *format, ...) {
     va_list args; va_start(args, format); vsnprintf(log_line, sizeof log_line, format, args); va_end(args);
 }
@@ -66,6 +72,7 @@ static void run_startup(void (*start)(void)) {
 
 static void reset(void) {
     headless = event_calls = thread_calls = close_calls = flush_calls = exit_calls = renderer_calls = 0;
+    stop_calls = 0; stop_result = 1;
     event_result = (HANDLE)1; thread_result = (HANDLE)2; window_result = (HANDLE)3;
     hwnd = NULL; error_result = 0; exit_code = 0;
     thread_proc = NULL; thread_arg = NULL; closed_handle = NULL; log_line[0] = 0;
@@ -80,6 +87,11 @@ static void failed(const char *operation, DWORD error) {
 int main(void) {
     reset(); headless = 1; run_startup(hos_display_start);
     CHECK("headless starts only offscreen renderer", renderer_calls == 1 && event_calls == 0 && thread_calls == 0);
+    CHECK("headless installs its stop route once", stop_calls == 1 && exit_calls == 0);
+    reset(); headless = 1; stop_result = 0; error_result = 404; run_startup(hos_display_start);
+    CHECK("missing stop route is not fatal", exit_calls == 0 && renderer_calls == 1 && stop_calls == 1);
+    CHECK("missing stop route names the fallback without a stale error code",
+          !strcmp(log_line, "stop: windowless stop route unavailable; use the control bridge"));
 
     reset(); event_result = NULL; error_result = 101; run_startup(hos_display_start);
     failed("CreateEventA", 101);
@@ -92,6 +104,7 @@ int main(void) {
     reset(); run_startup(hos_display_start);
     CHECK("successful startup stays asynchronous", event_calls == 1 && thread_calls == 1 && thread_proc != NULL);
     CHECK("successful startup does not exit", exit_calls == 0);
+    CHECK("windowed startup keeps its existing close route", stop_calls == 0);
     CHECK("owned thread handle is closed", close_calls == 1 && closed_handle == thread_result);
     reset(); window_result = NULL; error_result = 303; run_startup(create_window);
     failed("CreateWindowA", 303);

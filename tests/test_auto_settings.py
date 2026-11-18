@@ -44,13 +44,13 @@ def check_source():
                                # kept across restarts)
                                "::auto_settings::tune(tuning,", 'fprintf(f, "auto_tuned=%016llx\\n"', 'fprintf(f, "auto_steps=%d,%d\\n"',
                                'if (!strcmp(line, "auto_steps"))',
-                               # (the hardware changed: the exempt rows the player set under Auto stay theirs)
-                               "apply_auto(!first);", "apply_auto(false);"])
+                               # (the hardware changed, or Auto chosen on the row: all of its rows)
+                               "apply_auto();   // (the hardware changed)", "apply_auto();   // (chosen on the row"])
     need("vk_menu.h", (ROOT / "gpu/vk/vk_menu.h").read_text(encoding="utf-8"), ["constexpr int kAutoPreset = 6;"])
     if "constexpr int kAutoPreset" in menu:
         raise SystemExit("vk_menu.cpp defines kAutoPreset again: vk_menu.h has it")
     # (the upscaler set before the tier's rows: apply_preset snaps the Render resolution to it)
-    auto = body(menu, "void apply_auto(bool keep_own) {")
+    auto = body(menu, "void apply_auto() {")
     if not auto.index("opts.dlss = c.upscaler;") < auto.index("apply_preset(c.tier);"):
         raise SystemExit("apply_auto: opts.dlss must be set before apply_preset")
     # (Auto never sets the Output resolution: host/hos_main.c reads it at boot, before the card is known, so a size chosen here

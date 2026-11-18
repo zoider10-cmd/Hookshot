@@ -303,13 +303,17 @@ StagePackage parse_stage(const uint8_t* ctl, const std::vector<uint8_t>& area) {
     using Shader::Ampere::Instruction;
     std::vector<Instruction> native;
     Shader::Ampere::ProgramCaptureState capture;
+    // (live: a word that would branch outside every program ends the capture before it; the program is refused for
+    // that word only if the code before it does not lower, parse_code)
+    uint32_t outside = ~0u;
     for (uint32_t i = 0; hdr + (i + 1) * sizeof(Instruction) <= len; i++) {
         Instruction& insn = native.emplace_back();
         std::memcpy(&insn, area.data() + hdr + i * sizeof(Instruction), sizeof insn);
         const auto r = capture.Observe(insn, i);
         if (r == Shader::Ampere::ProgramCaptureState::Result::InvalidTarget) {
-            p.error = "captured program's branch target is outside it";
-            return p;
+            native.pop_back();
+            outside = i;
+            break;
         }
         if (r == Shader::Ampere::ProgramCaptureState::Result::Complete) break;
     }
@@ -318,7 +322,8 @@ StagePackage parse_stage(const uint8_t* ctl, const std::vector<uint8_t>& area) {
     if (!lowered) {
         char off[16];
         std::snprintf(off, sizeof off, "%#x", lowered.error_offset);
-        p.error = std::string(lowered.error) + " (at +" + off + ")";
+        p.error = std::string(outside != ~0u ? "captured program's branch target is outside it, and the code before it does not lower: " : "") +
+                  std::string(lowered.error) + " (at +" + off + ")";
         return p;
     }
     p.texture_bound = lowered.required_texture_buffer;

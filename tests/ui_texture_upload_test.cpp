@@ -20,7 +20,11 @@ ImGuiIO& GetIO() { std::abort(); } // No HDR/context transformation is modeled b
 }
 /* DESTROY_PIXELS */
 using VmaAllocation = void*;
-struct { VkDevice device{}; bool hdr=false; } dev;
+struct { VkDevice device{}; bool hdr=false; bool offscreen=false; } dev;
+// (with no window, what the overlays let go waits for the timeline too: vk_replay.cpp's two, as a test sets them)
+uint64_t retirement=0, timeline_done=0;
+uint64_t vk_retirement_value() { return retirement; }
+uint64_t vk_timeline_completed() { return timeline_done; }
 struct { int hdr_white=200; } opts;
 ImU32 hdr10_of(ImU32 c, float) { std::abort(); return c; }
 bool srgb_target=false, coherent=false;
@@ -129,6 +133,7 @@ static void finish(ImTextureData& tex) {
 }
 int main(int argc,char**argv) {
     require(argc==3,"fixture arguments"); std::string mode=argv[1]; coherent=std::string(argv[2])=="coherent";
+    if(mode=="headless") dev.offscreen=true, retirement=7;   // (no window: RX_VK_SHOT_MENU's overlays, recorded on the timeline)
     bool alpha=mode.rfind("alpha",0)==0; ImTextureData tex; init_pixels(tex,alpha,2);
     if(mode=="no-backend") { tex.SetStatus(ImTextureStatus_WantUpdates); update_texture({},&tex); require(buffers.empty() && pending.empty() && !flushes,"no backend has no upload"); return 0; }
     if(mode=="empty") { tex.SetStatus(ImTextureStatus_WantCreate); tex.Width=0; update_texture({},&tex); require(buffers.empty() && pending.empty() && !flushes,"empty request has no upload"); return 0; }
@@ -154,7 +159,12 @@ int main(int argc,char**argv) {
     auto& staged=buffers.at(pending[0].buffer); if(flushes) require(flushed_bytes==staged.cpu.size(),"flush must cover the entire packed staging range");
     VkImage image=pending[0].image; submit();
     require(images.at(image).bytes==expected,"GPU must see expected RGBA/alpha bytes and preserve untouched pixels");
-    presents=3; reap(false); require(!buffers.empty(),"staging must live through frames in flight");
-    presents=4; reap(false); require(buffers.empty(),"completed staging should retire");
+    if(dev.offscreen) {
+        presents=4; timeline_done=6; reap(false); require(!buffers.empty(),"headless: staging must live until the timeline is past its last use");
+        timeline_done=7; reap(false); require(buffers.empty(),"headless: staging retires once the timeline is past it");
+    } else {
+        presents=3; reap(false); require(!buffers.empty(),"staging must live through frames in flight");
+        presents=4; reap(false); require(buffers.empty(),"completed staging should retire");
+    }
     finish(tex); std::puts("PASS: production UI texture upload visibility and failure/retirement controls");
 }

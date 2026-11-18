@@ -43,7 +43,7 @@ def function(source, marker):
     return source[start:end]
 
 
-# (the Win32 file calls place_tool, reuse_part and the helpers they use make, over POSIX: '\\' becomes '/'. MoveFileW and
+# (the Win32 file calls place_tool, move_retry, reuse_part and the helpers they use make, over POSIX: '\\' becomes '/'. MoveFileW and
 # CopyFileW(..., TRUE) refuse an existing target, as Windows' do; a symbolic link is a reparse point)
 POSIX_WIN32 = r'''
 #define _GNU_SOURCE
@@ -72,6 +72,7 @@ typedef const wchar_t *LPCWSTR;
 #define FILE_ATTRIBUTE_REPARSE_POINT 0x400ul
 #define ERROR_FILE_NOT_FOUND 2
 #define ERROR_ACCESS_DENIED 5
+#define ERROR_SHARING_VIOLATION 32
 #define ERROR_NO_MORE_FILES 18
 #define ERROR_ALREADY_EXISTS 183
 #define GENERIC_READ 0x80000000ul
@@ -81,6 +82,7 @@ typedef struct { DWORD dwFileAttributes; wchar_t cFileName[MAX_PATH]; } WIN32_FI
 typedef struct { wchar_t root[MAX_PATH]; int portable; } HbHome;
 static DWORD last_error;
 static DWORD GetLastError(void) { return last_error; }
+static void Sleep(DWORD ms) { (void)ms; }   /* (move_retry's waits: none here) */
 static void SetLastError(DWORD e) { last_error = e; }
 static void u8(const wchar_t *w, char *out) {
     size_t n = wcstombs(out, w, 4 * MAX_PATH - 1);
@@ -221,7 +223,7 @@ def harness(source):
     code += source[source.rfind("typedef struct", 0, part_end):part_end] + "\n"
     code += "static HbHome g_home;\nstatic void fail(const wchar_t *format, ...);\n"
     for marker in ("static int home_path(", "static void rmtree_at(", "static void rmtree(", "static void mkdirs(", "static void read_small(",
-                   "static int part_folder(", "static int copy_tree_at(", "static int copy_part_tree(", "static int place_tool(",
+                   "static int part_folder(", "static int copy_tree_at(", "static int copy_part_tree(", "static BOOL move_retry(", "static int place_tool(",
                    "static int reuse_part("):
         code += function(source, marker) + "\n"
     return code + HARNESS.replace("static HbHome g_home;\n", "").replace("#define _wtoi(s) ((int)wcstol((s), NULL, 10))\n", "")

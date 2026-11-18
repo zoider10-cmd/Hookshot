@@ -14,20 +14,13 @@ import argparse
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: python -I leaves this folder off the path)
+from srccut import block   # noqa: E402
 
 RUN_ALL_ARGS = ["--cxx", "g++"]
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def block(text, marker):
-    start = text.index(marker)
-    end = text.index('{', start) + 1
-    depth = 1
-    while depth:
-        depth += (text[end] == '{') - (text[end] == '}')
-        end += 1
-    return text[start:end]
 
 
 def main():
@@ -85,9 +78,12 @@ Host the_host;
 Host* host = &the_host;
 bool diff_on = true;
 bool wb_diff_on() { return diff_on; }
+bool mirror_on() { return true; }   // (the pools here have mirrors: without, nothing is noted, tests/test_mirror_bookkeeping.py)
 std::mutex shadow_written_mu;
 std::vector<uint32_t> shadow_written_pages, shadow_written_collected_list, shadow_written_by_replay;
 bool shadow_written_all = false;
+std::vector<uint32_t> shadow_forgotten_last;   // (the forget's list of the collection's and the replay's pages, for the late pages' fix)
+bool shadow_forgotten_all = false;             // (and whether its lists overflowed)
 int64_t st_wbd_known_game = 0, st_wbd_known_collected = 0, st_wbd_known_replay = 0;
 void shadow_written_to(std::vector<uint32_t>& list, const uint32_t* pages, int64_t n);
 void guest_cpu_wrote(uint64_t gpu, uint64_t n);

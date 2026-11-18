@@ -1,70 +1,86 @@
-// (hookshot) The replay's per-thread caches in one flat open-addressing table: texture_view_of's resolved handles (7ac89d22, after
-// Project ReLink's idea), program_for's picks, graphics_pipeline's thread map and a recording's c1 uploads (after Hookshot eda64e895 /
-// HeyListen 3aa51bf5). tests/test_handle_table.py, tests/test_flat_map.py
 #pragma once
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
-/// A 64-bit key's value, searched on every draw: a node map's hash, bucket and node pointer chase cost more than the lookup's
-/// work. Linear probing over a power-of-two array, kept at most half full; nothing is erased one by one (the replay clears these
-/// caches whole), so no tombstones. An insert can move every entry: no pointer or reference from find or operator[] is held
-/// across an insert into the same map.
-template <class V>
-struct FlatMap {
+/// An integer key's value, kept in one array: open addressing, linear probing, at most 3/4 full, the slot from a
+/// multiplicative hash. For the replay's per-thread caches, searched on every draw: std::unordered_map divided by a prime
+/// and followed a node pointer per lookup. No erase of one key (those caches are only cleared whole). A clear keeps a small
+/// array and gives a large one back. An insert can move every entry: no reference or pointer is held across one.
+template <class K, class V>
+class FlatMap {
+public:
     struct Slot {
-        uint64_t key;
-        V hit;
+        K first{};
+        bool used = false;
+        V second{};
     };
-    std::vector<Slot> slots;
-    std::vector<uint8_t> used;
-    size_t count = 0;
-    static size_t mix(uint64_t k) {   // (a key's low bits can be a slot number or an address: spread the rest in)
-        k ^= k >> 29;
-        k *= 0xbf58476d1ce4e5b9ull;
-        k ^= k >> 32;
-        return (size_t)k;
-    }
-    V* find(uint64_t key) {
-        if (!count) return nullptr;
-        const size_t m = slots.size() - 1;
-        for (size_t i = mix(key) & m;; i = (i + 1) & m) {
-            if (!used[i]) return nullptr;
-            if (slots[i].key == key) return &slots[i].hit;
+
+    Slot* find(K key) {
+        if (!count_) return nullptr;
+        for (size_t i = index(key);; i = (i + 1) & mask_) {
+            Slot& s = slots_[i];
+            if (!s.used) return nullptr;
+            if (s.first == key) return &s;
         }
     }
-    V& operator[](uint64_t key) {
-        if ((count + 1) * 2 > slots.size()) grow();
-        const size_t m = slots.size() - 1;
-        size_t i = mix(key) & m;
-        for (; used[i]; i = (i + 1) & m)
-            if (slots[i].key == key) return slots[i].hit;
-        used[i] = 1, slots[i].key = key, slots[i].hit = V{}, count++;
-        return slots[i].hit;
+    Slot* end() const { return nullptr; }
+
+    V& operator[](K key) {
+        if (Slot* s = find(key)) return s->second;
+        if ((count_ + 1) * 4 > slots_.size() * 3) grow();
+        return place(key).second;
     }
-    void grow() {
-        std::vector<Slot> old = std::move(slots);
-        std::vector<uint8_t> old_used = std::move(used);
-        const size_t n = old.empty() ? 1024 : old.size() * 2;
-        slots.assign(n, Slot{});
-        used.assign(n, 0);
-        count = 0;
-        for (size_t j = 0; j < old.size(); j++)
-            if (old_used[j]) (*this)[old[j].key] = std::move(old[j].hit);
-    }
-    size_t size() const { return count; }
-    /// Empty, the array kept (these caches fill again to about the same size); a value that owns memory (a Pick's handles)
-    /// is let go now, not when its slot is next used
+
+    size_t size() const { return count_; }
+    size_t capacity() const { return slots_.size(); }
+
     void clear() {
-        if (!count) return;
-        if constexpr (!std::is_trivially_destructible_v<V>) {
-            for (size_t j = 0; j < slots.size(); j++)
-                if (used[j]) slots[j].hit = V{};
+        if (count_ && slots_.size() > kKeptSlots) {   // (a cache cleared at its size limit: its memory goes back too)
+            count_ = 0;
+            std::vector<Slot>().swap(slots_);
+            mask_ = 0, shift_ = 64;
+            return;
         }
-        std::fill(used.begin(), used.end(), (uint8_t)0);
-        count = 0;
+        reset();
     }
+
+    /// Empty, the array kept whatever its size: for a map emptied often that fills again to about the same size
+    /// (RecordingRes::c1_at, at every recording's start), so it isn't given back and grown again from 16 each time
+    void reset() {
+        if (!count_) return;
+        count_ = 0;
+        for (Slot& s : slots_)
+            if (s.used) s = Slot{};
+    }
+
+private:
+    static constexpr size_t kKeptSlots = 4096;
+
+    size_t index(K key) const { return (size_t)((uint64_t)key * 0x9E3779B97F4A7C15ull >> shift_); }
+
+    Slot& place(K key) {
+        size_t i = index(key);
+        while (slots_[i].used) i = (i + 1) & mask_;
+        Slot& s = slots_[i];
+        s.first = key, s.used = true;
+        count_++;
+        return s;
+    }
+
+    void grow() {
+        std::vector<Slot> old(slots_.empty() ? 16 : slots_.size() * 2);
+        old.swap(slots_);
+        mask_ = slots_.size() - 1;
+        shift_ = 64;
+        for (size_t n = slots_.size(); n > 1; n >>= 1) shift_--;
+        count_ = 0;
+        for (Slot& s : old)
+            if (s.used) place(s.first).second = std::move(s.second);
+    }
+
+    std::vector<Slot> slots_;
+    size_t count_ = 0, mask_ = 0;
+    unsigned shift_ = 64;
 };

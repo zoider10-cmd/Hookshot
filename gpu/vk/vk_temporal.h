@@ -22,10 +22,15 @@ int temporal_mode();
 /// RX_VK_DLSS=1 / 2 or RX_VK_FSR4=1 / 2 set for this run, and that engine runs here: over the row, its FSR 3.1 too
 /// (vk_fsr3.cpp fsr3_wanted). Where it cannot run, a saved FSR 3.1 stays
 bool temporal_env_chosen();
-// Opt-in: RGBA16F is a scene only under Native PsychoV35 with DLSS/DLAA or FSR 4 (upscaler_rows.h takes_psychov35).
+// RGBA16F is a scene only under Native PsychoV35 with a supported engine; RX_VK_PSYCHOV35_DLSS=0 opts out.
 bool temporal_scene_format(VkFormat format);
 bool temporal_colour_pair(VkFormat input, VkFormat output);
 bool temporal_wanted();       // (temporal_mode() != GAME)
+/// (hookshot) No engine (temporal_mode() is GAME: the game's own upscaler or the Upscaler's Off) and AMD FSR 3.1's frame
+/// interpolation asked for (vk_fsr3fi.h frames_wanted): the chain still takes the scene's camera and skinned draws, and makes
+/// the motion at the gameplay upscale's dispatch for that interpolation (actor motion in it), leaving the picture to the
+/// network. Its inputs are then as good as with an engine drawing
+bool temporal_fg_inputs();
 /// The Upscaler row's Off (upscaler_rows.h OFF) with no engine running over it for this run (temporal_mode() is GAME): no
 /// upscaler at all. temporal_upscale then leaves the game's network out too and stretches its input to its output with a plain
 /// linear filter
@@ -72,6 +77,10 @@ bool temporal_upscale(VkCommandBuffer cmd, uint64_t key, bool known, Texture* in
 /// engine's own state, the chain's images and deferred frees are let go, so their video memory comes back. Nothing to do
 /// costs one atomic load
 void temporal_idle();
+/// (hookshot) The game asked for its gameplay upscale (temporal_upscale) in this frame or the two before: it draws a 3D
+/// scene now, whether or not an engine then drew it (failed, refused, not this frame). Not in its own menus, movies and
+/// loading screens. Without the lock (an atomic frame number)
+bool temporal_scene_now();
 void temporal_reset_failure();
 
 /// For the renderer's status line (vk_replay.cpp status_tick): while an engine draws, its details since the last call into b

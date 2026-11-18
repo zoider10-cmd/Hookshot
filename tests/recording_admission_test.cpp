@@ -107,7 +107,7 @@ std::deque<RecordingRes> res;
 thread_local RecordingRes* cur = nullptr;
 const uint64_t kStream = 1024;
 constexpr VkBufferUsageFlags kStreamUse = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-std::atomic<uint64_t> stream_extra{0}, stream_grown{0}, stream_peak{0};
+std::atomic<uint64_t> stream_extra{0}, stream_grown{0}, stream_peak{0}, pools_extra{0};
 bool grow_off = false;
 bool stream_grow_off() { return grow_off; }
 struct BufferRef { VkBuffer buffer{}; uint64_t offset = 0, size = 0, address = 0; };
@@ -249,10 +249,12 @@ int main(int argc, char** argv) {
             }
         } else if (mode == "descriptor-retained") {
             fail_sets = 1; require(bind_tail() && cur->extra.size() == 1, "first extra pool");
+            require(pools_extra == 1, "a pool made because the recording's own ran out is not counted");
             const auto retained = cur->extra[0]; const auto count_before = pools.size();
             fail_sets = 2; require(!bind_tail(), "second pool allocation failure");
             require(cur->extra.size() == 1 && cur->extra[0] == retained && pools.count(retained) && pools.size() == count_before,
                     "rollback destroyed or displaced a retained pool");
+            require(pools_extra == 1, "a pool that could not be kept is counted as made");
             require(bind_tail() && cur->extra.size() == 1, "retained pool could not retry");
         } else if (mode == "descriptor-pool" || mode == "descriptor-set" || mode == "descriptor-commit") {
             const auto pool_count = pools.size(); fail_sets = mode == "descriptor-set" ? 2 : 1;

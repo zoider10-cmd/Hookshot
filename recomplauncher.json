@@ -16,7 +16,7 @@
     ],
     "args": [
       "--play",
-      "{home}/Games/Hookshot"
+      "{install}/Hookshot"
     ]
   },
   "prepare": {
@@ -28,8 +28,11 @@
       "--cli",
       "--prepare",
       "--game",
-      "{game}"
+      "{game}",
+      "--out",
+      "{install}/Hookshot"
     ],
+    "version": "2",
     "label": "Building the game from your copy (15 to 30 minutes)",
     "timeout": 7200,
     "options": [
@@ -50,6 +53,22 @@
           "name": "NVIDIA RTX SDKs license",
           "url": "https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt"
         }
+      },
+      {
+        "id": "xess",
+        "label": "Intel XeSS",
+        "note": "Downloads Intel's XeSS library during the build so the in-game menu offers XeSS, made for Intel Arc graphics. Never share the game folder.",
+        "os": [
+          "windows"
+        ],
+        "args": [
+          "--fetch-xess-runtime",
+          "--accept-intel-license"
+        ],
+        "license": {
+          "name": "Intel Simplified Software License",
+          "url": "https://github.com/intel/xess/blob/de0fb9c1c510661c571164e1418ceca8101dab69/LICENSE.txt"
+        }
       }
     ]
   },
@@ -59,20 +78,20 @@
       "format": "ini",
       "file": [
         {
-          "path": "{home}/Games/Hookshot/hookshot_options.ini"
+          "path": "{install}/Hookshot/hookshot_options.ini"
         }
       ]
     }
   ],
   "saves": [
     "{local}/hookshot",
-    "{home}/Games/Hookshot/user"
+    "{install}/Hookshot/user"
   ],
   "folders": {
     "saves": [
       {
-        "path": "{home}/Games/Hookshot/user",
-        "if": "{home}/Games/Hookshot/user"
+        "path": "{install}/Hookshot/user",
+        "if": "{install}/Hookshot/user"
       },
       {
         "path": "{local}/hookshot"
@@ -80,7 +99,7 @@
     ],
     "game": [
       {
-        "path": "{home}/Games/Hookshot"
+        "path": "{install}/Hookshot"
       }
     ]
   },

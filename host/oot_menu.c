@@ -828,7 +828,7 @@ void hos_oot_menu_tick(Ctx *c, uint64_t screen) {
 }
 #else
 void hos_input_clear_toggles(void);
-/* The pause page's focus hook also runs on Linux, even without mouse menu navigation. */
+/* Every menu screen's pane-focus hook runs on Linux too, without mouse menu navigation. */
 void hos_oot_menu_focus(Ctx *c, uint64_t screen, uint64_t pane, uint64_t lr) {
     (void)c, (void)screen, (void)pane, (void)lr;
     hos_input_clear_toggles();

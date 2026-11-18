@@ -13,9 +13,10 @@ MagicBeanDev/HookshotLauncher. The secrets and the variable the release workflow
 
 | Label | Used by | What it must be |
 |---|---|---|
-| `ubuntu-latest` | `release.yml`, `ci.yml` (its title check and its Linux checks run on `ubuntu-24.04`), `third-party.yml`, the launcher's `ci.yml` and `release.yml` | Linux, Docker: e.g. `ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-24.04` (Node for the actions, git, Python 3, curl, sudo and apt) |
-| `ubuntu-24.04` | `ci.yml`'s tests (with the Windows Builder's compile and --cli checks), `build-linux.yml`, `build-windows.yml` (all of it), `vulkan-dlss.yml` | the same image; the AppImage job builds inside Ubuntu 22.04 itself (`scripts/linux/deps.sh` runs in its container) and needs Docker or enough disk (about 30 GB). The Windows jobs install Wine and Xvfb with apt, and download llvm-mingw's Linux build and the .NET 8 SDK |
+| `ubuntu-latest` | `ci.yml` (its title check and its Linux checks run on `ubuntu-24.04`), `third-party.yml`, the launcher's `ci.yml` | Linux, Docker: e.g. `ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-24.04` (Node for the actions, git, Python 3, curl, sudo and apt) |
+| `ubuntu-24.04` | `ci.yml`'s tests (with the Windows Builder's compile and --cli checks), `vulkan-dlss.yml` | the same image |
 | `quick` | the short jobs of 5 minutes or less: `ci.yml`'s title check and actionlint, `pr-description.yml`, `third-party.yml`'s check, `release.yml`'s *The version* and *Sign and publish*; the launcher's title check, *The version* and *Sign and publish* | the same image. A runner kept for them only (label `quick`, capacity 1) means they never wait behind a build; the other runners carry `quick` too and take them when they have room |
+| `release` | the releases' builds: `build-linux.yml` and `build-windows.yml` (all of it), which `release.yml` calls (or *Run workflow*); the launcher's *The launcher, both systems* | the same image, on a runner kept for releases only (it carries no other label), so CI never takes it. The AppImage job builds inside Ubuntu 22.04 itself (`scripts/linux/deps.sh` runs in its container) and needs Docker or enough disk (about 30 GB). The Windows jobs install Wine and Xvfb with apt, and download llvm-mingw's Linux build and the .NET 8 SDK. A release waits while no `release` runner is online |
 
 ### Windows files, built on Linux
 
@@ -35,7 +36,10 @@ What only a Windows PC can check is in RELEASING.md, *Needs a Windows tester*.
    'ubuntu-latest:docker://ghcr.io/catthehacker/ubuntu:act-24.04,ubuntu-24.04:docker://ghcr.io/catthehacker/ubuntu:act-24.04,quick:docker://ghcr.io/catthehacker/ubuntu:act-24.04'`
 4. Run it as a service (`forgejo-runner daemon`). One Linux runner is enough to start; the builder jobs are long (an hour
    and more) and want 4+ cores, 16 GB of memory and about 50 GB of disk.
-5. Keep one runner for the quick jobs: register a second one with `--labels 'quick:docker://ghcr.io/catthehacker/ubuntu:act-24.04'`
+5. Releases build only on runners registered with `--labels 'release:docker://ghcr.io/catthehacker/ubuntu:act-24.04'`
+   and nothing else, so no pull request's checks take them and no build waits behind CI. At least one must be online for a
+   release to build; *The version* and *Sign and publish* stay on `quick`.
+6. Keep one runner for the quick jobs: register a second one with `--labels 'quick:docker://ghcr.io/catthehacker/ubuntu:act-24.04'`
    only and `capacity: 1` in its config (it can share the machine and its Docker), so a pull request's checks start at once
    however many builds are queued. A job that takes longer than a few minutes does not belong on `quick`.
 

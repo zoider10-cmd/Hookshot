@@ -201,20 +201,25 @@ void build_pkg(const SeedStage& st, const u8* ctl, const u8* area, Pkg& out) {
     using Shader::Ampere::Instruction;
     std::vector<Instruction> native;
     Shader::Ampere::ProgramCaptureState capture;
+    // (mirror parse_code: a word that would branch outside every program ends the capture before it; the program is
+    // refused for that word only if the code before it does not lower)
+    u32 outside = ~0u;
     for (u32 i = 0; hdr + (i + 1) * sizeof(Instruction) <= st.len; i++) {
         Instruction& insn = native.emplace_back();
         std::memcpy(&insn, area + hdr + i * sizeof(Instruction), sizeof insn);
         const auto r = capture.Observe(insn, i);
         if (r == Shader::Ampere::ProgramCaptureState::Result::InvalidTarget) {
-            out.fail = "capture: branch outside the program at +" + hex64(i * 16);
-            return;
+            native.pop_back();
+            outside = i;
+            break;
         }
         if (r == Shader::Ampere::ProgramCaptureState::Result::Complete) break;
     }
     out.native = native.size();
     const auto lowered = Shader::Ampere::LowerToMaxwell(native);
     if (!lowered) {
-        out.fail = "lowering failed at +" + hex64(lowered.error_offset) + ": " + std::string(lowered.error);
+        out.fail = (outside != ~0u ? "capture: branch outside the program at +" + hex64(outside * 16) + ", and " : std::string()) +
+                   "lowering failed at +" + hex64(lowered.error_offset) + ": " + std::string(lowered.error);
         return;
     }
     out.texture_bound = lowered.required_texture_buffer;

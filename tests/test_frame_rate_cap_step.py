@@ -56,11 +56,14 @@ FIXTURE = r'''#define _CRT_SECURE_NO_WARNINGS
 #include <string.h>
 #include <stdarg.h>
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL:%d %s\n", __LINE__, #x); exit(1); } } while (0)
+typedef void Ctx;
+static int present_interval = 1;
 static uint8_t guest[0x4000];
 #define GP(a) ((void *)(guest + (a)))
 #define MOD 0x1000u
 static int clock_logs;
 static long long clock_now;
+static int64_t now = 1000000000LL;   /* (the presents' clock; hos_now_ns below reads it) */
 static void hos_log(const char *fmt, ...) {
     char text[256];
     va_list args; va_start(args, fmt); vsnprintf(text, sizeof text, fmt, args); va_end(args);
@@ -79,13 +82,16 @@ volatile int hos_fixed_resolution, hos_dynres_runs, hos_scene_rgba16f;
 volatile uint32_t hos_fixed_scale_bits;
 volatile float hos_text_scale, hos_camera_scale;
 @OPTS@
-static int live_cap = -1;   /* (the Game frame rate cap row changed in play: HOS_OPT_FPS_CAP's answer, -1 the renderer not up) */
-int rx_option(int id, int otherwise) { return id == HOS_OPT_FPS_CAP && live_cap >= 0 ? live_cap : otherwise; }
+static int live_cap = -2;   /* (the Game frame rate cap row changed in play: HOS_OPT_FPS_CAP's answer, -1 the renderer not up) */
+int rx_option(int id, int otherwise) { return id == 0 && getenv("T_PER_FRAME") ? 0 : id == HOS_OPT_FPS_CAP && live_cap >= -1 ? live_cap : otherwise; }
 volatile uint64_t hos_step_probe, hos_res_module;
 volatile uint32_t hos_frame_seconds_bits;
 /* (Mako's Fast forward, which realtime_step asks about first: never held here) */
 static int fast_forward_was, fast_forward_reset;
 static int fast_forward_held(void) { return 0; }
+/* (the host clock the extracted cap code reads for the movie pacing; movie_seen_at itself comes with the
+   extracted block, which starts at the cap's enum) */
+static int64_t hos_now_ns(void) { return now; }
 @HOST@
 static uint64_t a64_fpx_div32_div32(void *c, uint64_t a, uint64_t b) {
     float x, y; uint32_t w;
@@ -100,7 +106,6 @@ static float lifted_step(float base, float nominal) {
     memcpy(&r, &_v, 4);
     return r;
 }
-static int64_t now = 1000000000LL;
 static float frames(int n, double seconds) {   /* (n presents that far apart: the seconds the hook is given, 0 when off) */
     float f;
     uint32_t bits;
@@ -124,6 +129,12 @@ int main(int argc, char **argv) {
         CHECK(clock_logs == 1 && clock_now == now);
         frames(1, 1.0 / 60);
         CHECK(clock_logs == 1);
+    } else if (!strncmp(mode, "cap 30", 6)) {
+        CHECK(fps_max() == 30 && *limit == 30);
+        CHECK(near(frames(600, 1.0 / 30), 1.0 / 30));
+        CHECK(near(lifted_step(60.0f, (float)*rate), 2.0));
+        live_cap = 0;
+        if (!getenv("HOS_FPS_MAX")) CHECK(frames(10, 1.0 / 60) == 0.0f && *limit == 60);
     } else if (!strcmp(mode, "cap 120")) {
         CHECK(near(frames(72000, 1.0 / 120), 1.0 / 120) && *rate == 60 && *limit == 120);   /* (the rate stays the engine's) */
         CHECK(near(lifted_step(60.0f, (float)*rate), 0.5) && near(lifted_step(30.0f, (float)*rate), 0.25));   /* (half a 60th a frame) */
@@ -162,6 +173,32 @@ int main(int argc, char **argv) {
             if (*rate == 40) { recovered = 1; break; }
         }
         CHECK(recovered && lifted_step(60.0f, (float)*rate) == 1.5f);
+    } else if (!strcmp(mode, "movie pace")) {   /* (issue #73: at the console's cap a movie's player pacing goes to 240 while it updates, back to 60 after) */
+        CHECK(frames(3, 1.0 / 60) == 0.0f && *limit == 60 && *rate == 60);   /* (no movie seen: nothing changes) */
+        movie_seen_at = (uint64_t)now;   /* (the movie's player just updated: the lift's hook stamps this in the host) */
+        CHECK(near(frames(10, 1.0 / 120), 1.0 / 120) && *limit == 240 && *rate == 60);   /* (paced and stepped: the frames' own time, the limiter raised) */
+        CHECK(near(frames(10, 1.0 / 240), 1.0 / 240) && *limit == 240);   /* (kept while the window holds) */
+        CHECK(frames(16, 1.0 / 60) == 0.0f && *limit == 60 && *rate == 60);   /* (the window passed with no new updates (16 x 1/60 = 266 ms > 250 ms): the game's limiter and step back) */
+        movie_seen_at = (uint64_t)now;   /* (another movie: up again, and the first movie's game_limit is not lost) */
+        CHECK(near(frames(5, 1.0 / 120), 1.0 / 120) && *limit == 240);
+    } else if (!strcmp(mode, "movie cap30") || !strcmp(mode, "movie cap30 per frame")) {
+        CHECK(frames(3, 1.0 / 60) == 0.0f && *limit == 60);
+        movie_seen_at = (uint64_t)now;
+        CHECK(near(frames(10, 1.0 / 240), 1.0 / 240) && *limit == 240);
+        live_cap = -1;
+        CHECK(hos_vi_native_interval(NULL, 2) == 2 && present_interval == 1);
+        CHECK(near(frames(10, 1.0 / 30), 1.0 / 30) && *limit == 30);
+        CHECK(near(lifted_step(60.0f, (float)*rate), 2.0));
+        movie_seen_at = (uint64_t)now;
+        live_cap = 0;
+        CHECK(near(frames(10, 1.0 / 240), 1.0 / 240) && *limit == 240);
+        CHECK(frames(16, 1.0 / 60) == 0.0f && *limit == 60 && *rate == 60);
+        CHECK(hos_vi_native_interval(NULL, 2) == 2);
+        CHECK(present_interval == (getenv("T_PER_FRAME") ? 2 : 1));
+        CHECK(rx_option(0, 1) == (getenv("T_PER_FRAME") ? 0 : 1));
+    } else if (!strcmp(mode, "movie pace off")) {   /* (HOS_MOVIE_PACE=0: even a fresh movie stamp leaves the game's cap) */
+        movie_seen_at = (uint64_t)now;
+        CHECK(frames(10, 1.0 / 60) == 0.0f && *limit == 60 && *rate == 60);
     } else {   /* (HOS_FPS_STEP=0, or a lift without the hook: the rate up to the cap, as before) */
         CHECK(frames(10, 1.0 / 120) == 0.0f && *rate == 120 && *limit == 120);
         CHECK(lifted_step(60.0f, 60.0f) == 1.0f);
@@ -225,14 +262,14 @@ def main():
     check('"60 (the console\'s)", "90", "120", "144", "165", "240", "Uncapped"}' in menu, "tx_fps_cap does not end with Uncapped")
     row = menu[menu.index('{TAB_GRAPHICS, "Game frame rate cap"'):]
     row = row[:row.index("},") + 2]
-    check("&opts.fps_cap, 0, 6, 1, tx_fps_cap," in row, "the Game frame rate cap row does not reach Uncapped")
+    check("&opts.fps_cap, -1, 6, 1, tx_fps_cap," in row, "the Game frame rate cap row does not reach Uncapped")
     check("V-Sync" in row and "real time" in row, "the row's help does not say Uncapped keeps real time and V-Sync limits it")
 
     vi = (ROOT / "host" / "nn_vi.c").read_text(encoding="utf-8")
     fps = vi[vi.index("enum { FPS_UNCAPPED"):]   # (the cap's values and fps_of, fps_refresh, fps_max)
     fps = fps[:fps.index(block(vi, "static int fps_max(void) {")) + len(block(vi, "static int fps_max(void) {"))]
     host = "\n".join([block(vi, "static float text_scale("), block(vi, "static float camera_scale("), fps] +
-                     [block(vi, m) for m in ("static int realtime_rate(", "static void realtime_step(")])
+                     [block(vi, m) for m in ("int hos_vi_native_interval(", "static int realtime_rate(", "static void realtime_step(")])
     # (the option ids realtime_step names: vk_api.h's HOS_OPT_* enums)
     opts = "\n".join(re.findall(r"enum \{ HOS_OPT_[^}]*\};", (ROOT / "gpu" / "vk" / "vk_api.h").read_text(encoding="utf-8")))
     fixture = FIXTURE.replace("@OPTS@", opts).replace("@HOST@", host).replace(
@@ -242,13 +279,18 @@ def main():
         exe = Path(tmp) / "fixture.exe"
         c.write_text(fixture, encoding="utf-8")
         subprocess.run([a.cc, "-std=c11", "-include", ENV_ON_H, "-Wall", "-Wextra", "-Werror", str(c), "-o", str(exe)], check=True)
-        for mode, cap, step, index in (("cap 120", "120", None, None), ("cap 60", None, None, None), ("step off", "120", "0", None),
+        for mode, cap, step, index in (("cap 30 per frame", None, None, "-1"), ("cap 30", "30", None, None), ("cap 30", None, None, "-1"), ("cap 120", "120", None, None), ("cap 60", None, None, None), ("step off", "120", "0", None),
                                        ("no hook", "120", None, None), ("uncapped", None, None, "6"), ("uncapped", "1000", None, None),
                                        ("unknown index", None, None, "7"), ("cap 120", None, None, "2"), ("clock log", "60", None, None),
-                                       ("live", None, None, "2"), ("live step off", None, "0", "2")):
+                                       ("live", None, None, "2"), ("live step off", None, "0", "2"),
+                                       ("movie pace", None, None, None), ("movie cap30", None, None, None), ("movie cap30 per frame", None, None, None), ("movie pace off", None, None, None)):
             env = {k: v for k, v in os.environ.items() if not k.startswith("HOS_") and k != "T_CAP_INDEX"}
+            if "per frame" in mode:
+                env["T_PER_FRAME"] = "1"
             if mode == "clock log":
                 env["HOS_FPS_LOG"] = "1"
+            if mode == "movie pace off":
+                env["HOS_MOVIE_PACE"] = "0"
             if cap:
                 env["HOS_FPS_MAX"] = cap
             if step:

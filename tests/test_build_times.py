@@ -193,6 +193,21 @@ class PhaseTests(unittest.TestCase):
         c.enter(None)
         self.assertEqual((c.seconds["lift"], c.seconds["compile"]), (25.0, 5.0))
 
+    def test_the_finish_is_cut_into_its_parts(self):
+        """part(): the time since the stage began, or since its last part, under the stage, and shown under it"""
+        c = self.clock()
+        self.t[0] = 110.0
+        c.enter("finish")
+        self.t[0] = 112.0
+        c.part("copying the new files in")
+        self.t[0] = 142.0
+        c.part("button prompts")
+        self.t[0] = 143.0
+        c.enter(None)
+        s = c.seconds
+        self.assertEqual((s["finish"], s["finish: copying the new files in"], s["finish: button prompts"]), (33.0, 2.0, 30.0))
+        self.assertTrue(any("button prompts" in row and "30 s" in row for row in c.table()))
+
     def test_the_planning_is_the_compile_stage_only(self):
         c = self.clock()
         c.enter("finish")
@@ -217,6 +232,62 @@ class PhaseTests(unittest.TestCase):
         self.assertIn("PHASES.enter(str(words[1]))", say)
         self.assertLess(src.index("PHASES.enter(None)"), src.index("phases=PHASES.seconds"))
         self.assertNotIn("@@phase", src)   # (no new line for the builders to read: they parse @@stage, @@file, @@times ...)
+
+
+class LiftProgressTests(unittest.TestCase):
+    """Translate's progress: one '@@progress' as each of the lift's steps ends, weighted by what the steps took"""
+
+    # (the lines nx2/lift.py and nx2/chunks.py print, in their order)
+    LINES = ["discovered 412345 functions (47s)",
+             "lift: coverage in 24.6s (72s)",
+             "lift: emit and write (12 processes) in 99.6s (171s)",
+             "lift: big chunks split in 17.6s (189s)",
+             "lift: patches (12 processes) in 10.0s (199s)",
+             "lift: output size and page-mark groups in 37.5s (236s)",
+             "lift: runtime tables and standalone files in 11.5s (248s)"]
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="hookshot-lift-")
+        self.addCleanup(self.temporary.cleanup)
+        self.work = str(Path(self.temporary.name))
+
+    def said(self, lines):
+        got = []
+        on_line = make_game.lift_progress(self.work, got.append)
+        for line in lines:
+            on_line(line)
+        return got
+
+    def test_each_step_moves_the_bar_up_to_the_end(self):
+        got = self.said(["standalone: 12 HLE functions in host/, 3 OS-facing imports stubbed"] + self.LINES + ["wrote 85 files"])
+        self.assertEqual(len(got), len(self.LINES))
+        self.assertEqual(got, sorted(got))
+        self.assertAlmostEqual(got[-1], 1.0)
+        self.assertAlmostEqual(got[0], 47.0 / sum(w for _, w in make_game.LIFT_STEPS), places=6)
+
+    def test_lines_that_are_no_step_say_nothing(self):
+        self.assertEqual(self.said(["lift: something new in 3.0s (3s)", "compiled in 12s, 0 failed", ""]), [])
+
+    def test_a_step_said_twice_counts_once(self):
+        self.assertEqual(len(self.said(self.LINES[:2] + self.LINES[1:2])), 2)
+
+    def test_this_pcs_last_lift_sets_the_weights(self):
+        phases = {"lift: " + n: 10.0 for n, _ in make_game.LIFT_STEPS}
+        phases["lift: emit and write"] = 40.0
+        make_game.save_times(self.work, {"format": make_game.TIMES_FORMAT, "seconds": {},
+                                         "builds": [{"total_seconds": 1.0, "phases": phases}]})
+        got = self.said(self.LINES[:3])
+        self.assertAlmostEqual(got[1], 20.0 / 100.0)
+        self.assertAlmostEqual(got[2], 60.0 / 100.0)
+
+    def test_a_record_without_every_step_is_not_used(self):
+        make_game.save_times(self.work, {"format": make_game.TIMES_FORMAT, "seconds": {},
+                                         "builds": [{"total_seconds": 1.0, "phases": {"lift: coverage": 500.0}}]})
+        self.assertEqual(make_game.lift_weights(self.work), list(make_game.LIFT_STEPS))
+
+    def test_the_lift_is_run_with_it(self):
+        text = (ROOT / "nx2" / "make_game.py").read_text(encoding="utf-8")
+        self.assertIn('"--work", work], env, lift_progress(work))', text)
 
 
 if __name__ == "__main__":

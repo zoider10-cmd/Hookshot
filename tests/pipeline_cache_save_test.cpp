@@ -47,7 +47,7 @@ int pcache = 2;
 std::string pcache_path;
 std::atomic<int64_t> pcache_built_since_save{32};
 std::atomic<std::size_t> pcache_saved_size{0};
-bool pcache_no_save = false;   // (RX_VK_PCACHE_LOAD=0: pcache_init; never set here)
+bool pcache_no_save = false;   // (the file not read, RX_VK_PCACHE_LOAD=0 or pcache_load.h: pcache_init; the no-save case)
 // The size the driver gives for the cache's data; a case grows it for pipelines taken in between saves.
 std::atomic<std::size_t> cache_size{64};
 enum Fault { NONE, VECTOR_ALLOC, VECTOR_LENGTH, TMP_ALLOC, QUERY_FAIL, EMPTY, COPY_FAIL, COPY_INCOMPLETE, COPY_SHORT, COPY_OVERSIZE, SHORT_WRITE, BLOCK_COPY, REPLACE_FAIL };
@@ -164,6 +164,15 @@ struct PcacheFetch {
     explicit PcacheFetch(int, bool = true) {}
     bool held() const { return true; }
 };
+// (vk_draw.cpp: a save owed to the serial builds' thread, and that thread's save between two builds; no serial thread here)
+thread_local bool pcache_save_between = false;
+std::atomic<bool> pcache_save_owed{false};
+bool serial_builds_on() { return false; }
+[[maybe_unused]] static void helper_thread_start() {}   // (vk_texture.cpp: registers a thread made inside a ReplayPin on Linux)
+// (vk_draw.cpp: what the last save on this thread did, for the precompile's line before the title)
+#include "precompile_save.h"
+thread_local precompile_save::Outcome pcache_save_outcome;
+using SaveOutcome = precompile_save::Outcome;
 #include "pipeline_cache_save.inc"
 #ifdef CACHE_VECTOR_BASELINE
 #undef fwrite
@@ -234,10 +243,13 @@ int run(const std::string& name) {
             fault = f;
             pipeline_cache_save(true);
             CHECK(old_file() && replacements == 0 && save_errors == 0 && start_errors == 0);
+            // (the driver gave no usable data, or data the file could not take: said as not written, never as written)
+            CHECK(pcache_save_outcome.what == SaveOutcome::kFetchFailed || pcache_save_outcome.what == SaveOutcome::kWriteFailed);
         }
         fault = NONE;
         pipeline_cache_save(true);
         CHECK(new_file() && replacements == 1);
+        CHECK(pcache_save_outcome.what == SaveOutcome::kWritten && pcache_save_outcome.bytes == cache_size);
     } else if (name == "actual-size") {
         fault = COPY_SHORT;
         pipeline_cache_save(true);
@@ -274,6 +286,7 @@ int run(const std::string& name) {
         pcache_saved_size = 64;  // As pcache_init leaves it: the driver's size for the data read from the file.
         pipeline_cache_save(true);  // At exit, nothing taken in.
         CHECK(queries == 1 && copies == 0 && writes == 0 && old_file());
+        CHECK(pcache_save_outcome.what == SaveOutcome::kSame && pcache_save_outcome.bytes == 64);
         CHECK(play_saves == 1);  // What play made is saved apart, the cache unchanged or not.
         pcache_built_since_save = 32;  // In play: the precompile's pipelines, all found in the cache, still count.
         pipeline_cache_save(false);
@@ -285,6 +298,7 @@ int run(const std::string& name) {
             fault = f;
             pipeline_cache_save(true);
             CHECK(old_file() && pcache_saved_size == 64);
+            CHECK(pcache_save_outcome.what == SaveOutcome::kWriteFailed && !pcache_save_outcome.detail.empty());
         }
         fault = NONE;
         pipeline_cache_save(true);
@@ -295,6 +309,29 @@ int run(const std::string& name) {
         pipeline_cache_save(true);
         CHECK(copies == 4 && replacements == 3 && new_file());
         CHECK(save_errors == 0 && start_errors == 0 && play_saves == 8);
+    } else if (name == "between") {
+        // The serial builds' thread between two of its builds: a save put off there runs on that thread, at once, whatever
+        // was built since (it was owed: put off with that many counted back).
+        pcache_built_since_save = 3;
+        pcache_save_between = true;
+        pipeline_cache_save(false);
+        pcache_save_between = false;
+        CHECK(queries == 1 && copies == 1 && replacements == 1 && new_file() && play_saves == 1);
+        CHECK(save_errors == 0 && start_errors == 0 && !pcache_save_owed.load());
+    } else if (name == "between-busy") {
+        // A background save under way: the one between two builds does not wait for it there, it is owed again.
+        fault = BLOCK_COPY;
+        pipeline_cache_save(false);
+        const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+        while (!copy_blocked.load() && std::chrono::steady_clock::now() < end) Sleep(1);
+        CHECK(copy_blocked);
+        pcache_built_since_save = 5;
+        pcache_save_between = true;
+        pipeline_cache_save(false);
+        pcache_save_between = false;
+        CHECK(pcache_save_owed.load() && pcache_built_since_save == 5 && queries == 1);
+        allow_copy = true;
+        CHECK(wait_until(replacements, 1) && wait_until(play_saves, 1));
     } else if (name == "in-play") {
         // In play the cache is not written at a save for a little growth: what play makes is in the play files.
         pcache_saved_size = 64;
@@ -313,6 +350,20 @@ int run(const std::string& name) {
         CHECK(wait_until(play_saves, 3));
         pipeline_cache_save(true);
         CHECK(copies == 2 && writes == 2 && replacements == 2 && pcache_saved_size == 96 + (64u << 20));
+        CHECK(save_errors == 0 && start_errors == 0);
+    } else if (name == "no-save") {
+        // The file not read (issue 388): the cache's own part is never fetched nor written, but the play part still runs at
+        // each save, the ordinary one included, to let play's generations go (tests/test_pipeline_play_cache.py no-save-periodic)
+        pcache_no_save = true;
+        pcache_built_since_save = 31;
+        pipeline_cache_save(false);
+        Sleep(20);
+        CHECK(play_saves == 0);  // Under the threshold: nothing.
+        pcache_built_since_save = 32;
+        pipeline_cache_save(false);
+        CHECK(wait_until(play_saves, 1));
+        pipeline_cache_save(true);  // After the worker.
+        CHECK(play_saves == 2 && queries == 0 && copies == 0 && writes == 0 && replacements == 0 && old_file());
         CHECK(save_errors == 0 && start_errors == 0);
     } else {
         CHECK(false);

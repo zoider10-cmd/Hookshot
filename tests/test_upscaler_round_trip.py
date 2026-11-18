@@ -39,6 +39,7 @@ FIXTURE = r'''
 #define _CRT_SECURE_NO_WARNINGS
 #include "upscaler_rows.h"
 #include "auto_settings.h"
+#include "monitor_choice.h"
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
@@ -46,6 +47,16 @@ FIXTURE = r'''
 #include <cstring>
 #include <iterator>
 #include <mutex>
+#include <cerrno>   // (save(): what failed, the options file's mode, its move)
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 #include <string>
 #include <utility>
 #include <vector>
@@ -59,6 +70,10 @@ void menu_debug_rows(int, int) { CHECK(false); }
 /* OPTIONS */
 /* AUTO_PRESET */
 Options opts;
+bool debug_warning = false;
+int debug_warning_choice = 0;
+void sync_transition_autosave() {}
+
 /* TABS */
 /* ROW */
 unsigned available = (1u << ur::kUpscalers) - 1;
@@ -93,8 +108,21 @@ const char* hn_preset(int, int) { return ""; }
 Row rows[] = {/* UPSCALER_ROW */, /* RESOLUTION_ROW */, /* MODEL_ROW */, /* PRESET_ROW */};
 constexpr int kRows = sizeof rows / sizeof rows[0];
 /* OVERRIDES */
+int monitor_pick;
+std::string monitor_want, monitor_saved_name;
 /* INI_KEY */
 std::string ini_file, mic_want;
+int output_pick;
+std::string output_want, output_saved_name;
+std::string output_id_key(const char* text) { return text; }
+std::string output_name_key(const char* text) { return text; }
+bool output_forced() { return false; }
+bool can_outputs() { return false; }
+void output_chosen() { CHECK(false); } // No playback-device row is exercised by this fixture.
+void refresh_outputs() {}
+bool can_monitors() { return false; }
+void refresh_monitors() {}
+void monitor_chosen() { CHECK(false); } // No fullscreen-monitor row is exercised here.
 std::string ini_path() { return ini_file; }
 // (the menu's replace_file moves save()'s part over the file in one step; here the same end, the part's bytes at the path)
 bool replace_file(const std::string& part, const std::string& path) {
@@ -108,12 +136,19 @@ int rumble_step(int v) { return v; }
 constexpr int HOS_KEY_N = 1, HOS_SW_N = 1, HOS_SW_PLUS = 10, HOS_SW_MINUS = 11, HOS_BIND_PAD = 0, HOS_BIND_KEY = 1;
 constexpr int HOS_KEY_OC_NOTE_L = 1, HOS_KEY_OC_NOTE_X = 1;
 const char* bind_names[1] = {"a"};
-struct Host { int (*binding)(int, int, int); float (*aspect_ratio)(); } *host = nullptr;
+struct Host { int (*binding)(int, int, int); float (*aspect_ratio)(); void (*audio_output_select)(const char*);
+              void (*monitor_select)(const char*); } *host = nullptr;
 bool can_bind() { return false; }
 // No hardware profile or measured tuning owns the manual round trips.
 uint64_t auto_for = 0, auto_fp = 0, auto_tuned = 0;
+#include "gpu_choice.h"   // (the GPU device row saved as the card itself, which save() writes)
+namespace gpu_choice = mkwvk::gpu_choice;
+std::vector<gpu_choice::Card> gpu_device_cards;
+std::string gpu_saved_card;
+bool gpu_card_missing = false;
 ::auto_settings::Choice auto_choice{};
 ::auto_settings::Tuning auto_tuning{};
+void logf(const char*, ...) {}
 /* SAVE */
 void restart() {
     opts = Options{};
@@ -121,15 +156,12 @@ void restart() {
     auto_for = auto_tuned = 0;
     auto_tuning = {};
     // The hardware stand-ins (auto_choice and auto_fp) describe the same PC after a restart.
-    bool has_options = false, has_output = false, has_vram_budget = false, has_memory_budget = false;
+    bool has_options = false, has_output = false, has_memory_budget = false;
     /* LOAD */
-    CHECK(has_options && !has_output && has_memory_budget && !has_vram_budget);
+    CHECK(has_options && !has_output && has_memory_budget);
 }
 void apply_pad_layout(int) {}
 int detect_pad_layout() { return opts.pad_layout; }
-void sync_preset_budgets(int) {}
-void vram_budget_sync() {}
-constexpr int kVramMinimumOnly = 1;
 namespace mr { constexpr int kMax = 8; struct State { void note(const int*) {} }; }
 mr::State restart_state;
 void restart_values(int*) {}
@@ -139,16 +171,15 @@ void samplers_changed() {}
 void temporal_reset_failure() {}
 void prompts_at_once(const Row&) {}
 /* STOPS */
-void apply_auto(bool keep_own);
-void logf(const char*, ...) {}
+void apply_auto();
 /* PRESET */
 /* APPLY_AUTO */
+bool menu_refresh = false;
 /* SET_ROW */
 /* RESOLUTION_SCALE */
 /* RESOLUTION_AUTO */
 /* WALK */
 std::recursive_mutex menu_mu;
-bool menu_refresh = false;
 int env_int(const char*, int fallback) { return fallback; }
 double fps_target_ms() { return 1000.0 / 60; }
 int display_refresh_mhz() { return 60000; }

@@ -1,0 +1,28 @@
+# UI source changes need a screenshot review, not an automatic recapture. No game,
+# native build, capture tools, external Launcher checkout or secrets are needed.
+name: Guide screenshots
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: Guide images and local UI source review
+    runs-on: quick
+    timeout-minutes: 5
+    steps:
+      - uses: https://github.com/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Integrity and local UI drift (external Launcher review remains separate)
+        run: python3 -I -B scripts/check_guide_screenshots.py --review-sources
+      - name: Checker regression tests
+        run: python3 -I -B tests/test_guide_screenshots.py
+      - name: Capture isolation and build-policy regression tests
+        run: python3 -I -B tests/test_launcher_capture.py

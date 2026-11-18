@@ -88,6 +88,13 @@ static const char *ini_dir;
 #endif
 static DWORD GetModuleFileNameA(void *m, char *b, DWORD n) { (void)m; return (DWORD)snprintf(b, n, "%s" EXE_SEP "hookshot.exe", ini_dir); }
 #define hos_game_path_a(b,n) GetModuleFileNameA(0,b,n)
+static const char *hos_options_file(void) {   /* (host/options_path.c: here, beside the exe) */
+    static char p[600];
+    DWORD n = GetModuleFileNameA(0, p, 560);
+    while (n && p[n - 1] != 92 && p[n - 1] != 47) n--;
+    snprintf(p + n, sizeof p - n, "hookshot_options.ini");
+    return p;
+}
 static int held[256];
 static int key(int vk) { return held[vk & 255]; }
 static int oc_menu, oc_front = 1;   /* (oc_pad_word shares read_input's gates: the Insert menu, the pads held after it, the window) */
@@ -199,8 +206,8 @@ int main(int argc, char **argv) {
     CHECK(hos_binding(HOS_BIND_KEY, HOS_KEY_OC_NOTE_A, 1) == 0);
     hos_bind(HOS_BIND_KEY, HOS_SW_Y, 0, VK_LBUTTON);   /* a normal row still takes the mouse button */
     CHECK(hos_binding(HOS_BIND_KEY, HOS_SW_Y, 0) == VK_LBUTTON);
-    /* (j) the note window shares read_input's own gates: Insert menu open, pads held after it closed, or the game
-       behind another window, and the word the game reads is the player's own */
+    /* (j) the note window shares read_input's own gates: Insert menu open, or the game behind another window, and
+       the word the game reads is the player's own; a pad input still held since the menu plays no note */
     release(), held[VK_NUMPAD2] = held['Q'] = held['E'] = 1;
     hos_oc_wait = 1;
     oc_notes();
@@ -210,9 +217,16 @@ int main(int argc, char **argv) {
     oc_menu = 1;
     CHECK(oc_pad_word(raw2) == raw2);
     oc_menu = 0;
-    pad_after_menu = 1;
-    CHECK(oc_pad_word(raw2) == raw2);
-    pad_after_menu = 0;
+    pad_raw_now = 1 << HOS_PAD_LSHOULDER;   /* (the (L) note's pad input, held since the menu) */
+    pad_after_menu = 1ULL << HOS_PAD_LSHOULDER;
+    oc_notes();
+    CHECK(!(hos_oc_note_bits & 1ULL) && !(oc_pad_word(raw2) & (1ULL << HOS_SW_L)));
+    CHECK(oc_pad_word(raw2) & (1ULL << HOS_SW_R));   /* (the keys' notes still play) */
+    pad_after_menu = 0;   /* (let go and pressed again) */
+    oc_notes();
+    CHECK((hos_oc_note_bits & 1ULL) && (oc_pad_word(raw2) & (1ULL << HOS_SW_L)));
+    pad_raw_now = 0;
+    oc_notes();
     oc_front = 0;
     CHECK(oc_pad_word(raw2) == raw2);
     oc_front = 1;

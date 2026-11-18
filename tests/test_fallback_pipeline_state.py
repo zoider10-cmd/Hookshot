@@ -7,8 +7,7 @@ dynamic topology and primitive restart. Ordinary vertex input keeps all three st
 native mesh pipelines use none. Check whole pipelines and vertex-input library construction
 (the fallback library case is called directly here; runtime fallback programs do not use GPL).
 Also replay the production pipeline-bind and vertex-cache decisions for ordinary, fallback,
-ordinary draws with the same buffers, and the vertex-binding range (RX_VK_VB_RANGE): a changed stream bound alone
-while the strides stand, all 16 after a fallback pipeline. The Vulkan state lifetime is modeled, not driver-tested.
+ordinary draws with the same buffers. The Vulkan state lifetime is modeled, not driver-tested.
 
 python -I -B tests/test_fallback_pipeline_state.py --cxx g++ --headers <Vulkan include>
 --source <vk_draw.cpp> also runs the same checks against an unfixed or mutated source.
@@ -56,6 +55,7 @@ struct Program {
     std::vector<Stage> stages;
     VkPipelineLayout layout = VK_NULL_HANDLE;
 };
+bool program_modules_dropped(const Program&) { return false; }
 // Plain fields model the state consumed below; NVN's packed command ABI is not under test.
 struct nvn_va_st { uint32_t fmt = 0, stream = 0, offset = 0; };
 struct nvn_blend_st { uint32_t src_rgb = 0, dst_rgb = 0, eq_rgb = 0, src_a = 0, dst_a = 0, eq_a = 0; };
@@ -103,7 +103,6 @@ driver_faults::Quarantine& fault_quarantine() { static driver_faults::Quarantine
 std::string driver_faults_path() { return {}; }
 void driver_fault_note(uint64_t) {}
 constexpr VkResult kDriverFault = static_cast<VkResult>(-77);
-bool program_modules(const Program&) { return true; }   // (Mako: a module let go after the start made again: not under test)
 bool driver_cache_only = false, quick_build = false, gate_busy = false, slow_full_build = false;
 int test_slow_ms() { return 0; }
 VkPipelineCache pcache = VK_NULL_HANDLE, driver_ask_cache = VK_NULL_HANDLE;
@@ -157,20 +156,15 @@ bool last_vb_valid = false;
 VertexSet vertex_set{};
 struct BufferRef {
     VkBuffer buffer = VK_NULL_HANDLE;
-    VkDeviceSize offset = 0, size = 0;
+    VkDeviceSize offset = 0;
     explicit operator bool() const { return buffer != VK_NULL_HANDLE; }
 };
-// (a stream not imported yet is copied into the recording's stream: never here, every buffer resolves)
-struct BindSite { BindSite(const char*, bool) {} };
-struct { VkBuffer stream = VK_NULL_HANDLE; uint8_t* mapped = nullptr; } cur_res, *cur = &cur_res;
-uint64_t stream_alloc(uint64_t, uint64_t) { return UINT64_MAX; }
-bool memory_read_as_submitted(uint64_t, void*, uint64_t) { return false; }
 /* KEPT_VERTEX */
 KeptVertex kept_vb[16]{};
 /* VERTEX_BIND_REUSE */
 /* VERTEX_SET_SAME */
 /* VERTEX_BIND_RANGE */
-unsigned vertex_binds = 0, pipeline_binds = 0, buffer_lookups = 0, binding_errors = 0, last_bind_first = 0, last_bind_count = 0;
+unsigned vertex_binds = 0, pipeline_binds = 0, buffer_lookups = 0, binding_errors = 0;
 bool model_stride_valid = false;
 VkBuffer zero_buffer = reinterpret_cast<VkBuffer>(uintptr_t{1});
 uint64_t gpu_bind_stamp() { return 1; }
@@ -188,12 +182,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindPipeline(VkCommandBuffer, VkPipelineBindPoin
 VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2(VkCommandBuffer, uint32_t first, uint32_t count,
     const VkBuffer* buffers, const VkDeviceSize* offsets, const VkDeviceSize* sizes, const VkDeviceSize* strides) {
     ++vertex_binds;
-    last_bind_first = first, last_bind_count = count;
-    if (!count || first + count > 16 || !buffers || !offsets || !sizes || !strides) ++binding_errors;
-    // (a partial bind leaves the other bindings' strides as they were: they must still be valid)
-    else if (count != 16 && !model_stride_valid) ++binding_errors;
-    else if (first <= 2 && first + count > 2 && (buffers[2 - first] != reinterpret_cast<VkBuffer>(uintptr_t{0x1000}) ||
-             offsets[2 - first] != 16 || sizes[2 - first] != 64 || strides[2 - first] != 16)) ++binding_errors;
+    if (first != 0 || count != 16 || !buffers || !offsets || !sizes || !strides) ++binding_errors;
+    else if (buffers[2] != reinterpret_cast<VkBuffer>(uintptr_t{0x1000}) ||
+             offsets[2] != 16 || sizes[2] != 64 || strides[2] != 16) ++binding_errors;
     model_stride_valid = true;
 }
 void replay_vertex_binding(const Program& p, VkPipeline pl, const NvnState& s) {
@@ -283,17 +274,6 @@ int main() {
     replay_vertex_binding(native_mesh, pipelines[1], state);
     replay_vertex_binding(ordinary, pipelines[0], state);
     check(vertex_binds == 2 && model_stride_valid, "sequence", -1, "native mesh without vertex-input state preserves strides");
-    // (RX_VK_VB_RANGE: a stream that changed is bound alone while the strides stand; after a static-stride pipeline, all 16)
-    state.vbuf[5].address = 0x5000;
-    state.vbuf[5].size = 32;
-    state.vstream[5].stride = 8;
-    replay_vertex_binding(ordinary, pipelines[0], state);
-    check(vertex_binds == 3 && last_bind_first == 5 && last_bind_count == 1, "sequence", -1, "a changed stream is bound alone");
-    replay_vertex_binding(fallback, pipelines[2], state);
-    state.vbuf[5].address = 0x6000;
-    replay_vertex_binding(ordinary, pipelines[0], state);
-    check(vertex_binds == 4 && last_bind_first == 0 && last_bind_count == 16 && model_stride_valid, "sequence", -1,
-          "after a fallback pipeline a changed stream binds all 16 again");
     check(binding_errors == 0, "sequence", -1, "intercepted bind arguments are intact");
     if (failures) return 1;
     std::puts("fallback pipeline state: ordinary, native mesh and fallback pass (5 pipeline creations)");

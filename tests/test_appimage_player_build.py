@@ -1,7 +1,8 @@
 """Game-free: a player's build starts from the tools the Linux AppImage carries. Runs the real tools-copy block of
 scripts/linux/appimage.sh into a temporary folder, then nx2/build.py --standalone --dry-run from there, as the AppImage runs
-it (HOOKSHOT_VK_PREBUILT: the Vulkan back end comes built), with stand-ins for the build tools tools.lock gives it outside
-the image (the compiler, sysroot, FFmpeg and the Vulkan headers, at their tools.lock places, builder/linux/linux_tools.py).
+it (the Vulkan back end compiled from the image's sources: the AppImage carries no built one since 2026-11-14), with
+stand-ins for the build tools tools.lock gives it outside the image (the compiler, sysroot, FFmpeg and the Vulkan headers,
+at their tools.lock places, builder/linux/linux_tools.py).
 The dry run goes up to the compile, where the lifted game is first needed, and fails on any other file the compile would
 read that is not in the tree. 2026-11-10: nx2/build.py wrote the menu's fonts from third_party/fonts at every start, the
 AppImage does not carry that folder, and every Linux player's build stopped (#1567); CI had packaged the AppImage and never
@@ -30,14 +31,14 @@ def package(tools):
                    capture_output=True, text=True)
 
 
-def dry_run(tools, lib, work, **extra):
+def dry_run(tools, work, **extra):
     """nx2/build.py as nx2/make_game.py runs it in the AppImage (AppRun's variables, and linux_tools.py's for the build tools
     in the builder's toolchains folder, work/toolchain), with nothing else of this PC's"""
     t = work / "toolchain"
     env = {**extra, "PATH": "/usr/bin:/bin", "HOME": str(work / "home"), "LANG": "C.UTF-8", "HOOKSHOT_TOOLS": str(tools),
            "EMSDK": str(t / "usr/lib/hookshot/emsdk"), "HOOKSHOT_SYSROOT": str(t / "usr/lib/hookshot/sysroot"),
            "HOOKSHOT_FFMPEG": str(t / "usr/lib/hookshot/ffmpeg"), "RX_CPM": str(t / "usr/share/hookshot/cpm"),
-           "HOOKSHOT_VK_PREBUILT": str(lib / "hookshot_vk.so"), "OOT_WORK": str(work / "work"), "RX_RELEASE": "1",
+           "OOT_WORK": str(work / "work"), "RX_RELEASE": "1",
            "A64_HOT_CHUNK": "1", "RX_MARCH": "x86-64-v3"}
     return subprocess.run([sys.executable, "-I", "-B", "-u", "-X", "utf8", "nx2/build.py", "--standalone", "--jobs", "1",
                            "--dry-run"], cwd=tools, env=env, capture_output=True, text=True, timeout=300)
@@ -49,11 +50,11 @@ class PlayerBuildFromTheAppImage(unittest.TestCase):
         temp = tempfile.TemporaryDirectory(prefix="hookshot-appimage-build-")
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
-        self.tools, self.lib = self.root / "AppDir/usr/share/hookshot", self.root / "AppDir/usr/lib/hookshot"
+        self.tools = self.root / "AppDir/usr/share/hookshot"
         self.tools.mkdir(parents=True)
         package(self.tools)
-        # (stand-ins for what appimage.sh builds, the back end, and for tools.lock's tools: a compiler that is never run, the
-        # sysroot, FFmpeg, the Vulkan headers in their CPM layout)
+        # (stand-ins for tools.lock's tools: a compiler that is never run, the sysroot, FFmpeg, the Vulkan headers in their CPM
+        # layout)
         t = self.root / "toolchain"
         (t / "usr/lib/hookshot/emsdk/upstream/bin").mkdir(parents=True)
         for name in ("clang", "clang++"):
@@ -66,46 +67,51 @@ class PlayerBuildFromTheAppImage(unittest.TestCase):
                       "vulkanmemoryallocator/v1/include/vk_mem_alloc.h"):
             (t / "usr/share/hookshot/cpm" / probe).parent.mkdir(parents=True, exist_ok=True)
             (t / "usr/share/hookshot/cpm" / probe).write_text("")
-        self.lib.mkdir(parents=True)
-        (self.lib / "hookshot_vk.so").write_bytes(b"")
         (self.root / "home").mkdir()
 
     def test_starts_from_the_packaged_tree(self):
-        r = dry_run(self.tools, self.lib, self.root)
+        r = dry_run(self.tools, self.root)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertIn("as built", r.stdout)   # (the prebuilt back end: nothing of gpu/vk compiled)
+        # (no DLSS, no FSR 4: the back end is compiled from the image's gpu/vk all the same, as every build compiles it)
+        self.assertIn("the Vulkan back end: Vulkan ", r.stdout)
+        self.assertNotIn("with NVIDIA DLSS", r.stdout)
+        self.assertNotIn("with AMD FSR 4", r.stdout)
         self.assertRegex(r.stdout, r"dry run: [1-9]\d* files to compile besides the lift's, 0 missing")
         self.assertFalse(list(self.tools.rglob("__pycache__")))   # (the image is read-only on a player's PC)
 
     def test_dlss_compiles_the_back_end_from_the_packaged_tree(self):
-        # (NVIDIA DLSS ticked in the builder: the prebuilt back end has no DLSS, so the build compiles gpu/vk from the image's
-        # tree. v2.2.0-rc.1 shipped third_party/zbic without zstd.h, and every such build stopped at FileNotFoundError)
+        # (NVIDIA DLSS ticked in the builder: the build compiles gpu/vk from the image's tree with it. v2.2.0-rc.1 shipped
+        # third_party/zbic without zstd.h, and every such build stopped at FileNotFoundError)
         # (its headers: tools.lock's cpm, RX_CPM)
         sdk = self.root / "ngx"
         (sdk / "include").mkdir(parents=True)
         (sdk / "lib").mkdir()
         (sdk / "lib/libnvsdk_ngx.a").write_bytes(b"")
-        r = dry_run(self.tools, self.lib, self.root, HOOKSHOT_NGX_SDK=str(sdk))
+        r = dry_run(self.tools, self.root, HOOKSHOT_NGX_SDK=str(sdk))
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("with NVIDIA DLSS", r.stdout)
-        self.assertNotIn("as built", r.stdout)   # (the back end compiled here, not the prebuilt one)
         self.assertRegex(r.stdout, r"dry run: [1-9]\d* files to compile besides the lift's, 0 missing")
 
     def test_fsr_compiles_the_back_end_from_the_packaged_tree(self):
-        # (AMD FSR 4 chosen: the prebuilt back end has none, so the build compiles gpu/vk from the image's tree with AMD's FSR
-        # API headers, which the image carries in third_party/fidelityfx)
-        r = dry_run(self.tools, self.lib, self.root, HOOKSHOT_FSR="1")
+        # (AMD FSR 4 chosen: the build compiles gpu/vk from the image's tree with AMD's FSR API headers, which the image
+        # carries in third_party/fidelityfx)
+        r = dry_run(self.tools, self.root, HOOKSHOT_FSR="1")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("with AMD FSR 4", r.stdout)
-        self.assertNotIn("as built", r.stdout)   # (the back end compiled here, not the prebuilt one)
         self.assertRegex(r.stdout, r"dry run: [1-9]\d* files to compile besides the lift's, 0 missing")
 
     def test_a_file_the_image_lacks_fails(self):
         first = (self.tools / "third_party/opus/sources.txt").read_text().split()[0]
         (self.tools / "third_party/opus" / first).unlink()
-        r = dry_run(self.tools, self.lib, self.root)
+        r = dry_run(self.tools, self.root)
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("missing: " + str(self.tools / "nx2" / ".." / "third_party" / "opus" / first), r.stdout)
+
+    def test_the_image_carries_the_renderer_sources_and_assets(self):
+        # (every player's build compiles the back end: its sources and the committed play profile, assets/profiles/, are in
+        # the image)
+        self.assertTrue((self.tools / "gpu/vk/vk_main.cpp").is_file())
+        self.assertTrue((self.tools / "assets/profiles").is_dir())
 
 
 class TheChecksAreWired(unittest.TestCase):
@@ -118,7 +124,6 @@ class TheChecksAreWired(unittest.TestCase):
         # build_tools, with the tools given as the builder's toolchains folder: nothing downloaded)
         apprun = (ROOT / "builder/linux/AppRun").read_text(encoding="utf-8")
         head = apprun[:apprun.index('\nif [ "${1:-}" = "--cli" ]')]
-        self.assertRegex(head, r"\nexport HOOKSHOT_VK_PREBUILT=")
         self.assertRegex(head, r"\nbuild_tools\(\) \{")
         self.assertNotRegex(head, r"\n\s*(exec|exit)\b")
         script = (ROOT / "scripts/linux/check_player_build.sh").read_text(encoding="utf-8")
@@ -126,6 +131,28 @@ class TheChecksAreWired(unittest.TestCase):
         self.assertIn("build_tools || exit 1", script)
         self.assertIn("HOOKSHOT_BUILDER_HOME=", script)
         self.assertIn("--dry-run", script)
+
+    def test_no_prebuilt_renderer(self):
+        # (2026-11-14: the AppImage's prebuilt Vulkan back end is gone, and every build compiles it, as with DLSS and FSR 4: one
+        # way to build it. Nothing sets or reads HOOKSHOT_VK_PREBUILT, appimage.sh builds no renderer and copies none into the
+        # image, and the image still carries what a player's build compiles it from: gpu/vk, and assets/ with its profile)
+        for folder, suffixes in (("nx2", (".py",)), ("scripts", (".py", ".sh")), ("builder", (".py", ".sh", ".cs")),
+                                 (".forgejo/workflows", (".yml",))):
+            for f in (ROOT / folder).rglob("*"):
+                if f.is_file() and f.suffix in suffixes:
+                    self.assertNotIn("HOOKSHOT_VK_PREBUILT", f.read_text(encoding="utf-8", errors="replace"), f)
+        apprun = (ROOT / "builder/linux/AppRun").read_text(encoding="utf-8")
+        self.assertNotIn("HOOKSHOT_VK_PREBUILT", apprun)
+        self.assertNotIn("hookshot_vk.so", apprun)
+        script = (ROOT / "scripts/linux/appimage.sh").read_text(encoding="utf-8")
+        self.assertNotIn("RX_VK_ONLY", script)
+        # (the image's: $TOOLS/usr/lib/hookshot is the build tools' install, tools.lock's places, outside the image)
+        self.assertNotIn("$APPDIR/usr/lib/hookshot", script)
+        self.assertRegex(script, r'\ncp -a gpu/vk gpu/compat gpu/third_party "\$T/gpu/"\n')
+        self.assertRegex(script, r'\ncp -a nx2 host scripts LICENSE README.md assets tools.lock "\$T/"\n')
+        build = (ROOT / "nx2/build.py").read_text(encoding="utf-8")
+        self.assertNotIn("prebuilt_renderer", build)
+        self.assertIn("build_vk = a.standalone and vk_headers and spirv_headers and vma_headers", build)
 
     def test_the_test_sets_what_apprun_sets(self):
         # (AppRun's own variables, and the build tools' that linux_tools.py prints for it)

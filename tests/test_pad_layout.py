@@ -75,7 +75,7 @@ static LONG InterlockedExchange(volatile LONG *p, LONG v) { LONG o = *p; *p = v;
 static LONG InterlockedCompareExchange(volatile LONG *p, LONG v, LONG c) { LONG o = *p; if (o == c) *p = v; return o; }
 static void Sleep(int ms) { (void)ms; }
 static void hos_log(const char *f, ...) { (void)f; }
-static DWORD hos_game_path_a(char *b, DWORD n) { (void)b, (void)n; return 0; }   /* (no options file: the defaults) */
+static const char *hos_options_file(void) { return ""; }   /* (no options file: the defaults; host/options_path.c) */
 /* TABLE */
 """
 

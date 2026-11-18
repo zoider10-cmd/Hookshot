@@ -1,7 +1,9 @@
 # Hookshot's releases (docs/releases.md; how to make one: RELEASING.md). The same workflow as MagicBeanDev/HookshotLauncher's,
 # but for what is built: here the two builders.
 #
-#   a push to main       the nightly: nightly-<commits since the fork>-<commit>, a pre-release
+#   a push to main       the nightly: nightly-<commits since the fork>-<commit>, a pre-release, 5 minutes after the last of a few
+#                        merges in a row (and at least once an hour while they keep coming)
+#                        and none when the commits since the nightly before put nothing on its page (ci:, chore:)
 #   a tag vX.Y.Z-rc.N    a release candidate, a pre-release (the rc channel)
 #   a tag vX.Y.Z         a stable (the stable channel, and rc too). Hookshot's first is v3.0.0
 #
@@ -11,8 +13,8 @@
 #    A tag whose commit CI has released already (its nightly; for a stable, its release candidate) names that release in
 #    `checked` (scripts/release.py released-as: published, its SHA256SUMS signed by a key the launcher trusts and naming its
 #    every file; one that is not stops the run). Its run passed every check of the commit, so the build checks that ship
-#    no file are not run again. Its files are not reused: each carries its version (the AppImage's VERSION and Vulkan back
-#    end, the zip's VERSION and builder), and a release never ships a file that names another version.
+#    no file are not run again. Its files are not reused: each carries its version (the AppImage's VERSION, the zip's
+#    VERSION and builder), and a release never ships a file that names another version.
 # 2. linux, windows: Hookshot-<v>-x86_64.AppImage and HookshotBuilder-<v>-windows-x64.zip (build-linux.yml, build-windows.yml).
 # 3. publish: SHA256SUMS over the files and tools.lock, SHA256SUMS.sig (the release key), the notes (git-cliff, cliff.toml),
 #    then a draft release with every file, published last: until then no launcher sees it. A nightly also prunes the
@@ -75,14 +77,40 @@ jobs:
             echo "checked=$checked" >> "$GITHUB_OUTPUT"
             [[ -z $checked ]] || echo "::notice::$checked is this commit's release: its build checks are not run again"
           else
-            # (a nightly whose commit is no longer main's skips itself: the release runs queue one at a time, and of a few
-            # merges in a row only the newest one builds; the one already running goes on)
-            head=$(git rev-parse origin/main)
-            if [[ $GITHUB_EVENT_NAME == push && $head != "$ref" ]]; then
-              echo "::notice::main has moved on to ${head:0:8}: this nightly skips, the newer one builds"
-              echo "tag=" >> "$GITHUB_OUTPUT"
-              echo "ref=$ref" >> "$GITHUB_OUTPUT"
-              exit 0
+            # (merges in a row build one nightly: the release runs queue one at a time, and a nightly whose commit is still
+            # main's waits 5 minutes for more. One whose commit is no longer main's, then or before, skips: the newer one
+            # builds. Unless the newest nightly is an hour old: while merges keep coming, a nightly still comes out each hour.
+            # The wait is on the quick runner, which has room for it (MagicBeanDev/Infra, runner/quick/config.yml))
+            if [[ $GITHUB_EVENT_NAME == push ]]; then
+              if [[ $(git rev-parse origin/main) == "$ref" ]]; then
+                sleep 300
+                git fetch -q origin main
+              fi
+              head=$(git rev-parse origin/main)
+              if [[ $head != "$ref" ]]; then
+                age=$(python3 -I scripts/release.py nightly-age) || age=none   # (no answer: it builds)
+                if [[ $age != none ]] && (( age < 3600 )); then
+                  echo "::notice::main has moved on to ${head:0:8}: this nightly skips, the newer one builds"
+                  echo "tag=" >> "$GITHUB_OUTPUT"
+                  echo "ref=$ref" >> "$GITHUB_OUTPUT"
+                  exit 0
+                fi
+                echo "::notice::main has moved on to ${head:0:8}, but the newest nightly is an hour old (${age}s): this one builds"
+              fi
+            fi
+            # (a nightly whose page would list nothing new since the nightly before, only ci: or chore: commits, is not
+            # made: the next one comes with what follows. git-cliff decides, as for the notes; no answer: it builds)
+            if [[ $GITHUB_EVENT_NAME == push ]]; then
+              news=yes
+              if cliff=$(python3 -I scripts/release.py git-cliff "$RUNNER_TEMP/cliff"); then
+                news=$(GIT_CLIFF=$cliff python3 -I scripts/release.py nightly-news) || news=yes
+              fi
+              if [[ $news == no ]]; then
+                echo "::notice::nothing for the notes since the newest nightly (ci: or chore: commits only): no nightly"
+                echo "tag=" >> "$GITHUB_OUTPUT"
+                echo "ref=$ref" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
             fi
             tag=$(python3 -I scripts/release.py nightly-name)
           fi
@@ -127,26 +155,36 @@ jobs:
           ref: ${{ needs.version.outputs.ref }}
           fetch-depth: 0
           persist-credentials: false
+      # (the builders from Forgejo's own address, RELEASE_UPLOAD_API on this runner's network, where the artifacts are on its
+      # disk: through its public address behind Cloudflare, as download-artifact fetches them, they came at about 1 MB/s,
+      # two of this job's three minutes (nightly-325). When that fails (no variable, an API that answers otherwise), the
+      # download-artifact steps below fetch them as before)
+      - id: artifacts
+        name: The builders, from Forgejo's own address
+        continue-on-error: true
+        run: python3 -I scripts/release.py artifacts files --run "$GITHUB_RUN_ID" Hookshot-linux-x86_64 HookshotBuilder-windows
       # (from Forgejo's public address behind Cloudflare, as the build jobs' upload: fetched once more when it failed)
       - id: download_1
+        if: steps.artifacts.outcome == 'failure'
         continue-on-error: true
         uses: https://data.forgejo.org/forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e   # v4 (4.1.4 with the GHES check off)
         with:
           name: Hookshot-linux-x86_64
           path: files
-      - if: steps.download_1.outcome == 'failure'
+      - if: steps.artifacts.outcome == 'failure' && steps.download_1.outcome == 'failure'
         uses: https://data.forgejo.org/forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e   # v4 (4.1.4 with the GHES check off)
         with:
           name: Hookshot-linux-x86_64
           path: files
       # (from Forgejo's public address behind Cloudflare, as the build jobs' upload: fetched once more when it failed)
       - id: download_2
+        if: steps.artifacts.outcome == 'failure'
         continue-on-error: true
         uses: https://data.forgejo.org/forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e   # v4 (4.1.4 with the GHES check off)
         with:
           name: HookshotBuilder-windows
           path: files
-      - if: steps.download_2.outcome == 'failure'
+      - if: steps.artifacts.outcome == 'failure' && steps.download_2.outcome == 'failure'
         uses: https://data.forgejo.org/forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e   # v4 (4.1.4 with the GHES check off)
         with:
           name: HookshotBuilder-windows

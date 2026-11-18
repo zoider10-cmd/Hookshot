@@ -51,7 +51,17 @@ class CpmDiscoveryTests(unittest.TestCase):
         # so the real build module discovers packages in this owned layout instead.
         kit = types.SimpleNamespace(ROOT=str(self.tools), HERE=str(self.tools / "nx2"),
                                     WORK=str(self.tools / "work"))
-        toolchain = types.SimpleNamespace(windows=lambda: os.name == "nt")
+        # No clang here: like the real toolchain.find with nothing on PATH, a path that isn't a file, so the
+        # import-time -march=native query is skipped and no compiler runs.
+        no_tools = self.base / "no toolchain"
+
+        def need(path):
+            if not os.path.isfile(path):
+                raise SystemExit("%s not found" % path)
+            return path
+
+        toolchain = types.SimpleNamespace(windows=lambda: os.name == "nt",
+                                          find=lambda tool, host=False: str(no_tools / tool), need=need)
 
         def no_process(command, *args, **kwargs):
             if command[0] == "pkg-config":

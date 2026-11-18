@@ -46,18 +46,20 @@ FIXTURE = r"""
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "FAIL %d: %s\n", __LINE__, #x); return 1; } } while (0)
 /* OPTIONS */
 Options opts;
+bool debug_warning = false;
+int debug_warning_choice = 0;
+void sync_transition_autosave() {}
+bool menu_refresh = false;
+
 /* TABS */
 /* ROW */
 int saves = 0;
 void save() { ++saves; }
 void apply_pad_layout(int) {}
 int detect_pad_layout() { return opts.pad_layout; }
-void sync_preset_budgets(int) {}
 constexpr int kAutoPreset = 6;   /* (the Quality preset Auto (this PC): apply_auto, not reached here) */
-void apply_auto(bool) {}
+void apply_auto() {}
 void env_release(const int*) {}   // (the environment's hold on a row: none here)
-void vram_budget_sync() {}
-constexpr int kVramMinimumOnly = 1;
 bool row_fixed(const int*) { return false; }
 namespace ur = mkwvk::upscaler_rows;
 int upscaler() { return opts.dlss; }
@@ -69,6 +71,11 @@ void restart_values(int*) {}
 struct { void note(const int*) {} } restart_state;
 bool can_mic() { return false; }
 void mic_chosen() {}
+int output_pick;
+int monitor_pick;
+bool output_forced() { return false; }
+void output_chosen() {}   // Playback selection is covered by test_audio_output_devices.py.
+void monitor_chosen() {}  // Fullscreen selection is covered by test_fullscreen_monitor_menu.py.
 void samplers_changed() {}
 void menu_debug_rows(int, int) {}   // (the Debug rows that apply in play: vk_draw.cpp)
 int temporal_resets = 0;

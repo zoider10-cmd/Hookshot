@@ -12,6 +12,8 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: python -I leaves this folder off the path)
+from srccut import block   # noqa: E402
 
 # (env_on, the switches' rule, before the code cut out of the sources: gpu/vk/compat/hookshot_env.h)
 ENV_ON_H = str(Path(__file__).resolve().parents[1] / "gpu" / "vk" / "compat" / "hookshot_env.h")
@@ -20,16 +22,6 @@ RUN_ALL_ARGS = ["--cc", "gcc", "--cxx", "g++"]
 
 ROOT = Path(__file__).resolve().parents[1]
 THRESHOLDS = [7849, 1638, 3277, 4915, 6553, 9830]   # (Default, then 5% ... 30% of 32767)
-
-
-def block(text, marker):
-    start = text.index(marker)
-    end = text.index("{", start) + 1
-    depth = 1
-    while depth:
-        depth += (text[end] == "{") - (text[end] == "}")
-        end += 1
-    return text[start:end]
 
 
 def check(cond, what):
@@ -139,7 +131,8 @@ int main(void) {
 #include <cstring>
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL:%d %s\n", __LINE__, #x); exit(1); } } while (0)
 enum MenuTab { TAB_CONTROLS };
-struct Options { int output_res = 0, vsync = 0, resolution = 0, fps_cap = 0, upscale = 0, dlss = 0, handheld = 0, ultrawide = 0, stick_dead_zone = 0, game_lang = 0; } opts;   // (ultrawide: the Aspect ratio row's key)
+struct Options { int output_res = 0, vsync = 0, resolution = 0, fps_cap = 0, upscale = 0, dlss = 0, handheld = 0, ultrawide = 0, stick_dead_zone = 0, game_lang = 0, audio_output = 0; } opts;   // (renamed rows retain their keys by value)
+int monitor_pick; // Only needed by the extracted ini_key(); this fixture exercises stick thresholds.
 static int parse_output(const char* text) { return atoi(text); }   // (the Output row's own parse: not what this checks)
 ''' + block(menu, "struct Row {") + ";\n" + block(menu, "const char* tx_stick_dead_zone(") + "\n" + \
         "Row rows[] = {" + row.group(0) + "};\n" + block(menu, "const char* ini_key(") + r'''
@@ -154,6 +147,9 @@ static int parse(const char* text) {
 }
 int main() {
     CHECK(!strcmp(ini_key(rows[0]), "stick_dead_zone"));
+    Row renamed = rows[0];
+    renamed.name = "A future speaker-label rename", renamed.value = &opts.audio_output;
+    CHECK(!strcmp(ini_key(renamed), "audio_output"));
     CHECK(rows[0].preset_exempt && !rows[0].restart);
     CHECK(parse("stick_dead_zone=0\n") == 0 && parse("stick_dead_zone=3\n") == 3 && parse("stick_dead_zone=5\n") == 5);
     CHECK(parse("stick_dead_zone=9\n") == 5 && parse("stick_dead_zone=-4\n") == 0 && parse("stick_dead_zone=x\n") == 0);

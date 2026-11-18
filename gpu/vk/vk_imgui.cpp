@@ -186,18 +186,27 @@ struct Tex {
     VkImageView view = VK_NULL_HANDLE;
     VkDescriptorSet set = VK_NULL_HANDLE;
 };
+/// (hookshot) With no window (dev.offscreen) the overlays are drawn into the replay's recordings
+/// (RX_VK_SHOT_MENU), not into the present's copy, and the frames counted here are not the present ring's (idle counts them too):
+/// what they let go waits for the timeline value that follows its last use as well (vk_retirement_value; never at 0). In a window
+/// the present ring alone, as before
+uint64_t retired_value() { return dev.offscreen ? vk_retirement_value() : 0; }
 struct Dead {   // (no longer used by anything recorded after `at`: gone once the frames in flight then are done)
     int64_t at;
     Tex tex;
     VkBuffer buf = VK_NULL_HANDLE;
     VmaAllocation buf_alloc = nullptr;
+    uint64_t value = retired_value();   // (with no window: the timeline value past its last use)
 };
 std::vector<Dead> dead;
 constexpr int64_t kFramesLater = 4;   // (present_image keeps three frames in flight)
 void reap(bool all) {
     for (size_t i = 0; i < dead.size();) {
         Dead& d = dead[i];
-        if (!all && presents - d.at < kFramesLater) { i++; continue; }
+        if (!all && (presents - d.at < kFramesLater || (dev.offscreen && (!d.value || vk_timeline_completed() < d.value)))) {
+            i++;
+            continue;
+        }
         if (d.tex.set) ImGui_ImplVulkan_RemoveTexture(d.tex.set);
         if (d.tex.view) vkDestroyImageView(dev.device, d.tex.view, nullptr);
         if (d.tex.image) destroy_image(d.tex.image, d.tex.alloc);

@@ -88,7 +88,7 @@ STAMPED_SOURCES = ("host/hos_main.c", "gpu/vk/vk_menu.cpp")
 OLD_TRANSLATOR = ("gpu/vk/eden/", "gpu/vk/sirit/", "gpu/vk/compat/", "gpu/vk/vk_shader.cpp", "gpu/vk/vk_bank.cpp",
                   "gpu/vk/vk_state.h", "gpu/vk/vk_api.h")
 TRANSLATOR_FILES = "nx2/translator_files.py"
-RENDERER_ONLY = ("gpu/vk/", "third_party/imgui/", "third_party/fidelityfx")
+RENDERER_ONLY = ("gpu/vk/", "third_party/imgui/", "third_party/fidelityfx", "third_party/xess/")
 INCLUDE = re.compile(r'#\s*include\s+"([^"]+)"')
 NO_MODULE = ("docs/", "tests/", ".github/", ".forgejo/", ".claude/")   # (.forgejo: Hookshot's workflows and templates)
 HEADERS = (".h", ".hpp", ".hh", ".inc", ".inl")
@@ -310,10 +310,20 @@ def object_store():
     return os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "hookshot-objects")
 
 
+def lift_store():
+    """(nx2/lift_store.py) The translations every base and pack on this PC share, unless HOOKSHOT_LIFT_STORE names another (or is
+    empty or 0: none): a new base or a first pack translates the game only when the translator, the hot list or the game
+    changed. Copies are clones where the file system has them (btrfs, XFS), full copies elsewhere"""
+    if os.name == "nt":
+        return os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "Hookshot", "lifts")
+    return os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "hookshot-lifts")
+
+
 def run(cmd, cwd, env=None):
     print("+ " + " ".join(cmd), flush=True)
     e = dict(os.environ, **(env or {}))
     e.setdefault("HOOKSHOT_OBJ_STORE", object_store())
+    e.setdefault("HOOKSHOT_LIFT_STORE", lift_store())
     subprocess.run(cmd, cwd=cwd, check=True, env=e)
 
 
@@ -323,6 +333,34 @@ def base_env(predict_s):
     RX_VK_PREDICT_S). For development only: a player's build prepares them all. 0 (the default) changes nothing. Given to the
     game's prepare only, never to make_game.py: its lift key hashes every RX_ variable"""
     return {"RX_VK_PREDICT_S": str(predict_s)} if predict_s > 0 else {}
+
+
+def renderer_profile(base_work, environ):
+    """The renderer's play profile for a pack of the renderer alone: the one make_game.py gave the base's build, by the same
+    path, so the base's objects are found again, since nx2/build.py run by itself uses none and the pack's renderer would then
+    differ from the base's by more than the change. That is <base work>/hookshot_vk.profdata when the base's checkout had its
+    own, else the committed one make_game.py unpacked there (hookshot_vk.shipped.profdata: every base of main since the
+    profile was committed; before this looked for the first name only, every renderer pack of such a base was built without
+    the profile its base had). Nothing when the base had none, or when RX_VK_PGO is set (a counting pack, or another profile)"""
+    if environ.get("RX_VK_PGO"):
+        return {}
+    for name in ("hookshot_vk.profdata", "hookshot_vk.shipped.profdata"):
+        prof = os.path.join(base_work, name)
+        if os.path.isfile(prof):
+            return {"RX_VK_PGO": prof}
+    return {}
+
+
+def pack_route(how, environ):
+    """What a pack builds: route()'s answer for the changed files, except that a profile switch set for this pack makes it build
+    even when no file changed. RX_VK_PGO (gen: a renderer that counts, for recording its profile; or another profile) builds
+    the renderer; RX_PGO (the game's hot pieces) the game. Before, `RX_VK_PGO=gen dev_packs.py pack` of an unchanged tree said
+    "nothing to build" and the pack held the base's ordinary renderer: a recording with it wrote nothing"""
+    if environ.get("RX_PGO"):
+        return "game"
+    if environ.get("RX_VK_PGO") and how is None:
+        return "renderer"
+    return how
 
 
 PREPARE_FAILED = {3: "no usable Vulkan here", 4: "the GPU driver stopped responding"}   # (make_game.py prepare_shaders' codes)
@@ -377,10 +415,10 @@ def write_base(d, b):
 
 
 def pack_folders(d):
-    """Where a base's packs are built: one work folder for the game and one for the renderer, the same for every pack. The lift key
-    (make_game.lift_key) hashes the work and game folders' paths with the lift's environment, so a translation is reused only in
-    the folder, and for the game folder, it was made for: a game pack after the first on a base skips the lift while the translator,
-    the HLE list and the hot list are the base's. One pack builds at a time"""
+    """Where a base's packs are built: one work folder for the game and one for the renderer, the same for every pack. A translation
+    is kept in the work folder it was made in (make_game.lift_key; HOOKSHOT_LIFT_STORE shares it with other folders): a game pack
+    after the first on a base skips the lift while the translator, the HLE list and the hot list are the base's. One pack builds at
+    a time"""
     return {"game_work": os.path.join(d, "game-work"), "game_out": os.path.join(d, "game-out"),
             "renderer_work": os.path.join(d, "renderer-work")}
 
@@ -477,7 +515,7 @@ def cmd_base(a):
 def cmd_adopt(a):
     d = os.path.abspath(a.dir)
     check_folders(d, {"work": a.work, "game": a.game})
-    os.makedirs(d, exist_ok=True)
+    ensure_dir(d)
     write_base(d, {"commit": git(os.path.abspath(a.tree), "rev-parse", "HEAD"), "work": os.path.abspath(a.work),
                    "game": os.path.abspath(a.game), "romfs": os.path.abspath(a.romfs), "exefs": os.path.abspath(a.exefs),
                    "language": game_language(a.game) or "en-US"})
@@ -492,7 +530,7 @@ def cmd_pack(a):
     if subprocess.run(["git", "-C", tree, "merge-base", "--is-ancestor", b["commit"], "HEAD"]).returncode:
         sys.exit("%s is not built on the base %s: rebase it on the base, or make a new base" % (tree, b["commit"][:8]))
     changed = changed_files(tree, b["commit"])
-    how = route(changed, tree)
+    how = pack_route(route(changed, tree), os.environ)
     pack = os.path.join(d, "packs", a.name)
     if os.path.isdir(pack):   # (what an earlier build of this pack brought goes: this one says again what differs)
         shutil.rmtree(pack)
@@ -510,7 +548,8 @@ def cmd_pack(a):
     elif how == "renderer":
         link_objects(b["work"], w["renderer_work"])
         run([sys.executable, "-I", "nx2/build.py", "--standalone"], tree,
-            {"OOT_WORK": w["renderer_work"], "RX_RELEASE": "1", "RX_VK_ONLY": "1", "HOOKSHOT_KEEP_BUILD_FILES": "1"})
+            dict({"OOT_WORK": w["renderer_work"], "RX_RELEASE": "1", "RX_VK_ONLY": "1", "HOOKSHOT_KEEP_BUILD_FILES": "1"},
+                 **renderer_profile(b["work"], os.environ)))
         built, kinds = os.path.join(w["renderer_work"], "sa", "build"), MODULES[1:]
     else:
         built, kinds = None, ()
@@ -689,6 +728,15 @@ def cmd_warm(a):
     print("the base's caches warmed by %d runs: %s" % (len(a.run), ", ".join(copied) or "nothing grew"))
 
 
+def ensure_dir(d):
+    """d made when it isn't there yet. os.makedirs(d, exist_ok=True) on a folder that is already there still looks at each
+    folder above it, and in the Beanstalk agent's Windows sandbox (an AppContainer that may open the folders it was given,
+    not see the ones above them) those look missing: it climbs to C:\\ and fails there with "Access is denied"
+    """
+    if not os.path.isdir(d):
+        os.makedirs(d, exist_ok=True)
+
+
 class Busy:
     """dev_packs.busy in a base's folder while a job builds, warms or copies from it: a second job on the same base is refused
     (game packs share one work folder; a warm-up writes the base's caches). A marker left by a stopped job is deleted by hand"""
@@ -696,7 +744,7 @@ class Busy:
         self.path, self.what = os.path.join(d, BUSY), what
 
     def __enter__(self):
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        ensure_dir(os.path.dirname(self.path))
         try:
             fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:

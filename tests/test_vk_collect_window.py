@@ -1,6 +1,4 @@
 """A submit's capture never misses a page the replay's collection is marking again (gpu/vk/vk_memory.cpp).
-(Ported from Longshot 95475b67, #1083, via HeyListen 26e0f0a6; adapted to this tree's collection, which walks the captured
-ranges with RangeWalk and reports its pages to the write-back diff.)
 
 memory_collect_written (the render thread, at each submit's memory work) takes every page's write mark
 (host->collect_written), then marks the pages in the captured ranges again, for the next capture to take as they are
@@ -22,21 +20,15 @@ import argparse
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (python -I leaves the check's own folder off the path)
+from srccut import block
+
 RUN_ALL_ARGS = ["--cxx", "{cxx}"]
+
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def block(text, marker):
-    """The function or struct starting at marker, to its closing brace"""
-    start = text.index(marker)
-    end = text.index("{", start) + 1
-    depth = 1
-    while depth:
-        depth += (text[end] == "{") - (text[end] == "}")
-        end += 1
-    return text[start:end]
 
 FIXTURE = r'''#include <algorithm>
 #include <chrono>
@@ -131,7 +123,6 @@ const Host* host = &host_fns;
 // (stand-ins for the rest of vk_memory.cpp the two functions use)
 uint32_t gen_now = 1;
 uint64_t pages_collected = 0;
-void shadow_written_collected(const uint32_t*, int64_t) {}
 uint32_t stamped[kTestPages];
 void stamp_page(uint64_t p, uint32_t g) {
     if (p < kTestPages) stamped[p] = g;
@@ -139,7 +130,10 @@ void stamp_page(uint64_t p, uint32_t g) {
 const std::vector<std::pair<uint64_t, uint64_t>> captured{{8 << kPageShift, 16 << kPageShift}};   // (pages 8-15)
 const std::vector<std::pair<uint64_t, uint64_t>>& capture_ranges_merged() { return captured; }
 void cap_view_bump() {}
-@RANGEWALK@;
+void shadow_written_collected(const uint32_t*, int64_t) {}
+uint32_t early_check_collect_begin() { return 0; }   // (RX_VK_LOG_EARLY_CHECK off)
+void early_check_cpu_pages(const uint32_t*, int64_t, bool, uint32_t) {}
+@WALK@
 @COLLECT@
 @SCAN@
 void run(Enter e, const char* when) {
@@ -195,16 +189,13 @@ def main():
     p.add_argument("--cxx", default="g++")
     a = p.parse_args()
     source = (ROOT / "gpu" / "vk" / "vk_memory.cpp").read_text(encoding="utf-8")
+    walk = block(source, "struct RangeWalk {") + ";"
     collect = block(source, "void memory_collect_written() {")
     scan = block(source, "int64_t capture_scan(")
-    walk = block(source, "struct RangeWalk {")
-    make = block(source, "std::unique_ptr<Capture> capture_make() {")
-    if "capture_scan(mirrored" not in make or "collect_written_in(" in make:
-        raise SystemExit("FAIL: capture_make does not scan the captured ranges through capture_scan (under collect_mu)")
     with tempfile.TemporaryDirectory(prefix="vk-collect-window-") as tmp:
         cpp = Path(tmp) / "fixture.cpp"
         exe = Path(tmp) / ("fixture.exe" if os.name == "nt" else "fixture")
-        fixture = FIXTURE.replace("@RANGEWALK@", walk).replace("@COLLECT@", collect).replace("@SCAN@", scan)
+        fixture = FIXTURE.replace("@WALK@", walk).replace("@COLLECT@", collect).replace("@SCAN@", scan)
         cpp.write_text(fixture, encoding="utf-8")
         cmd = [a.cxx, "-std=c++20", "-O2", "-pthread", "-Wall", "-Wextra", "-Werror", str(cpp), "-o", str(exe)]
         subprocess.run(cmd, check=True)

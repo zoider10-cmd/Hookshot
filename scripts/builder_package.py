@@ -6,11 +6,14 @@ data is involved. Python's standard library only.
         key). --host (default: this system): windows is tools.lock's, the one players get; linux is the same release's Linux
         build (LINUX_LLVM_MINGW below), which the release's Windows files are made with on the Linux runner
     python -I scripts/builder_package.py package <out folder> --publish <dotnet publish folder> --setup <setup exe>
+            [--third-party-objects <folder>]
         the builder's folder, HookshotBuilder\\ in the zip: the published builder, the setup (a game folder's hookshot.exe:
         make_game.py copies it there), LICENSE,
         the tracked gpu, host, nx2, scripts and third_party under tools\\, and the pipeline state list's sources
         (assets/pipeline_states/, which must be there and read). None of tools.lock's tools: the setup or the launcher adds
-        those on the player's PC
+        those on the player's PC. --third-party-objects: the third-party code's objects (nx2/third_party_objects.py make, with
+        llvm-mingw and tools.lock's cpm), as tools\\third_party_objects, which a player's build links instead
+        of compiling them
     python -I scripts/builder_package.py zip <package folder> <version> --setup <setup exe> --out <zip>
         HookshotBuilder-<version>-windows-x64.zip: HookshotBuilder.exe (the setup), HookshotBuilder\\ (the package),
         tools.lock, VERSION and recomplauncher.json (RecompLauncher reads it at the top). Deterministic: the same files give
@@ -91,6 +94,12 @@ def package(a):
         copy(os.path.join(ROOT, f), os.path.join(tools, *f.split("/")))
     if state_list(tools) != 0:
         return 1
+    objects = getattr(a, "third_party_objects", None)
+    if objects:   # (nx2/third_party_objects.py: found by their keys alone, so a set that does not fit is not used)
+        if not os.path.isfile(os.path.join(objects, "manifest.json")):
+            print("error: %s has no manifest.json (nx2/third_party_objects.py make)" % objects, file=sys.stderr)
+            return 1
+        shutil.copytree(objects, os.path.join(tools, "third_party_objects"))
     print("package folder: %s" % out)
     return 0
 
@@ -153,6 +162,7 @@ def main():
     s.add_argument("out")
     s.add_argument("--publish", required=True)
     s.add_argument("--setup", required=True)
+    s.add_argument("--third-party-objects")
     s = sub.add_parser("zip")
     s.add_argument("package")
     s.add_argument("version")

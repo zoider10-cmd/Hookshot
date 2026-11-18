@@ -1,7 +1,8 @@
-/* The renderer: the Maxwell 3D engine's work drawn with WebGPU (webgpu.h: wgpu-native on the PC, the browser's
-   WebGPU on the web). hos/gpu.c runs the command streams and hands the renderer the 3D methods that draw; the
-   renderer reads the engine's registers (suyu's Maxwell3D::Regs layout) and guest memory, and turns them into
-   WebGPU passes, pipelines and draws. hos/display.c gives it the window; nn_vi.c tells it what to present.
+/* The renderer's API as TOTKPort's WebGPU renderer had it (gpu/render, built no more: the Vulkan back end in gpu/vk is
+   the only renderer, and host/rx_backend.c implements the calls the host makes: host/display.c includes it for
+   rx_start and rx_resize). The rest is the WebGPU renderer's emulated-GPU interface:
+   hos/gpu.c ran the command streams and handed the renderer the 3D methods that draw; the renderer read the engine's
+   registers (suyu's Maxwell3D::Regs layout) and guest memory, and turned them into WebGPU passes, pipelines and draws.
 
    Threads: every entry point may be called from any thread; the renderer serializes them. */
 #pragma once

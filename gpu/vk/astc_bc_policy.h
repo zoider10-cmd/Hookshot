@@ -13,4 +13,12 @@ inline bool all_by_vram(uint64_t allowed) {
     return allowed && allowed < (8704ull << 20);
 }
 
+// An integrated GPU too, whatever the driver allows it: that is the system RAM the game and the system use, its textures are
+// held to at most 6 GB of it (vk_texture.cpp, the integrated budget: 4 GB with 32 GB of RAM), and it reads them through the
+// same memory as the CPU. A Ryzen 9 7900X's graphics are allowed 10232 MB with 32 GB of RAM, so the finer ones stayed RGBA8
+// there; in Kokiri Forest every large one as BC3 is 930 MB less decoded ASTC (2510 -> 1579 MB) at the same GPU time
+inline bool all(uint64_t allowed, bool integrated) {
+    return integrated || all_by_vram(allowed);
+}
+
 } // namespace astc_bc_policy

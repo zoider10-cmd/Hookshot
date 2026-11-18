@@ -340,17 +340,20 @@ PipelineSource& pipeline_source() {
     return caches;
 }
 
-/// RX_VK_LOAD, or the default (load_default.h): create where the GPU has mesh shaders and no earlier session's first uses
-/// waited too long for loads, start otherwise. Decided once the device is up (vk_main.cpp); start until then
+/// RX_VK_LOAD, or the default (load_default.h): create where no earlier session's first uses waited too long for loads (with
+/// mesh shaders or through the compute fallback), start otherwise. Decided once the device is up (vk_main.cpp); start until then
 std::atomic<int> load_mode{-1};
 std::atomic<bool> struck_last_session{false};   // (load_default.h: the session before this one left a strike)
 void programs_load_decide(bool native_mesh) {
     struck_last_session = load_default::strike_take(load_fallback_path());
     const load_default::Choice c = load_default::choose(getenv("RX_VK_LOAD"), native_mesh, load_default::marker_there(load_fallback_path()),
-                                                        env_on("RX_VK_PROGRAM_CACHE_ZSTD"));   // (as vk_progcache.cpp disk_init reads it)
-    load_mode.store(c.create ? 1 : 0, std::memory_order_release);
+                                                        env_on("RX_VK_PROGRAM_CACHE_ZSTD"));
+    const bool host_v14 = (!getenv("RX_VK_LOAD") && host && host->version <= 14);
+    const bool load_create = host_v14 ? false : c.create;
+    load_mode.store(load_create ? 1 : 0, std::memory_order_release);
     logf("vk: programs are loaded %s: %s (RX_VK_LOAD=create or start says which)",
-         c.create ? "when the game makes them (create)" : "before the title (start)", c.why);
+         load_create ? "when the game makes them (create)" : "before the title (start)",
+         host_v14 ? "executable host has version <= 14 (load-on-create requires host >= 21)" : c.why);
 }
 bool programs_load_at_create() { return load_mode.load(std::memory_order_acquire) == 1; }
 namespace {

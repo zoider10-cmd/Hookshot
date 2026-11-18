@@ -36,9 +36,6 @@ DRIVER = r'''
 #include "hos.h"
 #include <assert.h>
 #include <stdlib.h>
-#ifdef _WIN32   /* (hookshot: no setenv in the Windows C library) */
-static int setenv(const char *n, const char *v, int o) { (void)o; return _putenv_s(n, v); }
-#endif
 #include <string.h>
 int64_t fake_now;
 static void sweep(int64_t t, const char *a, const char *b) {
@@ -52,11 +49,11 @@ int main(int argc, char **argv) {
     (void)argc;
     setenv("HOS_SLOW_FRAMES", argv[1], 1);
     assert(hos_slow_frames_path() && !strcmp(hos_slow_frames_path(), argv[1]));
-    char longest[800] = "Long|";   /* (hookshot: 600 held 684 bytes; Windows caught it) */
-    for (int i = 0; i < 40; i++) strcat(longest, i ? ";longshot+1234567" : "longshot+1234567");
+    char longest[600] = "Long|";
+    for (int i = 0; i < 40; i++) strcat(longest, i ? ";hookshot+1234567" : "hookshot+1234567");
     int64_t t = 1000000000;   /* 1 s */
     for (int i = 0; i < 100; i++, t += 4000000) {   /* (400 ms of sweeps, 4 ms apart, frames on time every 16 ms) */
-        sweep(t, "sead::MainThread|longshot+10;longshot+20", i == 50 ? longest : "Worker|longshot+30");
+        sweep(t, "sead::MainThread|hookshot+10;hookshot+20", i == 50 ? longest : "Worker|hookshot+30");
         if (i % 4 == 0) { fake_now = t; hos_slow_frame_present(); }
     }
     /* (an on-time run so far: nothing written) */
@@ -65,7 +62,7 @@ int main(int argc, char **argv) {
     assert(!fopen(name, "r"));
     fake_now = t + 80000000;   /* (the next present 80 ms after the last one: a slow frame) */
     hos_slow_frame_present();
-    sweep(t + 80000000, "sead::MainThread|longshot+40", "Worker|longshot+50");
+    sweep(t + 80000000, "sead::MainThread|hookshot+40", "Worker|hookshot+50");
     FILE *f = fopen(name, "r");
     assert(f);
     char line[1024];
@@ -112,7 +109,8 @@ def sources():
         need("const int64_t sweep_ns = hos_now_ns();" in sampler and "hos_slow_sample(sweep_ns," in sampler,
              path + ": the ring's samples do not share their sweep's time")
         need("if (ring) hos_slow_sweep_done();" in sampler, path + ": a sweep's end is not told to the recorder")
-        need("CreateThread(NULL, 0, sample_all_thread, (void *)slow, 0, NULL);" in block(src, "void hos_prof_start(void) {"),
+        need("else hos_sample_write(out, line);" in sampler, path + ": the sampler's lines are not written through hos_sample_write")
+        need("CreateThread(NULL, 0, sample_all_thread, (void *)slow, 0, NULL);" in block(src, "void hos_prof_start(void)"),
              path + ": HOS_SLOW_FRAMES starts no sampler")
     need("hos_slow_frame_present();" in block((ROOT / "host/rx_backend.c").read_text(encoding="utf-8"),
                                               "void rx_nvn_present(const nvn_tex *t, const int crop[4])"),
@@ -124,18 +122,13 @@ def sources():
          "a long wait for a virtual core is not logged")
     need("if (hos_fps_timing) t->vc_wait_total += waited;" in acquire, "the virtual core's waits are not counted")
     need("vc_grant(c, t);" in block(threads, "static void vc_release(HosThread *t)"), "a grant does not know who let the core go")
-    need("t->blocked_total += hos_now_ns() - t->away_at" in block(threads, "void hos_vcore_back(void)", unique=False),
+    need("t->blocked_total += hos_now_ns() - t->away_at" in block(threads, "void hos_vcore_back(void)"),
          "a block's time is not counted")
-    # (hookshot) the frame trace's main-thread columns (MkwVkHost main_thread_times, Longshot's API 27) are not ported: our API is Mako's 23
-    main = (ROOT / "host/hos_main.c").read_text(encoding="utf-8")
-    record = block(main, "static void record_stutters_env(void)")
-    need('env_on("HOS_RECORD_STUTTERS")' in record and '"logs" SEP_S "slow_frame"' in record,
-         "HOS_RECORD_STUTTERS does not point the recorder at logs/slow_frame")
-    need('if (!getenv("HOS_SLOW_FRAMES"))' in record and 'if (!getenv("RX_VK_FRAME_TRACE"))' in record,
-         "HOS_RECORD_STUTTERS replaces a switch already set")
-    need(main.count("load_hookshot_env();\n    record_stutters_env();") == 2,
-         "HOS_RECORD_STUTTERS is not read after hookshot_env.txt in both mains")
-    need('"HOS_SLOW_FRAMES"' in block(main, "static int env_line_allowed(const char *name, const char *value)"),
+    need("host_main_thread_times" in (ROOT / "host/rx_backend.c").read_text(encoding="utf-8"), "the host does not give the main thread's times")
+    need("host->main_thread_times(mt)" in (ROOT / "gpu/vk/vk_replay.cpp").read_text(encoding="utf-8"),
+         "the frame trace does not read the main thread's times")
+    need('"HOS_SLOW_FRAMES"' in block((ROOT / "host/hos_main.c").read_text(encoding="utf-8"),
+                                      "static int env_line_allowed(const char *name, const char *value)"),
          "hookshot_env.txt takes HOS_SLOW_FRAMES, a path")
 
 

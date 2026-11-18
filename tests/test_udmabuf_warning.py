@@ -16,7 +16,7 @@ def main():
     src = (ROOT / "host/hos_main.c").read_text(encoding="utf-8")
     start = src.index('const int u = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);')
     code = src[src.index("\n", start):src.index("if (u >= 0)", start)]
-    redirect = src[src.index("startup_stderr = fcntl("):src.index('if (freopen(path, "w", stderr))')]
+    redirect = src[src.index("startup_stderr = fcntl("):src.index("/* (opened first: freopen closes stderr")]
     redirect = redirect.replace("#endif", "")
     fixture = r'''
 #define _GNU_SOURCE

@@ -8,8 +8,12 @@ python -I -B tests/test_upscaler_rows.py [--cxx g++]
 import argparse
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (python -I leaves the check's own folder off the path)
+from srccut import block
 
 RUN_ALL_ARGS = ["--cxx", "{cxx}"]
 
@@ -84,9 +88,13 @@ def main():
     # the help: a row's own, then a line for the value chosen (Row::hint). The Upscaler's says why DLSS is not offered, and
     # DLSS's values ask for more Sharpness (it looks softer than the game's own)
     upscaler = function(menu, "const char* hn_upscaler(int v, int variant) {")
+    # (DLSS's reasons are dlss_why_text's, which Frame generation by says too: hn_upscaler names them through it)
+    if "dlss_why_text(d)" not in upscaler:
+        raise SystemExit("hn_upscaler: the help no longer says why DLSS is not offered (dlss_why_text)")
+    reasons = function(menu, "const char* dlss_why_text(int why) {") + upscaler
     for why in ("not in this build", "RX_VK_DLSS=0", "NVIDIA RTX GPU", "newer NVIDIA driver", "runtime was not found",
                 "(int)dlss_why()", "RX_VK_FSR4=0", "AMD's files were not found", "no FSR 4 for this GPU", "(int)fsr4_why()"):
-        if why not in upscaler:
+        if why not in reasons:
             raise SystemExit("hn_upscaler: the help no longer says why DLSS or FSR is not offered (%s)" % why)
     if upscaler.count("Sharpness to") < 2:
         raise SystemExit("hn_upscaler: NVIDIA DLSS and DLAA do not say to set Sharpness to around 80%")
@@ -118,6 +126,15 @@ def main():
         raise SystemExit("vk_dlss.cpp: DLSS's feature is not made again for another DLSS model")
     if "upscaler_rows::dlss_preset(opts.dlss_model" not in function(dlss, "unsigned wanted_preset() {"):
         raise SystemExit("vk_dlss.cpp: the DLSS model row (and RX_VK_DLSS_PRESET over it) is not the preset asked for")
+    # (the K row's CNN preset E on a card under 7 GB: DLSS, the row's text, its help and the bug report by the one rule,
+    # upscaler_rows.h cnn_for_vram, checked by behaviour in test_upscaler_rows.cpp)
+    if "upscaler_rows::dlss_preset(opts.dlss_model, env, device_vram_bytes())" not in block(dlss, "unsigned wanted_preset() {"):
+        raise SystemExit("vk_dlss.cpp wanted_preset: the card's memory is not given to dlss_preset (no CNN preset E under 7 GB)")
+    for name in ("const char* tx_dlss_model(int v) {", "const char* hn_dlss_model(int v, int variant) {",
+                 "bool report_default_depends_on_pc(const Row& r) {"):
+        if "ur::cnn_for_vram(" not in block(menu, name) or "device_vram_bytes()" not in block(menu, name):
+            raise SystemExit("vk_menu.cpp %s: a card under 7 GB is not shown the CNN preset E that DLSS draws with"
+                             % name.split("(")[0].split()[-1])
     temporal = (ROOT / "gpu" / "vk" / "vk_temporal.cpp").read_text(encoding="utf-8")
     mode = function(temporal, "int temporal_mode() {")
     if "dlss_why() != DLSS_OK" not in mode or "fsr4_why() != FSR_OK" not in mode:
@@ -135,7 +152,7 @@ def main():
     if "return !fsr3_on_chain() && fsr3_chosen();" not in function(fsr3, "bool fsr3_wanted() {"):
         raise SystemExit("fsr3_wanted: FSR 3.1 would upscale with its own inputs while it draws on the chain (two upscales)")
     on_chain = "if (fsr3_on_chain() && fsr3_chosen()) return ur::FSR3;"
-    if on_chain not in mode or mode.index(on_chain) > mode.index("if (!ur::is_dlss(v) && !ur::is_fsr4(v)) return ur::GAME;"):
+    if on_chain not in mode or mode.index(on_chain) > mode.index("if (!ur::is_dlss(v) && !ur::is_fsr4(v) && !ur::is_xess(v)) return ur::GAME;"):
         raise SystemExit("temporal_mode does not run the row's FSR 3.1 on the chain before falling back to the game's own")
     if "fsr3_engine()" not in function(temporal, "Engine& engine_of("):
         raise SystemExit("engine_of has no slot for FSR 3.1's engine")
@@ -167,7 +184,8 @@ def main():
     if "temporal_off() && stretch(" not in upscale:
         raise SystemExit("temporal_upscale: the Upscaler's Off does not stretch in place of the game's network")
     stretch = function(temporal, "bool stretch(")
-    for need in ("s.linear, in_view", "s.out_layout", "c.valid", "in->width != c.width", "VK_FORMAT_B10G11R11_UFLOAT_PACK32"):
+    for need in ("s.linear, in_view", "s.out_layout", "c.valid", "in->width != c.width",
+                 "!temporal_colour_pair(in->format, out->format)", "rgba ? s.stretch_rgba : s.out"):
         if need not in stretch:
             raise SystemExit("stretch: %s is missing (Off's linear stretch of the scene only, into the picture)" % need)
     if "!temporal_wanted() && !temporal_off()" not in function(temporal, "void temporal_note_scene_draw("):

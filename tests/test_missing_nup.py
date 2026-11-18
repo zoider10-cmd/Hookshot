@@ -24,6 +24,7 @@ class MissingNupTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="hookshot-missing-nup-")
         self.addCleanup(temporary.cleanup)
+        self.addCleanup(getattr(make_game, "release_work", lambda: None))   # (Windows deletes no work folder with its lock open)
         self.root = Path(temporary.name).resolve()
         self.assertEqual(self.root.parent, Path(tempfile.gettempdir()).resolve())
         self.package = self.root / "selected game \u6f22 [1].nup"
@@ -62,7 +63,7 @@ class MissingNupTests(unittest.TestCase):
         argv = [str(SOURCE), "--jobs", "1", "--nup", str(self.package), "--out", str(self.out), "--work", str(self.work)]
         output = io.StringIO()
         with contextlib.ExitStack() as stack:
-            for name in ("check_windows_sdk", "check_cpu", "stop_stray_compilers", "drop_stale_objects", "no_throttle"):
+            for name in ("check_windows_sdk", "stop_stray_compilers", "drop_stale_objects", "no_throttle"):
                 stack.enter_context(mock.patch.object(make_game, name))
             stack.enter_context(mock.patch("ctypes.WinDLL", create=True))   # No Windows power-state change.
             blocked = [stack.enter_context(mock.patch.object(make_game.subprocess, "Popen", side_effect=AssertionError("process launched"))),

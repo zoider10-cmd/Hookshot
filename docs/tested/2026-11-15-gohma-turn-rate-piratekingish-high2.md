@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-15 | 903549ee plus this change; played before the rebase, v3.0.0-rc.4-117-g903549ee-dirty | Windows 11, Windows desktop, windowed | NVIDIA GeForce RTX 5090 / 621.24 | AMD Ryzen 7 9800X3D / 64 GB installed RAM | Game cap 240; Render resolution 100%; HOS_DYNRES=0; FPS counter on; 3416x1440 picture; game upscaler; frame generation off; no hot list or play profile | Gohma, complete fight played by hand from a pre-boss save; external read-only bridge and native frame log; FPS excludes loading, pauses and cutscenes | PirateKingIsh, run high2: defeated; 4 climbs, ceiling cycles normal; measured 98.1682 active FPS (13388 frames / 136.378194 s) |

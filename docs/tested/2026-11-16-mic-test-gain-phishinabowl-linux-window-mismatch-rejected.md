@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-16 | main f7922126 and topic 4155b515 | Ubuntu 26.04.1 LTS; kernel 7.0.0-43-generic; GNOME desktop | RTX 5090 Laptop GPU; NVIDIA 595.99.02 | Core Ultra 9 275HX; about 61.2 GiB kernel-visible RAM | First comparison attempt; copied settings; windowed mode | rejected-window-comparison; stationary Kakariko | Harness rejected differing observed window sizes before accepting the topic comparison. Partial FPS data excluded from conclusions. Corrected fixed-size runs are separately recorded. |

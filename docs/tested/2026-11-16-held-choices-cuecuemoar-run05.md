@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-16 | main e090cc48 (`hookshot v3.0.0-rc.4-1-ge090cc48`), a `scripts/dev_packs.py` base (llvm-mingw) | Windows 10 Pro 22H2 (19045), headless (offscreen, scripted input through the control bridge) | RTX 4090 24 GB, 617.42 | Core i9-13900K, 32 GB | `HOS_OUTPUT_RES` 2560x1080 (21:9), language pt-BR, otherwise defaults, no sound; `HOS_WIDE_UI_LOG=400` | `kokiri-start` (the repository save), the debug teleport to the Market, the gate guard: talked to, his question "Precisa de alguma coisa?" and its three choices | Run m1050-main-219: the choices beside the text box in the middle 16:9, whole. The plan 0.04 ms a present |

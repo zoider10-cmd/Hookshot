@@ -20,6 +20,10 @@ class CompilerFailureTests(unittest.TestCase):
         functions = [node for node in source.body if isinstance(node, ast.FunctionDef)
                      and node.name in ('compile_one', 'cache_put')]
         self.assertEqual(len(functions), 2)
+        constants = [node for node in source.body if isinstance(node, ast.Assign)   # (what compile_one tells a depfile key by)
+                     and any(isinstance(t, ast.Name) and t.id in ('DEPFILE_DEPS', 'DEPFILE_PENDING') for t in node.targets)]
+        self.assertEqual(len(constants), 2)
+        functions[:0] = constants
         with tempfile.TemporaryDirectory(prefix='hookshot-compiler-failure-') as temporary:
             folder = Path(temporary)
             compiler = folder / 'compiler.py'

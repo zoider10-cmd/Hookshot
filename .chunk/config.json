@@ -1,0 +1,15 @@
+{
+  "commands": [
+    {
+      "name": "install",
+      "run": "set -eu && curl -fsSL https://mise.run | MISE_VERSION=2026.11.3 sh && export PATH=\"$HOME/.local/bin:$HOME/.local/share/mise/shims:$PATH\" && mise trust -qy . && mise install",
+      "timeout": 900
+    },
+    {
+      "name": "test",
+      "run": "bash -lc 'mise run lint && mise run ci:smoke'",
+      "role": "gate",
+      "timeout": 900
+    }
+  ]
+}

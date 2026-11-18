@@ -117,6 +117,9 @@ struct RuntimeInfo {
     u32 mesh_fallback_task_threads{};
     /// (hookshot) the fallback's record slots: mesh workgroups past this one write nothing
     u32 mesh_fallback_capacity{};
+    /// (hookshot) how the fallback's mesh stage lays out its records and its vertex stage reads them
+    /// (Backend::SPIRV::MeshFallbackLayout, RX_VK_MESH_FB_LAYOUT); 0: record after record
+    u32 mesh_fallback_layout{};
 
     TessPrimitive tess_primitive{};
     TessSpacing tess_spacing{};

@@ -70,6 +70,15 @@ def source_contract():
     linux_main = main[main.rindex("int main(int argc, char **argv) {"):]
     assert linux_main.index("hos_game_layout();") < linux_main.index("hos_display_init();")
     assert "hos_crash_clean_end();" in block(main, "static DWORD WINAPI game_thread(")
+    relaunch = (ROOT / "host/hos_relaunch.c").read_text(encoding="utf-8")
+    finish = block(relaunch, "void hos_close_finish(")
+    assert finish.count("hos_crash_clean_end();") == 1
+    assert finish.index("hos_log_flush();") < finish.index("hos_crash_clean_end();")
+    stop = (ROOT / "host/windows_stop.c").read_text(encoding="utf-8")
+    worker = block(stop, "static DWORD WINAPI stop_worker(")
+    assert worker.index("hos_close_finish();") < worker.index("TerminateProcess(GetCurrentProcess(), 0);")
+    monitor = block(stop, "static DWORD WINAPI stop_messages(")
+    assert "hos_close_finish(" not in monitor and "hos_crash_clean_end(" not in monitor
 
     # An exhaustive inventory: a new process exit must be classified, not silently
     # start generating unclean records. Declarations and comments are not calls.
@@ -81,6 +90,8 @@ def source_contract():
         "hos_svc.c": ["ExitProcess(0);"],
         "hos_thread.c": ["ExitProcess(3);"],  # fatal: record, not a clean end
         "posix/display_sdl.c": ["ExitProcess(1);"],
+        "windows_stop.c": ["TerminateProcess(GetCurrentProcess(), 0);",
+                           "TerminateProcess(GetCurrentProcess(), STOP_TIMEOUT_EXIT);"],
         "posix/win32_posix.c": ["_exit((int)code);", "ExitProcess(code);"],  # platform implementations
     }
     observed = {}
@@ -88,15 +99,17 @@ def source_contract():
         text = path.read_text(encoding="utf-8")
         text = re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.S)
         calls = []
-        for match in re.finditer(r"\b(?:ExitProcess|_exit|_Exit)\s*\([^;\n]*\);", text):
+        for match in re.finditer(r"\b(?:ExitProcess|TerminateProcess|_exit|_Exit)\s*\([^;{}\n]*\);", text):
             prefix = text[text.rfind("\n", 0, match.start()) + 1:match.start()]
             if re.search(r"\bvoid\s*$", prefix):
                 continue
             calls.append(match.group())
             rel = path.relative_to(ROOT / "host").as_posix()
-            exempt = rel == "hos_thread.c" or rel == "posix/win32_posix.c"
+            exempt = rel == "hos_thread.c" or rel == "posix/win32_posix.c" or (
+                rel == "windows_stop.c" and match.group() == "TerminateProcess(GetCurrentProcess(), STOP_TIMEOUT_EXIT);")
             if not exempt:
-                assert "hos_crash_clean_end();" in text[max(0, match.start() - 180):match.start()], rel
+                clean = "hos_close_finish();" if rel in ("control.c", "hos_relaunch.c", "windows_stop.c") else "hos_crash_clean_end();"
+                assert clean in text[max(0, match.start() - 180):match.start()], rel
         if calls:
             observed[path.relative_to(ROOT / "host").as_posix()] = calls
     assert observed == expected, (observed, expected)
@@ -118,6 +131,7 @@ def build(cc, temp, glue, threads, main):
                                block(threads, "static void hos_vlog("), block(threads, "void hos_log("),
                                block(threads, "void hos_log_at("))),
         "HOS_FATAL": block(threads, "void hos_fatal("),
+        "CLOSE_FINISH": block((ROOT / "host/hos_relaunch.c").read_text(encoding="utf-8"), "void hos_close_finish("),
         "CONTROL_QUIT": block((ROOT / "host/control.c").read_text(encoding="utf-8"), "static void game_quit("),
         "WINDOW_EXIT": block((ROOT / "host/hos_relaunch.c").read_text(encoding="utf-8"), "void hos_window_closed_exit("),
         "GAME_THREAD": block(main, "static DWORD WINAPI game_thread("),
@@ -186,7 +200,7 @@ def main():
             count += 1
             return result
 
-        for mode in ("clean", "return", "control", "restart", "game-return", "denied", "device-mention"):
+        for mode in ("clean", "return", "control", "restart", "windowless-finish", "game-return", "denied", "device-mention"):
             folder = temp / mode; folder.mkdir()
             run(folder, mode)
             assert not records(folder) and not records(folder, "unclean")

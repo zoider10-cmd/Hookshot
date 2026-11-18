@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-16 | f2709248 plus six source/helper edits, subsequently committed as 4cdf7354 | Windows 10 Pro 19045 | RTX 3080; driver 32.0.16.2124 | Ryzen 9 5900XT; 64 GB | Reusable independent dev saves/settings; changed microphone gain/device; normal close/reopen | owner-reported-persistence; manual verification before controlled comparisons | Owner confirmed changed gain/device persistence across restart on this PC, then closed the game. No every-slot or cross-PC synchronization claim. |

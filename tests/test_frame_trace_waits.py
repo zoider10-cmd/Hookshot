@@ -11,7 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 BEFORE = ("frame,ms,pipe_waits,pipe_wait_ms,left_out,translate_ms,uploads,upload_mb,textures,memsync_ms,pipelines_ms,"
           "uploads_ms,programs_ms,slot_wait_ms,gpu_behind_ms,draw_ms,desc_ms,cmds_ms,tex_lookup_ms,textures_gone")
-NEW = ["late_wait_ms", "readback_wait_ms", "tex_frame_ms"]
+NEW = ["late_wait_ms", "readback_wait_ms", "tex_frame_ms",
+       # (the Breakdown's parts, and the game's main thread: on the CPU, blocked, waiting for a virtual core)
+       "game_ms", "render_ms", "gpu_wait_ms", "pace_ms", "wait_render_ms", "wait_gpu_ms", "wait_main_ms",
+       "main_cpu_ms", "main_blocked_ms", "main_vcore_ms",
+       # (the present on the host's clock: HOS_PROFILE=1's samples, presents.csv and events.txt share it)
+       "at_ns"]
 
 
 def block(text, marker):
@@ -34,7 +39,10 @@ def main():
         raise SystemExit("vk_replay.cpp: the frame trace's header is not the old columns followed by " + ", ".join(NEW) + ": " + header)
     # a line: one conversion a column
     line_at = replay.index('fprintf(trace, "%llu,')
-    fmt = re.search(r'fprintf\(trace, "((?:[^"\\]|\\.)*)"', replay[line_at:]).group(1).replace("\\n", "")
+    # (the format's string pieces, joined: it may run over several lines)
+    fmt_src = replay[line_at + len("fprintf(trace, "):]
+    fmt_src = fmt_src[:re.match(r'(\s*"(?:[^"\\]|\\.)*")+', fmt_src).end()]
+    fmt = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', fmt_src)).replace("\\n", "")
     if len(fmt.split(",")) != len(names):
         raise SystemExit("vk_replay.cpp: a frame trace line has %d values for %d columns" % (len(fmt.split(",")), len(names)))
     for needle in ("memory_late_wait_ns()", "texture_readback_wait_ns()", "texture_frame_ns()", "(late - l_late) / 1e6", "(rb - l_rb) / 1e6",
@@ -44,7 +52,7 @@ def main():
     mem = (ROOT / "gpu/vk/vk_memory.cpp").read_text(encoding="utf-8")
     take = block(mem, "bool take_capture(std::unique_ptr<Capture> c, uint64_t value, uint64_t completed)")
     # (the counter is fed by the wait itself, after it)
-    if not take.index("vk_timeline_wait(c->late_value);") < take.index("st_late_wait_ns.fetch_add("):
+    if not take.index("vk_timeline_wait(wait);") < take.index("st_late_wait_ns.fetch_add("):
         raise SystemExit("vk_memory.cpp: take_capture() does not time its wait for the GPU into st_late_wait_ns")
     tex = (ROOT / "gpu/vk/vk_texture.cpp").read_text(encoding="utf-8")
     if "const TraceTimer timed{st_readback_wait_ns};" not in block(tex, "bool readback_submit_wait()"):

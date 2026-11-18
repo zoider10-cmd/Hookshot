@@ -60,6 +60,7 @@
 #endif
 
 #include "vk_loader.h"
+#include "vk_new.h"   // (NewNothrow: the ring's and the arena's nothrow new keep their null at the commit limit)
 #if __has_include("hookshot_env.h")
 #include "hookshot_env.h"   // (env_on: the switches' one rule; the checks paste it ahead of this file themselves)
 #endif
@@ -88,7 +89,7 @@ extern std::atomic<bool> par_active;   // (vk_replay.cpp: a parallel replay's se
     V(vkCmdSetDepthCompareOp) V(vkCmdSetStencilTestEnable) V(vkCmdSetRasterizerDiscardEnable) V(vkCmdSetPolygonModeEXT)             \
     V(vkCmdSetDepthClampEnableEXT) V(vkCmdSetAlphaToCoverageEnableEXT)                                                             \
     A(vkCmdSetColorBlendEnableEXT) A(vkCmdSetColorBlendEquationEXT) A(vkCmdSetColorWriteMaskEXT)                                   \
-    V(vkCmdWriteBufferMarkerAMD) A(vkCmdSetCheckpointNV) V(vkCmdWriteTimestamp2) V(vkCmdResetQueryPool)
+    V(vkCmdWriteBufferMarkerAMD) A(vkCmdSetCheckpointNV) V(vkCmdWriteTimestamp2) V(vkCmdResetQueryPool) V(vkCmdCopyQueryPoolResults)
 
 // (DEFER) The calls that drain the thread's held packets first (vk_work.h has a macro for each: the test checks the two lists agree,
 // and that every file making one of these calls includes vk_work.h or is on its list of known exceptions). K: a ::vkx function,
@@ -181,10 +182,16 @@ inline bool parallel_configured() {
     const char* p = getenv("RX_VK_PARALLEL");
     return p && atoi(p) >= 2;
 }
-/// RX_VK_RECORDER: sync; defer, thread (serial only: refused, off, with RX_VK_PARALLEL); anything else, or unset, off
+/// (hookshot) The Insert menu's Threaded rendering, the recorder's half of it (threaded_rendering.h; vk_menu.cpp
+/// menu_threaded_rendering, set by vk_replay.cpp before anything runs): true, the recorder thread, as RX_VK_RECORDER=thread.
+/// Asked only with RX_VK_RECORDER unset: the switch, when set, is over the row. Null: no menu (the checks), off
+inline bool (*g_setting_thread)() = nullptr;
+/// RX_VK_RECORDER: sync; defer, thread (serial only: refused, off, with RX_VK_PARALLEL); anything else, off.
+/// Unset: off, or thread where the Threaded rendering row says so (g_setting_thread), refused as the switch's thread is
 inline int mode_from_env(bool* refused) {
     const char* e = getenv("RX_VK_RECORDER");
     *refused = false;
+    if (!e && g_setting_thread && g_setting_thread()) e = "thread";
     if (!e) return OFF;
     if (!strcmp(e, "sync")) return SYNC;
     if (!strcmp(e, "defer") || !strcmp(e, "thread")) {
@@ -213,7 +220,8 @@ inline int mode_init() {
     if (refused)   // (once: the thread that set the mode)
         ::mkwvk::logf("vk: RX_VK_RECORDER=%s refused: RX_VK_PARALLEL=%s records a command buffer on several threads (deferred "
                       "packets are the recording thread's own); the recorder is off",
-                      getenv("RX_VK_RECORDER"), getenv("RX_VK_PARALLEL"));
+                      getenv("RX_VK_RECORDER") ? getenv("RX_VK_RECORDER") : "thread (the Threaded rendering setting)",
+                      getenv("RX_VK_PARALLEL"));
     else if (m == DEFER)
         ::mkwvk::logf("vk: RX_VK_RECORDER=defer: vkCmd* packed and held, drained in order at each command buffer begin, end and "
                       "reset, submit, wait, readback, destruction and replay lock release (serial replay only)%s",
@@ -279,7 +287,11 @@ struct Arena {
             }
             const size_t cap = n + align > kChunk ? n + align : kChunk;
             if (nchunks == kMaxChunks || cap > g_hard_budget || capacity > g_hard_budget - cap) return nullptr;
-            void* p = ::operator new(cap, std::align_val_t(64), std::nothrow);
+            void* p;
+            {
+                const NewNothrow nothrow;   // (a refusal: the null below at once, not the new_handler's wait and stop)
+                p = ::operator new(cap, std::align_val_t(64), std::nothrow);
+            }
             if (!p) return nullptr;
             chunks[nchunks++] = {static_cast<uint8_t*>(p), cap};
             capacity += cap;
@@ -491,7 +503,10 @@ inline bool Recorder::start() {   // (the producer, its first packet)
     if (!base) {
         size_t c = 4096;
         while (c < g_ring_bytes && c < (size_t(1) << 30)) c <<= 1;
-        base = static_cast<uint8_t*>(::operator new(c, std::align_val_t(64), std::nothrow));
+        {
+            const NewNothrow nothrow;   // (a refusal: every call made directly, below, not the new_handler's wait and stop)
+            base = static_cast<uint8_t*>(::operator new(c, std::align_val_t(64), std::nothrow));
+        }
         if (!base) {
             broken.store(true);
             ::mkwvk::logf("vk: RX_VK_RECORDER=thread: no memory for the recorder's ring (%zu KB): every call made directly", c >> 10);

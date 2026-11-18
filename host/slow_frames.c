@@ -1,4 +1,4 @@
-/* (longshot) HOS_SLOW_FRAMES=<path>: the slow-frame recorder. The all-thread sampler (host/posix/prof.c, host/mkw_glue.c
+/* (hookshot) HOS_SLOW_FRAMES=<path>: the slow-frame recorder. The all-thread sampler (host/posix/prof.c, host/mkw_glue.c
    sample_all_thread) samples every guest thread and the renderer's every HOS_SLOW_FRAMES_EVERY_MS (4 ms) for the whole run, into
    a ring in memory (the last several seconds), and nothing is written while the frames are on time. When a present comes
    HOS_SLOW_FRAME_MS (50 ms) or more after the one before it, the samples of that frame and of the 250 ms before it are written

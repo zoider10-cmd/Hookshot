@@ -16,8 +16,15 @@ Versions and notes:
         commits since the last stable call for (CI runs it before it builds anything)
     python -I scripts/release.py nightly-name
         nightly-<commits since the product's first commit>-<8 hex of HEAD>: the nightly's version
+    python -I scripts/release.py nightly-news
+        yes when HEAD brings something the notes list since the newest nightly on its history (git-cliff, cliff.toml: a ci:
+        or chore: commit is in no notes), else no: the release workflow makes no nightly with nothing new on its page
+    python -I scripts/release.py nightly-age
+        the seconds since the newest published nightly came out, or none: the release workflow builds a nightly at
+        least once an hour while merges keep coming
     python -I scripts/release.py notes <tag> [--out <file>]
-        the release notes: git-cliff with cliff.toml, over the commits since the tag before (of the product's numbers)
+        the release notes: git-cliff with cliff.toml, over the commits since the tag before (of the product's numbers); an rc
+        after the first also lists what the earlier release candidates since the last stable brought
     python -I scripts/release.py git-cliff <folder>
         the pinned git-cliff (GIT_CLIFF below), downloaded and checked by its SHA-256 into <folder>; prints its path
 
@@ -46,10 +53,15 @@ this is; $FORGEJO_API, $FORGEJO_UPLOAD_API):
         that fails those checks stops it
     python -I scripts/release.py channels
         what each channel offers now, as the launcher reads it
+    python -I scripts/release.py artifacts <folder> --run <run id> <name>...
+        the build jobs' files: the named artifacts of a workflow run (CI: $GITHUB_RUN_ID), each unpacked into <folder>, from
+        the address without Cloudflare when $FORGEJO_UPLOAD_API names one (through Cloudflare they come at about 1 MB/s)
 """
 import argparse
 import base64
+import datetime
 import hashlib
+import io
 import json
 import os
 import re
@@ -57,9 +69,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SERVER = "https://git.magicbean.dev"
@@ -229,6 +243,20 @@ def nightly_name(product, root=ROOT):
     return "nightly-%s-%s" % (count, git("rev-parse", "--short=8", "HEAD", root=root))
 
 
+def nightly_age(rels, now=None):
+    """The seconds since the newest published nightly came out (its published_at, else created_at), or None when there is
+    none: a nightly that waited for more merges still builds when the one before is an hour old"""
+    published = [r for r in rels if NIGHTLY.match(r["tag_name"]) and not r.get("draft")]
+    if not published:
+        return None
+    newest = max(published, key=lambda r: int(NIGHTLY.match(r["tag_name"]).group(1)))
+    stamp = newest.get("published_at") or newest.get("created_at")
+    if not stamp:
+        return None
+    when = datetime.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    return int((time.time() if now is None else now) - when.timestamp())
+
+
 def previous_tag(tag, first_major, root=ROOT):
     """The tag the notes of tag start after: the newest version tag before it on its history (for a stable, the stable
     before it, so its notes cover its release candidates too)"""
@@ -241,23 +269,94 @@ def previous_tag(tag, first_major, root=ROOT):
     return max(older, key=version_key, default=None)
 
 
-def notes(tag, product, root=ROOT):
-    """git-cliff's notes for tag (cliff.toml), the commits since the previous tag of the product's numbers (the first:
-    since the product's first commit, for Hookshot the fork)"""
-    first = PRODUCTS[product]["first_major"]
-    since = previous_tag(tag, first, root) or PRODUCTS[product]["since"]
-    ref = "HEAD" if NIGHTLY.match(tag) or git("rev-parse", "-q", "--verify", "refs/tags/" + tag, root=root, check=False) is None else tag
+def previous_nightly(tag, root=ROOT):
+    """The newest nightly tag on HEAD's history other than tag (the ones past the newest 5 are pruned, tag and all): a
+    nightly's notes list what is new since it first. None for the first nightly"""
+    found = [t for t in (git("tag", "--merged", "HEAD", "--list", "nightly-*", root=root) or "").split()
+             if NIGHTLY.match(t) and t != tag]
+    return max(found, key=lambda t: int(NIGHTLY.match(t).group(1)), default=None)
+
+
+def nightly_news(product, root=ROOT):
+    """Whether HEAD brings anything a nightly's notes list as new since the newest nightly on its history: git-cliff's
+    notes over those commits (cliff.toml) have an entry. Only ci: or chore: commits since (nightly-322-5bc54c6c, one
+    ci(release) commit): no, and no nightly is made (they are in no notes); the next one comes with what follows. The
+    first nightly: yes"""
+    previous = previous_nightly(nightly_name(product, root), root)
+    if previous is None:
+        return True
+    if git("rev-list", "--count", previous + "..HEAD", root=root) == "0":
+        return False
+    return any(line.startswith("- ") for line in git_cliff("--strip", "all", previous + "..HEAD", root=root).splitlines())
+
+
+RC_TAGS = r"^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$"   # (git-cliff --ignore-tags: the earlier release candidates in one list)
+
+
+def earlier_rcs(tag, first_major, root=ROOT):
+    """The release candidates before an rc since the last stable, oldest first ([] for a stable, a nightly or a first rc):
+    an rc's page lists what is new since the one before, then what those brought"""
+    if not VERSION.match(tag) or STABLE.match(tag):
+        return []
+    ref = tag if git("rev-parse", "-q", "--verify", "refs/tags/" + tag, root=root, check=False) else "HEAD"
+    stable = last_stable(first_major, root, ref, below=tag)
+    return sorted((t for t in tags_merged(root, ref) if t != tag and VERSION.match(t) and not STABLE.match(t)
+                   and is_version(t, first_major) and version_key(t) < version_key(tag)
+                   and (stable is None or version_key(t) > version_key(stable))), key=version_key)
+
+
+def git_cliff(*args, root=ROOT):
     cliff = os.environ.get("GIT_CLIFF") or shutil.which("git-cliff")
     if not cliff:
         fail("git-cliff is needed for the notes: python -I scripts/release.py git-cliff <folder>, then GIT_CLIFF=<its path>")
-    # (no tag before and no first commit, the launcher's first release: every commit of the checkout, which is ref's. No
-    # range then: git-cliff takes a lone ref for a range and stops, SetCommitRangeError("HEAD", unable to parse OID))
-    args = [cliff, "--config", os.path.join(root, "cliff.toml"), "--tag", tag, "--strip", "all"] + \
-        ([since + ".." + ref] if since else [])
-    p = subprocess.run(args, cwd=root, capture_output=True, text=True, encoding="utf-8")
+    p = subprocess.run([cliff, "--config", os.path.join(root, "cliff.toml")] + list(args), cwd=root, capture_output=True,
+                       text=True, encoding="utf-8")
     if p.returncode:
         fail("git-cliff: " + p.stderr.strip())
-    return p.stdout.strip() + "\n"
+    return p.stdout.strip()
+
+
+def notes(tag, product, root=ROOT):
+    """git-cliff's notes for tag (cliff.toml), the commits since the previous tag of the product's numbers (the first:
+    since the product's first commit, for Hookshot the fork). An rc after the first has two lists: new since the rc before
+    (its heading says so), then "Earlier release candidates", everything those brought since the last stable in one list"""
+    first = PRODUCTS[product]["first_major"]
+    since = previous_tag(tag, first, root) or PRODUCTS[product]["since"]
+    ref = "HEAD" if NIGHTLY.match(tag) or git("rev-parse", "-q", "--verify", "refs/tags/" + tag, root=root, check=False) is None else tag
+    # (no tag before and no first commit, the launcher's first release: every commit of the checkout, which is ref's. No
+    # range then: git-cliff takes a lone ref for a range and stops, SetCommitRangeError("HEAD", unable to parse OID))
+    prev_nightly = previous_nightly(tag, root) if NIGHTLY.match(tag) else None
+    text = git_cliff("--tag", tag, "--strip", "all", *([(prev_nightly or since) + ".." + ref] if prev_nightly or since else []), root=root)
+    if prev_nightly:   # (a nightly: new since the nightly before, then everything since the last version, like an rc's page)
+        head, _, rest = text.partition("\n")
+        if head.startswith("## "):
+            text = "%s, new since %s\n%s" % (head, prev_nightly, rest)
+        older = git_cliff("--tag", prev_nightly, "--strip", "all", *([since + ".." + prev_nightly] if since else []), root=root)
+        head, _, rest = older.partition("\n")
+        older = rest if head.startswith("## ") else older
+        if not older.strip():
+            return text + "\n"
+        return "%s\n\n## Earlier changes%s\n%s\n" % (text, " (since %s)" % since if since else "", older.rstrip())
+    earlier = earlier_rcs(tag, first, root)
+    if not earlier:
+        return text + "\n"
+    last = earlier[-1]
+    short = lambda t: t.split("-", 1)[1] if base_of(t) == base_of(tag) else t   # (rc.2; another number's in full)
+    head, _, rest = text.partition("\n")
+    if head.startswith("## "):
+        text = "%s, new since %s\n%s" % (head, short(last), rest)
+    stable = last_stable(first, root, last)
+    base = stable or PRODUCTS[product]["since"]
+    if base:
+        span = [base + ".." + last]
+    else:   # (the start of the history: no range, and the commits after the last earlier rc skipped)
+        span = [a for c in (git("rev-list", last + "..HEAD", root=root) or "").split() for a in ("--skip-commit", c)]
+    older = git_cliff("--tag", last, "--ignore-tags", RC_TAGS, "--strip", "all", *span, root=root)
+    head, _, rest = older.partition("\n")
+    older = rest if head.startswith("## ") else older   # (git-cliff's heading names the last of them only)
+    heading = "## Earlier release candidates: %s%s" % (", ".join(short(t) for t in earlier),
+                                                       " (since %s)" % stable if stable else "")
+    return "%s\n\n%s\n%s\n" % (text, heading, older.rstrip())
 
 
 # ---- the release page ----
@@ -441,7 +540,16 @@ def repo_of(product):
     return os.environ.get("GITHUB_REPOSITORY") or PRODUCTS[product]["repo"]
 
 
-def api(method, path, body=None, data=None, content_type=None, upload=False, missing_ok=False):
+UPLOAD_TRIES = 4      # (an upload the server answers with a 5xx, or that the connection drops, is made again: this many times in all)
+UPLOAD_PAUSE = 20.0   # (seconds before the second try; twice that before the third, and so on)
+
+
+class ServerTrouble(Exception):
+    """A request the server answered with a 5xx, or that never got its answer: worth making again"""
+
+
+def api(method, path, body=None, data=None, content_type=None, upload=False, missing_ok=False, again=False):
+    """again: a 5xx answer or a lost connection raises ServerTrouble instead of ending the run, for a caller that retries"""
     base = (os.environ.get("FORGEJO_UPLOAD_API") if upload else None) or os.environ.get("FORGEJO_API") or SERVER + "/api/v1"
     headers = {"User-Agent": "hookshot-release", "Accept": "application/json"}
     token = os.environ.get("RELEASE_TOKEN")
@@ -458,8 +566,39 @@ def api(method, path, body=None, data=None, content_type=None, upload=False, mis
     except urllib.error.HTTPError as e:
         if missing_ok and e.code == 404:
             return None
-        fail("%s %s: HTTP %d %s" % (method, path, e.code, e.read().decode("utf-8", "replace")[:300]))
+        said = "%s %s: HTTP %d %s" % (method, path, e.code, e.read().decode("utf-8", "replace")[:300])
+        if again and e.code >= 500:
+            raise ServerTrouble(said)
+        fail(said)
+    except (urllib.error.URLError, OSError) as e:   # (no answer: refused, reset, timed out)
+        if again:
+            raise ServerTrouble("%s %s: %s" % (method, path, e))
+        fail("%s %s: %s" % (method, path, e))
     return json.loads(text) if text else None
+
+
+def upload_file(repo, rel_id, name, data):
+    """One release file, uploaded and its size checked. The server's own trouble (a 5xx, a dropped connection: its storage
+    or the proxy in front of it, not this file) is not the end of the release: what that try left under the name is
+    removed and the upload made again, UPLOAD_TRIES times in all, after a longer pause each time"""
+    form, ctype = multipart(name, data)
+    path = "/repos/%s/releases/%d/assets?name=%s" % (repo, rel_id, urllib.parse.quote(name))
+    for attempt in range(1, UPLOAD_TRIES + 1):
+        try:
+            got = api("POST", path, data=form, content_type=ctype, upload=True, again=attempt < UPLOAD_TRIES)
+        except ServerTrouble as e:
+            pause = UPLOAD_PAUSE * attempt
+            print("::warning::%s: upload %d of %d failed (%s): again in %d s" % (name, attempt, UPLOAD_TRIES, e, pause), flush=True)
+            time.sleep(pause)
+            for rel in releases(repo):   # (a failed upload can leave its file behind: a second one of the name is refused)
+                if rel["id"] == rel_id:
+                    for asset in rel.get("assets") or []:
+                        if asset["name"] == name:
+                            api("DELETE", "/repos/%s/releases/%d/assets/%d" % (repo, rel_id, asset["id"]), missing_ok=True)
+            continue
+        if got.get("size") != len(data):
+            fail("%s: uploaded %s bytes of %d" % (name, got.get("size"), len(data)))
+        return
 
 
 def releases(repo, pages=1000):
@@ -508,11 +647,7 @@ def publish(tag, target, notes_file, files, product):
         name = os.path.basename(path)
         with open(path, "rb") as f:
             data = f.read()
-        form, ctype = multipart(name, data)
-        got = api("POST", "/repos/%s/releases/%d/assets?name=%s" % (repo, rel["id"], urllib.parse.quote(name)), data=form,
-                  content_type=ctype, upload=True)
-        if got.get("size") != len(data):
-            fail("%s: uploaded %s bytes of %d" % (name, got.get("size"), len(data)))
+        upload_file(repo, rel["id"], name, data)
         print("uploaded %s (%d MB)" % (name, len(data) >> 20))
     api("PATCH", "/repos/%s/releases/%d" % (repo, rel["id"]), {"draft": False, "prerelease": not stable})
     print("published %s: %s/%s/releases/tag/%s" % (tag, SERVER, repo, tag))
@@ -566,6 +701,42 @@ class _TokenStaysHome(urllib.request.HTTPRedirectHandler):
 _OPENER = urllib.request.build_opener(_TokenStaysHome)
 
 
+def artifacts(run_id, names, out, product, limit=4 << 30):
+    """The named artifacts of workflow run run_id (its build jobs' files: upload-artifact's), each unpacked into out. From
+    the address without Cloudflare when FORGEJO_UPLOAD_API names one, as download does: through Cloudflare, as
+    download-artifact fetches them, they come at about 1 MB/s, a minute and more for a builder. Each name must be the run's
+    once, and each file in it a plain name that no other has; nothing is written into out until every one is fetched"""
+    repo = repo_of(product)
+    # (the run's list; Forgejo gives each artifact's archive_download_url under its public address, which download changes)
+    listed = api("GET", "/repos/%s/actions/runs/%d/artifacts?limit=50" % (repo, run_id), upload=True) or []
+    items = (listed.get("artifacts") or []) if isinstance(listed, dict) else listed
+    files = {}
+    for name in names:
+        found = [a for a in items if a.get("name") == name and not a.get("expired")]
+        if len(found) != 1:
+            fail("run %d has %d artifacts named %s, not one" % (run_id, len(found), name))
+        data = download(found[0]["archive_download_url"], limit=limit)
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                for info in z.infolist():
+                    if info.is_dir():
+                        continue
+                    base = info.filename
+                    if not base or base != os.path.basename(base) or "\\" in base or base in (".", ".."):
+                        fail("%s: %r is not a plain file name" % (name, info.filename))
+                    if base in files:
+                        fail("%s: %s is in two artifacts" % (name, base))
+                    files[base] = z.read(info)
+        except zipfile.BadZipFile as e:
+            fail("%s: not a zip (%s)" % (name, e))
+        print("%s: %d MB" % (name, len(data) >> 20), flush=True)
+    os.makedirs(out, exist_ok=True)
+    for base, data in sorted(files.items()):
+        with open(os.path.join(out, base), "wb") as f:
+            f.write(data)
+    return sorted(files)
+
+
 def released_as(commit, product, root=ROOT, but=None):
     """The tag of the published release CI made of commit (a nightly, or for a stable its release candidate), or None.
     Forgejo's list says a release's tag, git (the tags fetched) which commit it is. CI publishes a release only when every
@@ -617,6 +788,8 @@ def main(argv=None):
     s.add_argument("--releases", help="the releases as Forgejo's API lists them (a JSON file), instead of asking it")
     s.add_argument("--main", default="origin/main")
     sub.add_parser("nightly-name")
+    sub.add_parser("nightly-news")
+    sub.add_parser("nightly-age")
     s = sub.add_parser("notes")
     s.add_argument("tag")
     s.add_argument("--out")
@@ -649,6 +822,10 @@ def main(argv=None):
     s.add_argument("--not", dest="but")
     s = sub.add_parser("git-cliff")
     s.add_argument("folder")
+    s = sub.add_parser("artifacts")
+    s.add_argument("out")
+    s.add_argument("--run", type=int, required=True)
+    s.add_argument("names", nargs="+")
     a = p.parse_args(argv)
     product = a.product or product_of()
     first = PRODUCTS[product]["first_major"]
@@ -675,6 +852,11 @@ def main(argv=None):
         print("%s: ok (%s channel)" % (a.tag, channel_of(a.tag, first)))
     elif a.cmd == "nightly-name":
         print(nightly_name(product))
+    elif a.cmd == "nightly-news":
+        print("yes" if nightly_news(product) else "no")
+    elif a.cmd == "nightly-age":
+        age = nightly_age(releases(repo_of(product)))
+        print("none" if age is None else age)
     elif a.cmd == "notes":
         text = notes(a.tag, product)
         if a.out:
@@ -737,6 +919,9 @@ def main(argv=None):
         prune(a.keep, product)
     elif a.cmd == "git-cliff":
         print(fetch_git_cliff(a.folder))
+    elif a.cmd == "artifacts":
+        for name in artifacts(a.run, a.names, a.out, product):
+            print(os.path.join(a.out, name))
     elif a.cmd == "released-as":
         if not re.match(r"^[0-9a-f]{40}$", a.commit):
             fail("%s: a full commit hash is needed" % a.commit)

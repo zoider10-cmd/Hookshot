@@ -9,6 +9,7 @@ import bisect, collections, os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import prof  # noqa: E402
+import samples  # noqa: E402
 
 maps = prof.load_symbols()
 game = next((m for m in prof.GAME_MODS if m in maps), None)
@@ -19,7 +20,7 @@ share = float(sys.argv[3]) if len(sys.argv) > 3 else 0.85
 cap = int(sys.argv[4]) if len(sys.argv) > 4 else 1500
 c = collections.Counter()
 total = 0
-for line in open(sys.argv[1], encoding="utf-8", errors="replace"):
+for line in samples.lines(sys.argv[1]):   # (plain or packed)
     head, _, st = line.rstrip("\n").partition("|")
     if not st or head.split(" ", 1)[-1].startswith("mkw_vk"):
         continue

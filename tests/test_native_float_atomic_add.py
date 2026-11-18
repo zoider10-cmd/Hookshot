@@ -13,7 +13,9 @@ OpAtomicFAddEXT and no compare-exchange, the others the loop and no float-add ca
 extension asked for only when wanted, only that feature on, the profile and the program cache's stamp) and the
 global-address fallback are checked in the source. Whether it is wanted (native_fadd_wanted, vk_main.cpp) is compiled
 alone against a table: unset, NVIDIA's driver, and Intel's Windows driver on the Meteor Lake and Arrow Lake iGPUs (PCI
-device 0x7Dxx) from driver 101.9175 on, the family and driver it was run on (not Intel's other GPUs, older drivers, RADV,
+device 0x7Dxx) from driver 101.9175 on, Battlemage (Arc B-series, 0xE2xx) from 101.9154 on and the Panther Lake iGPUs
+(0xB0xx) from 101.9150 on, the families and drivers it was run on (Hookshot issue 618: Panther Lake's loop lost the adds
+of the game's exposure, a milky white haze) (not Intel's other GPUs, older drivers, RADV,
 AMD's, Mesa's Intel driver or NVK); set, RX_VK_NATIVE_FADD by #2042's rule on any driver, so =on is on and =off, =false,
 =no and empty are off. Nothing runs on a GPU.
 
@@ -221,17 +223,26 @@ def check_source():
 
 # RX_VK_NATIVE_FADD's value (None: unset), the driver (VkDriverId: the Vulkan specification's numbers), the GPU (PCI
 # device), its driver's version (Intel's Windows encoding: 101.9175 is 101 << 14 | 9175), and whether the float add is then
-# asked to be the GPU's own: unset, NVIDIA's driver and Intel's Windows driver on 0x7Dxx from 101.9175; set, #2042's rule
+# asked to be the GPU's own: unset, NVIDIA's driver and Intel's Windows driver on 0x7Dxx from 101.9175, on 0xE2xx
+# (Battlemage) from 101.9154 and on 0xB0xx (Panther Lake: the Arc B390, 0xB080, issue 618) from 101.9150; set, #2042's rule
 # (hookshot_env.h env_value_off) whatever the driver
 DRIVERS = {"AMD_PROPRIETARY": 1, "MESA_RADV": 3, "NVIDIA_PROPRIETARY": 4, "INTEL_PROPRIETARY_WINDOWS": 5,
            "INTEL_OPEN_SOURCE_MESA": 6, "MESA_NVK": 24}
 MEASURED = 101 << 14 | 9175
-MTL, ARL, LNL, IRIS_XE, ARC_A770, BMG = 0x7D55, 0x7D51, 0x64A0, 0x9A49, 0x56A0, 0xE20B
+BMG_MEASURED = 101 << 14 | 9154   # (Battlemage: the driver a B580 was run on)
+PTL, PTL_MEASURED = 0xB080, 101 << 14 | 9150   # (Panther Lake: the Arc B390 and its driver, issue 618)
+MTL, ARL, LNL, IRIS_XE, ARC_A770, BMG, BMG_B570 = 0x7D55, 0x7D51, 0x64A0, 0x9A49, 0x56A0, 0xE20B, 0xE20C
 INTEL_WIN = "INTEL_PROPRIETARY_WINDOWS"
 SWITCH_CASES = ([(None, "NVIDIA_PROPRIETARY", 0x2684, 0, 1)] +
                 [(None, INTEL_WIN, MTL, MEASURED, 1), (None, INTEL_WIN, ARL, MEASURED + 100, 1),
                  (None, INTEL_WIN, MTL, 101 << 14 | 9174, 0), (None, INTEL_WIN, MTL, 101 << 14 | 6000, 0)] +
-                [(None, INTEL_WIN, g, MEASURED, 0) for g in (LNL, IRIS_XE, ARC_A770, BMG)] +
+                [(None, INTEL_WIN, g, MEASURED, 0) for g in (LNL, IRIS_XE, ARC_A770)] +
+                [(None, INTEL_WIN, BMG, BMG_MEASURED, 1), (None, INTEL_WIN, BMG_B570, MEASURED, 1),
+                 (None, INTEL_WIN, BMG, 101 << 14 | 9153, 0), (None, INTEL_WIN, ARC_A770, BMG_MEASURED, 0),
+                 (None, "INTEL_OPEN_SOURCE_MESA", BMG, BMG_MEASURED, 0), ("0", INTEL_WIN, BMG, BMG_MEASURED, 0)] +
+                [(None, INTEL_WIN, PTL, PTL_MEASURED, 1), (None, INTEL_WIN, 0xB0A0, MEASURED, 1),
+                 (None, INTEL_WIN, PTL, PTL_MEASURED - 1, 0), (None, INTEL_WIN, MTL, PTL_MEASURED, 0),
+                 (None, "INTEL_OPEN_SOURCE_MESA", PTL, PTL_MEASURED, 0), ("0", INTEL_WIN, PTL, PTL_MEASURED, 0)] +
                 [(None, d, MTL, MEASURED, 0) for d in DRIVERS if d not in ("NVIDIA_PROPRIETARY", INTEL_WIN)] +
                 [(v, d, 0, 0, 1) for v in ("1", "on", "yes", "true", "2") for d in ("MESA_RADV", "NVIDIA_PROPRIETARY")] +
                 [(v, "AMD_PROPRIETARY", 0, 0, 1) for v in ("1", "on")] + [("1", "INTEL_OPEN_SOURCE_MESA", MTL, 0, 1)] +
@@ -281,9 +292,11 @@ def check_switch(cxx, tmp):
     if r.returncode:
         print(r.stdout + r.stderr)
         raise SystemExit("FAIL: the native float add is not wanted as it should be (NVIDIA's driver and Intel's Windows "
-                         "driver on Meteor Lake and Arrow Lake from 101.9175 by default, RX_VK_NATIVE_FADD by the "
+                         "driver on Meteor Lake and Arrow Lake from 101.9175, on Battlemage from 101.9154 and on Panther Lake from 101.9150 "
+                         "by default, RX_VK_NATIVE_FADD by the "
                          "switches' rule)")
-    print("switch: %d cases: unset, NVIDIA's driver and Intel's Windows driver on Meteor Lake and Arrow Lake from 101.9175; "
+    print("switch: %d cases: unset, NVIDIA's driver and Intel's Windows driver on Meteor Lake and Arrow Lake from 101.9175 "
+          "and on Battlemage from 101.9154 and on Panther Lake from 101.9150; "
           "RX_VK_NATIVE_FADD by the switches' rule on any driver" % len(SWITCH_CASES))
 
 

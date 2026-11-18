@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-16 | main @ 71b1edd8 | Bazzite (Fedora 45), KDE Plasma Wayland, kernel 7.2.15, game started headless in a Flatpak-like sandbox (`bwrap --dev-bind / / --tmpfs /sys/module`) | AMD Radeon RX 6700 XT, RADV NAVI22, Mesa 26.2.6 | Intel Core i7-14700F, 32 GB | 2560x1440 output, quality preset 6, upscaler the game's own, HOS_DYNRES=0, HOS_FPS_MAX=1000, frame generation off, audio off | Link's house (repo save kokiri-start), standing still, 20 s warm-up then fps from the control bridge once a second for 40 s | run main-1: median 3.9 fps (min 1.0, max 21.6); guest memory: host-pointer imports (`udmabuf's size_limit_mb cannot be read`) |

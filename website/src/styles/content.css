@@ -6,6 +6,7 @@
   h3:not(:where(.not-content *)) { font-size: var(--text-lg); }
   :is(h3, h4) { font-family: var(--sl-font); letter-spacing: -.01em; }
   table { font-size: var(--text-sm); }
+  :is(table, pre):focus-visible { outline: 2px solid var(--sl-color-text-accent); outline-offset: 2px; }
   th { background: var(--panel); }
   :is(th, td) { border-color: var(--border); padding: .8rem 1rem; }
   code:not(pre code) { border: 1px solid var(--border); border-radius: 4px; padding: .08em .3em; }
@@ -26,6 +27,9 @@
   .install-hub-card h2 { margin-top: 0; font-size: var(--text-xl); }
   .install-hub-card p { color: var(--sl-color-gray-2); font-size: var(--text-sm); }
   .download-buttons { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1.2rem 0; }
+  .launcher-version { margin: .9rem 0 0; font-size: var(--text-sm); }
+  .launcher-version [data-launcher-version] { font-weight: 600; color: var(--sl-color-white); }
+  .download-buttons a[aria-disabled='true'] { opacity: .65; cursor: default; }
   .launcher-channel:not([hidden]) { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .5rem; margin: 1.2rem 0 0; }
   .launcher-channel > :is(span, label) { margin-block: 0; }  /* (not the content's flow spacing between them) */
   .launcher-channel > span { margin-right: .25rem; font-weight: 600; font-size: var(--text-sm); color: var(--sl-color-white); }
@@ -158,3 +162,37 @@
   .graphics-row details::details-content { display: block; content-visibility: visible; }
   .graphics-row details > :not(summary) { display: block; }
 }
+
+/* Keep guide images and their captions aligned with the surrounding text, including numbered steps. */
+.sl-markdown-content .guide-screenshot {
+  margin-inline: 0;
+  min-width: 0;
+  text-align: start;
+}
+.sl-markdown-content .guide-screenshot > a { display: block; }
+.sl-markdown-content .guide-screenshot > a > p { margin: 0; }
+.sl-markdown-content .guide-screenshot img { width: 100%; height: auto; }
+.sl-markdown-content .guide-screenshot > figcaption {
+  margin-top: .5rem;
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--sl-color-gray-2);
+}
+
+/* Keep transfer steps, prose and screenshots on the same article edge.
+   Inside markers preserve native list numbering without indenting the entire step. */
+.sl-markdown-content .save-transfer-guide > :is(ol, ul) {
+  padding-inline-start: 0;
+  list-style-position: inside;
+}
+.sl-markdown-content .save-transfer-guide > :is(ol, ul) > li { margin-block: 1rem; }
+.sl-markdown-content .save-transfer-guide > :is(ol, ul) > li:first-child { margin-top: 0; }
+.sl-markdown-content .save-transfer-guide > :is(ol, ul) > li > p:first-child { display: inline; }
+.sl-markdown-content .save-transfer-guide > :is(ol, ul) > li > .guide-screenshot {
+  margin-inline: 0;
+  width: 100%;
+}
+.sl-markdown-content .save-transfer-guide :is(th, td) { vertical-align: top; }
+/* File details share the same button treatment on installation and downloads. */
+.download-buttons .button { flex-direction: column; gap: .15rem; }
+.download-buttons .button small { font-size: var(--text-xs); font-weight: 400; }

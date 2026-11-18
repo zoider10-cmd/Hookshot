@@ -26,7 +26,9 @@
    place in) the motion is the right stick as before, so the game's own menus, selections and aiming still take it.
 
    The sensitivity is the mouse's (the menu's Mouse sensitivity, - and =): 0.1 degrees a count at 1. HOS_MOUSE_INVERT_Y=1
-   or the menu's Invert mouse vertical flips up and down. */
+   or the menu's Invert mouse vertical flips up and down; HOS_MOUSE_INVERT_X=1 or its Invert mouse horizontal flips left
+   and right. The game's own camera inversion turns the right stick around, which the mouse is not here, and so do the
+   menu's Invert camera X and Y (a pad's stick): these two rows are the mouse's. */
 #include "hos.h"
 #include <math.h>
 #include <stdint.h>
@@ -76,6 +78,12 @@ static int invert_y(void) {
     static int env = -1;
     if (env < 0) env = env_on("HOS_MOUSE_INVERT_Y");
     return env || rx_option(8, 0);   /* (the menu's Invert mouse vertical) */
+}
+
+static int invert_x(void) {
+    static int env = -1;
+    if (env < 0) env = env_on("HOS_MOUSE_INVERT_X");
+    return env || rx_option(61, 0);   /* (the menu's Invert mouse horizontal, HOS_OPT_MOUSE_INVERT_X) */
 }
 
 /* a camera's angles as the game keeps them: limits in order within +-90, angles finite */
@@ -151,7 +159,7 @@ void hos_mouse_camera(uint64_t cam) {
     int32_t dx, dy;
     if (hos_mouse_take(&dx, &dy) && (dx || dy)) {
         const double k = DEG_PER_COUNT * hos_mouse_sens;
-        target_yaw -= (float)(dx * k);
+        target_yaw -= (float)((invert_x() ? -dx : dx) * k);
         target_pitch += (float)((invert_y() ? -dy : dy) * k);
         const float lo = getf(cam + LIMITS_AT), hi = getf(cam + LIMITS_AT + 4);
         while (target_yaw > 180.0f) target_yaw -= 360.0f;

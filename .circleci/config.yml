@@ -1,0 +1,149 @@
+# Setup continuation (magicbeandev/ci lean orb). Docs: docs/ci.md.
+version: 2.1
+setup: true
+parameters:
+  nightly: {type: boolean, default: false}
+  release_dry_run: {type: boolean, default: false}
+  website_refresh: {type: boolean, default: false}
+  vulkan_dlss: {type: boolean, default: false}
+  fork_pr: {type: integer, default: 0}
+  fork_sha: {type: string, default: ""}
+  full: {type: boolean, default: false}
+orbs:
+  # ORB_INLINE_START
+  mb: magicbeandev/ci@0.1.2
+  # ORB_INLINE_END
+jobs:
+  setup-noop:
+    docker:
+      - image: cimg/base:2026.10-24.04
+    resource_class: small
+    steps:
+      - run:
+          name: No continuation for this trigger
+          command: echo skip
+workflows:
+  setup-pr:
+    # expression strings: git.tag is null (not "") on Forgejo pipelines with no tag
+    when: pipeline.event.name == "pull_request" and pipeline.git.branch != "main" and (pipeline.git.tag or "") == ""
+    jobs:
+      - mb/setup:
+          name: setup-pr
+          event-file: .circleci/events/pr.yml
+          mapping: .circleci/mapping.conf
+          extra-params: >-
+            {"nightly":false,"release_dry_run":false,"website_refresh":false,
+            "vulkan_dlss":false,"fork_pr":0,"fork_sha":""}
+  setup-main:
+    when: pipeline.event.name == "push" and pipeline.git.branch == "main" and (pipeline.git.tag or "") == ""
+    jobs:
+      - mb/setup:
+          name: setup-main
+          event-file: .circleci/events/main.yml
+          mapping: .circleci/mapping.conf
+          force-full: true  # main runs everything before the nightly
+          # dry-run until cutover: Forgejo's release.yml is still the live publisher (docs/ci.md)
+          extra-params: >-
+            {"nightly":true,"release_dry_run":true,"website_refresh":false,
+            "vulkan_dlss":false,"fork_pr":0,"fork_sha":""}
+  setup-release:
+    when: (pipeline.git.tag or "") starts-with "v"
+    jobs:
+      - mb/setup:
+          name: setup-release
+          filters: (pipeline.git.tag or "") starts-with "v"
+          event-file: .circleci/events/release.yml
+          force-full: true
+          # dry-run until cutover: Forgejo's release.yml is still the live publisher (docs/ci.md)
+          extra-params: >-
+            {"full":true,"nightly":false,"release_dry_run":true,
+            "website_refresh":false,"vulkan_dlss":false,"fork_pr":0,"fork_sha":""}
+  setup-nightly:
+    when:
+      and:
+        - equal: [schedule, << pipeline.event.name >>]
+        - equal: [true, << pipeline.parameters.nightly >>]
+        - equal: [false, << pipeline.parameters.website_refresh >>]
+    jobs:
+      - mb/setup:
+          name: setup-nightly
+          event-file: .circleci/events/nightly.yml
+          force-full: true
+          extra-params: >-
+            {"full":true,"nightly":true,"release_dry_run":false,
+            "website_refresh":false,"vulkan_dlss":false,"fork_pr":0,"fork_sha":""}
+  setup-website:
+    when:
+      and:
+        - equal: [schedule, << pipeline.event.name >>]
+        - equal: [true, << pipeline.parameters.website_refresh >>]
+    jobs:
+      - mb/setup:
+          name: setup-website
+          event-file: .circleci/events/scheduled.yml
+          force-full: true
+          # dry-run until cutover: Forgejo's website.yml is still the live deployer (docs/ci.md)
+          extra-params: >-
+            {"full":true,"nightly":false,"release_dry_run":true,
+            "website_refresh":true,"vulkan_dlss":false,"fork_pr":0,"fork_sha":""}
+  setup-manual:
+    when:
+      and:
+        - equal: [api, << pipeline.event.name >>]
+        - or:
+            - equal: [true, << pipeline.parameters.release_dry_run >>]
+            - equal: [true, << pipeline.parameters.vulkan_dlss >>]
+    jobs:
+      - mb/setup:
+          name: setup-manual
+          event-file: .circleci/events/manual.yml
+          force-full: true
+          extra-params: >-
+            {"full":true,"nightly":false,"website_refresh":false,
+            "fork_pr":0,"fork_sha":""}
+  setup-api-full:
+    when:
+      and:
+        - equal: [api, << pipeline.event.name >>]
+        - equal: [true, << pipeline.parameters.full >>]
+        - equal: [false, << pipeline.parameters.release_dry_run >>]
+        - equal: [false, << pipeline.parameters.vulkan_dlss >>]
+    jobs:
+      - mb/setup:
+          name: setup-api-full
+          event-file: .circleci/events/main.yml
+          mapping: .circleci/mapping.conf
+          force-full: true
+          extra-params: >-
+            {"full":true,"nightly":false,"release_dry_run":true,
+            "website_refresh":false,"vulkan_dlss":false,"fork_pr":0,"fork_sha":""}
+  setup-noop-tag:
+    when: (pipeline.git.tag or "") != "" and not ((pipeline.git.tag or "") starts-with "v")
+    jobs:
+      - setup-noop:
+          name: setup-noop-tag
+          filters: (pipeline.git.tag or "") != "" and not ((pipeline.git.tag or "") starts-with "v")
+  setup-noop-schedule:
+    when:
+      and:
+        - equal: [schedule, << pipeline.event.name >>]
+        - equal: [false, << pipeline.parameters.nightly >>]
+        - equal: [false, << pipeline.parameters.website_refresh >>]
+    jobs:
+      - setup-noop:
+          name: setup-noop-schedule
+  setup-noop-api:
+    when:
+      and:
+        - equal: [api, << pipeline.event.name >>]
+        - equal: [false, << pipeline.parameters.release_dry_run >>]
+        - equal: [false, << pipeline.parameters.vulkan_dlss >>]
+        - equal: [false, << pipeline.parameters.full >>]
+    jobs:
+      - setup-noop:
+          name: setup-noop-api
+  setup-noop-branch-push:
+    when: pipeline.event.name == "push" and pipeline.git.branch != "main" and (pipeline.git.tag or "") == ""
+    jobs:
+      - setup-noop:
+          name: setup-noop-branch-push

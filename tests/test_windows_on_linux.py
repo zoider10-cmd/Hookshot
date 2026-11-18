@@ -83,7 +83,7 @@ class WindowsOnLinuxTests(unittest.TestCase):
             self.assertRegex(step, r"if: env\.RELEASE_CHECKED == ''", step.splitlines()[0])
         linux = (WORKFLOWS / "build-linux.yml").read_text(encoding="utf-8")
         gated = re.findall(r"- name: (.*)\n\s+if: env\.RELEASE_CHECKED == ''", linux)
-        self.assertEqual(gated, ["hookshot_vk.so with AMD FSR 4 (build check)"])
+        self.assertEqual(gated, ["hookshot_vk.so (build check)", "hookshot_vk.so with AMD FSR 4 (build check)"])
 
     def test_release_stays_self_contained(self):
         # (dotnet publish -c Release: self-contained win-x64, a folder, as the Windows build made it)

@@ -4,8 +4,9 @@ The file is compiled on its own against a fake guest memory that holds a player 
 pitch at +0x18c, its yaw at +0x1a4 and its state at +0x204. hos_mouse_camera is what the camera's update (f_80644c80,
 nx2/oot_patches.py) calls each frame. Until it has run the mouse's motion is the right stick's (hos_mouse_native gives
 -1); then it turns yaw and pitch by 0.1 degrees a count at sensitivity 1, pitch kept within the limits and yaw wrapped at
-180, up and down swapped with the menu's Invert mouse vertical (option 8), and the controller reads leave the motion to
-the camera. The game eases the angles back toward Link's by itself inside a frame (its follow camera): the mouse's angles
+180, up and down swapped with the menu's Invert mouse vertical (option 8) and left and right with its Invert mouse
+horizontal (option 61, or HOS_MOUSE_INVERT_X=1: the game's own camera inversion turns the right stick around, which the
+mouse is not here), and the controller reads leave the motion to the camera. The game eases the angles back toward Link's by itself inside a frame (its follow camera): the mouse's angles
 are put back every frame, so the view does not drift, and a move adds to the mouse's angles, not to the game's. The game's
 own right stick is let through (hos_mouse_native_stick: the camera's keys, a pad): its angles become the mouse's new
 start. Without the menu's Mouse camera (option 6), or on an object that is not a camera, it does nothing. The game gives
@@ -14,6 +15,7 @@ while no button it takes the right stick for is held (ZR, the bow's aim; L, the 
 150 ms without the camera (the pause menu, another camera) give the motion back to the stick as well.
 python -I -B tests/test_mouse_native.py   (Linux: host/posix's windows.h)
 """
+import os
 import shutil
 import subprocess
 import sys
@@ -53,8 +55,10 @@ static int64_t clock_ns = 1000000000LL;
 void hos_log(const char *fmt, ...) { va_list a; va_start(a, fmt); vfprintf(stderr, fmt, a); va_end(a); fputc(10, stderr); }
 int64_t hos_now_ns(void) { return clock_ns; }
 static int32_t move_x, move_y;
-static int captured = 1, menu_invert, menu_native = 1;
-int rx_option(int id, int otherwise) { return id == 8 ? menu_invert : id == 6 ? menu_native : otherwise; }
+static int captured = 1, menu_invert, menu_invert_x, menu_native = 1;
+int rx_option(int id, int otherwise) {
+    return id == 8 ? menu_invert : id == 61 ? menu_invert_x : id == 6 ? menu_native : otherwise;
+}
 int hos_mouse_take(int32_t *dx, int32_t *dy) { *dx = move_x, *dy = move_y; move_x = move_y = 0; return captured; }
 void hos_mouse_give_back(int32_t dx, int32_t dy) { move_x += dx, move_y += dy; }
 int hos_mouse_native(void);
@@ -76,10 +80,18 @@ static void frame(int32_t dx, int32_t dy) { move_x += dx, move_y += dy; clock_ns
 /* (the camera's angles become the mouse's start: a stick turn of the game's own, or a camera put somewhere by hand) */
 static void seed(void) { hos_mouse_native_stick(1); frame(0, 0); hos_mouse_native_stick(0); }
 static void seed_at(float pitch, float yaw) { putf(PITCH, pitch), putf(YAW, yaw); seed(); }
-int main(void) {
+int main(int argc, char **argv) {
     fake_heap = (uint8_t *)calloc(64, 4096);
     putf(CAM + 0x178, -85), putf(CAM + 0x17c, 89);
     puti(CAM + 0x204, 3);
+    if (argc > 1 && !strcmp(argv[1], "env")) {   /* HOS_MOUSE_INVERT_X=1, the menu's row off: right turns left too */
+        state(4);
+        seed_at(0, 0);
+        frame(10, 4);
+        CHECK(near(getf(YAW), 1.0f) && near(getf(PITCH), 0.4f));
+        if (!fails) printf("PASS\n");
+        return fails != 0;
+    }
     putf(PITCH, 10), putf(YAW, 30);
     state(4);   /* turned by the player */
     move_x = 5, move_y = 3;
@@ -110,6 +122,16 @@ int main(void) {
     frame(0, 10);
     CHECK(near(getf(PITCH), -1.0f));
     menu_invert = 0;
+    seed_at(0, 0);
+    menu_invert_x = 1;   /* the menu's Invert mouse horizontal: right turns left (yaw rises); up and down as they were */
+    frame(10, 4);
+    CHECK(near(getf(YAW), 1.0f) && near(getf(PITCH), 0.4f));
+    menu_invert = 1;   /* both rows: each turns its own direction around */
+    frame(10, 4);
+    CHECK(near(getf(YAW), 2.0f) && near(getf(PITCH), 0.0f));
+    menu_invert = menu_invert_x = 0;
+    frame(10, 4);
+    CHECK(near(getf(YAW), 1.0f) && near(getf(PITCH), 0.4f));   /* off again: right turns right */
     /* the game's own right stick (the camera's keys, a pad): its angles are the mouse's new start, and it still turns */
     putf(YAW, 70), putf(PITCH, 30);
     seed();
@@ -201,6 +223,10 @@ class MouseNativeTests(unittest.TestCase):
                                    text=True, capture_output=True)
             self.assertEqual(build.returncode, 0, build.stderr)
             run = subprocess.run([str(binary)], text=True, capture_output=True, timeout=30)
+            self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+            # (the switch is read once a run: its own process)
+            run = subprocess.run([str(binary), "env"], text=True, capture_output=True, timeout=30,
+                                 env=dict(os.environ, HOS_MOUSE_INVERT_X="1"))
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
 

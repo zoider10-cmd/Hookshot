@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-14 | Game v3.0.0-rc.3-75-g9c9d69ed (source6b76ded3), matched API22 modules; control client d0340ee9 | Windows11 build26300, headless | RTX5090, NVIDIA617.42 | Ryzen7 9800X3D, 96GiB | Independent copied profile; audio0, DLSS0, framegen0, cap60; requested1280x720, bridge window1920x1080 | Title-menu status, frames1339/1354/1367/1382; four consecutive metadata-only connections; live01 | Four successful protocol1 replies; normal quit, native0/guard0; all23 protected hashes unchanged. Busy occurrence not established; no performance or gameplay-input claim; live01 |

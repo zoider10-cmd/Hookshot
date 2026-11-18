@@ -17,6 +17,10 @@ twice (the move, then the start after) on folders of its own:
 - from another drive too, when this PC has one to try (/dev/shm);
 - a user/ that is a link itself is used as it is;
 - with an entry the new place has already, nothing moves;
+- with an entry that cannot go (a copy that fails, as on a full disk), the entries that went before it come back, renamed
+  and copied ones alike: at both starts the old place keeps every entry and the new place is empty; once the entry can
+  go, the next start moves them all. The entries' names are picked so that both kinds are listed before the one that
+  fails, whatever the file system's order; from another drive too, where every entry is copied;
 - a user/ without links moves as before, and saves-moved.txt says where to.
 
 python -I -B tests/test_linux_saves_move.py [--cc gcc]
@@ -38,6 +42,7 @@ def build(cc, tmp):
     end = source.index("#endif", source.index("static const char *saves_dir(const char *beside) {"))
     program = r'''#include <windows.h>
 #include <stdarg.h>
+#include "hos_atomic_file.h"
 #define SEP '/'
 #define SEP_S "/"
 static void hos_log(const char *fmt, ...) { va_list ap; va_start(ap, fmt); vprintf(fmt, ap); va_end(ap); putchar(10); }
@@ -46,7 +51,7 @@ int main(int argc, char **argv) { if (argc != 2) return 2; printf("uses %s\n", s
 '''
     src, exe = tmp / "mover.c", tmp / "mover"
     src.write_text(program, encoding="utf-8")
-    subprocess.run([cc, "-std=gnu11", "-D_GNU_SOURCE", "-w", "-I", str(ROOT / "host" / "posix"), str(src),
+    subprocess.run([cc, "-std=gnu11", "-D_GNU_SOURCE", "-w", "-I", str(ROOT / "host" / "posix"), "-I", str(ROOT / "host"), str(src),
                     str(ROOT / "host" / "posix" / "win32_posix.c"), "-o", str(exe), "-lpthread", "-ldl"], check=True)
     return exe
 
@@ -87,6 +92,77 @@ class Case:
         self.check((self.new / save / "account.sav").is_file(), "the save is not read from the new place")
         self.check(not self.user.exists(), "user/ is still there")
         self.check("%s\n" % self.new in (self.game / "saves-moved.txt").read_text(encoding="utf-8"), "saves-moved.txt")
+
+
+def tree(root):
+    """What a folder holds: {path in it: ("dir",) | ("file", text, or None when it cannot be read) | ("link", what it names)}"""
+    found = {}
+    for d, dirs, files in os.walk(root):
+        for n in dirs + files:
+            p = Path(d) / n
+            rel = str(p.relative_to(root))
+            if p.is_symlink():
+                found[rel] = ("link", os.path.realpath(p))
+            elif p.is_dir():
+                found[rel] = ("dir",)
+            else:
+                try:
+                    found[rel] = ("file", p.read_text(encoding="ascii"))
+                except PermissionError:
+                    found[rel] = ("file", None)
+        dirs[:] = [n for n in dirs if not (Path(d) / n).is_symlink()]
+    return found
+
+
+def cannot_go(case, name, game_parent):
+    """user/ with entries that are renamed and entries that are copied (a link in them; every entry from another drive),
+    and stuck/, whose unreadable file stops its copy as a full disk would. Entries are made before and after stuck/ (for
+    creation-order and newest-first listings), under new names until both kinds are listed before it (for a hashed one):
+    each start has then moved some before it fails, and they must come back"""
+    for attempt in range(50):
+        c = case(name, game_parent)
+        far = c.game.stat().st_dev != c.data.stat().st_dev
+        (c.user / "save" / USER_ID).mkdir(parents=True)
+        (c.user / "save" / USER_ID / "account.sav").write_text("my save", encoding="ascii")
+        kinds = {"temp": "renamed", "save": "renamed"}
+        stuck = c.user / "stuck"
+        for side in ("a", "z"):
+            if side == "z":
+                stuck.mkdir()
+                (stuck / "sync").symlink_to(c.sync)
+                (stuck / "locked").write_text("locked", encoding="ascii")
+                (stuck / "locked").chmod(0)
+            linked = c.user / ("%s-linked-%d" % (side, attempt))
+            linked.mkdir()
+            (linked / "sync").symlink_to(c.sync)
+            (linked / "notes.txt").write_text(linked.name, encoding="ascii")
+            plain = c.user / ("%s-file-%d" % (side, attempt))
+            plain.write_text(plain.name, encoding="ascii")
+            kinds[linked.name], kinds[plain.name] = "copied", "renamed"
+        order = os.listdir(c.user)
+        before = {"copied" if far else kinds[n] for n in order[:order.index("stuck")]}
+        if before >= ({"copied"} if far else {"copied", "renamed"}):
+            break
+        (stuck / "locked").chmod(0o600)
+    else:
+        raise SystemExit("test_linux_saves_move: %s: no names put both kinds of entry before stuck/ in this listing: %s"
+                         % (name, order))
+    try:
+        whole = tree(c.user)
+        for n in (1, 2):
+            place = c.start()
+            c.check(place == c.user, "start %d uses %s, not user/" % (n, place))
+            c.check(tree(c.user) == whole, "start %d: user/ lost or changed entries (listed %s): %s" % (
+                n, order, sorted(set(whole.items()) ^ set(tree(c.user).items()))))
+            c.check(sorted(os.listdir(c.new)) == [], "start %d left entries in the new place: %s" % (n, sorted(os.listdir(c.new))))
+            c.check(not (c.game / "saves-moved.txt").exists(), "start %d wrote saves-moved.txt" % n)
+    finally:
+        (stuck / "locked").chmod(0o600)
+    whole = tree(c.user)
+    c.moved("save/" + USER_ID)
+    c.check(tree(c.new) == whole, "once stuck/ could go, the new place did not get every entry: %s" % (
+        sorted(set(whole.items()) ^ set(tree(c.new).items()))))
+    c.saves_kept()
 
 
 def main():
@@ -180,6 +256,15 @@ def main():
             c.check(c.start() == c.user, "start %d left the old place" % n)
         c.check((c.user / "cache").is_dir() and (c.user / "save" / USER_ID).is_dir() and not (c.new / "cache").exists()
                 and not (c.new / "save").exists(), "an entry went to the new place all the same")
+
+        if os.geteuid() != 0:   # (root reads the unreadable file)
+            cannot_go(case, "an entry that cannot go", tmp)
+            if drives:
+                with tempfile.TemporaryDirectory(prefix="saves-move-", dir=other) as far:
+                    cannot_go(case, "an entry that cannot go, the game on another drive", Path(far))
+            else:
+                print("an entry that cannot go, the game on another drive: not tried (no other drive here: /dev/shm is "
+                      "missing, read-only or the temporary folder's own)")
 
         c = case("no link")
         (c.user / "save" / USER_ID).mkdir(parents=True)

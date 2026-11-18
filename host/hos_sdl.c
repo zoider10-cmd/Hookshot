@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include "audio_output_devices.h"
+#include "fullscreen_monitor.h"
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
@@ -17,6 +20,7 @@ static struct {
         *GetDesktopDisplayMode, *Vulkan_CreateSurface, *PixelSize, *GetKeyboardState, *GetMouseState, *WaitEventTimeout,
         *PollEvent, *GetWindowSize, *LoadPNG, *SetWindowIcon, *DestroySurface, *GetWindowDisplay, *GetCurrentDisplayMode;
     void *StartTextInput, *StopTextInput, *GetClipboardText;   /* (hookshot: the menu's text fields; optional) */
+    void *GetDisplays, *GetNumVideoDisplays, *GetDisplayName, *GetCurrentVideoDriver, *GetWindowPosition, *GetWindowFlags, *SyncWindow;
     /* sound */
     void *OpenAudioDevice, *PauseAudioDevice, *OpenAudioDeviceStream, *ResumeAudioStreamDevice, *PutAudioStreamData;
     /* controllers */
@@ -85,10 +89,16 @@ static int get_all(HMODULE m, int three) {
     *(FARPROC *)&f.StartTextInput = GetProcAddress(m, "SDL_StartTextInput");
     *(FARPROC *)&f.StopTextInput = GetProcAddress(m, "SDL_StopTextInput");
     *(FARPROC *)&f.GetClipboardText = GetProcAddress(m, "SDL_GetClipboardText");
+    GET(GetDisplayName,"SDL_GetDisplayName");
+    GET(GetCurrentVideoDriver,"SDL_GetCurrentVideoDriver");
+    GET(GetWindowPosition,"SDL_GetWindowPosition");
+    GET(GetWindowFlags,"SDL_GetWindowFlags");
     if (three) {
         *(FARPROC *)&f.GetJoystick = GetProcAddress(m, "SDL_GetGamepadJoystick");   /* (optional: diagnostics only) */
         GET(SetWindowPosition, "SDL_SetWindowPosition");
         GET(GetPrimaryDisplay, "SDL_GetPrimaryDisplay");
+        GET(GetDisplays,"SDL_GetDisplays");
+        *(FARPROC *)&f.SyncWindow=GetProcAddress(m,"SDL_SyncWindow");
         GET(OpenAudioDeviceStream, "SDL_OpenAudioDeviceStream");
         GET(ResumeAudioStreamDevice, "SDL_ResumeAudioStreamDevice");
         GET(PutAudioStreamData, "SDL_PutAudioStreamData");
@@ -101,6 +111,8 @@ static int get_all(HMODULE m, int three) {
         *(FARPROC *)&f.GetWindowDisplay = GetProcAddress(m, "SDL_GetDisplayForWindow");   /* (the refresh: hos_sdl_refresh_mhz) */
         *(FARPROC *)&f.GetCurrentDisplayMode = GetProcAddress(m, "SDL_GetCurrentDisplayMode");
     } else {
+        GET(SetWindowPosition,"SDL_SetWindowPosition");
+        GET(GetNumVideoDisplays,"SDL_GetNumVideoDisplays");
         *(FARPROC *)&f.Free = GetProcAddress(m, "SDL_free");   /* (optional: do not request an allocated mapping without it) */
         *(FARPROC *)&f.GetWindowDisplay = GetProcAddress(m, "SDL_GetWindowDisplayIndex");   /* (the refresh: hos_sdl_refresh_mhz) */
         *(FARPROC *)&f.GetCurrentDisplayMode = GetProcAddress(m, "SDL_GetCurrentDisplayMode");
@@ -180,6 +192,102 @@ void *hos_sdl_window(const char *title, int width, int height) {
 void hos_sdl_fullscreen(void *window, int on) {
     if (version == 3) CALL(_Bool (*)(void *, _Bool), SetWindowFullscreen)(window, on != 0);
     else CALL(int (*)(void *, uint32_t), SetWindowFullscreen)(window, on ? 0x1001 /* FULLSCREEN_DESKTOP */ : 0);
+}
+uint32_t hos_sdl_window_display(void *window) {
+    if (!window || !f.GetWindowDisplay) return UINT32_MAX;
+    if (version==3) {
+        uint32_t id=CALL(uint32_t (*)(void *),GetWindowDisplay)(window);
+        return id?id:UINT32_MAX;
+    }
+    int id=CALL(int (*)(void *),GetWindowDisplay)(window);
+    return id>=0?(uint32_t)id:UINT32_MAX;
+}
+int hos_sdl_monitor_list(void *window,MkwVkMonitor *out,uint32_t *tokens,int cap) {
+    if (!version || !out || !tokens || cap<=0) return 0;
+    int count=0;
+    uint32_t *ids=version==3?CALL(uint32_t *(*)(int *),GetDisplays)(&count):NULL;
+    if (version==2) count=CALL(int (*)(void),GetNumVideoDisplays)();
+    if (count<0 || count>4096 || (version==3 && !ids)) { if (ids) hos_sdl_free(ids); return 0; }
+    const char *driver=CALL(const char *(*)(void),GetCurrentVideoDriver)();
+    if (!driver) driver="unknown";
+    uint32_t current=hos_sdl_window_display(window);
+    uint32_t primary=version==3?CALL(uint32_t (*)(void),GetPrimaryDisplay)():0;
+    int made=0;
+    for (int i=0;i<count && made<cap;i++) {
+        uint32_t token=version==3?ids[i]:(uint32_t)i;
+        const char *name=CALL(const char *(*)(uint32_t),GetDisplayName)(token);
+        if (!name || !*name || strlen(name)>=sizeof out[0].name) continue;
+        MkwVkMonitor item={0};
+        if (!hos_monitor_copy_id(item.name,sizeof item.name,name)) continue;
+        int same=0;
+        for (int j=0;j<count;j++) {
+            const char *other=CALL(const char *(*)(uint32_t),GetDisplayName)(version==3?ids[j]:(uint32_t)j);
+            if (other && !strcmp(name,other)) same++;
+        }
+        if (same==1 && token<=0xffff) {
+            int n=snprintf(item.id,sizeof item.id,"sdl%d:%s:%s",version,driver,name);
+            if (n<0 || n>=(int)sizeof item.id) item.id[0]=0;
+        } /* Ambiguous names remain metadata-only: no persistent preference silently targets a twin. */
+        if (version==3) {
+            const uint8_t *mode=CALL(const uint8_t *(*)(uint32_t),GetDesktopDisplayMode)(token);
+            if (!mode) continue;
+            int w,h; float scale;
+            memcpy(&w,mode+8,4); memcpy(&h,mode+12,4); memcpy(&scale,mode+16,4);
+            if (!(scale>0)) scale=1;
+            item.width=(int)(w*scale+0.5f); item.height=(int)(h*scale+0.5f);
+        } else {
+            struct {uint32_t format; int w,h,refresh;void *data;} mode;
+            if (CALL(int (*)(int,void *),GetDesktopDisplayMode)((int)token,&mode)) continue;
+            item.width=mode.w; item.height=mode.h;
+        }
+        item.flags=(token==current?HOS_MONITOR_CURRENT:0)|(token==primary?HOS_MONITOR_PRIMARY:0);
+        out[made]=item; tokens[made++]=token;
+    }
+    if (ids) hos_sdl_free(ids);
+    return made;
+}
+int hos_sdl_is_fullscreen(void *window) {
+    if (!version || !window) return 0;
+    return version==3 ? (CALL(uint64_t (*)(void *),GetWindowFlags)(window)&1)!=0 :
+                       (CALL(uint32_t (*)(void *),GetWindowFlags)(window)&1)!=0;
+}
+int hos_sdl_fullscreen_target(void *window,int on,uint32_t token) {
+    static int saved, old_x, old_y;
+    if (!window || !version) return 0;
+    if (on && token!=UINT32_MAX && token>0xffff) return 0;
+    if (on && !saved) {
+        if (version==3) CALL(_Bool (*)(void *,int *,int *),GetWindowPosition)(window,&old_x,&old_y);
+        else CALL(void (*)(void *,int *,int *),GetWindowPosition)(window,&old_x,&old_y);
+        saved=1;
+    }
+    if (on && token!=UINT32_MAX) {
+        /* SDL2 ignores an unchanged FULLSCREEN_DESKTOP request, and positioning while
+           fullscreen changes only its saved windowed placement. Leave first so the
+           next entry selects this display; keep our original saved placement across
+           retargets and failed re-entry. SDL3 supports pending fullscreen positions. */
+        if (version==2 && hos_sdl_is_fullscreen(window) &&
+            CALL(int (*)(void *,uint32_t),SetWindowFullscreen)(window,0)!=0) return 0;
+        /* SDL's CENTERED_DISPLAY encoding reserves 16 bits for the display token. */
+        int centered=0x2fff0000 | (int)token;
+        /* SDL3 deliberately retains pending positions for fullscreen display selection, even on
+           Wayland where positioning a windowed toplevel returns Unsupported. Source reviewed:
+           https://github.com/libsdl-org/SDL/blob/release-3.2.0/src/video/SDL_video.c
+           SDL_GetVideoDisplayForFullscreenWindow; Wayland_SetWindowPosition also handles already-fullscreen moves.
+           This requests a display; the published CURRENT flag still comes from SDL's observed display. */
+        if (version==3) CALL(_Bool (*)(void *,int,int),SetWindowPosition)(window,centered,centered);
+        else CALL(void (*)(void *,int,int),SetWindowPosition)(window,centered,centered);
+    }
+    int ok=version==3?CALL(_Bool (*)(void *,_Bool),SetWindowFullscreen)(window,on!=0):
+        CALL(int (*)(void *,uint32_t),SetWindowFullscreen)(window,on?0x1001:0)==0;
+    if (ok && version==3 && f.SyncWindow) CALL(_Bool (*)(void *),SyncWindow)(window);
+    /* SyncWindow can time out after SDL accepted the request. Keep the saved placement, and publish
+       observed flags separately rather than treating a timeout as an undone mode change. */
+    if (ok && !on && saved && !hos_sdl_is_fullscreen(window)) {
+        if (version==3) CALL(_Bool (*)(void *,int,int),SetWindowPosition)(window,old_x,old_y);
+        else CALL(void (*)(void *,int,int),SetWindowPosition)(window,old_x,old_y);
+        saved=0;
+    }
+    return ok;
 }
 void hos_sdl_relative_mouse(void *window, int on) {
     if (version == 3) CALL(_Bool (*)(void *, _Bool), SetRelativeMouseMode)(window, on != 0);
@@ -370,10 +478,131 @@ int hos_sdl_poll_event(HosSdlEvent *e) {
 }
 
 /* ---- sound ---- */
+
+/* SDL's physical IDs and list positions are not durable identities. Intern backend-qualified names instead:
+   a token never changes meaning during this process, even if enumeration reorders while a stream is opening.
+   SDL exposes no persistent hardware ID here. A renamed device is missing; duplicate names are ambiguous. */
+typedef struct PlaybackEndpoint {
+    struct PlaybackEndpoint *next;
+    char id[HOS_OUTPUT_ID_CAP], name[HOS_OUTPUT_NAME_CAP];
+    unsigned token;
+    uint32_t physical;
+    int present;
+} PlaybackEndpoint;
+static PlaybackEndpoint *playback_endpoints;
+static unsigned playback_next;
+static int playback_loaded, playback_initialized;
+static SRWLOCK playback_lock = SRWLOCK_INIT;
+static struct {
+    void *Devices, *Name, *Driver, *Free, *Close, *Destroy, *Format, *DefaultInfo, *Status;
+} playback;
+
+static int playback_ready(void) {   /* playback_lock held */
+    if (playback_loaded) return 1;
+    if (!hos_sdl_load()) return 0;
+    if (!playback_initialized) {
+        if (!hos_sdl_init(HOS_SDL_AUDIO)) return 0;
+        playback_initialized = 1;
+    }
+    HMODULE m = load_one(version == 3 ? "SDL3.dll" : "SDL2.dll");
+    if (!m) return 0;
+#define PLAY_GET(field, symbol) (*(FARPROC *)&playback.field = GetProcAddress(m, symbol))
+    PLAY_GET(Devices, version == 3 ? "SDL_GetAudioPlaybackDevices" : "SDL_GetNumAudioDevices");
+    PLAY_GET(Name, "SDL_GetAudioDeviceName");
+    PLAY_GET(Driver, "SDL_GetCurrentAudioDriver");
+    PLAY_GET(Free, "SDL_free");
+    PLAY_GET(Close, "SDL_CloseAudioDevice");
+    PLAY_GET(Destroy, "SDL_DestroyAudioStream");
+    PLAY_GET(Format, version == 3 ? "SDL_GetAudioDeviceFormat" : "SDL_GetAudioDeviceSpec");
+    PLAY_GET(DefaultInfo, "SDL_GetDefaultAudioInfo");
+    PLAY_GET(Status, "SDL_GetAudioDeviceStatus");
+#undef PLAY_GET
+    playback_loaded = playback.Devices && playback.Name && playback.Driver && playback.Free &&
+                      (version == 3 ? playback.Destroy != NULL : playback.Close != NULL);
+    return playback_loaded;
+}
+static const char *playback_name(uint32_t physical) {
+    return version == 3 ? ((const char *(*)(uint32_t))playback.Name)(physical)
+                        : ((const char *(*)(int, int))playback.Name)((int)physical, 0);
+}
+static int playback_refresh(void) {   /* playback_lock held; no stream opened */
+    for (PlaybackEndpoint *p = playback_endpoints; p; p = p->next) p->present = 0;
+    if (!playback_ready()) return 0;
+    const char *driver = ((const char *(*)(void))playback.Driver)();
+    if (!driver) return 0;
+    int total = 0, count = 0;
+    uint32_t *all = NULL;
+    if (version == 3) all = ((uint32_t *(*)(int *))playback.Devices)(&total);
+    else total = ((int (*)(int))playback.Devices)(0);
+    for (int i = 0; i < total && (version == 2 || all); i++) {
+        const uint32_t physical = version == 3 ? all[i] : (uint32_t)i;
+        const char *name = playback_name(physical);
+        char id[HOS_OUTPUT_ID_CAP], valid[HOS_OUTPUT_ID_CAP];
+        if (!name || !*name || strlen(name) >= HOS_OUTPUT_NAME_CAP) continue;
+        int n = snprintf(id, sizeof id, "sdl:%s:%s", driver, name);
+        if (n < 0 || (size_t)n >= sizeof id || !audio_output_copy_id(valid, sizeof valid, id)) continue;
+        int duplicates = 0;
+        for (int j = 0; j < total; j++) {
+            const char *other = playback_name(version == 3 ? all[j] : (uint32_t)j);
+            if (other && !strcmp(name, other)) duplicates++;
+        }
+        if (duplicates != 1) continue;   /* opening SDL2 by this name would silently select the first */
+        PlaybackEndpoint *p;
+        for (p = playback_endpoints; p && strcmp(p->id, id); p = p->next) {}
+        if (!p) {
+            if (playback_next >= INT_MAX) continue;
+            p = (PlaybackEndpoint *)calloc(1, sizeof *p);
+            if (!p) continue;
+            strcpy(p->id, id), strcpy(p->name, name);
+            p->token = playback_next++;
+            p->next = playback_endpoints, playback_endpoints = p;
+        }
+        p->physical = physical, p->present = 1;
+        count++;
+    }
+    if (all) ((void (*)(void *))playback.Free)(all);
+    return count;
+}
+int hos_sdl_output_count(void) {
+    AcquireSRWLockExclusive(&playback_lock);
+    int count = playback_refresh();
+    ReleaseSRWLockExclusive(&playback_lock);
+    return count;
+}
+int hos_sdl_output_info(int index, char *id, int id_capacity, char *name, int name_capacity) {
+    if (index < 0 || !id || !name || id_capacity <= 0 || name_capacity <= 0) return 0;
+    int ok = 0;
+    AcquireSRWLockShared(&playback_lock);
+    for (PlaybackEndpoint *p = playback_endpoints; p; p = p->next) if (p->present && index-- == 0) {
+        if (strlen(p->name) < (size_t)name_capacity && audio_output_copy_id(id, (size_t)id_capacity, p->id)) {
+            strcpy(name, p->name);
+            ok = 1;
+        }
+        break;
+    }
+    ReleaseSRWLockShared(&playback_lock);
+    return ok;
+}
+int hos_sdl_output_resolve(const char *id) {
+    int token = -1;
+    if (!id || !*id) return -1;
+    AcquireSRWLockExclusive(&playback_lock);
+    playback_refresh();
+    for (PlaybackEndpoint *p = playback_endpoints; p; p = p->next)
+        if (p->present && !strcmp(p->id, id)) { token = (int)p->token; break; }
+    ReleaseSRWLockExclusive(&playback_lock);
+    return token;
+}
 typedef struct {
     void (*pull)(void *user, uint8_t *out, int len);
     void *user;
     int frame;   /* bytes a sample frame (all channels) */
+    void *stream;
+    uint32_t device;
+    unsigned token;
+    uint32_t physical;
+    uint64_t checked;
+    int alive;
 } Pull;
 static void pull3(void *p, void *stream, int want, int total) {   /* (SDL3: a stream asks for want more bytes) */
     (void)total;
@@ -392,19 +621,36 @@ static void pull2(void *p, uint8_t *out, int len) {   /* (SDL2: a device callbac
     const Pull *s = (const Pull *)p;
     s->pull(s->user, out, len);
 }
-int hos_sdl_audio_open(int freq, int channels, int s16, void (*pull)(void *user, uint8_t *out, int len), void *user) {
-    if (!hos_sdl_load()) return 0;
+void *hos_sdl_audio_open(unsigned device, int freq, int channels, int s16,
+                        void (*pull)(void *user, uint8_t *out, int len), void *user) {
+    uint32_t physical = 0xFFFFFFFFu;
+    const char *name = NULL;
+    AcquireSRWLockExclusive(&playback_lock);
+    int ready = playback_ready();
+    if (ready && device != UINT_MAX) {
+        playback_refresh();
+        ready = 0;
+        for (PlaybackEndpoint *p = playback_endpoints; p; p = p->next) if (p->token == device && p->present) {
+            physical = p->physical, name = p->name;   /* interned strings live for the process */
+            ready = 1;
+            break;
+        }
+    }
+    ReleaseSRWLockExclusive(&playback_lock);
+    if (!ready) return NULL;
     const uint16_t format = s16 ? 0x8010 /* S16LE */ : 0x8120 /* F32LE */;   /* (both's numbers) */
     const char *env_samples = getenv("SDL_AUDIO_DEVICE_SAMPLE_FRAMES");
     if (version == 3 && !env_samples) hos_sdl_hint("SDL_AUDIO_DEVICE_SAMPLE_FRAMES", "480");   /* (SDL2's device buffer below) */
-    if (!hos_sdl_init(HOS_SDL_AUDIO)) return 0;
     Pull *p = (Pull *)calloc(1, sizeof *p);
+    if (!p) return NULL;
     p->pull = pull, p->user = user, p->frame = channels * (s16 ? 2 : 4);
+    p->token = device, p->physical = physical, p->alive = 1;
     if (version == 3) {
         const struct { uint32_t format; int channels, freq; } spec = {format, channels, freq};
-        void *stream = CALL(void *(*)(uint32_t, const void *, void (*)(void *, void *, int, int), void *), OpenAudioDeviceStream)(
-            0xFFFFFFFFu /* the default output */, &spec, pull3, p);
-        if (stream && CALL(_Bool (*)(void *), ResumeAudioStreamDevice)(stream)) return 1;
+        p->stream = CALL(void *(*)(uint32_t, const void *, void (*)(void *, void *, int, int), void *), OpenAudioDeviceStream)(
+            physical, &spec, pull3, p);
+        if (p->stream && CALL(_Bool (*)(void *), ResumeAudioStreamDevice)(p->stream)) return p;
+        if (p->stream) ((void (*)(void *))playback.Destroy)(p->stream);
         free(p);
         return 0;
     }
@@ -422,29 +668,68 @@ int hos_sdl_audio_open(int freq, int channels, int s16, void (*pull)(void *user,
     want.samples = (uint16_t)(env_samples && atoi(env_samples) > 0 ? atoi(env_samples) : 512);   /* (SDL2 asks for a power of two) */
     want.callback = pull2, want.userdata = p;
     /* (no changes allowed: SDL converts to what the device wants) */
-    const uint32_t dev = CALL(uint32_t (*)(const char *, int, const void *, void *, int), OpenAudioDevice)(NULL, 0, &want, &have, 0);
+    const uint32_t dev = CALL(uint32_t (*)(const char *, int, const void *, void *, int), OpenAudioDevice)(name, 0, &want, &have, 0);
     if (!dev) {
         free(p);
         return 0;
     }
     CALL(void (*)(uint32_t, int), PauseAudioDevice)(dev, 0);
-    return 1;
+    p->device = dev;
+    return p;
+}
+void hos_sdl_audio_close(void *audio) {
+    Pull *p = (Pull *)audio;
+    if (!p) return;
+    /* Both close operations wait for an in-flight callback. Do not hold the WaveOut queue mutex here. */
+    if (p->stream) ((void (*)(void *))playback.Destroy)(p->stream);
+    else ((void (*)(uint32_t))playback.Close)(p->device);
+    free(p);
+}
+int hos_sdl_audio_alive(void *audio) {
+    Pull *p = (Pull *)audio;
+    if (!p) return 0;
+    uint64_t now = (uint64_t)GetTickCount64();
+    if (now - p->checked < 1000) return p->alive;
+    p->checked = now;
+    if (p->token != UINT_MAX) {
+        AcquireSRWLockExclusive(&playback_lock);
+        playback_refresh();
+        p->alive = 0;
+        for (PlaybackEndpoint *e = playback_endpoints; e; e = e->next)
+            if (e->token == p->token && e->present && (version == 2 || e->physical == p->physical)) {
+                p->alive = 1;
+                break;
+            }
+        ReleaseSRWLockExclusive(&playback_lock);
+    }
+    if (version == 2 && playback.Status &&
+        ((int (*)(uint32_t))playback.Status)(p->device) == 0) p->alive = 0;   /* SDL_AUDIO_STOPPED */
+    return p->alive;
 }
 /* SDL3's format of the default device; SDL2's default audio info (2.24 on: the bundled 2.32 has it). Looked up here,
    not at load: an SDL without it still plays, in stereo. */
 int hos_sdl_audio_channels(void) {
-    if (!hos_sdl_load() || !hos_sdl_init(HOS_SDL_AUDIO)) return 2;
-    HMODULE m = load_one(version == 3 ? "SDL3.dll" : "SDL2.dll");   /* (the one loaded: the same handle back) */
-    if (!m) return 2;
+    char wanted[HOS_OUTPUT_ID_CAP] = {0};
+#ifndef _WIN32
+    unsigned generation = 0;
+    const char *forced = getenv("HOS_AUDIO_DEVICE");
+    if (!forced || !*forced) hos_audio_output_preference(wanted, sizeof wanted, &generation);
+#endif
+    AcquireSRWLockExclusive(&playback_lock);
+    if (!playback_ready()) { ReleaseSRWLockExclusive(&playback_lock); return 2; }
+    uint32_t physical = UINT32_MAX;
+    if (*wanted) {
+        playback_refresh();
+        for (PlaybackEndpoint *p = playback_endpoints; p; p = p->next)
+            if (p->present && !strcmp(p->id, wanted)) { physical = p->physical; break; }
+    }
     int n = 0;
     if (version == 3) {
-        void *get = (void *)GetProcAddress(m, "SDL_GetAudioDeviceFormat");
         struct { uint32_t format; int channels, freq; } spec = {0, 0, 0};
         int frames = 0;
-        if (get && ((_Bool (*)(uint32_t, void *, int *))get)(0xFFFFFFFFu /* the default output */, &spec, &frames))
+        if (playback.Format && ((_Bool (*)(uint32_t, void *, int *))playback.Format)(physical, &spec, &frames))
             n = spec.channels;
     } else {
-        void *get = (void *)GetProcAddress(m, "SDL_GetDefaultAudioInfo"), *release = (void *)GetProcAddress(m, "SDL_free");
         struct {
             int freq;
             uint16_t format;
@@ -455,9 +740,14 @@ int hos_sdl_audio_channels(void) {
         } spec;
         memset(&spec, 0, sizeof spec);
         char *name = NULL;
-        if (get && ((int (*)(char **, void *, int))get)(&name, &spec, 0) == 0) n = spec.channels;
-        if (name && release) ((void (*)(void *))release)(name);
+        if (physical != UINT32_MAX) {
+            if (playback.Format && ((int (*)(int, int, void *))playback.Format)((int)physical, 0, &spec) == 0)
+                n = spec.channels;
+        } else if (playback.DefaultInfo && ((int (*)(char **, void *, int))playback.DefaultInfo)(&name, &spec, 0) == 0)
+            n = spec.channels;
+        if (name) ((void (*)(void *))playback.Free)(name);
     }
+    ReleaseSRWLockExclusive(&playback_lock);
     return n > 0 ? n : 2;
 }
 

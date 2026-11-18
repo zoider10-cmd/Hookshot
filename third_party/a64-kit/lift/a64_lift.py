@@ -557,6 +557,7 @@ def pack_flags(text):
     return FLAGS4.sub(sub, text)
 
 
+# (hookshot) its static inline helpers are always_inline, as VFPX_HEADER's (HOOKSHOT_LIGHT_PASSES)
 VSET_HEADER = r"""
 /* the four flags in one store (pack_flags in a64_lift.py): n, z, c, v are adjacent bytes of the context */
 static inline __attribute__((always_inline)) void a64_set_nzcv(Ctx *c, uint32_t n, uint32_t z, uint32_t cf, uint32_t v) {
@@ -592,9 +593,9 @@ static inline __attribute__((always_inline)) void a64_vst_lo64(uint64_t *d, __m1
     _mm_storeu_si128((__m128i *)d, r);
 }
 #else
-static inline void a64_vst16(uint64_t *d, const void *s) { memcpy(d, s, 16); }
-static inline void a64_vset64(uint64_t *d, uint64_t v) { d[0] = v; d[1] = 0; }
-static inline void a64_vset128(uint64_t *d, uint64_t lo, uint64_t hi) { d[0] = lo; d[1] = hi; }
+static inline __attribute__((always_inline)) void a64_vst16(uint64_t *d, const void *s) { memcpy(d, s, 16); }
+static inline __attribute__((always_inline)) void a64_vset64(uint64_t *d, uint64_t v) { d[0] = v; d[1] = 0; }
+static inline __attribute__((always_inline)) void a64_vset128(uint64_t *d, uint64_t lo, uint64_t hi) { d[0] = lo; d[1] = hi; }
 #endif
 static inline __attribute__((always_inline)) void a64_vset_lo(uint64_t *d, const void *s, int n) {
     uint64_t v = 0;
@@ -709,20 +710,22 @@ static inline __attribute__((always_inline)) uint32_t a64_fcmp64k(Ctx *c, const 
 }
 """
 
+# (hookshot) every static inline helper of the header is always_inline: lifted chunks compile without the module inliner
+# (nx2/build.py HOOKSHOT_LIGHT_PASSES), which left the plain ones out of line, as real calls
 VFPX_HEADER = r"""
 /* ---- 2/4-lane single-precision ops on SSE (vectorize_fpx in a64_lift.py): a lane kept only where the scalar fast
    path would keep it (the same tests, on every lane); otherwise each lane goes through its scalar helper ---- */
 #if RECOMP_FPX_HOST == 2
-static inline __m128i a64_v_ult(__m128i x, uint32_t k) {   /* unsigned x < k, per lane */
+static inline __attribute__((always_inline)) __m128i a64_v_ult(__m128i x, uint32_t k) {   /* unsigned x < k, per lane */
     return _mm_cmplt_epi32(_mm_xor_si128(x, _mm_set1_epi32((int)0x80000000u)), _mm_set1_epi32((int)(k ^ 0x80000000u)));
 }
-static inline __m128i a64_v_abs(__m128i x) { return _mm_and_si128(x, _mm_set1_epi32(0x7fffffff)); }
-static inline __m128i a64_v_big(__m128i t) { return a64_v_ult(_mm_sub_epi32(a64_v_abs(t), _mm_set1_epi32(0x00800001)), 0x7effffffu); }
-static inline __m128i a64_v_zero(__m128i x) { return _mm_cmpeq_epi32(a64_v_abs(x), _mm_setzero_si128()); }
-static inline __m128i a64_v_nonfin(__m128i t) { const __m128i e = _mm_set1_epi32(0x7f800000); return _mm_cmpeq_epi32(_mm_and_si128(t, e), e); }
-static inline __m128i a64_v_subn(__m128i x) { return a64_v_ult(_mm_sub_epi32(_mm_slli_epi32(x, 1), _mm_set1_epi32(1)), 0x00ffffffu); }
+static inline __attribute__((always_inline)) __m128i a64_v_abs(__m128i x) { return _mm_and_si128(x, _mm_set1_epi32(0x7fffffff)); }
+static inline __attribute__((always_inline)) __m128i a64_v_big(__m128i t) { return a64_v_ult(_mm_sub_epi32(a64_v_abs(t), _mm_set1_epi32(0x00800001)), 0x7effffffu); }
+static inline __attribute__((always_inline)) __m128i a64_v_zero(__m128i x) { return _mm_cmpeq_epi32(a64_v_abs(x), _mm_setzero_si128()); }
+static inline __attribute__((always_inline)) __m128i a64_v_nonfin(__m128i t) { const __m128i e = _mm_set1_epi32(0x7f800000); return _mm_cmpeq_epi32(_mm_and_si128(t, e), e); }
+static inline __attribute__((always_inline)) __m128i a64_v_subn(__m128i x) { return a64_v_ult(_mm_sub_epi32(_mm_slli_epi32(x, 1), _mm_set1_epi32(1)), 0x00ffffffu); }
 /* lanes that overflowed (an infinite result of finite operands), kept once FPSR.OFC is raised (FPX_FZ_HEADER) */
-static inline __m128i a64_v_ovf(const Ctx *c, __m128i a, __m128i b, __m128i t) {
+static inline __attribute__((always_inline)) __m128i a64_v_ovf(const Ctx *c, __m128i a, __m128i b, __m128i t) {
     if (!(c->fpsr & 4u)) return _mm_setzero_si128();
     const __m128i inf = _mm_cmpeq_epi32(a64_v_abs(t), _mm_set1_epi32(0x7f800000));
     return _mm_andnot_si128(_mm_or_si128(a64_v_nonfin(a), a64_v_nonfin(b)), inf);
@@ -803,6 +806,7 @@ static inline __attribute__((always_inline)) void a64_vfpx_mul32(Ctx *c, uint64_
 # exact body for it); under FZ with UFC raised a result below the normal range is the native one flushed to a zero of its
 # sign. Sums are exact there (a tiny sum of normal numbers is a subnormal exactly). No subnormal operand (those flush
 # first). FMUL/FNMUL/FMLA-family S: a64_fpx_sticky32 below.
+# (hookshot) its static inline helpers are always_inline, as VFPX_HEADER's (HOOKSHOT_LIGHT_PASSES)
 FPX_FZ_HEADER = r"""
 static inline __attribute__((always_inline)) int a64_fpx_fz_result(const Ctx *c, uint64_t a, uint64_t b, uint64_t t, uint64_t *v) {
     const uint32_t m = (uint32_t)t & 0x7fffffffu;
@@ -818,8 +822,8 @@ static inline __attribute__((always_inline)) int a64_fpx_fz_add32(const Ctx *c, 
 static inline __attribute__((always_inline)) int a64_fpx_fz_sub32(const Ctx *c, uint64_t a, uint64_t b, uint64_t *v) {
     return a64_fpx_fz_result(c, a, b, recomp_fpx_fb(recomp_fpx_f(a) - recomp_fpx_f(b)), v); }
 #else
-static inline int a64_fpx_fz_add32(const Ctx *c, uint64_t a, uint64_t b, uint64_t *v) { (void)c; (void)a; (void)b; (void)v; return 0; }
-static inline int a64_fpx_fz_sub32(const Ctx *c, uint64_t a, uint64_t b, uint64_t *v) { (void)c; (void)a; (void)b; (void)v; return 0; }
+static inline __attribute__((always_inline)) int a64_fpx_fz_add32(const Ctx *c, uint64_t a, uint64_t b, uint64_t *v) { (void)c; (void)a; (void)b; (void)v; return 0; }
+static inline __attribute__((always_inline)) int a64_fpx_fz_sub32(const Ctx *c, uint64_t a, uint64_t b, uint64_t *v) { (void)c; (void)a; (void)b; (void)v; return 0; }
 #endif
 /* FMUL/FNMUL/FMLA-family S past the fast path (the "sticky" rescue of the outlined wrappers a64_fpx_mul32_fma32 and
    a64_fpx_fma32_fma32, inside their RECOMP_FPX_OPEN gate): one hardware multiply or fused multiply-add, kept when every

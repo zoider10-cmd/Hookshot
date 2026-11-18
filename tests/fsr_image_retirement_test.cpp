@@ -78,6 +78,7 @@ void full_barrier(VkCommandBuffer, const char*) {}
 void logf(const char*, ...) {}
 void device_lost() { need(false, "unexpected device loss"); }
 void note_timeline_sent(uint64_t) {}
+void rec_close() {}   // (RX_VK_READBACK_EARLY: the recording finished, for the early reads' writers; none here)
 bool memory_sparse_wait(VkSemaphoreSubmitInfo*) { return false; }   // (vk_memory.cpp: no sparse mirror binds here)
 uint64_t oldest_unfinished() { return oldest; }
 #define PROF(x) ((void)0)
@@ -113,6 +114,8 @@ inline uint64_t produced() { return 0; }
 struct OwnSlot { OwnSlot() {} ~OwnSlot() {} };   // (a scope, as the real one)
 }   // namespace rec
 uint64_t rec_end_pos[64];   // (vk_replay.cpp: each slot's end in the recorder's ring)
+uint64_t occ_part_lo = UINT64_MAX, occ_part_hi = 0;   // (vk_replay.cpp, RX_VK_OCC_COPY: no occlusion queries here)
+void occ_copy_part(VkCommandBuffer) {}
 // PRODUCTION
 void retire(uintptr_t id, uint64_t required) {
     bundles[id].required = required;

@@ -22,12 +22,25 @@ inline const char* level_name(int v) {
 
 /// The Dev level's lines, under the Breakdown's: their names, and their values from the renderer's counters (vk_menu.cpp
 /// fps_texts, every half second: the counts a frame over that half second, the uploads a second)
-enum DevLine { kVram, kTextures, kDraws, kDispatches, kPasses, kSkipped, kUploads, kPipelines, kDevLines };
+/// (hookshot) and the renderer's pressure: its waits for a recording slot (the GPU behind), its queue submits (the driver's
+/// and the kernel's time) and the GPU's results written back to the game's memory, a frame each
+enum DevLine { kVram, kTextures, kDraws, kDispatches, kPasses, kSkipped, kUploads, kPipelines, kSlotWait, kQueueSubmit,
+               kWriteBack, kDevLines };
 inline const char* dev_name(int i) {
     static const char* const t[] = {"VRAM", "Textures", "Draws / frame", "Dispatches / frame", "Render passes / frame",
-                                    "Draws skipped / frame", "Texture uploads", "Pipelines built"};
+                                    "Draws skipped / frame", "Texture uploads", "Pipelines built", "GPU slot waits / frame",
+                                    "Queue submits / frame", "Write-backs / frame"};
     return i >= 0 && i < kDevLines ? t[i] : "";
 }
+/// (hookshot) the names in the Dev level's grid, two to a row: short, the details page's rows have the full ones
+inline const char* dev_short(int i) {
+    static const char* const t[] = {"VRAM", "Textures", "Draws", "Dispatches", "Passes", "Skipped", "Uploads", "Pipelines",
+                                    "Slot waits", "Submits", "Write-backs"};
+    return i >= 0 && i < kDevLines ? t[i] : "";
+}
+/// The grid's order after VRAM (which has a row of its own, its value is long): pairs that read together
+constexpr int kDevGrid[kDevLines - 1] = {kTextures, kUploads, kDraws, kDispatches, kPasses, kSkipped, kSlotWait, kQueueSubmit,
+                                         kWriteBack, kPipelines};
 inline double dev_gb(uint64_t bytes) { return bytes / (1024.0 * 1024.0 * 1024.0); }
 /// "5.2 of 7.8 GB": what the game uses of what the driver allows it (VK_EXT_memory_budget); without a budget, its own "5.2 GB"
 inline int vram_line(char* b, size_t n, uint64_t used, uint64_t allowed, bool known) {
@@ -56,28 +69,47 @@ inline const char* corner_name(int v) {
 }
 
 /// Where a frame's time went, on the thread that presents (the parts add up to the frame's time): the game's code (what
-/// is left), the renderer's recording and submitting, waits for the GPU (a recording slot, a fence, OoT's own poll for its
-/// frame's GPU work), and the wait for the frame's turn (the frame pacing, the game's own sleeps, vsync)
-enum Part { kGame, kRender, kGpuWait, kPace, kParts };
+/// is left), the renderer's recording and submitting, waits for the GPU (a recording slot, OoT's own poll for its frame's
+/// GPU work), and the wait for the frame's turn (the frame pacing, the game's own sleeps, vsync). (hookshot) And the game's
+/// waits for its fences, on any of its threads (OoT's main thread makes most): for work the renderer had not recorded yet
+/// (kWaitRender), or had and the GPU had not run yet (kWaitGpu). On another thread they are carved out of the game's part:
+/// the presenting thread waited for that thread meanwhile. kWaitRender also takes the present's wait for room (the render
+/// thread a frame behind). kWaitMain: with the render thread, the present's wait for the main thread's signal that the frame
+/// is written (the game's own time, until then in the renderer's part)
+enum Part { kGame, kRender, kGpuWait, kPace, kWaitRender, kWaitGpu, kWaitMain, kParts };
+/// (hookshot) The render thread's frame (threaded rendering): its recording and submitting (what is left), its waits for the
+/// parallel replay's workers, for the GPU (a recording slot), and for work (idle). Over the same present-to-present span
+enum RenderPart { kRtWork, kRtWorkers, kRtGpu, kRtIdle, kRtParts };
 
 struct Frame {
     int64_t at_ns = 0;          // (its present)
     float ms = 0;               // (present to present)
     float part[kParts] = {};    // (ms)
     float gpu_ms = 0;           // (the GPU's own time for the recordings timed since the frame before: a few frames late)
+    float rt[kRtParts] = {};    // (the render thread's, ms; all 0 without a render thread)
     uint16_t pipelines = 0;     // (pipelines made since the frame before: shaders built in play)
     uint16_t left_out = 0;      // (draws left out because their pipeline was not ready)
 };
 
-/// The parts of a frame of `ms`: what was measured, scaled down if it is more than the frame (a wait that began before the
-/// frame did), and the game's the rest
-inline void split(Frame& f, double ms, double render, double gpu_wait, double pace) {
+/// The parts of a frame of `ms`: what was measured on the presenting thread, scaled down if it is more than the frame (a wait
+/// that began before the frame did), and the game's the rest; then the fence waits of the game's other threads taken out of
+/// the game's part, as far as it goes
+inline void split(Frame& f, double ms, double render, double gpu_wait, double pace, double wait_render = 0, double wait_gpu = 0,
+                  double other_render = 0, double other_gpu = 0, double wait_main = 0) {
     f.ms = (float)ms;
     render = std::max(render, 0.0), gpu_wait = std::max(gpu_wait, 0.0), pace = std::max(pace, 0.0);
-    const double sum = render + gpu_wait + pace;
+    wait_render = std::max(wait_render, 0.0), wait_gpu = std::max(wait_gpu, 0.0), wait_main = std::max(wait_main, 0.0);
+    const double sum = render + gpu_wait + pace + wait_render + wait_gpu + wait_main;
     const double k = sum > ms && sum > 0 ? std::max(ms, 0.0) / sum : 1.0;
     f.part[kRender] = (float)(render * k), f.part[kGpuWait] = (float)(gpu_wait * k), f.part[kPace] = (float)(pace * k);
-    f.part[kGame] = (float)std::max(0.0, ms - (render + gpu_wait + pace) * k);
+    double game = std::max(0.0, ms - sum * k);
+    const double other_r = std::min(std::max(other_render, 0.0), game);
+    game -= other_r;
+    const double other_g = std::min(std::max(other_gpu, 0.0), game);
+    game -= other_g;
+    f.part[kWaitRender] = (float)(wait_render * k + other_r), f.part[kWaitGpu] = (float)(wait_gpu * k + other_g);
+    f.part[kWaitMain] = (float)(wait_main * k);
+    f.part[kGame] = (float)game;
 }
 
 /// The last N frames (N a power of two): back(0) the newest
@@ -112,6 +144,7 @@ struct Summary {
     double avg_ms = 0;         // (the mean frame time over the window)
     double part[kParts] = {};  // (each part's mean)
     double gpu_ms = 0;         // (the GPU's mean time a frame)
+    double rt[kRtParts] = {};  // (the render thread's parts' means)
     int pipelines = 0, left_out = 0;   // (summed over the window)
     double low_fps = 0;        // (the 1% low over the low window)
 };
@@ -132,11 +165,13 @@ Summary summarize(const Ring<N>& r, int64_t now, int64_t window, int64_t low_win
         s.avg_ms += f.ms;
         for (int p = 0; p < kParts; p++) s.part[p] += f.part[p];
         s.gpu_ms += f.gpu_ms;
+        for (int p = 0; p < kRtParts; p++) s.rt[p] += f.rt[p];
         s.pipelines += f.pipelines, s.left_out += f.left_out;
     }
     if (s.frames) {
         s.avg_ms /= s.frames, s.gpu_ms /= s.frames;
         for (double& p : s.part) p /= s.frames;
+        for (double& p : s.rt) p /= s.frames;
     }
     s.low_fps = one_percent_low(low.data(), (int)low.size());
     return s;
@@ -144,24 +179,32 @@ Summary summarize(const Ring<N>& r, int64_t now, int64_t window, int64_t low_win
 
 /// The graph's columns, oldest left: column c holds the frames presented in its share of (now - window, now]; out[c] is
 /// the back() index of its slowest frame, -1 for none; marks[c] whether one of its frames built pipelines or left draws out
+/// (hookshot) A column is a fixed slot of time (window / count), not a share of the window back from now: a frame stays in its
+/// column while the graph scrolls, and the columns do not change between two draws (the line jumped as the shares slid over
+/// the frames). The newest column is the one now is in; *scroll, if asked, how far into its slot now is (0 to 1), for a
+/// smooth scroll
 template <int N>
-void columns(const Ring<N>& r, int64_t now, int64_t window, int count, int* out, bool* marks) {
+void columns(const Ring<N>& r, int64_t now, int64_t window, int count, int* out, bool* marks, double* scroll = nullptr) {
     for (int c = 0; c < count; c++) out[c] = -1, marks[c] = false;
+    if (scroll) *scroll = 0;
     if (count <= 0 || window <= 0) return;
+    const int64_t span = std::max<int64_t>(1, window / count), slot_now = now / span;
+    if (scroll) *scroll = (double)(now - slot_now * span) / (double)span;
     for (int i = 0; i < r.size(); i++) {
         const Frame& f = r.back(i);
-        const int64_t age = now - f.at_ns;
-        if (age >= window) break;
-        if (age < 0) continue;
-        const int c = std::clamp(count - 1 - (int)(age * count / window), 0, count - 1);
+        const int64_t back = slot_now - f.at_ns / span;
+        if (back >= count) break;
+        if (back < 0) continue;
+        const int c = count - 1 - (int)back;
         if (out[c] < 0 || f.ms > r.back(out[c]).ms) out[c] = i;
         if (f.pipelines || f.left_out) marks[c] = true;
     }
 }
 
-/// The Game frame rate cap row's rate (0 60, then 90, 120, 144, 165, 240; 6 Uncapped: 0, no rate); HOS_FPS_MAX over it
+/// The Game frame rate cap row's rate (-1 30, 0 60, then 90, 120, 144, 165, 240; 6 Uncapped: 0, no rate); HOS_FPS_MAX over it
 /// (env_max, 0 when not set: host/nn_vi.c fps_max's rules, 1000 and over is uncapped)
 inline int cap_rate(int fps_cap, int env_max = 0) {
+    if (env_max == 30 || (fps_cap == -1 && env_max <= 0)) return 30;
     static const int rates[] = {60, 90, 120, 144, 165, 240, 0};
     if (env_max > 0) return env_max >= 1000 ? 0 : std::max(env_max, 60);
     return fps_cap >= 0 && fps_cap <= 6 ? rates[fps_cap] : 60;   // (a value this build does not know: 60, as the host)
@@ -201,8 +244,14 @@ inline int rate_grade(double fps, double target_ms) {
     return fps >= want * 0.95 ? 0 : fps >= want * 2 / 3 ? 1 : 2;
 }
 
-/// The text lines: "16.7 ms", "1% low 52"
+/// The frame time's text: "16.7 ms"
 inline int frame_time_text(char* b, size_t n, double ms) { return snprintf(b, n, ms >= 100 ? "%.0f ms" : "%.1f ms", ms); }
-inline int low_text(char* b, size_t n, double fps) { return snprintf(b, n, "1%% low %.0f", fps); }
+/// (hookshot) the 1% low as a frame time, beside the frame time: the slowest 1% of frames' mean time ("1% low 40.0 ms"), from
+/// its rate; "1% low -" with none
+inline int low_text(char* b, size_t n, double fps) {
+    if (fps <= 0) return snprintf(b, n, "1%% low -");
+    const double ms = 1000.0 / fps;
+    return snprintf(b, n, ms >= 100 ? "1%% low %.0f ms" : "1%% low %.1f ms", ms);
+}
 
 } // namespace mkwvk::fps_stats

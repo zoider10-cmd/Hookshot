@@ -225,5 +225,5 @@ test('dev watches direct fragment additions, edits and removals as well as the o
   assert.equal((loader.match(/context\.renderMarkdown\(markdown\)/g) || []).length, 1);
   const config = await readFile(new URL('../astro.config.ts', import.meta.url), 'utf8');
   assert.match(config, /import \{ unified \} from '@astrojs\/markdown-remark';/);
-  assert.match(config, /markdown: \{ processor: unified\(\{ remarkPlugins: \[remarkTestedConfigurations\] \}\) \}/);
+  assert.match(config, /markdown: \{ processor: unified\(\{ remarkPlugins: \[remarkTestedConfigurations\], rehypePlugins: \[rehypeKeyboardScroll\] \}\) \}/);
 });

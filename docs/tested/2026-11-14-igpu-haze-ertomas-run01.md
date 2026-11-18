@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-14 | fix/vk-ptl-native-fadd over main 414f56e2 (dev_packs runtime, renderer pack) | Windows 11 Insider 26220 | Intel Arc B390 (Panther Lake iGPU, 0xB080, no VRAM mirror) / 32.0.101.9150 | Intel Core Ultra X7 358H / 32 GB | Auto (this PC) preset, defaults, RX_VK_NO_INTEL_SERIAL=1 | Kokiri Forest: Saria by Link's house and the Deku Tree path, 37 min of play | Float adds native by default; the milky white haze of issue 618 gone (screen linear mean 0.20 against main's 0.78 at Saria, an Arc B580 0.19); no device loss; run01 |

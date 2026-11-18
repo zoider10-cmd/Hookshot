@@ -70,7 +70,9 @@ static void release_wb(Voice *voice, uint64_t buffer) { (void)voice; (void)buffe
         # An authored import dispatch for the absent HLE, using the real runtime fallback (not a replacement DSP/setter).
         actual.append('HLE(' + FLOAT + ') { static int seen; a64_unimplemented(c, "' + FLOAT + '", &seen); }')
     render = helper.block(source, "static void render_voice(")
-    loop = helper.block(render, "for (int f = 0; f < 2; f++)")
+    # (the per-voice filter loop: the one render_voice opens on its own line; its inner loops by channel and sample put their
+    # braces on the next line. The helper is tests/srccut.py's block, which wants its marker once)
+    loop = helper.block(render, "for (int f = 0; f < 2; f++) {")
     actual.append("static void filter_samples(Voice *v, float out[MAX_CH][FRAME]) {\n" + loop + "\n}")
     flags = subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS if os.name == "nt" else 0
     with tempfile.TemporaryDirectory(prefix="audio-voice-biquad-") as temporary:

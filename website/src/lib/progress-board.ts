@@ -29,10 +29,24 @@ export class ProgressBoard extends HTMLElement {
   region<T extends HTMLElement = HTMLElement>(name: string) { return this.querySelector<T>(`[data-${name}]`)!; }
   connectedCallback() {
     this.events = new AbortController();
+    // Collapse only on first connection at mobile sizes; never close controls the user is editing.
+    const filters = this.querySelector<HTMLDetailsElement>('[data-filters]');
+    if (filters && !filters.dataset.initialized) {
+      if (window.matchMedia('(max-width: 49.99rem)').matches) filters.open = false;
+      filters.dataset.initialized = 'true';
+    }
     const options = { signal: this.events.signal };
     this.form.addEventListener('submit', e => e.preventDefault(), options);
-    this.form.addEventListener('input', () => { this.limit = 20; this.renderResults(); }, options);
-    this.form.addEventListener('reset', () => queueMicrotask(() => { this.limit = 20; this.renderResults(); }), options);
+    this.form.addEventListener('input', event => {
+      if ((event.target as HTMLInputElement).name === 'query') { this.limit = 20; this.renderResults(); }
+    }, options);
+    this.form.addEventListener('change', event => {
+      if ((event.target as HTMLInputElement).name !== 'query') { this.limit = 20; this.renderResults(); }
+    }, options);
+    // The reset event precedes the browser's default reset; a microtask can still read the old values.
+    this.form.addEventListener('reset', () => requestAnimationFrame(() => {
+      if (this.isConnected) { this.limit = 20; this.renderResults(); }
+    }), options);
     this.region('more').addEventListener('click', () => { this.limit += 20; this.renderResults(); }, options);
     this.region('refresh').addEventListener('click', () => this.refresh(), options);
     window.addEventListener('hashchange', () => this.openProblemSearch(), options);
@@ -169,8 +183,15 @@ export class ProgressBoard extends HTMLElement {
     else if (activeGroup) [...root.querySelectorAll<HTMLDetailsElement>('details')].find(d => d.dataset.group === activeGroup)?.querySelector<HTMLElement>('summary')?.focus();
   }
   renderResults() {
-    if (!this.feed) return;
     const values = Object.fromEntries(new FormData(this.form).entries());
+    const selected = this.form.querySelector<HTMLInputElement>('input[name="view"]:checked');
+    const view = selected?.parentElement?.textContent?.trim() || 'Everything';
+    const active = ['status', 'platform', 'area', 'version'].flatMap(name => {
+      const select = this.form.elements.namedItem(name) as HTMLSelectElement;
+      return select.value ? [`${name === 'version' ? 'Version' : name[0].toUpperCase() + name.slice(1)}: ${select.selectedOptions[0].textContent}`] : [];
+    });
+    this.region('filter-summary').textContent = [view, ...(active.length ? active : ['no filters'])].join(' · ');
+    if (!this.feed) return;
     const items = filterItems(this.feed.items, values);
     const results = this.region('results');
     const focusedId = (document.activeElement as HTMLElement)?.closest<HTMLElement>('[data-item]')?.dataset.item;

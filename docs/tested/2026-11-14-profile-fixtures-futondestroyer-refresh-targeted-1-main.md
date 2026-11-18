@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-14 | main 5d3ecc78; game-free checks | Windows 11 build26300; native Python3.14.7; no desktop interaction | Not used; no GPU work | i7-13700F; 32 GB RAM | Three game-free drivers: make_game_cache, linux_preflight, vk_pgo; interleaved main/PR/main/PR | Authored fixtures; profile-fixtures-futondestroyer-refresh-targeted-1-main; no game scene | 1 passed, 2 failed, 0 skipped; failures: tests/test_linux_preflight.py, tests/test_make_game_cache.py; no game or performance claim |

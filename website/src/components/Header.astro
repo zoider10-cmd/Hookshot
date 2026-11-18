@@ -1,7 +1,9 @@
 ---
 import Search from '@astrojs/starlight/components/Search.astro';
 import ThemeSelect from '@astrojs/starlight/components/ThemeSelect.astro';
+import { Icon } from '@astrojs/starlight/components';
 
+const { hasSidebar } = Astro.locals.starlightRoute;
 const links = [
   ['Get started', '/install/'],
   ['Help', '/help/'],
@@ -9,7 +11,7 @@ const links = [
   ['About', '/about/'],
 ];
 ---
-<div class="header">
+<div class:list={['header', { 'has-mobile-nav': !hasSidebar }]}>
   <div class="brand">
     <a class="brand-home" href="/" aria-label="Hookshot home">
       <img src="/branding/hookshot.png" alt="" width="512" height="512" decoding="async" />
@@ -18,10 +20,13 @@ const links = [
     <small>by <a href="https://magicbean.dev/">Team MagicBean</a></small>
   </div>
   <nav class="links" aria-label="Main navigation">{links.map(([label, href]) => <a href={href}>{label}</a>)}</nav>
-  <details class="mobile-menu">
-    <summary>Menu</summary>
+  {!hasSidebar && <details class="mobile-menu">
+    <summary aria-label="Main navigation">
+      <Icon name="bars" class="open-menu" />
+      <Icon name="close" class="close-menu" />
+    </summary>
     <nav aria-label="Main navigation">{links.map(([label, href]) => <a href={href}>{label}</a>)}</nav>
-  </details>
+  </details>}
   <div class="tools"><Search /><ThemeSelect /></div>
 </div>
 
@@ -71,14 +76,20 @@ const links = [
 
   .mobile-menu { display: none; }
 
+  @media (min-width: 50rem) and (max-width: 70rem) {
+    .tools :global(site-search) { width: clamp(8rem, 20vw, 16rem); }
+  }
   @media (max-width: 70rem) {
-    .header { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; align-content: center; gap: .15rem .5rem; }
+    .header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: center; gap: .5rem; }
+    .header.has-mobile-nav { padding-inline-end: calc(var(--sl-menu-button-size) + var(--sl-nav-gap)); }
     .links { display: none; }
     .tools { grid-column: 2; grid-row: 1; gap: .75rem; }
-    .mobile-menu { display: block; position: relative; grid-row: 2; grid-column: 1 / -1; min-width: 0; }
-    .mobile-menu summary { width: fit-content; min-height: 44px; padding: .6rem .8rem; cursor: pointer; font-weight: 600; color: var(--sl-color-white); }
+    .mobile-menu { display: block; position: fixed; inset-inline-end: var(--sl-nav-pad-x); top: calc((var(--sl-nav-height) - var(--sl-menu-button-size)) / 2); }
+    .mobile-menu summary { list-style: none; }
+    .mobile-menu summary::-webkit-details-marker { display: none; }
+    .mobile-menu:not([open]) :global(.close-menu), .mobile-menu[open] :global(.open-menu) { display: none; }
     .mobile-menu nav {
-      position: absolute; z-index: 10; inset-inline: 0; top: 100%; display: grid; gap: .2rem; padding: .6rem;
+      position: fixed; z-index: 10; inset-inline: var(--sl-nav-pad-x); top: var(--sl-nav-height); display: grid; gap: .2rem; padding: .6rem;
       background: var(--sl-color-bg-nav); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 24px #0003;
     }
     .mobile-menu nav a { display: block; min-height: 44px; padding: .6rem .8rem; color: var(--sl-color-white); font-weight: 600; text-decoration: none; border-radius: 4px; }
@@ -95,5 +106,8 @@ const links = [
     .tools { gap: .4rem; }
     .tools :global(starlight-theme-select .label-icon) { display: none; }
     .tools :global(starlight-theme-select select) { width: 4.5rem; max-width: none; margin-inline: 0; padding-inline: .25rem 1.4rem; }
+  }
+  @media (max-width: 21.99rem) {
+    .brand-home span { display: none; }
   }
 </style>

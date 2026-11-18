@@ -9,6 +9,7 @@ import unittest
 from unittest import mock
 
 RUN_ALL_ARGS = ["--cxx", "{cxx}"]
+RUN_ALL_MODULES = ["zstandard"]
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "nx2"))
 import bake_mimo

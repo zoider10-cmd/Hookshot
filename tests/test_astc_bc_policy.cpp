@@ -24,6 +24,11 @@ int main() {
     expect(!all_by_vram(9400 * MB), "a 10 GB card");
     expect(!all_by_vram(11200 * MB), "a 12 GB card");
     expect(!all_by_vram(15000 * MB), "a 16 GB card");
+    using astc_bc_policy::all;
+    expect(all(10232 * MB, true), "an integrated GPU allowed 10 GB (a Ryzen 9 7900X's, 32 GB of RAM)");
+    expect(all(0, true), "an integrated GPU whose allowance is unknown");
+    expect(all(7402 * MB, true), "an integrated GPU allowed under 8.5 GB (UHD Graphics, 16 GB of RAM)");
+    expect(!all(15000 * MB, false) && all(7133 * MB, false) && !all(0, false), "a card: by what it is allowed, as before");
     if (failures) return EXIT_FAILURE;
     std::printf("astc bc policy: all checks passed\n");
     return EXIT_SUCCESS;

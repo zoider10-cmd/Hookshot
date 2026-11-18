@@ -24,6 +24,8 @@ struct Hardware {
     bool rdna4 = false;         // (an AMD RDNA 4 card, RX 9000: FSR 4)
     bool dlss_built = false;    // (the game was built with NVIDIA's DLSS SDK)
     bool fsr4_built = false;    // (with AMD's FSR 4 runtime)
+    bool xess_ready = false;    // (Intel's libxess.dll found and loaded: Intel XeSS on the Upscaler row. Only said in the
+                                // choice's why, never chosen, and not part of the fingerprint)
     uint32_t vram_mb = 0;
     uint32_t ram_mb = 0;        // (0: not known)
     int threads = 0;            // (0: not known)
@@ -36,7 +38,7 @@ struct Hardware {
 // at boot, before the card is known, so a size chosen here only applied at the next start, and a new install's first close of
 // the menu asked to restart for it
 struct Choice {
-    int tier = 0;               // (the preset whose memory budgets and scaling hold: 1 Minimum ... 5 Ultra)
+    int tier = 0;               // (the preset whose scaling holds: 1 Minimum ... 5 Ultra; VRAM budgets: texture_budget.h)
     int upscaler = 0;
     int resolution = 0;         // (0: the tier's own, as the preset sets it)
     char why[480] = {};
@@ -44,23 +46,24 @@ struct Choice {
 
 // (upscaler_rows.h's, kept here so the rules compile on their own; the test checks they agree)
 enum { GAME = 0, DLSS = 1, FSR4 = 4 };
-enum { RES_QUALITY = 3, RES_PERFORMANCE = 4, RES_BALANCED = 5 };
+enum { RES_QUALITY = 3, RES_PERFORMANCE = 4, RES_BALANCED = 5, RES_ULTRA_PERFORMANCE = 6 };
 
 // The Render resolution each preset sets (vk_menu.cpp apply_preset; tests/test_auto_settings.py checks they agree): the tier's
 // own, with the game's own upscaler
 constexpr int kTierResolution[] = {0, 4, 2, 1, 1, 1};
 
-// The memory tier: the presets' own steps (Minimum 4 GB, Low 6, Balanced 8, High 12, Ultra 16+). High from 11.5 GB: its 7.5 GB
-// of textures and 2 GB of mirrors leave a 10 or 11 GB card (RTX 3080, RX 6700, RTX 2080 Ti) too little for its targets and the
-// upscaler, and 12 GB cards report 12,000-12,288 MB. An integrated GPU, a handheld or a card without mesh shaders starts at
+// The memory tier: the presets' own steps (Minimum 4 GB, Low 6, Balanced 8, High 12, Ultra 16+). High from 11.5 GB: chosen when
+// High's 7.5 GB of textures and 2 GB of mirrors left a 10 or 11 GB card (RTX 3080, RX 6700, RTX 2080 Ti) too little for its
+// targets and the upscaler, and 12 GB cards report 12,000-12,288 MB. An integrated GPU, a handheld or a card without mesh shaders starts at
 // Minimum whatever its memory says: the memory it reports is shared with the system, or the fallback costs the frame more than
-// the memory saves
+// the memory saves. The tier sets the scaling rows only: the VRAM budgets are the card's own (texture_budget.h, mirror_budget.h),
+// the sizes these presets gave the cards they were for
 inline int tier_of(const Hardware& h) {
     if (h.integrated || h.handheld || !h.mesh_native) return 1;
     const uint32_t mb = h.vram_mb;
     int t = mb <= 4608 ? 1 : mb <= 6656 ? 2 : mb <= 11776 ? 3 : mb <= 13312 ? 4 : 5;
     // (under 12 GB of RAM the game's memory and the copies the driver keeps of its textures leave little: a lower tier's
-    // smaller budgets)
+    // lighter rows, and texture_budget.h's smaller texture budget for such a PC)
     if (h.ram_mb && h.ram_mb < 12288 && t > 2) t = 2;
     return t;
 }
@@ -94,8 +97,19 @@ inline Choice choose(const Hardware& h) {
         c.resolution = c.tier == 2 ? RES_PERFORMANCE : c.tier == 3 ? RES_BALANCED : RES_QUALITY;
         add(c, c.tier == 2 ? "AMD RDNA 4: FSR 4 Performance" : c.tier == 3 ? "AMD RDNA 4: FSR 4 Balanced" : "AMD RDNA 4: FSR 4 Quality");
     } else {
+        // (Intel XeSS is never chosen here: it runs only with Intel's own DLL beside the game, whose version the player picked,
+        // it has not been measured against the game's own network on Intel's GPUs, and the network was what the presets were
+        // tuned on. A PC that has it is told it is there)
         add(c, h.rtx && !h.dlss_built ? "the game's own upscaler (this build has no DLSS)"
-               : h.rdna4 && !h.fsr4_built ? "the game's own upscaler (this build has no FSR 4)" : "the game's own upscaler");
+               : h.rdna4 && !h.fsr4_built ? "the game's own upscaler (this build has no FSR 4)"
+               : h.vendor == INTEL && h.xess_ready ? "the game's own upscaler (Intel XeSS is there: choose it in the Upscaler row)"
+                                                   : "the game's own upscaler");
+    }
+    // (an integrated GPU beside 4 threads or fewer: Minimum's 50% was 60-220 ms of GPU time a frame in Kokiri Forest on an
+    // i3-1115G4's UHD Graphics (2 cores, 4 threads, 16 GB), 3-5 fps. A third of each side is a ninth of the pixels)
+    if (h.integrated && h.threads > 0 && h.threads <= 4) {
+        c.resolution = RES_ULTRA_PERFORMANCE;
+        add(c, "4 threads or fewer: the game's own at 33%");
     }
     return c;
 }

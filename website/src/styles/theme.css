@@ -36,6 +36,7 @@
   --sl-text-h1: 2.65rem;
   --sl-line-height: 1.65;
   --sl-nav-height: 5rem;
+  --sl-menu-button-size: 2.75rem;
   --sl-sidebar-width: 16.5rem;
   --sl-content-width: 49rem;
 
@@ -65,7 +66,6 @@
   --panel: #eef0ea;
   --panel-hover: #e5e8e1;
 }
-@media (max-width: 70rem) { :root { --sl-nav-height: 8rem; } }
 
 * { scrollbar-color: var(--sl-color-gray-4) transparent; }
 ::selection { background: #466b4c; color: #fff9dc; }
@@ -78,6 +78,25 @@ h1#_top { letter-spacing: -.03em; }
 }
 
 /* Starlight's frame */
+/* One appearance for Starlight's sidebar toggle and the splash-page disclosure. */
+:is(.sl-menu-button, .mobile-menu > summary) {
+  align-items: center; justify-content: center;
+  width: var(--sl-menu-button-size); height: var(--sl-menu-button-size);
+  padding: .5rem; border: 0; border-radius: 50%;
+  color: var(--sl-color-black); background-color: var(--sl-color-white);
+  box-shadow: var(--sl-shadow-md); cursor: pointer;
+}
+.mobile-menu > summary { display: flex; }
+:is(.sl-menu-button, .mobile-menu > summary) svg { width: 1.25rem; height: 1.25rem; }
+:is(.sl-menu-button:has(~ :popover-open), .mobile-menu[open] > summary) {
+  background-color: var(--sl-color-gray-2); box-shadow: none;
+}
+[data-theme='light'] :is(.sl-menu-button, .mobile-menu > summary) {
+  color: var(--sl-color-white); background-color: var(--sl-color-black);
+}
+[data-theme='light'] :is(.sl-menu-button:has(~ :popover-open), .mobile-menu[open] > summary) {
+  background-color: var(--sl-color-gray-5);
+}
 header.header { border-bottom: 1px solid var(--border); }
 .content-panel { border: 0; }
 .sidebar-pane, .right-sidebar { border-color: var(--border); }

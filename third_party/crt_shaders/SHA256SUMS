@@ -1,0 +1,4 @@
+e382eec413c2acf5d03cce65d447347553032acf2e550826d0142a9c51d559ef  crt/shaders/crt-lottes.slang
+4b8dc17d092440d6e1edd31aaea41165bc491e82e112ddb974f1db2d450be11e  crt/shaders/hyllian/crt-hyllian-fast.slang
+0214419beed4c08d991288e90f8a73700fd7da567a454ad2ffe725b3b6eea366  crt/shaders/zfast_crt/zfast_crt_finemask.slang
+e1006274577b85f18ed793856b46f92d5cd6f6207a98af398004644006907bf1  crt/shaders/zfast_crt/zfast_crt_impl.inc

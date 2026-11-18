@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-15 | main 9e6f231d0ded199793e8270d20ec60cdb765d28f production sources plus the new ed097a30 test | Ubuntu 24.04.5 WSL2; kernel 6.18.58.1-microsoft-standard-WSL2; no window | Not used; game-free fixture | CPU/RAM not recorded | Python 3.12.3; GCC/G++ 13.3.0; fake SDL; one warm-up per variant excluded | tests/test_audio_in.py, measured sequence main/fix/main/fix, invocation 1 | linux-pair01-main: expected expanded-list/boundary failure; native exit 43, Python exit 1; 0.686 s diagnostic elapsed; no performance claim |

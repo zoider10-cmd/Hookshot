@@ -18,7 +18,11 @@ will. That includes:
 - `work/` and everything in it: the extracted dump, `image.bin`, the lifted C, test builds, runs and screenshots;
 - `hookshot.exe`, `hookshot_vk.dll` and other build output, and the game folder's `cache/` (`hookshot_programs.bin` and
   its `.idx`, `hookshot_pipelines.bin`, `hookshot_vk_pipelines.bin`);
-- saves (`user/`), `hookshot_options.ini`, `hookshot_env.txt` and `language.txt`.
+- saves (`user/`), `hookshot_options.ini`, `hookshot_env.txt` and `language.txt`. The one exception: scrubbed saves
+  under `assets/saves/` ([the rules](assets/saves/README.md)): one slot each (`progress.sav` and `caption.sav` only),
+  its picture made grey and its date reset by `scripts/hookshot_saves.py scrub`, passing `check-repo-saves`, made fresh
+  for the farm (never someone's own adventure), and added through a pull request two maintainers approve.
+  `account.sav`, `option.sav`, `hookshot_options.ini`, `hookshot_env.txt` and the rest of `user/` stay banned.
 
 Don't ask in an issue, a pull request or the chat where to get the game, how to decrypt it, or for someone else's
 files. A screenshot, a video and `hookshot_log.txt` are fine and often necessary: the log holds no game data.
@@ -43,16 +47,28 @@ Five minutes, then a first build.
    `git blame` past your clone, a version name from the tags (a shallow build calls itself by its commit, `2331f46`),
    and cutting a release (`scripts/release.py`). For those, `git fetch --unshallow --tags` once.
 
-2. **Sign in:**
+2. **Get the team's tooling and sign in.** The sign-in, `forge.py` (forks, pull requests, issues) and the team chat live
+   in [MagicBeanDev/Tooling](https://git.magicbean.dev/MagicBeanDev/Tooling), shared by every
+   MagicBeanDev repository. Clone it beside this checkout, keep it current (`git -C ../Tooling pull --ff-only`), and
+   run its scripts from here:
 
    ```
-   python -I scripts/forge.py login
+   git clone https://git.magicbean.dev/MagicBeanDev/Tooling.git ../Tooling
+   python -I ../Tooling/scripts/forge.py login
    ```
 
    Click **Sign in with Discord** (or sign in with the email account you made on git.magicbean.dev) and approve. That
    one sign-in covers git.magicbean.dev (git signs in by itself from then on, and the remote `forge` points at
-   Hookshot), the team chat and [test requests](docs/test-requests.md). The first time creates your account.
-   [docs/forge.md](docs/forge.md) has the details and the other commands.
+   Hookshot) and the team chat. The first time creates your account.
+   [Tooling's docs/forge.md](https://git.magicbean.dev/MagicBeanDev/Tooling/src/branch/main/docs/forge.md) has the details and the other commands.
+
+   **Using Claude Code?** Install the team's plugin once per PC, for the skills (`/magicbean:team-updates`,
+   `/magicbean:release`, `/magicbean:batch-review`) in every MagicBeanDev repository:
+
+   ```
+   /plugin marketplace add https://git.magicbean.dev/MagicBeanDev/Tooling.git
+   /plugin install magicbean@magicbean
+   ```
 
 3. **Check the game-free tests run** (no game needed):
 
@@ -72,7 +88,7 @@ break.
 
 | | What |
 |---|---|
-| **Test on other hardware** | NVIDIA cards are the most tested; the README's [status table](README.md#project-status) says what works where, and the [tested configurations catalogue](https://hookshot.magicbean.dev/tested-configurations/) lists the runs behind it. Reports from AMD and Intel cards, other drivers, other distributions and SteamOS help even when everything works. Pull requests that need a run on your hardware are queued as [test requests](docs/test-requests.md). |
+| **Test on other hardware** | NVIDIA cards are the most tested; the README's [status table](README.md#project-status) says what works where, and the [tested configurations catalogue](https://hookshot.magicbean.dev/tested-configurations/) lists the runs behind it. Reports from AMD and Intel cards, other drivers, other distributions and SteamOS help even when everything works. Lend your PC to the [Test Farm](https://beanstalk.magicbean.dev/how): it tests approved pull requests on your hardware by itself. |
 | **Play further** | The tested area is the start of the game. Reaching new areas, cutscenes, menus and items finds problems nobody has seen. |
 | **Report what is broken** | Use the [issue forms](https://git.magicbean.dev/MagicBeanDev/Hookshot/issues/new/choose): game problem, install or build problem, save problem or idea. Include the version, your hardware, where you were and `hookshot_log.txt`. |
 | **Send a fix** | Branch, fix, test, open a pull request from your fork ([how](#commits-and-pull-requests)). Small, focused changes are the easiest to review. |
@@ -90,6 +106,8 @@ break.
 
 ## Development setup
 
+After you clone the repository, run **`mise run setup`** once to install the pre-commit and commit-msg hooks.
+
 You need your own supported dump: program `0400486024DEC000`, update v131072, build `e0f3ccfa`. Other versions don't
 work, and the build reads the dump where it lies without changing it. A build needs about 60 GB free. For runtime
 memory, see the README's [requirements](README.md#what-you-need): the game alone can exceed 16 GiB, depending on the
@@ -97,6 +115,15 @@ build, driver and scene. Build on an SSD if you can: a hard drive works but take
 
 Where a step below needs files from the Builder, use the Windows builder of the newest
 [Hookshot release](https://git.magicbean.dev/MagicBeanDev/Hookshot/releases).
+
+### Tools: mise, CircleCI and AI agents
+
+- **mise** pins every tool this repo uses. Install it ([mise docs](https://mise.jdx.dev/getting-started.html)), then in the repo run `mise install` and, once per clone, `mise run setup` (it installs the pre-commit and commit-msg hooks). `mise run lint` and `mise run test` run the same checks CI does.
+- **CircleCI** runs CI for this repo; [docs/ci.md](docs/ci.md) has the flow and what runs when. Sign up at https://circleci.com/signup and ask in Discord to be added to the MagicBeanDev org, so you can see runs, read logs and rerun jobs.
+- **CircleCI CLI:** `mise install` installs the pinned version, or see the [official install docs](https://circleci.com/docs/guides/toolkit/circleci-cli/). Run `circleci auth login` once.
+- **CircleCI MCP server**, so an AI agent can read failures and logs and rerun jobs. Claude Code: `claude mcp add --transport http circleci-mcp-server https://mcp.circleci.com/v1/mcp`, then `/mcp` and Authenticate. Cursor: search "circleci" in the MCP marketplace.
+- **CircleCI docs MCP**, so an agent can look things up in CircleCI's docs (no account needed): `claude mcp add --transport http circleci-docs https://circleci.mcp.kapa.ai`.
+- **Chunk CLI** (optional) runs this repo's checks on a remote CircleCI sidecar, handy for an agent or a machine without the toolchain. Install with `brew install CircleCI-Public/circleci/chunk` (Windows: see its [README](https://github.com/CircleCI-Public/chunk-cli)), run `chunk auth login`, then `chunk sidecar create`, `chunk sidecar sync` and `chunk validate`. The commands it runs are in `.chunk/config.json`.
 
 ### Windows
 
@@ -117,7 +144,6 @@ Where a step below needs files from the Builder, use the Windows builder of the 
    | From `tools` | To | Variable |
    |---|---|---|
    | `cpm` | anywhere | `RX_CPM` points at it (Vulkan headers and FFmpeg; without it the standalone build stops, unless system headers or `HOOKSHOT_*_HEADERS` are set) |
-   | `wgpu-native` | anywhere | `WGPU_NATIVE` points at it (the WebGPU fallback renderer; without it the game has none) |
    | `third_party` | `third_party\` | its `.dll`, `.exe`, `.lib` and `.sha1` files, to the same places: `a64emit`, `lld-link`, `zbic` and SDL2 |
    | `work` | `work\` | hot-function list, link order, profile and icon (without them the game builds but runs slower) |
 
@@ -187,7 +213,7 @@ state on an external SSD, see [portable Builder setup](docs/windows-portable-bui
 | `python -I nx2/lift.py --standalone --write` | Lift the game to C in `work/sa/gen`. |
 | `python -I nx2/build.py --standalone --jobs 4` | Compile `work/sa/build/hookshot.exe` and `hookshot_vk.dll`. |
 | `powershell -File scripts/run-vk.ps1 -Window -Seconds 120` | Run the standalone build and take screenshots in `work/runs/<name>/shots`. |
-| `python -I scripts/prof.py <stacks file>` | Read a profile sampled with `HOS_PROFILE`, `HOS_SAMPLE` and `HOS_SAMPLE_FILE`. |
+| `python -I scripts/prof.py <stacks file>` | Read a profile sampled with `HOS_PROFILE_EVERY`, `HOS_SAMPLE` and `HOS_SAMPLE_FILE`. |
 
 Use a separate `--work` folder (or `OOT_WORK`) to keep more than one dump. The lifted C and every build stay local.
 Not measuring speed? [A faster build for development](docs/development.md#a-faster-build-for-development) compiles the
@@ -205,13 +231,17 @@ python -I -B tests/run_all.py
 
 It runs every `tests/test_*.py` and `nx2/test_*.py` in its own process, the C++ unit tests under `gpu/vk/tests` and a
 byte-compile of every tracked Python file, keeps going after a failure, and ends with a table and every failure's
-output. Name part of a path to run only matching checks (`tests/run_all.py ub_`). A check whose tool is missing (a
+output. Name part of a path to run only matching checks (`tests/run_all.py ub_`). While you work, `--changed [BASE]`
+runs only the checks that read a file your branch changed since it left `main` (committed, uncommitted or untracked:
+by path, by name or as a module they import; every check when the runner or a shared test file changed). Before a pull
+request the whole run is still the one that counts. A check whose tool is missing (a
 compiler, `spirv-val`, the SPIR-V or Vulkan headers, `zstandard`) is skipped and says so; `--strict` fails it instead.
 Checks that can't run everywhere say so in their own file (`RUN_ALL_SKIP`); `--no-skip` runs them anyway.
 
-Forgejo doesn't run these on pull requests or on `main` for now: CI runs only the light checks (the title, the
-description, workflow lint, the third-party notes), and a maintainer can start the full checks by hand (*Actions* >
-*CI* > *Run workflow*). So run them before you open a pull request and put their results in it.
+CircleCI on Forgejo (see [docs/ci.md](docs/ci.md)) runs path-filtered game-free checks on same-repo pull requests and
+`main`. Run `mise run ci:smoke` and `mise run test` locally before you push, and put results in
+the pull request. Forgejo Actions workflows under `.forgejo/workflows/` remain until cutover; they still match what
+CI reproduces.
 
 ### Checks that need your dump or a run
 
@@ -244,6 +274,10 @@ for scripted input, screenshots, frame dumps and profiles are in the development
   ```
 
   `{name}` is a tool the runner finds (`cxx`, `vulkan_headers`, `spirv_headers`, `spirv_val`, `glslang`, `dotnet`).
+- A check that cuts a function or a block out of a source file by its text uses `tests/srccut.py`: `block(text,
+  marker)` from the marker to the brace that closes it (braces in strings, comments and preprocessor lines not
+  counted), `between(text, start, end)`. A marker that is missing or appears twice stops the check with one message
+  naming the source and the marker, so a renamed function is one clear failure, not a wrong cut.
 - Keep it fast, and make it pass on Linux and Windows where it can.
 - For a renderer or runtime fix, say what you saw before and after, on which GPU and driver, and where in the game.
 
@@ -251,6 +285,9 @@ for scripted input, screenshots, frame dumps and profiles are in the development
 
 - Match the file you're editing: there is no formatter, so follow the indentation, comments and naming around you. Don't
   reformat unrelated code in the same change.
+- A function that keeps a rule written in the docs says where, in a comment just above it: `// doc: docs/<file>.md#<heading
+  anchor>` (`# doc:` in Python), with the rule's number or a few words after it. `tests/test_doc_anchors.py` fails on an
+  anchor whose file or heading is gone, so a renamed heading is fixed in the same change.
 - Keep game-specific code in new files where possible. `nx2/`, `host/` and `gpu/` stay close to mkw-recomp so upstream
   fixes apply as a patch; each sync names its mkw-recomp base commit in the commit message.
 - Don't modify `third_party/`: its parts are upstream copies with their notices in `PROVENANCE.md` (a64-kit's note lists
@@ -260,8 +297,11 @@ for scripted input, screenshots, frame dumps and profiles are in the development
   deliberate refresh from upstream, say so in the part's note and run `python -I scripts/check_third_party.py --update
   <part>` in the same commit.
 - Treat local mkw-recomp and Eglantine checkouts as read-only references.
-- New switches use `RX_` in the renderer and `HOS_` in the runtime. They are off or neutral unless asked for, cost
-  nothing while off, and are documented beside the switches around them.
+- New switches use `RX_` in the renderer and `HOS_` in the runtime. A change that should have one (to A/B it, to turn
+  it off, to roll it back) gets one, and it ships at its **recommended** value: on by default when that is what you
+  recommend and the measurements back it, off when it is only for testing or not yet measured enough; never off just
+  because it is new. It costs nothing while off, and it is documented beside the switches around them. The PR's
+  *Flags and settings* says its value before and after, and why.
 - The GPU replay rules in [design notes, section 4](docs/design.md#4-the-lessons-from-mkw-as-rules-here) are not
   suggestions: nothing the replay reads may come from live guest memory, waits are honoured per queue, and texture and
   sampler registrations stay in submission order.
@@ -274,11 +314,16 @@ for scripted input, screenshots, frame dumps and profiles are in the development
 
 ## Commits and pull requests
 
+Changes to recorded menu, Launcher, font or shared renderer inputs also trigger the
+[user-guide screenshot source review](docs/images/guide/README.md#developer-maintenance-plan).
+Run the check and review the affected image and written steps before updating its fingerprints;
+even an implementation-only header change needs a recorded decision to retain or recapture it.
+
 Every pull request uses the [pull request template](.forgejo/pull_request_template.md): its sections are the
 description, its checklist stays whole, and `forge.py pr ready` checks it before review.
 
 Hookshot's `main` takes reviewed pull requests only. You work on a branch, push it to your fork and open the pull
-request from there. Set up pushing once: `python -I scripts/forge.py fork` makes your fork and the remote
+request from there. Set up pushing once: `python -I ../Tooling/scripts/forge.py fork` makes your fork and the remote
 `forge-fork` (`pr create` does it too if you haven't).
 
 ```
@@ -286,42 +331,45 @@ git fetch forge && git switch -c fix/arc-walls forge/main        jj: jj git fetc
 ... change, build, test, commit ...
 git push forge-fork fix/arc-walls                                 jj: jj bookmark create fix/arc-walls -r @;
                                                                       jj git push --remote forge-fork -b fix/arc-walls
-python -I scripts/forge.py pr create fix/arc-walls --title "fix(vk): walls missing on Intel Arc" --body-file pr.md
+python -I ../Tooling/scripts/forge.py pr create fix/arc-walls --title "fix(vk): walls missing on Intel Arc" --body-file pr.md
 ```
 
 1. Name the branch for the change: `fix/...`, `linux/...`, `builder/...`, `docs/...`. One topic per pull request: a fix
    doesn't carry a refactor, and two unrelated fixes are two PRs.
 2. Write the title as a Conventional Commit ([below](#pull-request-titles)).
-3. Fill in the description from [the pull request template](.forgejo/pull_request_template.md): the web page puts it in the box,
-   and `forge.py pr create` starts from it when you give no `--body-file`, with the commits filled in. Each heading
-   says in a line what a good answer looks like:
-   - **Why**: the problem or goal a player would notice, in one or two sentences ("The menu's text is cut off at 4K");
-   - **What changed**: bullets by area, with the files and functions a reviewer should read;
-   - **Flags and settings**: a note for reviewers and testers, not a gate: a row per switch, menu row, ini key or
-     build flag added or changed (what it does, its default, your recommendation: on by default, off by default or
-     on after more testing, with why; where it helps, where it doesn't and where it is untested), or "None";
-   - **Measurements**: `main` and this PR, each at its commit, the hardware, the scene, the method, how to reproduce
-     it, the table and the log lines ([what counts](#measurements));
-   - **Testing** (the [template](.forgejo/pull_request_template.md)'s section), in three parts: **Tested** (what you ran and checked, where and how, including what you checked
-     but didn't measure), **Not tested** (what the PR could affect that nobody has run yet, and why) and **Needs other
-     testers** (a line per thing you can't test yourself: what to check, the result expected, and its
-     [test request](docs/test-requests.md); "None" if you covered everything). The PR goes ready only once those test
-     requests are open;
-   - **Screenshots** when it shows on screen, from the same spot (a screenshot of the game is fine: the rule above is
-     about game files);
-   - **Risk and rollback**: what could break, and how to turn it off or revert it; **Reviewer notes** if any;
-   - `Fixes #123` (one line per issue) closes the issue when the PR merges; `See #123` keeps it open;
-   - the **checklist**: the whole *For everyone* list, every box ticked; from *If applicable*, only the boxes that
+3. Fill in the description from [the pull request template](.forgejo/pull_request_template.md): the web page puts it
+   in the box, and `forge.py pr create` starts from it when you give no `--body-file` (the type from the title, How to
+   reproduce only for a fix, the commits in the Measurements' columns). The comment under each heading says what a
+   good answer looks like; in short:
+   - the **status line** first: type, risk, where it was tested and where it still needs testing;
+   - **Why**, in plain words a player could follow, with the issues that fit linked (search the tracker first);
+   - **How to reproduce**, for a fix only: where it was seen, the steps, expected against actual;
+   - **What changed**: a two- or three-sentence summary, then the details by area, naming files and functions;
+   - **Measurements**: the verdict first, then the setup and a table whose columns name their commits
+     ([what counts](#measurements)), or one line saying why there is nothing to measure. Its **Flags and settings**
+     says "None", or gives each switch, menu row, ini key or build flag added or changed: its value before and after
+     this PR, its effect, where it helps, and your recommendation;
+   - **Testing**: what was tested (where and how), what wasn't (and why), and what **must be tested** before merge:
+     exactly where (OS, GPU, driver, or a Test Farm tag), the steps for someone else, the result to expect, and who
+     runs it: the Test Farm (Beanstalk: a `@Beanstalk <what to test>` comment on the PR) or a person by hand ("None"
+     when you covered everything);
+   - **Risks**: what could break, how to turn it off, and its **Compatibility** (saves, `hookshot_options.ini`, the
+     shader and pipeline caches, the vk ABI, the builder's tools);
+   - **Issues**: `Fixes #123` closes the issue on merge, `See #123` links it; delete the section when there is none;
+   - the **checklist**: the whole *Everyone* list, every box ticked; from *When it applies*, only the boxes that
      apply to this PR, ticked (delete the rest: a box kept means it applies, so it must be done). `pr create` keeps
      the ones the diff suggests, and the check warns when the diff suggests one that isn't there.
      The author keeps it true: check each box against the PR as it is now, and again after every push (tick what
-     holds, untick what no longer does, delete what stopped applying). A *For everyone* box that can't be true yet
+     holds, untick what no longer does, delete what stopped applying). An *Everyone* box that can't be true yet
      stays unticked with the reason beside it, and the PR stays WIP.
      Every box is the author's to settle: work it out from the diff, the tests and the runs, and ask the person you
      work for only about what you can't settle yourself.
-4. **A pull request is work in progress until it is measured and ready for review.** On Forgejo that is a title
+4. **A change the game runs opens as a pull request only once it has run in the game**, at least once where it
+   matters: `forge.py pr create --tested-in-game "where it ran and what you saw"` (the PR's first comment). It refuses
+   a branch that touches `gpu/`, `host/`, `nx2/`, `assets/` or `third_party/` without it; `--force` opens it anyway.
+   **A pull request is work in progress until it is measured and ready for review.** On Forgejo that is a title
    starting with `WIP:` (or `[WIP]`). `pr create` opens it so (`--ready` when the description is complete already);
-   `pr ready <n>` marks it ready once the Measurements have real numbers and every *For everyone* box is ticked, and
+   `pr ready <n>` marks it ready once the Measurements have real numbers and every *Everyone* box is ticked, and
    refuses until then (the same check runs on every pull request: `scripts/check_pr_description.py`). Reviewers
    don't review a WIP pull request. One that turns out to need more work goes back to WIP (`pr wip <n>`); one without
    measurements also gets the label `needs measurements`.
@@ -334,7 +382,7 @@ python -I scripts/forge.py pr create fix/arc-walls --title "fix(vk): walls missi
    your branch; measure again, or say in the comment why the numbers still hold.
 
 A maintainer reviews and squash-merges it. `forge.py pr status <n>`, `pr list --mine` and `pr view <n> --comments`
-follow up from the command line ([docs/forge.md](docs/forge.md)).
+follow up from the command line ([Tooling's docs/forge.md](https://git.magicbean.dev/MagicBeanDev/Tooling/src/branch/main/docs/forge.md)).
 
 ### Measurements
 
@@ -349,14 +397,14 @@ the [pull request template](.forgejo/pull_request_template.md):
 | `build`, tools | time or size on `main` and with this PR, or test output |
 | `docs`, `test` only | test output on `main` and with this PR (a new test failing on `main` is the best proof) |
 
-Every number says plainly what it was measured on. The columns are `main @ <hash>` and `this PR @ <hash>` (`main @
-7afe6ae1`, `this PR @ 992a2420`), never a bare Before and After, and the same names caption the screenshots. One
-column is the change, the other the baseline it is compared with. When something else is compared, each column says
-exactly what, with its hash: `this PR @ 992a2420, RX_VK_X=0` against `this PR @ 992a2420, RX_VK_X=1`, or a build by
-its name (`nightly @ 55b976c0`, `nightly-123-abcd1234`). Then a `Baseline: <its column>` line says which one is the
-baseline, and a line says why `main` against this PR wasn't the comparison. A Δ column is optional; its sign is the
-change against the baseline. When the PR is rebased onto a newer `main`, measure again, or say why the numbers still
-hold.
+Every number says plainly what it was measured on. The section starts with a **Verdict:** line: did it help, by how
+much, did it pass. The table's columns name what was run with its commit, `Before: main @ <hash>` and `After: this PR
+@ <hash>` (`pr create` fills both in), never a bare Before and After, and the same names caption the screenshots. Add
+a column when a variant matters: `After, RX_VK_X=0: this PR @ 992a2420`. A Δ column is optional; its sign is the change
+against the before column. When the before column isn't `main` (or the after column isn't this PR), a `Baseline:` line
+says what it is and why `main` against this PR wasn't the comparison. When the PR is rebased onto a newer `main`,
+measure again, or say why the numbers still hold. A change with nothing to measure (docs only, a script with its own
+tests) says so in one line, and that line is the whole of it.
 
 For the two sides to compare:
 
@@ -369,18 +417,18 @@ For the two sides to compare:
 The numbers come from the FPS counter's **Breakdown** or **Dev** level (Insert menu, Gameplay), the `fps` lines of
 `hookshot_log.txt`, `RX_VK_DRAW_STATS`, or a test. A filled-in Measurements section, from a real run (a
 full one also names the driver, CPU, RAM, the settings and where each number comes from). This one compares against
-another baseline, so it names it:
+another baseline, so it says so:
 
 ```
-Baseline: nightly @ 55b976c0 (last nightly before #2602)
-main: 87991bc8 (2026-11-12), with #2602
-#2602 had merged already, so this is main against the last nightly before it; main also carried about 50 other merges.
-Hardware: RTX 3080, Windows 11
-Scene: the player character in a demanding outdoor area, uncapped
-Method: 120 s each after a warm-up, two interleaved pairs (nightly, main, nightly, main)
+**Verdict:** faster: +31% fps and 4.15 ms off the median frame time, the readback waits gone.
+
+Baseline: nightly @ 55b976c0, the last nightly before #2602: #2602 had merged already, so this is main against it; main also carried about 50 other merges.
+Hardware: Windows 11, RTX 3080
+Scene: the player character in a demanding outdoor area, Ultra preset, uncapped
+Method: fps and frame time from the FPS counter's Breakdown, 120 s each after a warm-up, two interleaved pairs (nightly, main, nightly, main), the median
 How to reproduce: a save in that same outdoor area, Ultra preset, the FPS counter at Breakdown
 
-| | nightly @ 55b976c0 (last nightly before #2602) | main @ 87991bc8 (with #2602) | Δ |
+| | Before: nightly @ 55b976c0 | After: main @ 87991bc8 (with #2602) | Δ |
 |---|---|---|---|
 | fps (run 1 / run 2) | 59.7 / 60.8 | 78.4 / 79.3 | +31% |
 | median frame time | 16.35 ms | 12.2 ms | -4.15 ms |
@@ -427,7 +475,7 @@ Performance, and so on (`ci` and `chore` are left out). The details are in [docs
 [docs/releases.md](docs/releases.md).
 
 AI assistance is recorded with `Assisted-by:` and `Co-Authored-By:` trailers where the account allows it: if you
-used a tool, add the trailers that describe it (the template's box is under *If applicable*, since some maintainer
+used a tool, add the trailers that describe it (the template's box is under *When it applies*, since some maintainer
 accounts add no attribution); if you wrote the change yourself, there is nothing to add.
 
 ## Licensing
@@ -444,14 +492,16 @@ public source when there is one.
 
 The third-party parts (Eden, suyu, Sirit, the Vulkan Memory Allocator, SDL, Opus, Dear ImGui, zstd, the Libertinus
 fonts, zbic and the a64-kit tools) keep their own notices: preserve them, and don't relicense their code. NVIDIA's DLSS
-SDK is not one of them: it is never in the repository ([NVIDIA DLSS](#nvidia-dlss-optional)).
+SDK is not one of them: it is never in the repository ([NVIDIA DLSS](#nvidia-dlss-optional)). Nor is Intel's
+`libxess.dll` (Intel's license): only XeSS's MIT API headers are (`third_party/xess`), and the player puts the DLL beside
+the game (the README's Intel XeSS section).
 
 ## Where to talk
 
 - **Discord:** https://discord.gg/magicbean. Claim work and discuss pull requests in `#dev-work`; `#prs` shows every
   open pull request, kept up to date.
 - **Issues:** [the forms on git.magicbean.dev](https://git.magicbean.dev/MagicBeanDev/Hookshot/issues/new/choose).
-- **Agents:** [AGENTS.md](AGENTS.md); they post progress to the team chat (`scripts/team_chat.py`).
+- **Agents:** [AGENTS.md](AGENTS.md); they post progress to the team chat (Tooling's `team_chat.py`).
 
 Thanks for testing, reporting and sending fixes. Every report from a different GPU and every area played further than
 before moves the port forward.

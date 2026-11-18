@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-15 | 3b54a58d, PR #614 | Windows 11 build 26200 | RTX 4090 / Vulkan driver ID `0x9b438000` | Ryzen 7 7700X / 32 GB | 2560x1440, Debug tools Off, Transition autosave Off then On, local save trace enabled | Walked between Hyrule Field and Kakariko Village, then used System → Save | Codex run01: Off persisted across restart. Four transition requests were blocked, but two new progress saves still appeared, one per crossing. A manual save changed one slot with Off. With On, a repeat into Kakariko wrote a new slot with no transition suppression. |

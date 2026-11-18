@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-14 | the change of f3264534 (a part ends only right before a plain draw) on 4da0099b: main cf605c85 with three changes not merged yet, the Battlemage float-add fix (3c8b0a99), the uniform snapshot on Arc discrete cards and XeSS (b46daa73) | Windows 11 Pro 10.0.29704 | Intel Arc B580 12 GB, driver 32.0.101.9154 | Core i5-13600K, 64 GB | frame generation off; `RX_VK_SPLIT_BEFORE_DRAW=0` (main's path) | Kokiri Forest (child), a recorded 30 s walk from Link's balcony replayed through the control bridge; no screenshots; fps from the log's 5 s windows | 39.1, 50.6, 56.5, 56.1, 45.4, 52.7 fps, median 51.7 (run V7) |

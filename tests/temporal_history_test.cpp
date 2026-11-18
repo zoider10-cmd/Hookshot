@@ -13,13 +13,15 @@
 namespace dlss_math = mkwvk::dlss_math;
 struct State {
     uint64_t last_frame = 99;
+    int last_format = 122; bool last_psycho = false;
     float last_vp[16]{}, last_jitter[2]{};
     struct { unsigned width = 1920, height = 1080; } frame;
 };
 struct Camera { float current[16]{}; };
 struct Decision { bool reset, motion; };
 
-Decision temporal(State& s, const Camera& cam, uint64_t now, bool fsr4_engine) {
+enum Engine { DLSS, FSR4, XESS };
+Decision temporal(State& s, const Camera& cam, uint64_t now, Engine engine) {
     const uint64_t last = s.last_frame;
     /* CHAIN_POLICY */
     (void)show_motion;
@@ -27,20 +29,25 @@ Decision temporal(State& s, const Camera& cam, uint64_t now, bool fsr4_engine) {
     /* CHAIN_SINK */
     struct { unsigned InReset; } ep{};
     struct { bool reset; } d{};
+    struct { unsigned resetHistory; } p{};
     /* DLSS_SINK */
     /* FSR4_SINK */
-    return {fsr4_engine ? d.reset : ep.InReset != 0, motion};
+    /* XESS_SINK */
+    return {engine == FSR4 ? d.reset : engine == XESS ? p.resetHistory != 0 : ep.InReset != 0, motion};
 }
-Decision dlss(State& s, const Camera& cam, uint64_t now = 100) { return temporal(s, cam, now, false); }
-Decision fsr4(State& s, const Camera& cam, uint64_t now = 100) { return temporal(s, cam, now, true); }
+Decision dlss(State& s, const Camera& cam, uint64_t now = 100) { return temporal(s, cam, now, DLSS); }
+Decision fsr4(State& s, const Camera& cam, uint64_t now = 100) { return temporal(s, cam, now, FSR4); }
+Decision xess(State& s, const Camera& cam, uint64_t now = 100) { return temporal(s, cam, now, XESS); }
 
-Decision fsr(State& s, const Camera& cam, uint64_t now = 100) {
+Decision fsr_format(State& s, const Camera& cam, uint64_t now = 100, int format = 122, bool psycho = false) {
+    struct { int format; } input{format}; auto* in = &input;
     const unsigned rw = 1920, rh = 1080;
     /* FSR_POLICY */
     struct { bool reset; } f{};
     /* FSR_SINK */
     return {f.reset, motion};
 }
+Decision fsr(State& s, const Camera& cam, uint64_t now = 100) { return fsr_format(s,cam,now); }
 
 int checks = 0, failures = 0;
 void check(bool value, const char* why) {
@@ -49,7 +56,7 @@ void check(bool value, const char* why) {
 }
 void identity(float* p) { for (int i = 0; i < 16; ++i) p[i] = i % 5 == 0 ? 1.0f : 0.0f; }
 void policies(State& s, const Camera& camera, bool reset, uint64_t now = 100) {
-    for (auto call : {dlss, fsr4, fsr}) {
+    for (auto call : {dlss, fsr4, xess, fsr}) {
         const Decision d = call(s, camera, now);
         check(d.reset == reset, "wrong reset delivered to an upscaler");
         check(d.motion == !reset, "wrong motion eligibility");
@@ -117,6 +124,12 @@ int main() {
             for (float v : out) check(std::isfinite(v), "accepted non-finite shader coefficient");
         }
     }
+    identity(s.last_vp); identity(camera.current);
+    s.last_frame=99;s.last_format=122;s.last_psycho=false;
+    check(fsr_format(s,camera,100,97,true).reset,"FSR kept history across Psycho/format change");
+    s.last_format=97;s.last_psycho=true;
+    check(!fsr_format(s,camera,100,97,true).reset,"FSR reset stable Psycho input");
+    check(fsr_format(s,camera,100,97,false).reset,"FSR kept history across tone-only change");
     std::cout << checks << " checks, " << failures << " failures\n";
     return failures ? 1 : 0;
 }

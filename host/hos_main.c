@@ -14,6 +14,7 @@
 #endif
 #include "hos_paths.h"
 #include "game_layout.h"
+#include "options_path.h"
 #include "hos_wide_size.h"   /* (the widescreen picture's size, shared with the Insert menu) */
 #include "../gpu/vk/vk_api.h"
 #include "../gpu/vk/oot_cheat_items.h"
@@ -25,6 +26,7 @@
 #define HOOKSHOT_VERSION "unknown"
 #endif
 const char *hos_version(void) { return HOOKSHOT_VERSION; }   /* (discord_rpc.c's status) */
+
 #if defined(_WIN32) || defined(__EMSCRIPTEN__)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -41,6 +43,7 @@ const char *hos_version(void) { return HOOKSHOT_VERSION; }   /* (discord_rpc.c's
 #include <unistd.h>
 #include <sys/syscall.h>
 #endif
+#include "hos_atomic_file.h"   /* (the files the saves' move copies, saves-moved.txt and the stand-ins' clean-up: whole or not at all) */
 /* (linux) the separator of the paths the executable's folder is joined with */
 #ifdef _WIN32
 #define SEP 92
@@ -49,6 +52,19 @@ const char *hos_version(void) { return HOOKSHOT_VERSION; }   /* (discord_rpc.c's
 #define SEP '/'
 #define SEP_S "/"
 #endif
+
+/* (hookshot) the map Link is in and his age, as the last map: line, for the performance summary (gpu/vk/perf_report.cpp
+   through MkwVkHost perf_info): "" while no save is loaded (before one, and back at the title) */
+static SRWLOCK map_lock = SRWLOCK_INIT;
+static char map_now[100];
+void hos_movie_stats(int64_t out[5]);   /* nn_video.c */
+const char *hos_perf_info(char *map, int cap, int64_t movie[5]) {
+    AcquireSRWLockShared(&map_lock);
+    snprintf(map, (size_t)cap, "%s", map_now);
+    ReleaseSRWLockShared(&map_lock);
+    hos_movie_stats(movie);
+    return HOOKSHOT_VERSION;
+}
 
 #ifdef A64_MEM_ZERO
 /* web: guest address = wasm address; the guest window is wasm memory below the host's data (-sGLOBAL_BASE) */
@@ -129,23 +145,17 @@ static int reserve_guest(void) {
     hos_space_end = (uint64_t)(uintptr_t)&__global_base & ~0xFFFFULL;
     return hos_space_end >= (1ULL << 30);
 #elif defined(_WIN32)
-    /* Committed but untouched pages cost no physical memory. Write-watched: the renderer's buffer cache asks which
-       pages changed (GetWriteWatch) so that it uploads only those (soft write watch builds mark pages themselves). */
-#if defined(A64_WRITE_TRACK)
-    const DWORD watch = 0;
+    /* Committed but untouched pages cost no physical memory. Not write-watched: lifted stores and host writes mark
+       their pages themselves (the soft write watch, rt/a64.h A64_MARK), and the renderer reads those marks. */
     if (env_on("HOS_LARGE_PAGES") && reserve_large(GUEST_SPACE) == (void *)A64_HOST_BASE) {
         hos_large_pages = 1;
         hos_log("mem: the guest window is in large pages (%llu MB)", (unsigned long long)(GUEST_SPACE >> 20));
         return 1;
     }
-#else
-    const DWORD watch = MEM_WRITE_WATCH;
-#endif
-    /* mkw-recomp: 512 GB reserved (write-watched: the renderer's change tracking, a 16 MB bitmap), committed as the
-       runtime hands memory out (hos_commit) or on first touch */
+    /* mkw-recomp: 512 GB reserved, committed as the runtime hands memory out (hos_commit) or on first touch */
     void hos_commit_init(void);
     hos_commit_init();
-    return VirtualAlloc((void *)A64_HOST_BASE, GUEST_SPACE, MEM_RESERVE | watch, PAGE_NOACCESS) == (void *)A64_HOST_BASE;
+    return VirtualAlloc((void *)A64_HOST_BASE, GUEST_SPACE, MEM_RESERVE, PAGE_NOACCESS) == (void *)A64_HOST_BASE;
 #else
     /* (linux) the whole window readable and writable at once, its pages made as they are first touched (no commit
        step: MAP_NORESERVE). Decommitting is madvise (host/posix/win32_posix.c VirtualFree): the pages read as zero. */
@@ -162,7 +172,6 @@ static int reserve_guest(void) {
            needed. HOS_GUEST_MEMFD=1: the memfd all the same) */
         const char *e = getenv("HOS_GUEST_MEMFD");
         int usable = 0;
-        unsigned long long limit_mb = 0;
         {
             const int u = open("/dev/udmabuf", O_RDWR | O_CLOEXEC);
             if (u < 0 && (errno == EACCES || errno == EPERM)) {
@@ -180,16 +189,19 @@ static int reserve_guest(void) {
             if (startup_stderr >= 0) close(startup_stderr), startup_stderr = -1;
             if (u >= 0) {
                 close(u);
+                /* (issue 1135) usable whatever size_limit_mb says: the renderer reads the limit itself and takes udmabuf's
+                   default, 64 MB, when it can't (gpu/vk/vk_memory.cpp import_dma_buf), and a limit too small only makes more
+                   dma-bufs. A Flatpak's or Steam's container shows /dev/udmabuf but not /sys/module */
                 FILE *f = fopen("/sys/module/udmabuf/parameters/size_limit_mb", "r");
-                if (f) {
-                    if (fscanf(f, "%llu", &limit_mb) != 1) limit_mb = 0;
+                if (f)
                     fclose(f);
-                }
-                usable = limit_mb > 0;
+                else
+                    hos_log("mem: udmabuf's size_limit_mb cannot be read (in a container?): its default, 64 MB, assumed");
+                usable = 1;
             }
             if (!usable && !e)
-                hos_log("mem: guest memory stays host-pointer imports for the GPU (slow submissions on AMD): %s",
-                        u < 0 ? "/dev/udmabuf cannot be opened" : "udmabuf's size_limit_mb cannot be read");
+                hos_log("mem: guest memory stays host-pointer imports for the GPU (slow submissions on AMD): "
+                        "/dev/udmabuf cannot be opened");
         }
         if (e ? atoi(e) != 0 : usable) {
             const int fd = (int)syscall(SYS_memfd_create, "hookshot-guest", 1u /* MFD_CLOEXEC */ | 2u /* MFD_ALLOW_SEALING */);
@@ -234,7 +246,7 @@ int hos_posix_guest_discard(void *p, size_t n) {
 }
 #endif
 
-/* The guest window, for the renderer (gpu/render/rx_buffer.cpp). */
+/* The guest window, for the renderer (MkwVkHost.guest_base and guest_size, host/rx_backend.c). */
 uint8_t *hos_guest_base(void) { return A64_MEM; }
 uint64_t hos_guest_size(void) { return GUEST_SPACE; }
 
@@ -315,14 +327,7 @@ static int has_link(const char *p) {
 static int copy_tree(const char *from, const char *to) {
     if (is_link(from)) return copy_link(from, to);
     if (!is_dir(from)) {
-        FILE *in = fopen(from, "rb"), *out = in ? fopen(to, "wb") : NULL;
-        int ok = in && out;
-        char buf[1 << 16];
-        for (size_t n; ok && (n = fread(buf, 1, sizeof buf, in)) > 0;) ok = fwrite(buf, 1, n, out) == n;
-        ok = ok && in && !ferror(in);
-        if (in) fclose(in);
-        if (out && fclose(out)) ok = 0;
-        return ok;
+        return hos_atomic_copy_file(from, to);   /* (each file whole under its name, or not there) */
     }
     if (!CreateDirectoryA(to, NULL) && !is_dir(to)) return 0;
     char pattern[MAX_PATH];
@@ -382,23 +387,46 @@ static const char *saves_dir(const char *beside) {
     char real[MAX_PATH];
     move_old = realpath(beside, real), move_from = beside, move_new = dir;
     /* (looked at first, then moved: with an entry the new place has already, the old place is kept, and it keeps them all.
-       The others used to go all the same, and the game then ran here without them) */
+       The others used to go all the same, and the game then ran here without them. So does one that cannot go, a copy that
+       fails (a full disk): the entries that went before it come back, and a copied one's old place goes only once all are
+       there. They used to stay in the new place, and the next start found them there and kept the old place without them) */
+    struct { char *name; int copied; } *went = NULL;
+    size_t n_went = 0;
     for (int move = 0; move < 2 && !kept; move++) {
         WIN32_FIND_DATAA fd;
         HANDLE h = FindFirstFileA(pattern, &fd);
         if (h == INVALID_HANDLE_VALUE) return dir;
         do {
-            if (!strcmp(fd.cFileName, ".") || !strcmp(fd.cFileName, "..")) continue;
+            if (!strcmp(fd.cFileName, ".") || !strcmp(fd.cFileName, "..") || (move && kept)) continue;
             char from[MAX_PATH], to[MAX_PATH];
             snprintf(from, sizeof from, "%s" SEP_S "%s", beside, fd.cFileName);
             snprintf(to, sizeof to, "%s" SEP_S "%s", dir, fd.cFileName);
-            if (!move) kept += GetFileAttributesA(to) != INVALID_FILE_ATTRIBUTES;
-            else if (!has_link(from) && MoveFileExA(from, to, 0)) moved++;
-            else if (copy_tree(from, to)) delete_tree(from), moved++;
-            else delete_tree(to), kept++;
+            if (!move) {
+                kept += GetFileAttributesA(to) != INVALID_FILE_ATTRIBUTES;
+                continue;
+            }
+            void *more = realloc(went, (n_went + 1) * sizeof *went);
+            char *name = more ? _strdup(fd.cFileName) : NULL;
+            if (more) went = more;
+            if (!name) kept++;
+            else if (!has_link(from) && MoveFileExA(from, to, 0)) went[n_went].name = name, went[n_went++].copied = 0;
+            else if (copy_tree(from, to)) went[n_went].name = name, went[n_went++].copied = 1;
+            else delete_tree(to), free(name), kept++;
         } while (FindNextFileA(h, &fd));
         FindClose(h);
     }
+    for (size_t i = 0; i < n_went; i++) {
+        char from[MAX_PATH], to[MAX_PATH];
+        snprintf(from, sizeof from, "%s" SEP_S "%s", beside, went[i].name);
+        snprintf(to, sizeof to, "%s" SEP_S "%s", dir, went[i].name);
+        if (!kept) {
+            moved++;
+            if (went[i].copied) delete_tree(from);
+        } else if (went[i].copied) delete_tree(to);
+        else if (!MoveFileExA(to, from, 0)) hos_log("saves: %s could not come back to %s", to, from);
+        free(went[i].name);
+    }
+    free(went);
     if (kept) {
         hos_log("saves: %d of %s's entries could not go to %s: the saves stay in %s", kept, beside, dir, beside);
         return beside;
@@ -408,11 +436,9 @@ static const char *saves_dir(const char *beside) {
         char note[MAX_PATH];
         const char *sep = strrchr(beside, SEP);
         snprintf(note, sizeof note, "%.*s" SEP_S "saves-moved.txt", sep ? (int)(sep - beside) : 0, beside);
-        FILE *f = fopen(note, "w");
-        if (f) {
-            fprintf(f, "Mako's saves are now in\n%s\n\nThey moved there from the user folder that was here.\n", dir);
-            fclose(f);
-        }
+        char text[MAX_PATH + 160];
+        const int n = snprintf(text, sizeof text, "Mako's saves are now in\n%s\n\nThey moved there from the user folder that was here.\n", dir);
+        if (n > 0 && (size_t)n < sizeof text) hos_atomic_write(note, text, (size_t)n);
         hos_log("saves: moved from %s to %s", beside, dir);
     }
     return dir;
@@ -582,6 +608,22 @@ static void save_folder_import(const char *game_dir, const char *user_dir) {
     MessageBoxA(NULL, msg, HOS_GAME_TITLE, MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
 }
 #endif
+/* (hookshot) What a write of a setting that a kill cut left (host/hos_atomic_file.h), at the start, before the game reads any
+   setting: a "<name>.hosnew" beside the setting. language.txt is the game folder's; mouse_sens.txt is the user folder's; the
+   settings file is where options_path.c chose it (the user folder's with --user, HOS_OPTIONS_FILE's, else the game folder's):
+   the options' one-time copy into the user folder leaves its stand-in there. */
+static void recover_writes(void) {
+    char path[MAX_PATH];
+    const DWORD len = hos_game_path_a(path, MAX_PATH);
+    char *slash = len ? strrchr(path, SEP) : NULL;
+    if (slash) {
+        snprintf(slash + 1, (size_t)(path + MAX_PATH - slash - 1), "language.txt");
+        hos_atomic_remove_stale(path);
+    }
+    if (hos_options_file()[0]) hos_atomic_remove_stale(hos_options_file());
+    snprintf(path, sizeof path, "%s" SEP_S "mouse_sens.txt", hos_user_dir);
+    hos_atomic_remove_stale(path);
+}
 
 /* hookshot_env.txt beside the game: NAME=VALUE lines set as environment variables before anything reads them, for the
    switches players are asked to test (RX_VK_NOOPT and the rest). Lines starting with # are notes. On Linux this runs
@@ -589,14 +631,17 @@ static void save_folder_import(const char *game_dir, const char *user_dir) {
    HOS_ENV_FILE=<path> reads that file instead: a scripted or A/B test run brings its own switches and leaves the
    player's hookshot_env.txt as it is.
    (hookshot) hookshot_env.txt is a file players pass around, so it sets only the game's own switches (RX_, HOS_,
-   HOOKSHOT_, EDEN_, NVN_ and SDL_ names), never HOS_ENV_FILE or SDL's library override, and no value that is a
-   path but RX_VK_DLSS_DIR's: the system's variables (the Vulkan loader's layers, PATH and the like) can load code, and
-   the dump switches write files where they name. The file HOS_ENV_FILE names sets anything. */
+   HOOKSHOT_, EDEN_, NVN_ and SDL_ names), never HOS_ENV_FILE, HOS_CONTROL_PEER_SID or SDL's library override, and no
+   value that is a path but RX_VK_DLSS_DIR's: the system's variables (the Vulkan loader's layers, PATH and the like) can
+   load code, and the dump switches write files where they name. The file HOS_ENV_FILE names sets anything. */
 static int env_line_allowed(const char *name, const char *value) {
     static const char *const prefixes[] = {"RX_", "HOS_", "HOOKSHOT_", "EDEN_", "NVN_", "SDL_"};
     int ok = 0;
     for (size_t i = 0; i < sizeof prefixes / sizeof *prefixes; i++) ok |= !strncmp(name, prefixes[i], strlen(prefixes[i]));
     if (!ok || !strcmp(name, "HOS_ENV_FILE") || !strcmp(name, "SDL_DYNAMIC_API")) return 0;
+    /* (hookshot) nor HOS_CONTROL_PEER_SID: it lets one more account into the control bridge's pipe (host/control.c), so a
+       shared file would let another user of this PC steer the game and read its memory. The environment still sets it */
+    if (!strcmp(name, "HOS_CONTROL_PEER_SID")) return 0;
     /* (hookshot) nor the libraries SDL loads by name (SDL_VULKAN_LIBRARY, SDL_OPENGL_LIBRARY, SDL_VIDEO_GL_DRIVER,
        SDL_VIDEO_EGL_DRIVER...): a bare file name is looked for beside the game and in the current folder on Windows */
     if (!strncmp(name, "SDL_", 4) && (strstr(name, "_LIB") || strstr(name, "GL_DRIVER"))) return 0;
@@ -612,10 +657,9 @@ static int env_line_allowed(const char *name, const char *value) {
        the file select) */
     static const char *const by_name[] = {
         "HOS_AUDIO_DUMP", "HOS_AUDIO_WB_DUMP", "HOS_SHADER_DUMP", "HOS_FS_OVERLAY", "HOS_MODS", "HOS_INPUT_LIVE",
-        "HOS_INPUT_SCRIPT", "HOS_SAMPLE_ALL", "HOS_SLOW_FRAMES", "HOS_CHAIN", "HOS_WATCH", "HOOKSHOT_BUILDER_HOME", "RX_VK_SHOTS", "RX_VK_SHOT_GO",
+        "HOS_INPUT_SCRIPT", "HOS_SAMPLE_ALL", "HOS_SLOW_FRAMES", "HOS_CHAIN", "HOS_WATCH", "HOS_CRASH_TEST", "HOOKSHOT_BUILDER_HOME", "RX_VK_SHOTS", "RX_VK_SHOT_GO",
         "RX_VK_FRAMELOG", "RX_VK_HANG_DUMP", "RX_VK_DUMP", "RX_VK_DUMP_SPV", "RX_VK_DUMP_MESH_SPV", "RX_VK_DUMP_STAGES",
-        "RX_VK_DUMP_FAILED", "RX_VK_IR", "RX_VK_MENU_SCRIPT", "RX_DUMP_WGSL", "RX_DUMP_SLOW_WGSL", "RX_DUMP_TICS",
-        "RX_WGSL_OVERRIDE"};
+        "RX_VK_DUMP_FAILED", "RX_VK_IR", "RX_VK_MENU_SCRIPT"};
     for (size_t i = 0; i < sizeof by_name / sizeof *by_name; i++) names_file |= !strcmp(name, by_name[i]);
     /* RX_VK_DLSS_DIR: a folder on this PC, not a share (\\server\x or //server/x) or a device path */
     if (!strcmp(name, "RX_VK_DLSS_DIR"))
@@ -676,54 +720,13 @@ static void load_hookshot_env(void) {
     fclose(f);
 }
 
-/* (longshot) HOS_RECORD_STUTTERS=1: the stutter tools in one switch, the one players are asked to set (docs/performance-report.md),
-   allowed in hookshot_env.txt where HOS_SLOW_FRAMES=<path> is not (a path). It sets, for this run, what is not set already:
-   HOS_SLOW_FRAMES to the game folder's logs/slow_frame (the slow-frame recorder, host/slow_frames.c: logs/slow_frame-<n>.txt)
-   and RX_VK_FRAME_TRACE=1 (logs/hookshot_frames.csv with the main thread's columns). HOS_VCORE_LOG_MS is on by default
-   already. After load_hookshot_env and hos_game_layout (logs/ made), before the samplers and the renderer read them */
-static void record_stutters_env(void) {
-    if (!env_on("HOS_RECORD_STUTTERS")) return;
-    if (!getenv("HOS_SLOW_FRAMES")) {
-        char path[MAX_PATH + 32];
-        DWORD n = hos_game_path_a(path, MAX_PATH);
-        while (n && path[n - 1] != 92 && path[n - 1] != 47) n--;
-        if (n) {
-            memcpy(path + n, "logs" SEP_S "slow_frame", sizeof("logs" SEP_S "slow_frame"));
-#ifdef _WIN32
-            char put[MAX_PATH + 64];
-            snprintf(put, sizeof put, "HOS_SLOW_FRAMES=%s", path);
-            _putenv(put);
-#else
-            setenv("HOS_SLOW_FRAMES", path, 1);
-#endif
-        }
-    }
-    if (!getenv("RX_VK_FRAME_TRACE")) {
-#ifdef _WIN32
-        _putenv("RX_VK_FRAME_TRACE=1");
-#else
-        setenv("RX_VK_FRAME_TRACE", "1", 1);
-#endif
-    }
-    fprintf(stderr, "env: HOS_RECORD_STUTTERS: the slow-frame recorder in %s, the frame trace %s\n",
-            getenv("HOS_SLOW_FRAMES") ? getenv("HOS_SLOW_FRAMES") : "(no game folder: off)",
-            env_on("RX_VK_FRAME_TRACE") ? "on" : "off (RX_VK_FRAME_TRACE set to 0)");
-}
-
 /* Switches this build no longer reads, still set (in the environment or hookshot_env.txt, as older issues told players):
-   one log line each, naming what took its place, so a bug report shows the switch did nothing */
+   one log line each, naming what took its place, so a bug report shows the switch did nothing. The host's own: the
+   renderer's removed switches (RX_) are the GONE rows of gpu/vk/switches.def, said by its start (switches.h) */
 static void removed_switch_notes(void) {
     static const char *const gone[][2] = {
-        {"RX_VK_NO_DESC_REUSE", "RX_VK_DESC_REUSE=never"},
-        {"RX_VK_DESC_SLOTGEN", "RX_VK_DESC_REUSE (the same 0 and 1) or the Descriptor reuse row"},
-        {"RX_VK_DESC_REUSE_DGEN", NULL},
-        {"RX_VK_NO_NAN_GUARD", "RX_VK_NAN_GUARD=0"},
-        {"RX_VK_FOLLOW_MESH", NULL},
-        {"RX_VK_OOT", NULL},
-        {"RX_VK_OOT_EXPOSURE", NULL},
-        {"RX_VK_OOT_FOG", NULL},
-        {"RX_VK_OOT_VISUAL", NULL},
         {"HOS_FIX_RES", NULL},
+        {"HOS_RECORD_STUTTERS", "HOS_PROFILE=1 (the profiling mode: docs/development.md#the-profiling-mode)"},
         {"HOS_SCENE_NATIVE", NULL},
         {"TOTK_MINIMAL_LAYOUT", NULL},
     };
@@ -735,6 +738,27 @@ static void removed_switch_notes(void) {
 }
 
 int hos_oot_protect_hearts;
+/* Trace the request before the save manager queues it. */
+int hos_oot_trace_save(Ctx *c) {
+    int rx_option(int id, int otherwise);
+    const uint64_t caller = c->x[30];
+    const uint64_t parent = caller == 0x80bc7764ULL ? recomp_load64(c, c->x[31] + 24) : 0;
+    if (env_on("HOS_OOT_TRACE_SAVES")) hos_log("save trace: reason=%u mode=%u caller=%#llx request_site=%#llx", (unsigned)c->x[1], (unsigned)c->x[2],
+            (unsigned long long)caller, (unsigned long long)(parent ? parent : caller));
+    const unsigned reason = (uint32_t)c->x[1];
+    /* A crossing can queue both arrival requests in addition to the transition request. */
+    const int transition = (parent == 0x80bc7710ULL && reason == 6) ||
+        (parent == 0x80bc7864ULL && reason == 2) ||
+        (parent == 0x832a9764ULL && reason == 1);
+    if (caller == 0x80bc7764ULL && transition &&
+        (uint32_t)c->x[2] == 0 && !rx_option(HOS_OPT_TRANSITION_AUTOSAVE, 1)) {
+        if (env_on("HOS_OOT_TRACE_SAVES")) hos_log("save trace: transition autosave suppressed");
+        c->x[0] = 0;
+        return 1;
+    }
+    return 0;
+}
+
 volatile int hos_oot_live_action;   /* (test runs) the live input file's "!cheat <action>": host/nn_hid.c */
 
 int hos_oot_hearts_enabled(void) {
@@ -865,30 +889,64 @@ static void oot_inventory_refresh(Ctx *c, int64_t now) {
         int child = 1;
         rx_option_set(OOT_CHEAT_AGE_ID, loaded && oot_gamedata_bool(c, 0xcea220d3u, &child) ? (child ? 0 : 1) : -1);
     }
+    static char logged[100];
+    if (!loaded && logged[0]) {   /* back to the title or the file select: the summary's time there is not the last map's */
+        logged[0] = 0;
+        AcquireSRWLockExclusive(&map_lock);
+        map_now[0] = 0;
+        ReleaseSRWLockExclusive(&map_lock);
+    }
     if (loaded) {   /* the map Link is in and his age, logged when either changes: where a log's problem happened, the "Where in
                        the game" of the Insert menu's Bug report (gpu/vk/vk_bug_report.cpp reads the last of these lines) */
-        static char logged[100];
         char map[80], line[100];
         int child = 1;
         if (oot_gamedata_string(c, 0x1d6189dau, map, sizeof map) && map[0]) {   /* Sequence_CurrentBanc */
             snprintf(line, sizeof line, "%s (%s)", map,
                      oot_gamedata_bool(c, 0xcea220d3u, &child) ? (child ? "child" : "adult") : "age not known");
-            if (strcmp(line, logged)) hos_log("map: %s", line), snprintf(logged, sizeof logged, "%s", line);
+            if (strcmp(line, logged)) {
+                hos_log("map: %s", line), snprintf(logged, sizeof logged, "%s", line);
+                AcquireSRWLockExclusive(&map_lock);   /* (the performance summary's map: hos_perf_info) */
+                snprintf(map_now, sizeof map_now, "%s", line);
+                ReleaseSRWLockExclusive(&map_lock);
+            }
         }
     }
     if (loaded) oot_family_levels_refresh(c);
     if (!probed && oot_pouch_count(c, "Item_DekuSeed") >= 0) {
-        probed = 1;   /* (one line naming every count, both spellings: which names the pouch knows) */
+        probed = 1;   /* (each editor value, plus the alternative pouch spellings) */
         static const char *const probes[] = {OOT_CHEAT_ITEM_PROBES};
         const unsigned total = (unsigned)(OOT_ITEM_COUNT + sizeof probes / sizeof probes[0]);
         char line[512];
         size_t used = 0;
         for (unsigned i = 0; i < total; i++) {   /* (several short lines: the log cuts long ones) */
             const char *name = i < OOT_ITEM_COUNT ? oot_item_names[i] : probes[i - OOT_ITEM_COUNT];
-            used += (size_t)snprintf(line + used, sizeof line - used, " %s=%d", name, oot_pouch_count(c, name));
+            const int count = i < OOT_ITEM_COUNT ? oot_item_count(c, name) : oot_pouch_count(c, name);
+            used += (size_t)snprintf(line + used, sizeof line - used, " %s=%d", name, count);
             if (used > 300 || i + 1 == total) hos_log("cheats: inventory probe:%s", line), used = 0;
         }
     }
+}
+
+/* Learned songs use saved IsGet.<actor> Bool flags rather than pouch quantities.
+   These are their MurmurHash3 x86-32 hashes with seed 0. */
+static uint32_t oot_song_flag(const char *name) {
+    static const struct { const char *name; uint32_t hash; } songs[] = {
+        {"Item_Melody_ZeldaLullaby", 0x01c20002u},
+        {"Item_Melody_EponaSong", 0xb492ac33u},
+        {"Item_Melody_SariaSong", 0xd3f8bfccu},
+        {"Item_Melody_SunSong", 0x165dd1adu},
+        {"Item_Melody_TimeSong", 0x03b3450eu},
+        {"Item_Melody_StormSong", 0x2b39dd4fu},
+        {"Item_Melody_ForestMinuet", 0xdc0a0b54u},
+        {"Item_Melody_FireBolero", 0x49041ab9u},
+        {"Item_Melody_WaterSerenade", 0x3fa63986u},
+        {"Item_Melody_ShadowNocturne", 0xc2fb95f4u},
+        {"Item_Melody_SpiritRequiem", 0x802a36a8u},
+        {"Item_Melody_LightPrelude", 0xd6320ba4u},
+    };
+    for (unsigned i = 0; i < sizeof songs / sizeof songs[0]; i++)
+        if (!strcmp(name, songs[i].name)) return songs[i].hash;
+    return 0;
 }
 
 /* Masks share one slot (the Happy Mask Shop lends one at a time). The game takes "Item_Mask_X" when adding one and
@@ -898,29 +956,14 @@ static int oot_mask_alias(const char *name, char *alias, size_t size) {
     return 0;
 }
 
-/* (the randomizer's fork) A song is not counted in the pouch: adding one there was accepted and nothing kept, with an
-   ocarina or without (seen in play: the Fairy Ocarina was given, the song still not). What the game's scenes ask of a
-   song is its flag, IsGet.Item_Melody_<song> (a plain truth value of the game's list of flags), so the Inventory page
-   reads and sets that. The flag's MurmurHash3, by the song's name after Item_Melody_; 0: not a song. */
-static uint32_t oot_song_flag(const char *name) {
-    static const struct { const char *song; uint32_t hash; } songs[] = {
-        {"ZeldaLullaby", 0x01c20002u}, {"EponaSong", 0xb492ac33u}, {"SariaSong", 0xd3f8bfccu}, {"SunSong", 0x165dd1adu},
-        {"TimeSong", 0x03b3450eu}, {"StormSong", 0x2b39dd4fu}, {"ForestMinuet", 0xdc0a0b54u}, {"FireBolero", 0x49041ab9u},
-        {"WaterSerenade", 0x3fa63986u}, {"ShadowNocturne", 0xc2fb95f4u}, {"SpiritRequiem", 0x802a36a8u}, {"LightPrelude", 0xd6320ba4u},
-    };
-    if (strncmp(name, "Item_Melody_", 12)) return 0;
-    for (unsigned i = 0; i < sizeof songs / sizeof songs[0]; i++)
-        if (!strcmp(name + 12, songs[i].song)) return songs[i].hash;
-    return 0;
-}
-
 static int oot_item_count(Ctx *c, const char *name) {
+    const uint32_t song = oot_song_flag(name);
+    if (song) {
+        int learned = 0;
+        return oot_gamedata_bool(c, song, &learned) ? learned : -1;
+    }
     char alias[64];
     const int n = oot_pouch_count(c, name);
-    if (oot_song_flag(name) && n >= 0) {   /* (a song: learned or not, by its flag) */
-        int learned = 0;
-        if (oot_gamedata_bool(c, oot_song_flag(name), &learned)) return learned ? 1 : n > 0;
-    }
     if (!oot_mask_alias(name, alias, sizeof alias)) return n;
     const int m = oot_pouch_count(c, alias);
     return n > m ? n : m;
@@ -949,9 +992,19 @@ static void oot_inventory_edit(Ctx *c, int action) {
     const unsigned item = (unsigned)(action - OOT_CHEAT_ITEM_ACTION) / 256, op = (unsigned)(action - OOT_CHEAT_ITEM_ACTION) % 256;
     if (item >= OOT_ITEM_COUNT) return;
     const char *name = oot_item_names[item];
+    const int have = oot_item_count(c, name);
+    const uint32_t song = oot_song_flag(name);
+    if (song) {
+        if (op != 200 || have < 0) return;   /* songs have no editable quantity */
+        if (!oot_gamedata_set_bool(c, song, !have)) {
+            hos_log("cheats: song %s: learned flag unavailable", name);
+            return;
+        }
+        hos_log("cheats: song %s %s (had %d, now %d)", name, have ? "relocked" : "unlocked", have, oot_item_count(c, name));
+        return;
+    }
     char alias[64];
     const int is_mask = oot_mask_alias(name, alias, sizeof alias);
-    const int have = oot_item_count(c, name);
     int delta = 0;
     if (op == 200) delta = have > 0 ? -have : 1;   /* unlock / relock */
     else if (op < 128) delta = (int)op - 64;
@@ -995,9 +1048,6 @@ static void oot_inventory_edit(Ctx *c, int action) {
     } else {
         result = oot_pouch_change(c, is_mask ? alias : name, delta);   /* (masks are added as Item_Mask_X, as the shop does) */
     }
-    if (oot_song_flag(name))   /* (a song: its flag is what is asked) */
-        hos_log("cheats: inventory %s: its flag IsGet.%s %s", name, name,
-                oot_gamedata_set_bool(c, oot_song_flag(name), delta > 0) ? (delta > 0 ? "set" : "put out") : "NOT FOUND");
     hos_log("cheats: inventory %s %+d (had %d, now %d, event status %d)", name, delta, have, oot_item_count(c, name), result);
 }
 
@@ -3576,13 +3626,6 @@ float hos_aspect_ratio = 0;   /* (the window's default shape: host/display.c) */
 volatile uint64_t hos_wide_out, hos_wide_scene;
 volatile float hos_wide_ratio, hos_wide_squeeze, hos_wide_margin;
 volatile uint32_t hos_wide_keep_mask = 0xf;   /* (nx2/oot_wide.py KEEP_VTABLES: the screens that keep the whole picture, a bit each; MkwVkHost.wide_menus) */
-/* (nx2/oot_occlusion.py) read by the game's code where it decides to make occlusion queries: 1, none (HOOKSHOT_OCCLUSION_OFF=1) */
-volatile int hos_occlusion_off;
-static void occlusion_switch(void) {
-    const char *e = getenv("HOOKSHOT_OCCLUSION_OFF");
-    hos_occlusion_off = e && e[0] == '1';
-    if (hos_occlusion_off) hos_log("occlusion off: the game makes no occlusion queries (HOOKSHOT_OCCLUSION_OFF=1)");
-}
 /* (issues 1241, 2838) Swap can keep a small Linux PC from running out of backing storage without keeping it responsive.
    Warn below the existing 10 GiB floor in physical RAM there too; this is not a promise that 10 GiB is enough.
    The game starts anyway, and headless runs only log the warning. Windows keeps its commit-limit check. */
@@ -3641,6 +3684,12 @@ static void memory_notice(void) {
     MessageBoxA(NULL, text, "Hookshot", MB_OK | MB_ICONWARNING);
 }
 #endif
+/* (hookshot, linux) What driver_env_choose did with the driver's environment, said again in the game's own log once it is open
+   (it runs before, when stderr is still the launcher's) */
+static char driver_env_said[1024];
+static void driver_env_log(void) {
+    if (driver_env_said[0]) hos_log("%s", driver_env_said);
+}
 #ifdef _WIN32
 /* (hookshot) On laptops with two GPUs, the drivers run a program on the dedicated one when it exports these (NVIDIA Optimus, AMD
    PowerXpress): without them a laptop could put the game on its integrated GPU, 5 fps (issue 176) */
@@ -3681,6 +3730,11 @@ int main(int argc, char **argv) {
 static int game_main(int argc, char **argv) {
 #endif
 #ifdef _WIN32
+    {   /* (hookshot) the crash window's helper of this run (host/hos_crash_dialog.c): first, so it starts nothing of the game */
+        int hos_crash_helper_main(int argc, char **argv);
+        const int helper = hos_crash_helper_main(argc, argv);
+        if (helper >= 0) return helper;
+    }
     if (!narrow_paths_ok(argc, argv)) return 1;
     hos_game_layout();   /* (the game folder's cache/ and logs/, before anything writes there: host/game_layout.c) */
     {
@@ -3688,9 +3742,11 @@ static int game_main(int argc, char **argv) {
         hos_relaunch_keep_env();
     }
     load_hookshot_env();
-    record_stutters_env();   /* (HOS_RECORD_STUTTERS: after the file, which may set it) */
+    hos_profiling_env();   /* (HOS_PROFILE=1, host/profiling.c: after the file, which may set it) */
 #endif
-    occlusion_switch();
+    /* (the settings file, in the user folder: chosen before the crash window's helper, the Discord status and the renderer read
+       it, and after hookshot_env.txt, which may set HOS_OPTIONS_FILE; Linux's main chose it already: host/options_path.c) */
+    hos_options_choose(argc, argv);
     {
         const char *protect_hearts = getenv("HOS_OOT_PROTECT_HEARTS");
         hos_oot_protect_hearts = protect_hearts && !strcmp(protect_hearts, "1");
@@ -3740,18 +3796,29 @@ static int game_main(int argc, char **argv) {
 #if !defined(_WIN32) && !defined(A64_MEM_ZERO)
             startup_stderr = fcntl(STDERR_FILENO, F_DUPFD_CLOEXEC, 0);
 #endif
-            if (freopen(path, "w", stderr)) setvbuf(stderr, NULL, _IONBF, 0);
+            /* (opened first: freopen closes stderr when it cannot open the file, and the next file opened would take its
+               descriptor. A log that cannot be written leaves the stderr the game was started with) */
+            FILE *log = fopen(path, "w");
+            if (log) {
+                fclose(log);
+                if (freopen(path, "w", stderr)) setvbuf(stderr, NULL, _IONBF, 0);
+            }
         } else hos_crash_record_prepare(NULL);   /* an externally supplied stderr, not the game's log */
     }
     hos_log("hookshot %s", HOOKSHOT_VERSION);   /* (the log's first line: which build a report comes from) */
     const char *hos_report_run_id(void);
     hos_log("run_id: %s", hos_report_run_id());
     hos_game_layout_log();
+    driver_env_log();
     void hos_crash_record_log_notes(void);
     hos_crash_record_log_notes();
     removed_switch_notes();
     void hos_control_start(const char *version);
     hos_control_start(HOOKSHOT_VERSION);   /* (HOS_CONTROL=<socket>: the control bridge, host/control.c) */
+    /* (hookshot) the window after a crash: a helper that waits for this run to end (host/hos_crash_dialog.c), started before
+       the guest, the renderer, the sound and the input; none for --prepare-shaders, HOS_HEADLESS or HOS_CRASH_WATCH=0 */
+    void hos_crash_watch_start(int argc, char **argv);
+    hos_crash_watch_start(argc, argv);
     const char *image = NULL;
     /* (hookshot) --compile-shaders all or most: what a preparation of this run builds (gpu/vk/vk_draw.cpp compile_all), over
        compile_shaders= in hookshot_options.ini; as RX_VK_COMPILE_SHADERS, set before --prepare-shaders runs, wherever it stands */
@@ -3821,7 +3888,12 @@ static int game_main(int argc, char **argv) {
         return 2;
     }
     if (env_on("HOS_TRACE")) hos_trace = 1;
+    if (env_on("HOS_HLE_STATS")) {
+        void hos_hle_stats_start(void);
+        hos_hle_stats_start();
+    }
     if (!hos_user_dir) hos_user_dir = "user";
+    recover_writes();   /* (what a write of a setting that a kill cut left: before anything reads the settings) */
     CreateDirectoryA(hos_user_dir, NULL);
 #ifdef _WIN32
     if (beside_user[0] && hos_user_dir == beside_user && !getenv("HOS_NO_SAVE_FOLDER")) {   /* (sharkiix version) */
@@ -3831,10 +3903,13 @@ static int game_main(int argc, char **argv) {
         if (slash) *slash = 0, save_folder_import(game_dir, hos_user_dir);
     }
 #endif
+    hos_options_carry();   /* (a game folder's settings from before into the user folder, once: host/options_path.c) */
     if (!reserve_guest()) {
         fprintf(stderr, "cannot reserve the guest window\n");
         return 1;
     }
+    void hos_crash_test_arm(void);
+    hos_crash_test_arm();   /* (HOS_CRASH_TEST: a crash on purpose, once the crash handlers are set up: host/hos_crash_dialog.c) */
 #ifdef A64_MEM_ZERO
     web_fs_init(NULL, hos_romfs_dir);
     /* (the whole file, no range: the server sends it brotli-compressed, 85 -> 26 MB) */
@@ -3876,22 +3951,22 @@ static int game_main(int argc, char **argv) {
         float want = e ? (float)atof(e) : 0.0f;
         if (!e) {
             int saved = -1, version = 0;   /* (the Aspect ratio's ultrawide= and options_version=, -1 / 0 without them) */
-            char path[MAX_PATH];
-            const DWORD len = hos_game_path_a(path, MAX_PATH);
-            char *slash = len ? strrchr(path, SEP) : NULL;
-            if (slash) {
-                snprintf(slash + 1, (size_t)(path + MAX_PATH - slash - 1), "hookshot_options.ini");
-                FILE *o = fopen(path, "r");
-                if (o) {
-                    char line[80];
-                    while (fgets(line, sizeof line, o)) {
-                        if (!strncmp(line, "ultrawide=", 10)) saved = atoi(line + 10) != 0;
-                        if (!strncmp(line, "options_version=", 16)) version = atoi(line + 16);
-                    }
-                    fclose(o);
+            FILE *o = fopen(hos_options_file(), "r");
+            if (o) {
+                char line[80];
+                while (fgets(line, sizeof line, o)) {
+                    if (!strncmp(line, "ultrawide=", 10)) saved = atoi(line + 10) != 0;
+                    if (!strncmp(line, "options_version=", 16)) version = atoi(line + 16);
                 }
+                fclose(o);
             }
-            const int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+            void hos_monitor_prepare(void);
+            int hos_monitor_screen_size(int *,int *);
+            hos_monitor_prepare();
+            int sw=0,sh=0;
+            if (!hos_monitor_screen_size(&sw,&sh)) {
+                sw=GetSystemMetrics(SM_CXSCREEN); sh=GetSystemMetrics(SM_CYSCREEN);
+            }
             /* (no line: the monitor's shape; an older file's 16:9 on a screen narrower than 16:9 too: hos_aspect_on) */
             const int on = hos_aspect_on(saved, version, sw, sh);
             if (on && sh > 0) want = (float)sw / (float)sh;
@@ -3940,7 +4015,7 @@ static int game_main(int argc, char **argv) {
     Ctx *c = hos_boot_main_thread(hos_main_stack_size);
     uint64_t sp = c->x[31];
     void hos_prof_start(void);
-    hos_prof_start();   /* HOS_PROFILE=<seconds> */
+    hos_prof_start();   /* HOS_PROFILE_EVERY=<seconds>, the samplers, HOS_PROFILE=1 */
     void hos_chain_start(void);
     hos_chain_start();  /* HOS_CHAIN=<path> */
 #ifdef _WIN32
@@ -4028,14 +4103,52 @@ static void driver_cache_folder(void) {
         *p = '/';
     }
 }
+/* (hookshot, linux) RADV_FORCE_VRS_CONFIG_FILE dropped before anything loads Vulkan. The Steam Deck's Game Mode sets it for
+   Steam and everything it starts, naming a file it writes the Half Rate Shading rate to (/tmp/radv_vrs.<random>, "1x1" when
+   off). When that file exists, RADV forces VRS for the device and puts that into every graphics pipeline's key, so nothing
+   built without it is found, in the driver's cache or in ours: measured on a Steam Deck OLED (RADV, Mesa 26.2.0-devel), the
+   same install compiled its 32,438 noted pipelines at about 20 a second (25-30 minutes) with the variable naming a file, empty
+   or "1x1", and loaded them in 22 s without it or with it naming no file. The preparation (the Builder, a first start from the
+   desktop) runs without it, so every start from Game Mode compiled again what it built. Dropped only when it names a file that
+   exists, which is when RADV reads it; no other driver reads it. RX_VK_HALF_RATE_SHADING=1 keeps it: Steam's Half Rate Shading
+   works for Hookshot then (little: RADV leaves a fragment program that reads its position at full rate, and nearly all of
+   ours do), and the starts in Game Mode compile their own pipelines. RADV_FORCE_VRS, a rate someone set by hand, is kept.
+   The variable is named in HOOKSHOT_DRIVER_ENV_SET for the renderer's driver cache line. A restart (hos_relaunch.c) starts
+   again from the first environment and drops it again */
+static void driver_env_choose(void) {
+    const char *file = getenv("RADV_FORCE_VRS_CONFIG_FILE");
+    struct stat st;
+    if (!file || !*file || stat(file, &st) != 0) return;
+    const char *keep = getenv("RX_VK_HALF_RATE_SHADING");
+    if (keep && !strcmp(keep, "1")) {
+        snprintf(driver_env_said, sizeof driver_env_said,
+                 "vk: RADV_FORCE_VRS_CONFIG_FILE kept (RX_VK_HALF_RATE_SHADING=1): Steam's Half Rate Shading reaches the game, "
+                 "and RADV gives every graphics pipeline another key than the preparation's, so they are compiled again");
+    } else {
+        snprintf(driver_env_said, sizeof driver_env_said,
+                 "vk: RADV_FORCE_VRS_CONFIG_FILE=%.300s dropped: with it RADV gives every graphics pipeline another key than the "
+                 "preparation's and compiles them all again; Steam's Half Rate Shading has no effect on Hookshot "
+                 "(RX_VK_HALF_RATE_SHADING=1 keeps it)", file);
+        unsetenv("RADV_FORCE_VRS_CONFIG_FILE");
+        setenv("HOOKSHOT_DRIVER_ENV_SET", "RADV_FORCE_VRS_CONFIG_FILE", 1);
+    }
+    fprintf(stderr, "%s\n", driver_env_said);
+}
 int main(int argc, char **argv) {
+    {   /* (hookshot) the crash window's helper of this run (host/hos_crash_dialog.c): first, so it starts nothing of the game */
+        int hos_crash_helper_main(int argc, char **argv);
+        const int helper = hos_crash_helper_main(argc, argv);
+        if (helper >= 0) return helper;
+    }
     int hos_display_init(void);
     void hos_display_loop(void);
     hos_game_layout();   /* (the game folder's cache/ and logs/, before anything writes there, --prepare-shaders too: host/game_layout.c) */
     load_hookshot_env();
-    record_stutters_env();   /* (HOS_RECORD_STUTTERS: after the file, which may set it) */
+    hos_profiling_env();   /* (HOS_PROFILE=1, host/profiling.c: after the file, which may set it) */
+    hos_options_choose(argc, argv);   /* (before the Discord status reads it, below: host/options_path.c) */
     driver_cache_room();
     driver_cache_folder();
+    driver_env_choose();
     game_argc = argc, game_argv = argv;
     int prepare_shaders = 0;
     for (int i = 1; i < argc; i++) {

@@ -1,0 +1,10 @@
+# CircleCI Smarter Testing — static split + dynamic splitting (~3k credits per 100k atoms; ~520 atoms ≈ 16 credits/run).
+name: game-free checks
+discover: python3 -I -B tests/run_all.py --strict --list
+run: python3 -I -B tests/run_all.py --strict --exact --junit "<< outputs.junit >>" << test.atoms >>
+outputs:
+  junit: test-results/run_all/junit.xml
+options:
+  dynamic-test-splitting: true
+#   test-impact-analysis: true
+#   max-auto-rerun: 3

@@ -14,6 +14,9 @@
 
 namespace vram_compact {
 
+/// Global minimum graphics memory requirement for the game (~8 GB, matching Switch 2 UMA footprint).
+inline constexpr uint64_t GLOBAL_MIN_GRAPHICS_REQ = 8192ull << 20;
+
 /// Whether the textures are compacted, by RX_VK_COMPACT as the environment has it: on when it is not set, off for 0 (or empty).
 /// It was opt-in (RX_VK_COMPACT=1) while its hold could let go of textures in use; that is what hold_keeps and hold_met are for
 inline bool enabled(const char* env) { return !env || atoi(env) != 0; }
@@ -21,8 +24,10 @@ inline bool enabled(const char* env) { return !env || atoi(env) != 0; }
 /// The driver's count over 90% of what it allows: a run starts for less free space, and the next one sooner
 inline bool pressed(uint64_t used, uint64_t allowed) { return allowed && used > allowed / 10 * 9; }
 
-/// The free space in the textures' pool from which a run starts: RX_VK_COMPACT_MB (512), 192 MB while pressed. The cache grows
-/// into what a run gave back while the next one waits: under a 9.8 GB allowance the count reached 10.2 GB with 1.1-1.6 GB free
+/// The free space in the textures' pool from which a run starts: proportional to `allowed` (allowed / 16, clamped to 64-512 MB)
+/// unless overridden by RX_VK_COMPACT_MB, and 192 MB while pressed.
+inline uint64_t default_min_free(uint64_t allowed) {
+    return allowed ? std::clamp<uint64_t>(allowed / 16, 64ull << 20, 512ull << 20) : (512ull << 20);}
 inline uint64_t run_from(uint64_t min_free, bool is_pressed) { return is_pressed ? std::min<uint64_t>(min_free, 192ull << 20) : min_free; }
 
 /// The blocks a pool starts with (#2438: each block made in play is a vkAllocateMemory on the replay thread, ~170 ms on AMD's
@@ -32,9 +37,15 @@ inline uint64_t run_from(uint64_t min_free, bool is_pressed) { return is_pressed
 /// empty: the driver counted them (1152 MB on an 8 GB card), no texture could take them, so reclaimable() rightly left them in
 /// the count and the hold cut the texture budget by as much (#2690: an RTX 3070 in Castle Town Market, 31-36 fps against 54-56
 /// without them), and the textures' blocks were made in play as before. In the textures' pool the scene's textures fill them,
-/// and what they hold free is that pool's free space, which the budget takes off the count already
-inline uint64_t blocks_at_start(uint64_t heap, uint64_t block, bool holds_textures) {
-    return holds_textures && block ? std::clamp<uint64_t>(heap / 100 * 15 / block, 2, 24) : 0;
+/// and what they hold free is that pool's free space, which the budget takes off the count already.
+/// None on an integrated GPU: its heap is the PC's RAM, which the game needs too, and VMA keeps those blocks for the whole run.
+/// On a UHD Graphics with 16 GB (i3-1115G4) nine blocks (1152 MB) stayed while the textures' budget fell to 720 MB; the pool
+/// down to them (kept_only) kept the 97% rule waiting, and at 6.6 GB of the 6.5 the driver allowed a 1119 x 1119 depth image
+/// was not made and the device was lost (the Deku Tree's last cutscene)
+inline uint64_t blocks_at_start(uint64_t heap, uint64_t block, bool holds_textures, bool integrated) {
+    if (!holds_textures || !block || integrated) return 0;
+    if (heap < GLOBAL_MIN_GRAPHICS_REQ) return std::clamp<uint64_t>(heap / 100 * 8 / block, 2, 12);
+    return std::clamp<uint64_t>(heap / 100 * 15 / block, 2, 24);
 }
 
 /// The free space of the textures' pool a run can give back: not what the blocks made at the start hold (kept), which VMA
@@ -94,12 +105,57 @@ inline uint64_t reclaimable(uint64_t block_free, uint64_t pool_free) { return st
 
 /// The texture budget that holds the count, as it will be once a run has given `reclaim` back, at pct% of the allowance:
 /// what the textures hold (total) less the excess, and never more than the budget was
-inline uint64_t held_budget(uint64_t budget, uint64_t total, uint64_t used, uint64_t reclaim, uint64_t allowed, uint64_t pct) {
+/// Sane texture working set floor to prevent thrashing and downward budget ratcheting.
+/// Preserves a 1800 MB baseline on < 8 GB cards for complex open-world scenes (e.g. Kokiri Forest, Hyrule Field).
+inline uint64_t texture_min_floor(uint64_t allowed) {
+    if (!allowed) return 0;
+    if (allowed < GLOBAL_MIN_GRAPHICS_REQ) return 1800ull << 20;
+    return std::max<uint64_t>(1800ull << 20, allowed / 4);
+}
+
+/// Dynamic texture floor with hysteresis targeting the 86%-92% VRAM sweet spot on constrained GPUs.
+inline uint64_t update_dynamic_floor(uint64_t current_floor, uint64_t total_bytes, uint64_t used, uint64_t pressure, uint64_t allowed) {
+    const uint64_t min_floor = texture_min_floor(allowed);
+    if (!allowed || allowed >= GLOBAL_MIN_GRAPHICS_REQ) return min_floor;
+
+    const uint64_t max_floor = std::max(min_floor, allowed / 2);
+    uint64_t floor = current_floor ? std::clamp(current_floor, min_floor, max_floor) : min_floor;
+
+    const uint64_t sweet_low = allowed / 100 * 86;
+    const uint64_t sweet_high = allowed / 100 * 92;
+    const uint64_t hard_high = allowed / 100 * 95;
+    const uint64_t emergency_high = allowed / 100 * 97;
+    constexpr uint64_t kStep = 32ull << 20;
+
+    if (used > emergency_high) {
+        floor = min_floor;
+    } else if (pressure > sweet_high || used > hard_high) {
+        floor = floor > min_floor + kStep ? floor - kStep : min_floor;
+    } else if (pressure < sweet_low && used < sweet_high && total_bytes >= floor / 10 * 9) {
+        const uint64_t demand_cap = std::min<uint64_t>(max_floor, total_bytes + (64ull << 20));
+        if (floor < demand_cap) {
+            floor = std::min(demand_cap, floor + kStep);
+        }
+    }
+    return std::clamp(floor, min_floor, max_floor);
+}
+
+/// The texture budget that holds the count at pct% of `allowed`, with damped contraction on constrained GPUs.
+inline uint64_t held_budget(uint64_t budget, uint64_t total, uint64_t used, uint64_t reclaim, uint64_t allowed, uint64_t pct, uint64_t floor_override = 0) {
     const uint64_t line = allowed / 100 * pct;
     const uint64_t pressure = used - std::min(used, reclaim);
     if (!allowed || pressure <= line) return budget;
     const uint64_t over = pressure - line;
-    return std::min(budget, total > over ? total - over : 0);
+    // Damped contraction (alpha = 0.25) on < 8 GB GPUs to smoothly absorb transient frame spikes without thrashing.
+    const uint64_t damped_over = (allowed < GLOBAL_MIN_GRAPHICS_REQ) ? (over / 4) : over;
+    uint64_t target = total > damped_over ? total - damped_over : 0;
+    const uint64_t floor = floor_override ? floor_override : texture_min_floor(allowed);
+    if (floor && target < floor) {
+        target = floor;
+    }
+    uint64_t res = std::min(budget, target);
+    if (floor && res < floor) res = floor;
+    return res;
 }
 
 /// What the hold lets go of has gone unused for this many presents (ten seconds at 60 fps). The eviction's own 60 is right for a
@@ -107,7 +163,7 @@ inline uint64_t held_budget(uint64_t budget, uint64_t total, uint64_t used, uint
 /// leaves the scene's textures no room under it, and then every texture out of view for a second went and came back when the
 /// camera turned: with the count held under a 7 GB allowance, a turning camera in Hyrule Field at DLAA let go of 2.3-2.6 GB of live
 /// textures every 600 presents and uploaded 6.8 GB in 50 seconds, against 1.4 GB with the compaction off
-inline constexpr uint64_t kHoldUnused = 600;
+inline constexpr uint64_t kHoldUnused = 180;
 
 /// Whether the hold's pass keeps a texture no render target has drawn over: one used in the last kHoldUnused presents
 inline bool hold_keeps(uint64_t unused) { return unused < kHoldUnused; }
@@ -119,10 +175,10 @@ inline bool hold_keeps(uint64_t unused) { return unused < kHoldUnused; }
 /// recorder running the GPU's frame went from 11 to 15-23 ms for ten seconds each time it reached 87-90%. With the reserve:
 /// over 85% for 5%, over 87% for 0-1%, peaks of 87-88%, no more uploads
 inline constexpr uint64_t kReservePoints = 5;
-inline constexpr uint64_t kReserveUnused = 1800;
+inline constexpr uint64_t kReserveUnused = 600;
 
 /// A texture's presents unused, as many as they would have been at 60 fps (fps: the presents a second lately), for the hold's and
-/// the reserve's waits above, which are ten and thirty seconds at 60 fps. Counted as presents they stretch with the frame rate: at
+/// the reserve's waits above (kHoldUnused, kReserveUnused), which are seconds at 60 fps. Counted as presents they stretch with the frame rate: at
 /// 3.5 fps (a UHD Graphics laptop, i3-1115G4) three and nine minutes, and the hold let go of next to nothing (1,776 MB of textures
 /// against a budget of 1,299 MB, 0 to 13 of them retired a pass). At 60 fps or more, or with no rate known, as counted; under
 /// kMinFps as at kMinFps, so that a load's stall does not age every texture at once. The eviction's own wait stays in presents,

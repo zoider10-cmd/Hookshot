@@ -36,7 +36,7 @@ def main():
                          "goes and comes back without what the GPU made of it (cyan in play and over the Start menu)")
     lookup = body(mem, "Pool* pool_lookup(uint64_t guest, uint64_t size) {")
     took_in = lookup[lookup.index("for (uint64_t k : overlapped) {   // (the pools it took in)"):]
-    merged = took_in[:took_in.index("imported.emplace(p.lo, p)")]
+    merged = took_in[:took_in.index("imported_add(p)")]   # (where the new pool goes into the table)
     if "p.gpu_only |= o->second.gpu_only" not in merged or "p.gpu_written |= o->second.gpu_written" not in merged:
         raise SystemExit("a pool that takes others in does not keep their gpu_only and gpu_written marks")
     print("PASS: mirrors the GPU wrote past the write-back are kept")

@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-15 | ed097a30aeaa424cc25a7d9ade43b110312877fc; documentation-only working changes | Ubuntu 24.04.5 WSL2; kernel 6.18.58.1-microsoft-standard-WSL2; no window | Not used; game-free fixture | CPU/RAM not recorded | Python 3.12.3; GCC/G++ 13.3.0; fake SDL; one warm-up per variant excluded | tests/test_audio_in.py, measured sequence main/fix/main/fix, invocation 2 | linux-pair01-fix: Python exit 0; 55 host cases and expanded-device menu fixture pass; 1.319 s diagnostic elapsed; no real mic capture or performance claim |

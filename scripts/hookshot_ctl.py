@@ -9,6 +9,7 @@ steer it and read its state from a shell, a test or a coding agent. Standard lib
 
     launch GAME_DIR [--data DIR] [--headless]   start the game with the bridge on; prints the socket's path
            [--save FOLDER [--slot NN]]          a copy of a save folder (one slot of it) as the run's saves
+           [--repo-save NAME [--repo DIR]]      its slot_00 from the repository (assets/saves/NAME) instead
     status                                      frame, fps, draws, state, window, version, OoT snapshot
     press A+B [--frames 8] [--exclusive]        buttons held for some frames (the reply once they are let go)
     stick L 0 1 [--frames 60]                   a stick at x, y (-1 to 1)
@@ -21,17 +22,21 @@ steer it and read its state from a shell, a test or a coding agent. Standard lib
     age [child|adult] [--arrive SECS]           (OoT) the Debug tab's Switch age (none: the other age), reloading the map
     option get [NAME]  /  option set NAME VALUE the Insert menu's settings
     saves  /  slots [--thumbs DIR]              the save folder the game uses; its slots, newest first
+    saves --repo [DIR]                          the saves in the repository (no game): names, README first lines
     watch [--events present,state,log,map,oot] [--every 60] [--log TEXT] [--count N]
           [--flags NAME,0xHASH,...] [--changes]    oot: watched values and changed flags
     mem read ADDR SIZE [--format hex|u8|u16|u32|u64|f32]   read guest memory (HOS_CONTROL_MEM=ro or rw)
     mem write ADDR HEX                          write guest memory (HOS_CONTROL_MEM=rw); aliases: ro->r/read, rw->readwrite
     quit                                        the game exits
+    relaunch [--timeout 120]                    the game starts again (the Insert menu's Restart now), with the same
+                                                command and environment; back when its bridge answers again
     raw '{"cmd": "status"}'                     any request
 
 The socket defaults to $HOS_CONTROL. Plain lines by default, --json for the replies as they come. Exit status: 0 done,
 1 an error reply, 2 no game or bad usage, 3 a timeout.
 """
 import argparse
+import calendar
 import codecs
 import contextlib
 import functools
@@ -71,6 +76,39 @@ def session_call(function):
     return call
 
 
+def open_windows_pipe(name, timeout):
+    """Open a local pipe, retrying only the Windows busy error until the deadline."""
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    create = kernel.CreateFileW
+    create.argtypes = (wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+                       wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE)
+    create.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    deadline = time.monotonic() + timeout
+    while True:
+        handle = create(name, 0xC0000000, 0, None, 3, 0, None)  # read/write, OPEN_EXISTING
+        if handle != ctypes.c_void_p(-1).value:
+            try:
+                fd = msvcrt.open_osfhandle(handle, os.O_RDWR | os.O_BINARY)
+            except BaseException:
+                kernel.CloseHandle(handle)
+                raise
+            try:
+                return os.fdopen(fd, "r+b", buffering=0)
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+                raise
+        error = ctypes.get_last_error()
+        if error != 231 or time.monotonic() >= deadline:  # ERROR_PIPE_BUSY only
+            raise ctypes.WinError(error)
+        time.sleep(min(0.02, max(0, deadline - time.monotonic())))
+
+
 class Bridge:
     """One connection: requests with ids, replies matched to them, events kept for watch"""
 
@@ -81,16 +119,7 @@ class Bridge:
             if WINDOWS:
                 name = path if path.startswith("\\\\.\\pipe\\") else "\\\\.\\pipe\\" + path
                 self.sock = None
-                deadline = time.monotonic() + timeout
-                while True:   # (the bridge keeps one instance waiting: a busy pipe is waited for)
-                    try:
-                        self.pipe = open(name, "r+b", buffering=0)
-                        break
-                    except OSError as e:
-                        # (busy: winerror 231, ERROR_PIPE_BUSY; missing pipes are not waited for)
-                        if getattr(e, "winerror", 0) != 231 or time.monotonic() > deadline:
-                            raise
-                        time.sleep(0.02)
+                self.pipe = open_windows_pipe(name, timeout)
             else:
                 self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 self.sock.settimeout(timeout)
@@ -100,6 +129,26 @@ class Bridge:
 
     def close(self):
         (self.sock or self.pipe).close()
+
+    def server_pid(self):
+        """The pid of the process that serves this connection, as the system says (Windows: the pipe's server,
+        GetNamedPipeServerProcessId; Linux: the socket's peer, SO_PEERCRED); None when it can't tell"""
+        try:
+            if WINDOWS:
+                import ctypes
+                import msvcrt
+                from ctypes import wintypes
+                k = ctypes.WinDLL("kernel32", use_last_error=True)
+                k.GetNamedPipeServerProcessId.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.ULONG)]
+                pid = wintypes.ULONG()
+                if k.GetNamedPipeServerProcessId(msvcrt.get_osfhandle(self.pipe.fileno()), ctypes.byref(pid)):
+                    return pid.value or None
+                return None
+            import struct
+            cred = self.sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
+            return struct.unpack("3i", cred)[0] or None
+        except (OSError, AttributeError, ValueError):
+            return None
 
     def send(self, obj):
         data = (json.dumps(obj, separators=(",", ":")) + "\n").encode()
@@ -169,9 +218,13 @@ class Bridge:
             req["timeout"] = timeout
         self.send(req)
         wait = (timeout if timeout is not None else 3600 if cmd in ("press", "stick", "sequence") else 60) + 10
-        deadline = time.monotonic() + (wait if reply_timeout is None else reply_timeout)
-        while True:
-            msg = self.line(wait if reply_timeout is None else max(0, deadline - time.monotonic()))
+        limit = wait if reply_timeout is None else reply_timeout
+        deadline = time.monotonic() + limit
+        while True:   # (one deadline: an event line that comes meanwhile does not start the wait again)
+            left = deadline - time.monotonic()
+            if left <= 0 and b"\n" not in self.pending:
+                raise Failed("no answer from the game in %.0f s" % limit, 3)
+            msg = self.line(max(0, left))
             if msg is None:
                 if cmd == "quit":
                     return {"id": rid, "ok": True, "quitting": True}
@@ -255,6 +308,83 @@ def format_bytes(data, fmt):
     return " ".join(("%g" if fmt == "f32" else "%d") % v for v in out)
 
 
+def relaunch(b, timeout):
+    """The game started again (the relaunch command), then its status once its bridge answers on the same socket from the
+    process started again: one whose uptime is no longer than the wait (its bridge started after the ask), not the old one
+    answering before it lets go of the socket (status gives the uptime to 0.1 s: 0.05 s to spare). A connection the old
+    one drops mid-request (Windows: a write to its pipe as it closes, EINVAL) is tried again. b is closed; the status reply
+    has after_s, the seconds it took.
+    In a session (--run DIR) the session follows the game: the run folder's manifest records the relaunch, and then the
+    process that serves the socket again, its pid and birth identity as the system gives them (follow_relaunch), so
+    stop, show and the run's supervisor go on with the game started again. On Linux that is the same process (execve);
+    on Windows it is a new one"""
+    session = getattr(b, "session", None)
+    ticket = None
+    if session:
+        info = session.info()
+        ticket = {"id": uuid.uuid4().hex, "state": "asked", "asked_at": utc_now(), "timeout": timeout,
+                  "from": {"pid": info["pid"], "process_start": info["process_start"]}}
+        session.update(relaunch=ticket)
+    try:
+        check(b.request("relaunch"))
+    except BaseException:
+        if session:
+            session.update(relaunch=dict(ticket, state="refused"))
+        raise
+    path = b.path
+    b.close()
+    t0 = time.monotonic()
+    while True:
+        try:
+            nb = Bridge(path, 2)
+            try:
+                st = nb.request("status", timeout=5)
+                server = nb.server_pid() if session else None
+            finally:
+                nb.close()
+            waited = time.monotonic() - t0
+            if st.get("ok") and st.get("uptime", float("inf")) <= waited + 0.05:
+                st = dict(st, after_s=round(waited, 1))
+                if session:
+                    st["session"] = follow_relaunch(session, ticket, server)
+                return st
+        except (Failed, OSError):
+            pass
+        if time.monotonic() - t0 > timeout:
+            if session:
+                session.update(relaunch=dict(ticket, state="failed", ended_at=utc_now()))
+            raise Failed("the game did not answer again in %.0f s" % timeout, 3)
+        time.sleep(0.2)
+
+
+def follow_relaunch(session, ticket, pid):
+    """The run's manifest moved to the process that answers after a relaunch: pid (the socket's server, from the system)
+    and its birth identity. The same process (Linux: execve keeps both) is kept as it is; one the client can't tell, or one
+    gone already, leaves the run failed to follow (stop and show then refuse, as for any game that is gone).
+    A run that ended meanwhile, or whose supervisor stopped waiting for this ticket (relaunched_game: it is no longer
+    asked), is left as it is: the game started again is not written into a run nobody watches"""
+    birth = process_start(pid)
+    with run_lock(session.folder):
+        info = session._read()
+        current = info.get("relaunch") or {}
+        if info["state"] in ("finished", "failed") or current.get("id") != ticket["id"] or current.get("state") != "asked":
+            raise Failed("relaunched, but the run ended before the game answered again: the run does not follow it: %s"
+                         % session.folder, 3)
+        if birth is None:
+            state = "lost"
+        elif pid == info["pid"] and birth == info["process_start"]:
+            state = "same-process"
+        else:
+            state = "followed"
+            info.update(pid=pid, process_start=birth, relaunches=info.get("relaunches", 0) + 1)
+        info["relaunch"] = dict(ticket, state=state, ended_at=utc_now(), to={"pid": pid, "process_start": birth})
+        write_json(session.manifest, info)
+    if state == "lost":
+        raise Failed("relaunched, but the process serving the socket can't be told: the run no longer follows the game: %s"
+                     % session.folder, 3)
+    return state
+
+
 def connect(a, timeout=10.0):
     if getattr(a, "run", None):
         if a.sock:
@@ -308,6 +438,11 @@ def run(a):
         show(a, result, lambda r: "\n".join(plain_text(s) for s in r["text"].split("\n")) if "text" in r
              else json.dumps(r, indent=2))
         return 3 if a.command == "stop" and not result.get("process_exited") else 0
+    if a.command == "saves" and a.repo is not None:
+        rows = repo_saves_list(a.repo or None)
+        show(a, rows, lambda rows: "\n".join("%-28s %s" % (r["name"], plain_text(r["title"])) for r in rows) or
+             "no saves in %s" % repo_saves_dir(a.repo or None))
+        return 0
     if a.command == "mem":
         a.addr = addr_of(a.addr)
         if a.action == "read":
@@ -433,6 +568,9 @@ def run(a):
                 print(slots_text(r))
         elif a.command == "quit":
             show(a, check(b.request("quit")), lambda r: "quitting")
+        elif a.command == "relaunch":
+            st = relaunch(b, a.timeout)
+            show(a, st, lambda r: "relaunched: answering again after %.1f s (uptime %.1f s)" % (r["after_s"], r["uptime"]))
         elif a.command == "raw":
             req = json.loads(a.request)
             b.next_id += 1
@@ -493,7 +631,7 @@ def slot_name(text):
     return "slot_%02d" % int(t)
 
 
-def plain_tree(path):
+def plain_tree(path, flag="--save"):
     """Refused (Failed) when path or anything under it is a link or not a plain file or folder: a save from elsewhere could
     hold a link to one of this user's files, which the copy would read and the game then write through"""
     for top, dirs, files in os.walk(path):
@@ -501,10 +639,10 @@ def plain_tree(path):
             st = os.lstat(n)
             if not (stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)) or \
                     getattr(st, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0):
-                raise Failed("--save: %s is a link or not a plain file: refused" % n, 2)
+                raise Failed("%s: %s is a link or not a plain file: refused" % (flag, n), 2)
 
 
-def plain_save_dirs(root):
+def plain_save_dirs(root, flag="--save"):
     """The two entries the copier creates must be directories, not links; /home or a data root may itself be a link"""
     for path in (Path(root) / "save", Path(root) / "save" / SAVE_USER):
         try:
@@ -512,7 +650,7 @@ def plain_save_dirs(root):
         except FileNotFoundError:
             continue
         if not stat.S_ISDIR(st.st_mode) or getattr(st, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0):
-            raise Failed("--save: %s is a link or not a plain folder: refused" % path, 2)
+            raise Failed("%s: %s is a link or not a plain folder: refused" % (flag, path), 2)
 
 
 @session_call
@@ -520,7 +658,6 @@ def copy_save(src, data=None, slot=None, user=None):
     """A save folder (account.sav, option.sav, slot_NN/) copied to where the game reads it in the data folder; with slot,
     that slot alone (so Continue loads it). The source is only read, and holds plain files and folders only (no links).
     Returns the destination"""
-    import shutil
     src = os.path.abspath(src)
     if os.path.islink(src) or not os.path.isdir(src):
         raise Failed("--save: %s is not a folder" % src, 2)
@@ -534,27 +671,109 @@ def copy_save(src, data=None, slot=None, user=None):
         slot = slot_name(slot)
         if slot not in slots:
             raise Failed("--save: %s has no %s (it has %s)" % (src, slot, ", ".join(slots)), 2)
+    entries = [(os.path.join(src, n), n) for n in names
+               if (n.startswith("slot_") and os.path.isdir(os.path.join(src, n)) and (slot is None or n == slot)) or
+               os.path.isfile(os.path.join(src, n))]
+    return place_save(entries, [src], data, user, "--save")
+
+
+def place_save(entries, sources, data, user, flag):
+    """entries ([(file or folder, its name in the save)]) copied into the data folder's save folder, which must be empty;
+    none of sources (the folders they come from) may hold it or be in it. Returns the destination"""
+    import shutil
     root = os.path.abspath(user or os.path.join(data, "hookshot"))
     dest = os.path.join(root, "save", SAVE_USER)
-    plain_save_dirs(root)
-    source_real, dest_real = (os.path.normcase(os.path.realpath(p)) for p in (src, dest))
-    try:
-        overlap = os.path.commonpath([source_real, dest_real]) in (source_real, dest_real)
-    except ValueError:   # (different Windows drives cannot overlap)
-        overlap = False
-    if overlap:
-        raise Failed("--save: source and destination must be separate plain folders", 2)
+    plain_save_dirs(root, flag)
+    dest_real = os.path.normcase(os.path.realpath(dest))
+    for src in sources:
+        source_real = os.path.normcase(os.path.realpath(src))
+        try:
+            overlap = os.path.commonpath([source_real, dest_real]) in (source_real, dest_real)
+        except ValueError:   # (different Windows drives cannot overlap)
+            overlap = False
+        if overlap:
+            raise Failed("%s: source and destination must be separate plain folders" % flag, 2)
     if os.path.exists(dest) and os.listdir(dest):
-        raise Failed("--save: %s already holds saves: give an empty --data (or none: the run folder's own)" % dest, 2)
+        raise Failed("%s: %s already holds saves: give an empty --data (or none: the run folder's own)" % (flag, dest), 2)
     os.makedirs(dest, exist_ok=True)
-    for n in names:
-        p = os.path.join(src, n)
-        if n.startswith("slot_") and os.path.isdir(p):
-            if slot is None or n == slot:
-                shutil.copytree(p, os.path.join(dest, n), symlinks=True)   # (none: plain_tree; never followed)
-        elif os.path.isfile(p):
+    for p, n in entries:
+        if os.path.isdir(p):
+            shutil.copytree(p, os.path.join(dest, n), symlinks=True)   # (none: plain_tree; never followed)
+        else:
             shutil.copy2(p, os.path.join(dest, n), follow_symlinks=False)
     return dest
+
+
+# Saves in the repository (assets/saves, CONTRIBUTING.md; scripts/hookshot_saves.py scrub and check-repo-saves):
+# <name>/{README.md, slot_00/{progress.sav, caption.sav}} only: account.sav and option.sav are never shipped (the game
+# makes them when it loads a slot on its own)
+CHECKOUT = Path(__file__).resolve().parents[1]
+REPO_SAVE_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,47}")
+REPO_SAVE_FILES = {"README.md": "file", "slot_00": "dir"}
+REPO_SLOT_FILES = {"progress.sav": "file", "caption.sav": "file"}
+
+
+def repo_saves_dir(repo=None):
+    return os.path.join(os.path.abspath(repo) if repo else str(CHECKOUT), "assets", "saves")
+
+
+def repo_save_names(repo=None):
+    root = repo_saves_dir(repo)
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return []
+    return sorted(n for n in names if REPO_SAVE_NAME.fullmatch(n) and not os.path.islink(os.path.join(root, n)) and
+                  os.path.isdir(os.path.join(root, n)))
+
+
+def only_files(folder, wanted, label):
+    """folder holds exactly wanted ({name: 'file' or 'dir'}), as plain files and folders (plain_tree ran first)"""
+    have = set(os.listdir(folder))
+    extra, missing = sorted(have - set(wanted)), sorted(set(wanted) - have)
+    wrong = sorted(n for n in have & set(wanted) if os.path.isdir(os.path.join(folder, n)) != (wanted[n] == "dir"))
+    if extra or missing or wrong:
+        raise Failed("--repo-save: %s is not a repo save's layout (%s): refused" % (label, "; ".join(
+            x for x in ("not expected: " + ", ".join(extra) if extra else "", "missing: " + ", ".join(missing) if missing
+                        else "", "not the right kind: " + ", ".join(wrong) if wrong else "") if x)), 2)
+
+
+@session_call
+def copy_repo_save(name, data=None, user=None, repo=None):
+    """The repo save `name` (in the checkout's assets/saves, or repo's) copied to where the game reads it, as copy_save
+    does: the save's slot_00 alone (the game makes account.sav and option.sav itself). Only the expected files, no links;
+    a _profile folder beside the saves (an old layout, with someone's account.sav and option.sav) is refused. Returns the
+    destination"""
+    root = repo_saves_dir(repo)
+    known = repo_save_names(repo)
+    if not REPO_SAVE_NAME.fullmatch(name or "") or name not in known:
+        raise Failed("--repo-save: no repo save %r in %s (%s)" % (name, root, "it has: " + ", ".join(known) if known else
+                                                                   "it has none"), 2)
+    save, profile = os.path.join(root, name), os.path.join(root, "_profile")
+    if os.path.islink(root) or not os.path.isdir(root):
+        raise Failed("--repo-save: %s is not a folder" % root, 2)
+    if os.path.lexists(profile):
+        raise Failed("--repo-save: %s is not shipped any more (account.sav and option.sav are made by the game): "
+                     "refused" % profile, 2)
+    plain_tree(save, "--repo-save")
+    only_files(save, REPO_SAVE_FILES, save)
+    only_files(os.path.join(save, "slot_00"), REPO_SLOT_FILES, os.path.join(save, "slot_00"))
+    return place_save([(os.path.join(save, "slot_00"), "slot_00")], [save], data, user, "--repo-save")
+
+
+def repo_saves_list(repo=None):
+    """[{name, title (its README's first line), path}] of the repo saves"""
+    out = []
+    for n in repo_save_names(repo):
+        path = os.path.join(repo_saves_dir(repo), n)
+        title = ""
+        try:
+            with open(os.path.join(path, "README.md"), encoding="utf-8", errors="replace") as f:
+                title = f.readline(512).strip()
+        except OSError:
+            pass
+        out.append({"name": n, "title": title, "path": path})
+    return out
 
 
 def game_exe(game, exe=None):
@@ -936,6 +1155,103 @@ def terminate_child(process):
         return "terminate"
 
 
+class Adopted:
+    """The game a Windows relaunch started (host/hos_relaunch.c: a new process, not this supervisor's child), held by a
+    handle this supervisor opened while the process's birth identity was the manifest's, so a pid reused later is never
+    waited for or ended. It answers as the Popen child does where supervise, stop_child and terminate_child ask it"""
+
+    def __init__(self, pid, birth):
+        import ctypes
+        from ctypes import wintypes
+        self.k = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.k.OpenProcess.restype = wintypes.HANDLE
+        self.k.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        self.k.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        self.k.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        self.k.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        self.k.CloseHandle.argtypes = [wintypes.HANDLE]
+        self.pid, self.birth, self.returncode = pid, birth, None
+        # (SYNCHRONIZE | PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION; the identity checked after the handle is
+        # held, so the process the handle names is the one that was checked)
+        self.h = self.k.OpenProcess(0x100000 | 0x0001 | 0x1000, False, pid)
+        if not self.h or process_start(pid) != birth:
+            self.close()
+            raise Failed("the relaunched game is gone or its pid was reused", 2)
+
+    def close(self):
+        if self.h:
+            self.k.CloseHandle(self.h)
+            self.h = None
+
+    def _wait(self, ms):
+        from ctypes import wintypes
+        import ctypes
+        if self.returncode is not None:
+            return True
+        if self.k.WaitForSingleObject(self.h, ms) != 0:
+            return False
+        code = wintypes.DWORD()
+        self.returncode = code.value if self.k.GetExitCodeProcess(self.h, ctypes.byref(code)) else 1
+        return True
+
+    def poll(self):
+        return self.returncode if self._wait(0) else None
+
+    def wait(self, timeout=None):
+        if not self._wait(0xFFFFFFFF if timeout is None else max(0, int(timeout * 1000))):
+            raise subprocess.TimeoutExpired("relaunched game", timeout)
+        return self.returncode
+
+    def terminate(self):
+        if self.returncode is None:
+            self.k.TerminateProcess(self.h, 1)
+
+    kill = terminate
+
+
+def relaunched_game(session, process, birth):
+    """After the game the supervisor watches ended: the game a relaunch of it started, when the client followed it to a new
+    process (follow_relaunch), held as Adopted; else None, and the run ends. A relaunch still being waited for by its
+    client is waited for, as long as the client said it would wait and a little more, counted from the ask (asked_at), so
+    a ticket left asked by a client that ended mid-wait does not hold up a later exit. Giving up marks the ticket failed
+    under the manifest's lock, so a client that follows the game later finds it so and leaves the run alone"""
+    since = time.time()   # (for a ticket without asked_at: from the exit)
+    while True:
+        info = session.info()
+        ticket = info.get("relaunch") or {}
+        mine = ticket.get("from") == {"pid": process.pid, "process_start": birth}
+        if not mine or info.get("stop_request") or ticket.get("state") not in ("asked", "followed"):
+            return None
+        if ticket["state"] == "followed":
+            if not WINDOWS or ticket["to"]["pid"] == process.pid:
+                return None
+            try:
+                return Adopted(info["pid"], info["process_start"])
+            except Failed:
+                return None
+        if time.time() >= relaunch_deadline(ticket, since):
+            with run_lock(session.folder):
+                info = session._read()
+                current = info.get("relaunch") or {}
+                if current.get("id") == ticket.get("id") and current.get("state") == "asked":
+                    info["relaunch"] = dict(current, state="failed", ended_at=utc_now())
+                    write_json(session.manifest, info)
+                    return None
+            continue   # (the client wrote its ticket meanwhile: read again)
+        time.sleep(0.05)
+
+
+def relaunch_deadline(ticket, since):
+    """When a supervisor stops waiting for a relaunch (the system's clock, seconds): the client's --timeout from its ask,
+    and 10 s more, for the client's last try (a 2 s open, a 5 s status) and asked_at's whole seconds; from since when the
+    ticket has no asked_at"""
+    try:
+        asked = calendar.timegm(time.strptime(ticket["asked_at"], "%Y-%m-%dT%H:%M:%SZ"))
+    except (KeyError, TypeError, ValueError):
+        asked = since
+    return asked + float(ticket.get("timeout") or 120) + 10
+
+
 def supervise(folder):
     session, process = Session(folder), None
     info = session.update(owner={"pid": os.getpid(), "birth": process_start(os.getpid())}, state="starting")
@@ -950,21 +1266,26 @@ def supervise(folder):
         info = session.update(pid=process.pid, process_start=birth, started_at=utc_now())
         reply = wait_ready(session, info["ready"], info["ready_timeout"], process)
         session.update(state="running", ready_reply=reply)
-        while process.poll() is None:
-            info = session.info()
-            request = info.get("stop_request")
-            if request:
-                if request["pid"] != process.pid or request["process_start"] != birth:
-                    result = {"method": "refused", "process_exited": False, "error": "process identity changed"}
-                else:
-                    session.update(state="stopping")
-                    result = stop_child(process, info, request["timeout"], request["terminate"])
-                method = result["method"]
-                session.update(stop_result=dict(result, id=request["id"]), stop_request=None,
-                               state="stopping" if result["process_exited"] else "running")
-            if (session.folder / "cancel").exists():
-                method = "cancel-" + terminate_child(process)
-            time.sleep(0.05)
+        while True:
+            while process.poll() is None:
+                info = session.info()
+                request = info.get("stop_request")
+                if request:
+                    if request["pid"] != process.pid or request["process_start"] != birth:
+                        result = {"method": "refused", "process_exited": False, "error": "process identity changed"}
+                    else:
+                        session.update(state="stopping")
+                        result = stop_child(process, info, request["timeout"], request["terminate"])
+                    method = result["method"]
+                    session.update(stop_result=dict(result, id=request["id"]), stop_request=None,
+                                   state="stopping" if result["process_exited"] else "running")
+                if (session.folder / "cancel").exists():
+                    method = "cancel-" + terminate_child(process)
+                time.sleep(0.05)
+            followed = relaunched_game(session, process, birth)
+            if followed is None:
+                break
+            process, birth = followed, followed.birth   # (the game started again: watched and stopped as the first one was)
     except BaseException as e:
         error, code = str(e), e.code if isinstance(e, Failed) else 2
         if process is not None:
@@ -979,7 +1300,7 @@ def supervise(folder):
 @session_call
 def start_session(game_dir, *, run=None, root=None, exe=None, image=None, romfs=None, user=None, cwd=None, data=None,
                   save=None, slot=None, profile="default", headless=False, sock=None, env=None, ready="bridge",
-                  timeout=600, wrapper=None):
+                  timeout=600, wrapper=None, repo_save=None, repo=None):
     """Start a durable supervisor, optionally through an admission wrapper (argv, never a shell command)"""
     game = os.path.abspath(game_dir)
     executable = game_exe(game, exe)
@@ -987,16 +1308,20 @@ def start_session(game_dir, *, run=None, root=None, exe=None, image=None, romfs=
         raise Failed("no game at %s" % executable, 2)
     if slot and not save:
         raise Failed("--slot goes with --save", 2)
+    if save and repo_save:
+        raise Failed("--save or --repo-save, not both", 2)
+    if repo and not repo_save:
+        raise Failed("--repo goes with --repo-save", 2)
     if profile not in ("default", "test") or ready not in ("bridge", "present", "play"):
         raise Failed("unknown profile or ready level", 2)
     if not math.isfinite(timeout) or timeout <= 0:
         raise Failed("launch timeout must be positive seconds", 2)
     if profile == "test" and (user or data):
-        raise Failed("test profile owns its user folder; use --save for a copy, not --user or --data", 2)
+        raise Failed("test profile owns its user folder; use --save or --repo-save for a copy, not --user or --data", 2)
     if cwd and not image:
         raise Failed("--cwd needs --image (otherwise the game changes back to its image folder)", 2)
-    if WINDOWS and save and not user and profile != "test":
-        raise Failed("--save on Windows needs --user or --profile test", 2)
+    if WINDOWS and (save or repo_save) and not user and profile != "test":
+        raise Failed("%s on Windows needs --user or --profile test" % ("--save" if save else "--repo-save"), 2)
     changes = dict(env or {})
     if any(not k or "=" in k or "\0" in k + v for k, v in changes.items()):
         raise Failed("--env NAME=VALUE", 2)
@@ -1020,9 +1345,11 @@ def start_session(game_dir, *, run=None, root=None, exe=None, image=None, romfs=
     log = folder / "log.txt"
     log.touch()
     user = os.path.abspath(user) if user else str(folder / "user") if profile == "test" else None
-    data = os.path.abspath(data) if data else str(folder / "data") if save and not user else None
+    data = os.path.abspath(data) if data else str(folder / "data") if (save or repo_save) and not user else None
     if save:
         copy_save(save, data, slot, user=user)
+    elif repo_save:
+        copy_repo_save(repo_save, data, user=user, repo=repo)
     if user:
         Path(user).mkdir(parents=True, exist_ok=True)
     if data:
@@ -1061,7 +1388,8 @@ def start_session(game_dir, *, run=None, root=None, exe=None, image=None, romfs=
     session = Session(folder)
     info = {"schema_version": MANIFEST_VERSION, "client_version": CLIENT_VERSION, "run": str(folder),
             "game": game, "executable": executable, "command": command, "cwd": working, "environment": changes,
-            "profile": profile, "user": user_path, "save_source": os.path.abspath(save) if save else None, "slot": slot,
+            "profile": profile, "user": user_path, "save_source": os.path.abspath(save) if save else
+            os.path.join(repo_saves_dir(repo), repo_save) if repo_save else None, "repo_save": repo_save, "slot": slot,
             "socket": sock, "socket_dir": socket_dir, "log": str(log), "pid": None, "process_start": None,
             "owner": {"pid": None, "birth": None}, "created_at": utc_now(), "started_at": None, "ended_at": None,
             "state": "queued", "exit_code": None, "stop_method": None, "save_drain": "unsupported",
@@ -1069,7 +1397,9 @@ def start_session(game_dir, *, run=None, root=None, exe=None, image=None, romfs=
     write_json(session.manifest, info)
     command = (wrapper or []) + [sys.executable, "-I", "-B", str(Path(__file__).resolve()),
                                  "--run", str(folder), "_supervise"]
-    flags = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS} if WINDOWS \
+    # (Windows: the owner gets a console of its own with no window, apart from the caller's, and the game inherits it. With
+    # no console at all (DETACHED_PROCESS) Windows opened a new console window for the game, one each launch)
+    flags = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW} if WINDOWS \
         else {"start_new_session": True}
     try:
         with (folder / "owner.log").open("ab") as out:
@@ -1110,7 +1440,7 @@ def launch(a):
     session = start_session(a.game_dir, run=a.run, root=a.root, exe=a.exe, image=a.image, romfs=a.romfs, user=a.user,
                             cwd=a.cwd, data=a.data, save=a.save, slot=a.slot, profile=a.profile, headless=a.headless,
                             sock=a.sock, env=changes, ready=a.ready, timeout=a.timeout,
-                            wrapper=json.loads(a.wrapper) if a.wrapper else None)
+                            wrapper=json.loads(a.wrapper) if a.wrapper else None, repo_save=a.repo_save, repo=a.repo)
     info = session.info()
     print(json.dumps(info) if a.json else info["socket"])
     return 0
@@ -1123,13 +1453,19 @@ def main(argv=None):
     p.add_argument("--json", action="store_true", help="the replies as JSON lines")
     sub = p.add_subparsers(dest="command", required=True)
 
+    def finite_float(text):
+        value = float(text)
+        if not math.isfinite(value):
+            raise argparse.ArgumentTypeError("expected a finite number")
+        return value
+
     def inputs(q):
         q.add_argument("--frames", type=int, default=8)
         q.add_argument("--at", type=int, default=0, help="frames from the next controller read")
         q.add_argument("--exclusive", action=argparse.BooleanOptionalAction, default=None,
                        help="the player's own devices left out meanwhile (default for test runs)")
         q.add_argument("--no-wait", action="store_true", help="reply as soon as it is queued")
-        q.add_argument("--timeout", type=float)
+        q.add_argument("--timeout", type=finite_float)
 
     q = sub.add_parser("launch", help="start a game folder with the bridge on")
     q.add_argument("game_dir")
@@ -1138,8 +1474,13 @@ def main(argv=None):
     q.add_argument("--romfs", help="the game's --romfs folder")
     q.add_argument("--user", help="the game's --user folder, on Linux and Windows")
     q.add_argument("--data", help="XDG_DATA_HOME for the run (its saves)")
-    q.add_argument("--save", help="a save folder (<data>/hookshot/save/<user id>) copied in first (Linux); the source is "
+    which = q.add_mutually_exclusive_group()
+    which.add_argument("--save", help="a save folder (<data>/hookshot/save/<user id>) copied in first (Linux); the source is "
                                   "only read")
+    which.add_argument("--repo-save", metavar="NAME", help="a save in the repository (assets/saves/NAME): its slot_00 "
+                       "alone copied in first, as --save (the game makes account.sav and option.sav)")
+    q.add_argument("--repo", metavar="DIR", help="with --repo-save: the checkout whose assets/saves it is in (default this "
+                   "script's)")
     q.add_argument("--slot", help="with --save: that slot alone (03 or slot_03), so Continue loads it")
     q.add_argument("--run", default=argparse.SUPPRESS, help="a new or empty run folder")
     q.add_argument("--root", help="parent for unique run folders (default work/control-runs)")
@@ -1156,28 +1497,28 @@ def main(argv=None):
     inputs(q)
     q = sub.add_parser("stick")
     q.add_argument("which", choices=["L", "R", "l", "r"])
-    q.add_argument("x", type=float)
-    q.add_argument("y", type=float)
+    q.add_argument("x", type=finite_float)
+    q.add_argument("y", type=finite_float)
     inputs(q)
     q = sub.add_parser("sequence")
     q.add_argument("script", help="<at>:<buttons>[/<frames>],...")
     q.add_argument("--hos", action="store_true", help="times in seconds and holds in ms, as HOS_INPUT_SCRIPT")
     q.add_argument("--exclusive", action=argparse.BooleanOptionalAction, default=None)
     q.add_argument("--no-wait", action="store_true")
-    q.add_argument("--timeout", type=float)
+    q.add_argument("--timeout", type=finite_float)
     q = sub.add_parser("release", help="let go of this client's queued inputs and those of clients gone")
     q.add_argument("--all", action="store_true", help="every client's, also those still connected")
     q = sub.add_parser("shot")
     q.add_argument("path", nargs="?")
     q.add_argument("--after", type=int, help="the first present after this frame")
-    q.add_argument("--timeout", type=float)
+    q.add_argument("--timeout", type=finite_float)
     q = sub.add_parser("wait")
     q.add_argument("event", choices=["present", "frame", "in_play", "state", "loading_start", "loading_end", "change", "map"])
     q.add_argument("--frames", type=int)
     q.add_argument("--frame", type=int)
     q.add_argument("--state")
     q.add_argument("--map", help="map: until the game is in this map (default: any other map than now)")
-    q.add_argument("--timeout", type=float, default=60)
+    q.add_argument("--timeout", type=finite_float, default=60)
     q = sub.add_parser("option")
     q.add_argument("action", choices=["get", "set"])
     q.add_argument("name", nargs="?")
@@ -1198,19 +1539,23 @@ def main(argv=None):
                    help="read: how to print the bytes")
     q = sub.add_parser("teleport", help="(OoT) the debug teleport: a destination's index or map; none lists them")
     q.add_argument("to", nargs="?")
-    q.add_argument("--timeout", type=float, default=10, help="seconds for the game to take it (it does in play)")
-    q.add_argument("--arrive", type=float, metavar="SECS", help="then wait up to SECS until the game is in the map")
+    q.add_argument("--timeout", type=finite_float, default=10, help="seconds for the game to take it (it does in play)")
+    q.add_argument("--arrive", type=finite_float, metavar="SECS", help="then wait up to SECS until the game is in the map")
     q.add_argument("--no-wait", action="store_true", help="reply once asked, without whether the game took it")
     q = sub.add_parser("age", help="(OoT) the Debug tab's Switch age: child or adult (none: the other age)")
     q.add_argument("to", nargs="?", choices=["child", "adult"])
-    q.add_argument("--timeout", type=float, default=10, help="seconds for the game to take it (it does in play)")
-    q.add_argument("--arrive", type=float, metavar="SECS", help="then wait up to SECS until the map has reloaded (its "
+    q.add_argument("--timeout", type=finite_float, default=10, help="seconds for the game to take it (it does in play)")
+    q.add_argument("--arrive", type=finite_float, metavar="SECS", help="then wait up to SECS until the map has reloaded (its "
                    "load ended)")
     q.add_argument("--no-wait", action="store_true", help="reply once asked, without whether the game took it")
-    sub.add_parser("saves", help="the save folder the game uses: its files, newest slot first")
+    q = sub.add_parser("saves", help="the save folder the game uses: its files, newest slot first")
+    q.add_argument("--repo", nargs="?", const="", metavar="DIR", help="the saves in the repository instead (assets/saves, "
+                   "no game needed): each with its README's first line; DIR another checkout")
     q = sub.add_parser("slots", help="the save slots: last written, sizes, scene; * the newest (Continue's)")
     q.add_argument("--thumbs", metavar="DIR", help="each slot's file-select picture written there as slot_NN.jpg")
     sub.add_parser("quit")
+    q = sub.add_parser("relaunch", help="the game starts again (the Insert menu's Restart now); back when it answers")
+    q.add_argument("--timeout", type=float, default=120, help="seconds for the game started again to answer")
     q = sub.add_parser("raw")
     q.add_argument("request", help="a JSON request object")
     q = sub.add_parser("runs", help="list run manifests under a root")

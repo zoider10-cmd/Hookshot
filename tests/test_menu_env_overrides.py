@@ -44,6 +44,16 @@ FIXTURE = r"""
 #include <cstring>
 #include <iterator>
 #include <mutex>   // (save() locks since the control bridge, #926)
+#include <cerrno>   // (save(): what failed, the options file's mode, its move)
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 #include <string>
 #include "hookshot_env.h"   // (gpu/vk/compat: env_value_off, the switches' rule)
 #include "hos_wide_size.h"   // (host/: the output sizes the menu accepts, hos_output_size_valid)
@@ -86,13 +96,23 @@ bool replace_file(const std::string& part, const std::string& path) {
     return std::rename(part.c_str(), path.c_str()) == 0;
 }
 std::string mic_want;
+int output_pick;
+std::string output_want, output_saved_name;   // Playback state used by the real save(); device tests cover selection.
+int monitor_pick;
+std::string monitor_want, monitor_saved_name; // Monitor selection is saved by identity, not the transient row index.
 uint64_t auto_for = 0, auto_tuned = 0;   // (the Quality preset Auto (this PC)'s fingerprints, which save() writes)
+#include "gpu_choice.h"   // (the GPU device row saved as the card itself, which save() writes)
+namespace gpu_choice = mkwvk::gpu_choice;
+std::vector<gpu_choice::Card> gpu_device_cards;
+std::string gpu_saved_card;
+bool gpu_card_missing = false;
 struct { int steps = 0; bool went_down = false; } auto_tuning;   // (and its tuning's steps)
 constexpr int HOS_KEY_N = 1, HOS_SW_N = 1, HOS_BIND_PAD = 0, HOS_BIND_KEY = 1;
 constexpr int HOS_KEY_OC_NOTE_L = 1, HOS_KEY_OC_NOTE_X = 1;   /* (the note rows: past this stub's one row) */
 const char* const bind_names[1] = {"a"};
 struct Host { int (*binding)(int, int, int); } host_value{nullptr}, *host = &host_value;
 bool can_bind() { return host->binding != nullptr; }
+void logf(const char*, ...) {}   // (save()'s line when the file cannot be written)
 /* INI_KEY */
 /* SAVE */
 void env_part() {

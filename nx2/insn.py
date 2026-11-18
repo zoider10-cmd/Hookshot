@@ -266,8 +266,16 @@ def install():
     base_classify = a64_lift.classify
     base_translate = a64emit.translate
 
+    ops = set()   # (words that are ("op",) at any pc: neither classify reads the pc for them)
+    OP = ("op",)
+
     def classify(w, pc):
-        return classify_ext(w, pc) or base_classify(w, pc)
+        if w in ops:   # (most of the 18 million words the discovery walks: one set lookup instead of both classifies)
+            return OP
+        k = classify_ext(w, pc) or base_classify(w, pc)
+        if k == OP:
+            ops.add(w)
+        return k
 
     def translate(items, batch=65536):
         mine = {}

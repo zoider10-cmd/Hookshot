@@ -1,0 +1,39 @@
+---
+title: Scrub a save
+description: Make a save for the repository in your browser, with its Load-screen picture made grey and its date reset, as scripts/hookshot_saves.py scrub does.
+tableOfContents: false
+---
+import SaveScrubber from '../../../components/SaveScrubber.astro';
+
+The scrubber makes one slot of a save into a save for the repository (`assets/saves`): the same files, byte for byte,
+that the `scrub` command of
+[`scripts/hookshot_saves.py`](https://git.magicbean.dev/MagicBeanDev/Hookshot/src/branch/main/scripts/hookshot_saves.py) makes, without Python or a copy of the source. **It runs in your
+browser: your files are not uploaded anywhere.**
+
+<SaveScrubber />
+
+## What it changes
+
+- **The picture becomes grey.** The Load screen's picture in `caption.sav` is replaced by a plain mid-grey one of the
+  same size.
+- **The date becomes 2026-01-01 00:00:00.** The date and time the Load screen shows are reset, and the files in the zip
+  carry that date too.
+- **`progress.sav` is copied unchanged.** It holds the slot's progress, which is what the save is for. There is no
+  player name in these saves to remove.
+- **`account.sav` and `option.sav` are left out.** The game makes them itself when it loads the slot, and they could
+  carry your settings.
+
+A file laid out in a way the scrubber doesn't know is refused, and nothing is made. The zip holds
+`<name>/slot_00/progress.sav`, `<name>/slot_00/caption.sav` and a `README.md` whose first line you fill in (where the
+save stands). The details are in the
+[saves script's guide](https://git.magicbean.dev/MagicBeanDev/Hookshot/src/branch/main/docs/saves-script.md#what-scrub-changes).
+
+## Adding it to the repository
+
+Saves in the repository follow [their own rules](https://git.magicbean.dev/MagicBeanDev/Hookshot/src/branch/main/assets/saves/README.md):
+made fresh from a new profile for the Test Farm, one slot each, and added by a pull request that two maintainers
+approve. Unzip it into `assets/saves/`, fill in its `README.md`, and check it with
+`python -I scripts/hookshot_saves.py check-repo-saves` before opening the pull request.
+
+A scrubbed save is still a save: **don't attach saves to issues**, scrubbed or not. Describe the problem instead, as
+the [report guide](/help/report/) says. To move your own save between programs, see [Transfer a save](/saves/transfer/).

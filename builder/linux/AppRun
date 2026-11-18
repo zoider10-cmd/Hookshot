@@ -1,7 +1,7 @@
 #!/bin/sh
-# The Hookshot AppImage: the Linux builder, for the command line. Its Python, Hookshot's sources and nx2/make_game.py, with the
-# Vulkan back end built already. It has no window: players use the Hookshot Launcher, which unpacks this AppImage and runs
-# make_game.py with its Python. The build tools (clang and lld, a glibc 2.35 sysroot, FFmpeg, SDL2, the Vulkan headers) are
+# The Hookshot AppImage: the Linux builder, for the command line. Its Python, Hookshot's sources and nx2/make_game.py (the
+# player's build compiles the Vulkan back end from them too). It has no window: players use the Hookshot Launcher, which
+# unpacks this AppImage and runs make_game.py with its Python. The build tools (clang and lld, a glibc 2.35 sysroot, FFmpeg, SDL2, the Vulkan headers) are
 # tools.lock's linux-x64 lines, outside the image: builder/linux/linux_tools.py finds them (the Hookshot Launcher's, or the
 # builder's own toolchains folder) and, for --cli, downloads what is missing.
 #   Hookshot.AppImage --cli <args>     nx2/make_game.py itself, e.g. --cli --nup game.nup --out ~/Games/Hookshot
@@ -12,9 +12,7 @@
 #   Hookshot.AppImage --launch <dir>  the same (a game folder's hookshot, builder/linux/hookshot-folder, when --cli built it)
 #   Hookshot.AppImage                  a message: get the Hookshot Launcher
 HERE="$(dirname "$(readlink -f "$0")")"
-LIB="$HERE/usr/lib/hookshot"
 export HOOKSHOT_TOOLS="$HERE/usr/share/hookshot"
-export HOOKSHOT_VK_PREBUILT="$LIB/hookshot_vk.so"
 # (written into the game folder's hookshot_version.txt, so its launcher finds this builder)
 if [ -n "${APPIMAGE:-}" ]; then
     export HOOKSHOT_BUILDER_EXE="$APPIMAGE"

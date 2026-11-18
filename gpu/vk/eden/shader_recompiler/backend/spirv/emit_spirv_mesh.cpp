@@ -201,13 +201,50 @@ Id LineWord(EmitContext& ctx, Id array, Id element, u32 base, u32 num_lines, u32
         SharedWord(ctx, array, ctx.OpIAdd(ctx.U32[1], first, ctx.Const(line * 32))));
 }
 
+/// The Soa layout's records (MeshFallbackLayout): record k of the workgroup's, base + k, is corner k % corners of primitive
+/// k / corners, its index byte at 4 + k. The threads take the records in turn, and each line's words are neighbours: line l of
+/// record r at H + l * fit + r
+void WriteFallbackLines(EmitContext& ctx, Id base, Id taken) {
+    const MeshInfo& mesh{ctx.mesh_info};
+    const u32 corners{mesh.Corners()};
+    const u32 fit{MeshFallbackFit(FallbackRecordWords(mesh))};
+    const u32 vertex_lines{static_cast<u32>(mesh.vertex_lines.size())};
+    const u32 primitive_lines{static_cast<u32>(mesh.primitive_lines.size())};
+    const auto store = [&](u32 line, Id record, Id value) {
+        StoreWord(ctx,
+                  BufferWord(ctx, ctx.mesh_fallback_records_member_index,
+                             ctx.OpIAdd(ctx.U32[1], record, ctx.Const(MESH_FALLBACK_HEADER_WORDS + line * fit))),
+                  value);
+    };
+    Strided(ctx, mesh.max_primitives * corners, ctx.mesh_threads, LocalInvocation(ctx), [&](Id k) {
+        If(ctx, ctx.OpULessThan(ctx.U1, k, taken), [&] {
+            // (an index byte the program left unwritten is held to the vertex count)
+            const Id vertex{Clamped(ctx,
+                                    ctx.OpLoad(ctx.U32[1], SharedWord(ctx, ctx.mesh_map, ctx.OpIAdd(ctx.U32[1], k, ctx.Const(4U)))),
+                                    mesh.max_vertices)};
+            const Id record{ctx.OpIAdd(ctx.U32[1], base, k)};
+            store(0, record, ctx.Const(1U));
+            for (u32 line = 0; line < vertex_lines; ++line) {
+                store(1 + line, record, LineWord(ctx, ctx.mesh_attributes, vertex, 0, vertex_lines, line));
+            }
+            if (primitive_lines) {
+                const Id primitive{corners == 1 ? k : ctx.OpUDiv(ctx.U32[1], k, ctx.Const(corners))};
+                for (u32 line = 0; line < primitive_lines; ++line) {
+                    store(1 + vertex_lines + line, record,
+                          LineWord(ctx, ctx.mesh_attributes, primitive, ctx.mesh_primitive_base, primitive_lines, line));
+                }
+            }
+        });
+    });
+}
+
 /// A mesh workgroup takes records for its primitives' corners from the records buffer's allocator and writes them; the vertex
 /// stage's indirect draw covers the records taken (MESH_FALLBACK_DRAW_WORD). A task's flag first bounds its count.
 void MeshFallbackEpilogue(EmitContext& ctx) {
     const MeshInfo& mesh{ctx.mesh_info};
     const u32 corners{mesh.Corners()};
     const u32 words{FallbackRecordWords(mesh)};
-    const u32 fit{MESH_FALLBACK_RECORD_WORDS / words};   // (this program's records the buffer holds)
+    const u32 fit{MeshFallbackFit(words)};   // (this program's records the buffer holds)
     const Id none{ctx.Const(0xFFFFFFFFU)};
     Barrier(ctx);
     // (with a task program every workgroup dispatched was started by it: the dispatch is the map's, TaskEpilogue)
@@ -240,6 +277,10 @@ void MeshFallbackEpilogue(EmitContext& ctx) {
     Barrier(ctx);
     const Id base{ctx.OpLoad(ctx.U32[1], ctx.mesh_primitive_count)};
     If(ctx, ctx.OpINotEqual(ctx.U1, base, none), [&] {
+        if (ctx.runtime_info.mesh_fallback_layout == static_cast<u32>(MeshFallbackLayout::Soa)) {
+            WriteFallbackLines(ctx, base, taken);
+            return;
+        }
         const Id invocation{LocalInvocation(ctx)};
         Strided(ctx, mesh.max_primitives, ctx.mesh_threads, invocation, [&](Id primitive) {
             If(ctx, ctx.OpULessThan(ctx.U1, primitive, count), [&] {
@@ -477,16 +518,19 @@ void EmitMeshFallbackVertexBody(EmitContext& ctx) {
     const u32 primitive_lines{static_cast<u32>(mesh.primitive_lines.size())};
     const u32 words{FallbackRecordWords(mesh)};
     // (a record a vertex, in the order the mesh workgroups took them (MeshFallbackEpilogue): the indirect draw's count is the
-    // records taken, so every one it reaches was written)
+    // records taken, so every one it reaches was written. Its words a record apart (Aos) or a line apart (Soa))
+    const bool lines{ctx.runtime_info.mesh_fallback_layout == static_cast<u32>(MeshFallbackLayout::Soa)};
+    const u32 stride{lines ? MeshFallbackFit(words) : 1U};
     const Id vertex{ctx.OpLoad(ctx.U32[1], ctx.vertex_index)};
-    const Id first{ctx.OpIAdd(ctx.U32[1], ctx.Const(MESH_FALLBACK_HEADER_WORDS),
-                              ctx.OpIMul(ctx.U32[1], vertex, ctx.Const(words)))};
+    const Id first{lines ? ctx.OpIAdd(ctx.U32[1], ctx.Const(MESH_FALLBACK_HEADER_WORDS), vertex)
+                         : ctx.OpIAdd(ctx.U32[1], ctx.Const(MESH_FALLBACK_HEADER_WORDS),
+                                      ctx.OpIMul(ctx.U32[1], vertex, ctx.Const(words)))};
     const Id valid{LoadWord(ctx, BufferWord(ctx, ctx.mesh_fallback_records_member_index, first))};
     const auto read = [&](u32 word) {
         return ctx.OpBitcast(
             ctx.F32[1],
             LoadWord(ctx, BufferWord(ctx, ctx.mesh_fallback_records_member_index,
-                                              ctx.OpIAdd(ctx.U32[1], first, ctx.Const(word)))));
+                                              ctx.OpIAdd(ctx.U32[1], first, ctx.Const(word * stride)))));
     };
     std::array<Id, 4> position{};
     for (u32 line = 0; line < vertex_lines; ++line) {

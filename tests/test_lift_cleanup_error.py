@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -50,14 +51,17 @@ class LiftCleanupErrorTests(unittest.TestCase):
         self.namespace, self.branch = production()
         self.namespace.update(work=str(self.work), exefs=str(self.root / "exefs"), env={}, key="b" * 40, PY=["authored-python"],
                               gen_dir=str(self.gen), KEPT_LIST="lifted_objects.txt", KEPT_SCHEME=1,
-                              kept_lift=[], contextlib=contextlib)
+                              kept_lift=[], contextlib=contextlib,
+                              # (HOOKSHOT_LIFT_STORE unset: no lift shared with another work folder, nx2/lift_store.py)
+                              _lift_store=types.SimpleNamespace(root=lambda: None))
         self.actual_write = self.namespace["write_lift_key"]
 
         def write_key(work, key):
             self.events.append("key")
             self.actual_write(work, key)
 
-        def run(command, environment):
+        def run(command, environment, on_line=None):
+            self.assertEqual(on_line, "lift progress")   # (Translate's progress, lift_progress: make_game's own, not this branch's)
             self.assertEqual(command, ["authored-python", "nx2/lift.py", "--standalone", "--write", "--exefs",
                                        str(self.root / "exefs"), "--work", str(self.work)])
             self.assertEqual(environment, {})
@@ -77,7 +81,7 @@ class LiftCleanupErrorTests(unittest.TestCase):
             self.events.append("rekey")
             return "c" * 40
 
-        self.namespace.update(run=run, write_lift_key=write_key, lift_key=rekey)
+        self.namespace.update(run=run, write_lift_key=write_key, lift_key=rekey, lift_progress=lambda work: "lift progress")
 
     def seed(self, same_key=False):
         self.gen.mkdir(parents=True)
@@ -143,11 +147,11 @@ class LiftCleanupErrorTests(unittest.TestCase):
             path.write_bytes(data)
         child = self.namespace["run"]
 
-        def run(command, environment):
+        def run(command, environment, on_line=None):
             self.assertFalse((self.gen / "code_obsolete.c").exists())
             self.assertFalse((self.gen / "code_obsolete.c.whole").exists())
             self.assertFalse(self.key.exists())
-            child(command, environment)
+            child(command, environment, on_line)
 
         self.namespace["run"] = run
         self.exercise()
@@ -196,7 +200,7 @@ class LiftCleanupErrorTests(unittest.TestCase):
     def test_failed_lift_leaves_no_fresh_key(self):
         self.seed()
 
-        def stopped(command, environment):
+        def stopped(command, environment, on_line=None):
             self.events.append("lift")
             raise SystemExit(37)
 

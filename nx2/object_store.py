@@ -142,11 +142,19 @@ def prune(store_root=None, now=None):
     now = time.time() if now is None else now
     days, limit = _number("HOOKSHOT_OBJ_STORE_DAYS", KEEP_DAYS), _number("HOOKSHOT_OBJ_STORE_GB", KEEP_GB) * (1 << 30)
     alone = []   # (last used, size, path) of the objects only the store holds
-    for sub in os.listdir(r):
+    try:
+        subs = os.listdir(r)
+    except OSError:   # (a store that cannot be read: nothing to clean, the build stands)
+        return 0, 0
+    for sub in subs:
         d = os.path.join(r, sub)
         if not os.path.isdir(d):
             continue
-        for f in os.listdir(d):
+        try:
+            names = os.listdir(d)
+        except OSError:   # (a namespace that cannot be listed, or removed meanwhile: skipped)
+            continue
+        for f in names:
             p = os.path.join(d, f)
             try:
                 st = os.stat(p)

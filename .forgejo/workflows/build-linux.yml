@@ -1,12 +1,14 @@
-# The Linux Hookshot Builder (docs/releases.md): Hookshot-<version>-x86_64.AppImage, the builder with its Python, Hookshot's
-# sources and the Vulkan back end built (scripts/linux/deps.sh's pinned downloads, scripts/linux/appimage.sh), and
-# recomplauncher.json inside. Its build tools (the compiler, the sysroot, FFmpeg, SDL2, the Vulkan headers) are not in it:
-# they are tools.lock's linux-x64 lines, installed here to build the back end and check the image, and on the player's PC by
-# the launcher or the builder's first start. No game data is involved. Built in Ubuntu 22.04, the oldest system it is for
-# (glibc 2.35). The AppImage is a workflow artifact; called by release.yml with the version's name, it is the release's.
-# It carries the version (its name, usr/share/hookshot/VERSION, and hookshot_vk.so's menu and bug report: nx2/version.py), so
-# a tag always builds it again; a tag whose commit CI released already (release.yml's `checked`) skips only the build check
-# that ships nothing and passed in that run (the back end with AMD FSR 4).
+# The Linux Hookshot Builder (docs/releases.md): Hookshot-<version>-x86_64.AppImage, the builder with its Python and Hookshot's
+# sources (scripts/linux/deps.sh's pinned downloads, scripts/linux/appimage.sh), and recomplauncher.json inside. No Vulkan back
+# end is built into it: every player's build compiles it from those sources. Its build tools (the compiler, the sysroot, FFmpeg,
+# SDL2, the Vulkan headers) are not in it either: they are tools.lock's linux-x64 lines, installed here to check that the back
+# end compiles and to check the image, and on the player's PC by the launcher or the builder's first start. No game data is
+# involved. Built in Ubuntu 22.04, the oldest system it is for (glibc 2.35). The AppImage is a workflow artifact; called by
+# release.yml with the version's name, it is the release's.
+# It carries the version (its name and usr/share/hookshot/VERSION, which a player's hookshot_vk.so shows in its menu and bug
+# report: nx2/version.py), so a tag always builds it again; a tag whose commit CI released already (release.yml's `checked`)
+# skips only the build checks that ship nothing and passed in that run (the back end, without and with AMD FSR 4). Those
+# checks, and the tools' downloads, take the runner's caches on every run; what the AppImage carries never does.
 name: Linux AppImage
 on:
   # (no pull_request trigger for now: the Release workflow builds main's pushes and tags by calling this one; build a
@@ -32,7 +34,7 @@ permissions:
 env:
   # (the version this run is for, from the Release workflow; empty on other runs)
   RELEASE_TAG: ${{ inputs.tag }}
-  # (a published release of the same commit, when there is one: the AMD FSR 4 build check, passed in its run, is not run again)
+  # (a published release of the same commit, when there is one: the back end's build checks, passed in its run, are not run again)
   RELEASE_CHECKED: ${{ inputs.checked }}
 concurrency:
   group: linux-appimage-${{ inputs.tag || github.ref }}
@@ -41,7 +43,7 @@ concurrency:
 
 jobs:
   appimage:
-    runs-on: ubuntu-latest
+    runs-on: release  # (a release's build: only the runners kept for them take it, docs/forgejo-runners.md)
     container: ubuntu:22.04
     # (about 4 minutes with the dependencies cached; building them all, as a release does, takes longer)
     timeout-minutes: 60
@@ -130,7 +132,13 @@ jobs:
         run: scripts/linux/deps.sh
 
       # (tools.lock's linux-x64 tools, from Hookshot's packages, each checked by its SHA-256: what the player's builder
-      # downloads. Kept between runs by tools.lock's own hash; a release fetches them again)
+      # downloads. Their downloads are kept for every run, a release's too: scripts/tools.py checks a kept archive's size and
+      # SHA-256 each time it takes one, and fetches it again when they differ. The installed tools, by tools.lock's own hash,
+      # for the runs that are not a release's)
+      - uses: https://github.com/actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: linux-tools-downloads-${{ hashFiles('tools.lock') }}
       - if: env.RELEASE_TAG == ''
         uses: https://github.com/actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -140,14 +148,13 @@ jobs:
         run: python3 -I scripts/tools.py install build-linux/tools --system linux-x64 --cache "$RUNNER_TEMP/tools-cache"
 
       # The Vulkan back end's compiled objects (nx2/build.py's object cache, build-linux/vk-work/objcache: each object
-      # under the SHA-1 of its source, its flags and the headers it can see), for pull requests: a pull request compiles
-      # only the files its change reaches, not all 209 (about 80-140 s here). Written after every build but a release's
-      # (a pull request's own, for its next push; main's, for every pull request). Read only by pull requests: a push to
-      # main compiles every object itself, as a release does, so the nightly and the releases never take one from a cache. The
-      # key also names the compiler (tools.lock pins it) and this system's C and C++ library headers, which the objects'
-      # own keys leave out.
+      # under the SHA-1 of its source, its flags and the headers it can see): a build compiles only the files a change
+      # reaches, not all 209 (about 40 s of a release's build, 80-140 s on a smaller runner). Read and written by every
+      # build that makes the back end, the nightly's and a release's too: the back end is a build check, which no release
+      # file carries (every player's build compiles its own from the AppImage's sources), and the cache is the runner's own
+      # (a release runner's is written by release builds and Run workflow alone). The key also names the compiler
+      # (tools.lock pins it) and this system's C and C++ library headers, which the objects' own keys leave out.
       - name: Object cache key
-        if: env.RELEASE_TAG == ''
         id: objkey
         env:
           COMPILER: ${{ hashFiles('tools.lock') }}
@@ -156,22 +163,12 @@ jobs:
           system=$(dpkg-query -W -f '${Package}=${Version}\n' libc6-dev libstdc++-13-dev libstdc++-12-dev | sha256sum | cut -c1-16)
           echo "prefix=linux-vk-objects-$COMPILER-$system-" >> "$GITHUB_OUTPUT"
           echo "key=linux-vk-objects-$COMPILER-$system-$SOURCES" >> "$GITHUB_OUTPUT"
-      - if: env.RELEASE_TAG == '' && github.event_name == 'pull_request'
+      - if: env.RELEASE_CHECKED == ''
         uses: https://github.com/actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build-linux/vk-work/objcache
           key: ${{ steps.objkey.outputs.key }}
           restore-keys: ${{ steps.objkey.outputs.prefix }}
-
-      # work/: the play profile made on the development PC (addresses and counts, no game code): tools.lock's profile when
-      # it has one (RELEASING.md, One-time setup); without it the game is built all the same, a little slower in play
-      - name: Play profile
-        run: |
-          if [ -f work/hot_order.txt ]; then echo "work/ is in the repository"; exit 0; fi
-          grep -q '^tool profile ' tools.lock || { echo "tools.lock has no profile yet: built without it"; exit 0; }
-          python3 -I scripts/tools.py install "$RUNNER_TEMP/profile" --only profile --cache "$RUNNER_TEMP/tools-cache"
-          mkdir -p work && cp -r "$RUNNER_TEMP"/profile/HookshotBuilder/tools/work/. work/
-          ls -la work
 
       # (the AppImage, named by the release's version: a release's tag or the nightly's name)
       - name: AppImage
@@ -179,10 +176,32 @@ jobs:
           HOOKSHOT_VERSION: ${{ env.RELEASE_TAG }}
         run: scripts/linux/appimage.sh
 
+      # (the Vulkan back end, compiled as a player's build compiles it from the AppImage's sources (nx2/build.py), with the
+      # renderer's play profile as nx2/make_game.py's vk_profile_for picks it: the checkout's work/hookshot_vk.profdata, else
+      # the committed assets/profiles/ one. A build check: the AppImage carries no built back end. RX_MARCH=x86-64-v3, not this
+      # runner's own CPU, so the object cache's keys stay the same from one runner to the next)
+      - name: hookshot_vk.so (build check)
+        if: env.RELEASE_CHECKED == ''
+        shell: bash
+        run: |
+          VKW="$PWD/build-linux/vk-work"
+          mkdir -p "$VKW"
+          rm -f "$VKW/sa/build/hookshot_vk.so"
+          VK_PGO=
+          if [ -f work/hookshot_vk.profdata ]; then VK_PGO="$PWD/work/hookshot_vk.profdata"
+          elif [ -f assets/profiles/hookshot_vk.profdata.xz ]; then
+            xz -dc assets/profiles/hookshot_vk.profdata.xz > "$VKW/hookshot_vk.shipped.profdata"; VK_PGO="$VKW/hookshot_vk.shipped.profdata"
+          fi
+          echo "VK_PGO=$VK_PGO" >> "$GITHUB_ENV"   # (the AMD FSR 4 check below builds with the same, so only vk_fsr4.cpp compiles again)
+          D="$PWD/build-linux/deps" T="$PWD/build-linux/tools"
+          OOT_WORK="$VKW" EMSDK="$T/usr/lib/hookshot/emsdk" RX_CPM="$T/usr/share/hookshot/cpm" RX_MARCH=x86-64-v3 \
+            RX_VK_ONLY=1 RX_RELEASE=1 RX_VK_PGO="$VK_PGO" "$D/python/bin/python3" -I nx2/build.py --standalone --jobs "$(nproc)"
+          test -f "$VKW/sa/build/hookshot_vk.so"
+
       # (the object cache down to the objects this build used, as nx2/make_game.py prune_object_cache does: each object in
-      # sa/build/obj names its key in <obj>.sha1. Nothing goes when no stamp is found)
-      - name: Object cache for pull requests
-        if: env.RELEASE_TAG == ''
+      # sa/build/obj names its key in <obj>.sha1. Nothing goes when no stamp is found: a commit released already, whose
+      # back end is not built again, keeps the cache as it is)
+      - name: The object cache, down to this build's objects
         shell: bash
         run: |
           W=build-linux/vk-work
@@ -197,25 +216,24 @@ jobs:
           done
           left=("$W"/objcache/*.o)
           echo "objcache: ${#left[@]} objects, $(du -sh "$W/objcache" | cut -f1)"
-      - if: env.RELEASE_TAG == ''
+      - if: env.RELEASE_CHECKED == ''
         uses: https://github.com/actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build-linux/vk-work/objcache
           key: ${{ steps.objkey.outputs.key }}
 
-      # (AMD FSR 4's Linux side, a build option the AppImage's prebuilt back end leaves off (a player's build with --fsr compiles
-      # its own: scripts/linux/check_player_build.sh) (gpu/vk/vk_fsr4.cpp: dlopen, the older backend
-      # description, the unit exposure; the descriptor buffers in vk_main.cpp): built once more in a copy of the back end's
-      # work folder, where only vk_fsr4.cpp compiles again. The AppImage above is not changed)
+      # (AMD FSR 4's Linux side, a build option (a player's build with --fsr: scripts/linux/check_player_build.sh) (gpu/vk/
+      # vk_fsr4.cpp: dlopen, the older backend description, the unit exposure; the descriptor buffers in vk_main.cpp): built once
+      # more in a copy of the build check's work folder, where only vk_fsr4.cpp compiles again. The AppImage above is not changed)
       - name: hookshot_vk.so with AMD FSR 4 (build check)
         if: env.RELEASE_CHECKED == ''
         shell: bash   # (this container's default is sh, which has no PIPESTATUS)
         run: |
           cp -r build-linux/vk-work "$RUNNER_TEMP/vk-fsr"
-          rm -f "$RUNNER_TEMP/vk-fsr/sa/build/hookshot_vk.so"   # (the AppImage's own, without FSR: the test below is this build's)
+          rm -f "$RUNNER_TEMP/vk-fsr/sa/build/hookshot_vk.so"   # (the build check's, without FSR: the test below is this build's)
           D="$PWD/build-linux/deps" T="$PWD/build-linux/tools"
           OOT_WORK="$RUNNER_TEMP/vk-fsr" EMSDK="$T/usr/lib/hookshot/emsdk" RX_CPM="$T/usr/share/hookshot/cpm" RX_MARCH=x86-64-v3 \
-            RX_VK_ONLY=1 RX_RELEASE=1 HOOKSHOT_FSR=1 "$D/python/bin/python3" -I nx2/build.py --standalone --jobs "$(nproc)" |
+            RX_VK_ONLY=1 RX_RELEASE=1 RX_VK_PGO="$VK_PGO" HOOKSHOT_FSR=1 "$D/python/bin/python3" -I nx2/build.py --standalone --jobs "$(nproc)" |
             tee "$RUNNER_TEMP/vk-fsr.log"
           test "${PIPESTATUS[0]}" -eq 0
           grep -q "with AMD FSR 4" "$RUNNER_TEMP/vk-fsr.log"

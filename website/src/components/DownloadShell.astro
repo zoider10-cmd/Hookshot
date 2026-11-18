@@ -1,0 +1,29 @@
+<!-- The Worker fills this slot from the current launcher releases. Static preview keeps useful fallback links. -->
+<div class="download-page not-content">
+  <launcher-download-content>
+    <p>The launcher builds the game on your PC, from your own supported copy.</p>
+    <p>Choose your platform on the <a href="/install/">installation page</a>, or browse <a href="https://git.magicbean.dev/MagicBeanDev/HookshotLauncher/releases">launcher releases</a>.</p>
+    <p>Choose Windows or Linux and follow the installation guide. Bring your own copy of the game; the download includes no game files or keys.</p>
+  </launcher-download-content>
+</div>
+<style is:global>
+  .download-page { max-width: 49rem; }
+  launcher-download-content { display: block; }
+  .download-page .lead { font-size: var(--text-lg); }
+  .download-page h2 { font-size: var(--text-xl); margin: 2rem 0 1rem; }
+  .download-page p { color: var(--sl-color-gray-2); }
+  .download-page a:not(.button) { color: var(--sl-color-text-accent); }
+  .download-page .bigs, .download-page .others { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
+  .download-page .big { flex-direction: column; align-items: flex-start; gap: .15rem; background: var(--button); border-color: var(--button); color: var(--button-text); }
+  .download-page .big small { font-size: var(--text-xs); font-weight: 400; }
+  .download-page .big:hover { background: var(--button-hover); }
+  .download-page .pill:hover { background: var(--panel); border-color: var(--sl-color-text-accent); }
+  .download-page .channels { display: grid; gap: 1rem; }
+  .download-page .channel, .download-page .warn { padding: 1.2rem; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+  .download-page .warn { border-left: 4px solid var(--sl-color-text-accent); }
+  .download-page .channel h3 { margin: 0; font-size: var(--text-lg); }
+  .download-page .channel h3 small { display: block; font: 400 var(--text-xs)/1.65 var(--sl-font); color: var(--sl-color-gray-2); }
+  @media (max-width: 30rem) {
+    .download-page .big, .download-page .pill { width: 100%; align-items: center; }
+  }
+</style>

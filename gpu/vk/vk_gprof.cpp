@@ -63,9 +63,8 @@ uint32_t stamp(Stream& st, VkCommandBuffer cmd) {
 
 bool gprof_on() {
     static const bool on = [] {
-        const char* a = getenv("RX_VK_PASS_TIMING");
-        const char* b = getenv("RX_VK_GPU_PROFILE");
-        return (a && atoi(a) != 0) || (b && atoi(b) != 0);
+        const char* a = getenv("RX_VK_PASS_TIMING");   // (its second name, RX_VK_GPU_PROFILE, is gone: switches.def)
+        return a && atoi(a) != 0;
     }();
     return on;
 }

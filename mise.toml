@@ -1,0 +1,78 @@
+min_version = "2026.11.3"
+
+[tasks.setup]
+description = "Install git hooks (pre-commit and commit-msg)"
+shell = "bash -c"
+run = "pre-commit install"
+
+[tools]
+python = "3.12.15"
+node = "22.12.0"
+"aqua:pre-commit/pre-commit" = "4.0.1"
+"github:rhysd/actionlint" = "1.7.12"
+"github:open-policy-agent/conftest" = "0.71.1"
+"github:CircleCI-Public/circleci-cli" = "1.14.0"
+"github:koalaman/shellcheck" = "0.10.0"
+# glslang 16.6.0 linux x86_64 tarball (checksum in test-deps-linux and [tasks.deps]); no arm64 release.
+
+[tasks.deps]
+description = "Pinned headers and glslang for local run_all (Linux x86_64)"
+shell = "bash -c"
+run = """
+set -euo pipefail
+if [ "$(uname -s)" != Linux ]; then
+  echo 'deps: Linux only'
+  exit 2
+fi
+scripts/fetch_commit.sh https://github.com/KhronosGroup/SPIRV-Headers \
+  04f10f650d514df88b76d25e83db360142c7b174 _deps/spirv-headers
+scripts/fetch_commit.sh https://github.com/KhronosGroup/Vulkan-Headers \
+  74d8a6cb930c68ef617b202c3ff3c59d919e086b _deps/vulkan-headers
+tool_dir="${HOME}/glslang-16.6.0"
+mkdir -p "$tool_dir"
+if [ ! -x "$tool_dir/bin/glslangValidator" ]; then
+  curl -fL --retry 3 -o "$tool_dir/glslang.tar.gz" \
+    https://github.com/KhronosGroup/glslang/releases/download/16.6.0/glslang-16.6.0-linux-x86_64-release.tar.gz
+  echo '2c34071f56ecf39d16233294d3739cf43f981fd39080f2fd9dccb782101191ce  '"$tool_dir/glslang.tar.gz" | sha256sum -c --strict
+  tar -xzf "$tool_dir/glslang.tar.gz" -C "$tool_dir"
+fi
+python3 -m pip install --disable-pip-version-check --no-deps \
+  zstandard==0.25.0 pillow==13.0.0 numpy==2.5.4
+"""
+
+[tasks.lint]
+description = "pre-commit on what this branch changed (as CI does) + actionlint"
+shell = "bash -c"
+run = """
+set -euo pipefail
+# same range as CI: changes since the merge-base with origin/main (whole tree when there is no origin/main)
+if base=$(git merge-base HEAD origin/main 2>/dev/null) && [ "$base" != "$(git rev-parse HEAD)" ]; then
+  pre-commit run --from-ref "$base" --to-ref HEAD
+else
+  pre-commit run --all-files
+fi
+actionlint -color -config-file .forgejo/actionlint.yaml .forgejo/workflows/*.yml
+"""
+
+[tasks."ci:smoke"]
+description = "Junit helper for run_all --junit"
+shell = "bash -c"
+run = "python3 -I -B tests/test_run_all_junit.py"
+
+[tasks.test]
+description = "Game-free checks (mise run deps on Linux for toolchain)"
+shell = "bash -c"
+run = 'python3 -I -B tests/run_all.py --strict "$@"'
+
+[tasks.validate]
+description = "CircleCI config (merged events + conftest) via lean orb"
+shell = "bash -c"
+run = """
+set -euo pipefail
+orb="${MB_ORB_DIR:-}"
+if [ -z "$orb" ] || [ ! -f "$orb/tools/validate.sh" ]; then
+  echo 'Set MB_ORB_DIR to a local checkout of MagicBeanDev/orb (maintainers).' >&2
+  exit 2
+fi
+bash "$orb/tools/validate.sh" "$PWD"
+"""

@@ -45,14 +45,14 @@ struct HosThread {
     int vc_held, vc_last, vc_queued, vc_escaped, vc_starved;
     volatile int vc_kick;
     int64_t vc_since;
-    /* (longshot) a long wait's cause (HOS_VCORE_LOG_MS, vc_long_wait): when it took the core it holds and when a waiter asked
+    /* (hookshot) a long wait's cause (HOS_VCORE_LOG_MS, vc_long_wait): when it took the core it holds and when a waiter asked
        for it; and, as a grant ends its wait, the thread that let the core go, its priority, how long it had held it and how
        long before it let go it was asked (-1: never) */
     int64_t vc_held_at, vc_kick_at;
     char vc_by[48];
     int vc_by_prio;
     int64_t vc_by_held, vc_by_asked;
-    /* (longshot) the frame trace (RX_VK_FRAME_TRACE, MkwVkHost thread_times): time waiting for a core and time blocked (from
+    /* (hookshot) the frame trace (RX_VK_FRAME_TRACE, MkwVkHost thread_times): time waiting for a core and time blocked (from
        hos_vcore_away to hos_vcore_back, the core's wait taken out), in ns, counted while hos_fps_timing is on */
     volatile int64_t vc_wait_total, blocked_total;
     int64_t away_at;
@@ -613,7 +613,7 @@ void hos_thread_join(HosThread *t) {
     if (away) hos_vcore_back();
 }
 
-/* (longshot) The frame trace's main-thread columns (RX_VK_FRAME_TRACE, through MkwVkHost thread_times): the thread named name's
+/* (hookshot) The frame trace's main-thread columns (RX_VK_FRAME_TRACE, through MkwVkHost thread_times): the thread named name's
    time so far, in ns: [0] waiting for a virtual core, [1] blocked (in a wait, a sleep or a join, the core given up), both counted
    only while hos_fps_timing is on, and [2] its CPU time (the system's, GetThreadTimes). 0 when no thread has that name */
 int hos_thread_times_of(const char *name, int64_t out[3]) {
@@ -1713,8 +1713,8 @@ static void vc_take(HosThread *t, int c) {
     t->vc_held = c + 1;
     t->vc_last = c + 1;
     t->vc_kick = 0;
-    t->vc_held_at = hos_now_ns(), t->vc_kick_at = 0;
     t->vc_starved = 0;
+    t->vc_held_at = hos_now_ns(), t->vc_kick_at = 0;
 }
 static void vc_dequeue(HosThread *t) {
     for (int i = 0; i < vc_nq; i++)
@@ -1760,7 +1760,7 @@ static int64_t vc_env_ns(const char *name, int64_t us) {
     const char *e = getenv(name);
     return (e ? atoll(e) : us) * 1000;
 }
-/* (longshot) HOS_VCORE_LOG_MS=<ms> (50 by default; 0: none): a wait for a core that long is logged with its cause, the thread
+/* (hookshot) HOS_VCORE_LOG_MS=<ms> (50 by default; 0: none): a wait for a core that long is logged with its cause, the thread
    whose release ended it (its priority, how long it had held the core, how long before it let go it was asked to) or how it
    ended otherwise, and the holders of the cores the thread may use as it ends (how long each has held its core, and whether it
    was asked). The first 200 a run; the 5 s "vcores:" line counts them all. Holding vc_lock */
@@ -1776,8 +1776,9 @@ static int64_t vc_log_ns(void) {
 static void vc_long_wait(HosThread *t, int64_t waited, int how, unsigned m) {
     vc_st.long_waits++;
     static int logged;
-    if (logged >= 200) return;
-    logged++;
+    if (logged >= 200 && !hos_profiling_dir()) return;   /* (the profiling mode's events.txt takes them all) */
+    const int log = logged < 200;
+    logged += log;
     const int64_t now = hos_now_ns();
     char by[160] = "", who[320] = "";
     if (how == 0 && t->vc_by[0])
@@ -1796,8 +1797,12 @@ static void vc_long_wait(HosThread *t, int64_t waited, int how, unsigned m) {
                                           h->vc_held_at ? (now - h->vc_held_at) / 1e6 : 0.0, h->vc_kick ? ", asked" : "")
                  : snprintf(who + len, sizeof who - len, " core %d: %s;", k, h ? "it" : "-");
         }
-    hos_log("vcores: %s (priority %d) waited %.1f ms for a core: %s; the cores it may use now:%s", t->name, t->priority,
-            waited / 1e6, by, who);
+    if (log)
+        hos_log("vcores: %s (priority %d) waited %.1f ms for a core: %s; the cores it may use now:%s", t->name, t->priority,
+                waited / 1e6, by, who);
+    /* (HOS_PROFILE=1: at its time, and when the wait began, for scripts/profile_report.py to put it in its frame) */
+    hos_profiling_event("vcore_wait %.1f ms from %lld: %s (priority %d) waited for a core: %s; the cores it may use now:%s",
+                        waited / 1e6, (long long)(now - waited), t->name, t->priority, by, who);
 }
 static void vc_acquire(HosThread *t) {
     static int64_t esc_better = -1, esc_eq, slice, starve;

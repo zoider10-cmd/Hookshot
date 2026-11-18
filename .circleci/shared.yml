@@ -1,0 +1,1059 @@
+# Shared jobs and executors (merged with events/*.yml). magicbeandev/ci orb. Docs: docs/ci.md.
+version: 2.1
+
+orbs:
+  # ORB_INLINE_START
+  mb: magicbeandev/ci@0.1.2
+  # ORB_INLINE_END
+
+parameters:
+  full: {type: boolean, default: false}
+  nightly: {type: boolean, default: false}
+  release_dry_run: {type: boolean, default: false}
+  website_refresh: {type: boolean, default: false}
+  vulkan_dlss: {type: boolean, default: false}
+  fork_pr: {type: integer, default: 0}
+  fork_sha: {type: string, default: ""}
+  tests: {type: boolean, default: false}
+  gpu: {type: boolean, default: false}
+  linux: {type: boolean, default: false}
+  windows: {type: boolean, default: false}
+  website: {type: boolean, default: false}
+
+executors:
+  small:
+    docker:
+      - image: cimg/base:2026.10-24.04
+    resource_class: arm.medium.gen2
+  py312-large:
+    docker:
+      - image: cimg/python:3.12.7
+    resource_class: large
+  ubuntu2404-large:
+    docker:
+      - image: ubuntu:24.04@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5
+    resource_class: large
+  ubuntu2404:
+    docker:
+      - image: ubuntu:24.04@sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5
+    resource_class: medium
+  dotnet8:
+    docker:
+      - image: mcr.microsoft.com/dotnet/sdk:8.0.404@sha256:fe0fd4e93bd2fbb47c883b7a6369e5c8d3db8bf01cdc5981f6ee35fbdf3ff4fb
+    resource_class: medium
+  ubuntu22:
+    docker:
+      - image: ubuntu:22.04@sha256:74b12b11ffa550fba1929ad4d8d16533c34f6612728469671afba1b03b66881c
+    resource_class: large
+  node22:
+    docker:
+      - image: cimg/node:22.23.4
+    resource_class: medium
+  # Forgejo build-windows.yml: ubuntu-24.04 VM (Wine, sudo, no container quirks).
+  ubuntu2404-vm:
+    machine:
+      image: ubuntu-2404:2026.05.1
+    resource_class: medium
+
+commands:
+  glslang:
+    steps:
+      - run:
+          name: glslang 16.6.0 (linux x86_64 release)
+          command: |
+            set -euo pipefail
+            tool_dir="$HOME/glslang-16.6.0"
+            mkdir -p "$tool_dir"
+            curl -fL --retry 3 -o "$tool_dir/glslang.tar.gz" \
+              https://github.com/KhronosGroup/glslang/releases/download/16.6.0/glslang-16.6.0-linux-x86_64-release.tar.gz
+            echo '2c34071f56ecf39d16233294d3739cf43f981fd39080f2fd9dccb782101191ce  '"$tool_dir/glslang.tar.gz" | sha256sum -c --strict
+            tar -xzf "$tool_dir/glslang.tar.gz" -C "$tool_dir"
+            "$tool_dir/bin/glslangValidator" --version | head -1
+            echo "export PATH=\"$tool_dir/bin:\$PATH\"" >> "$BASH_ENV"
+  release-checked-skip:
+    parameters:
+      prefix:
+        type: string
+        default: ""
+    steps:
+      - run:
+          name: Skip when already released
+          command: |
+            set -euo pipefail
+            . release.env
+            tag="${TAG:-}"
+            checked="${CHECKED:-}"
+            prefix="<< parameters.prefix >>"
+            [ -z "$checked" ] && exit 1
+            [ -z "$tag" ] && exit 1
+            case "$tag" in
+              nightly-*)
+                if [[ "$checked" == nightly-* ]]; then
+                  echo "${prefix}skip: already ${checked}"
+                  circleci-agent step halt
+                fi ;;
+              v*)
+                if [[ "$tag" == *-rc.* ]]; then
+                  if [[ "$checked" == "$tag" ]] || { [[ "$checked" == v* ]] && [[ "$checked" != *-rc.* ]]; }; then
+                    echo "${prefix}skip: already ${checked}"
+                    circleci-agent step halt
+                  fi
+                elif [[ "$checked" == v* ]] && [[ "$checked" != *-rc.* ]]; then
+                  echo "${prefix}skip: already ${checked}"
+                  circleci-agent step halt
+                fi ;;
+            esac
+  test-deps-linux:
+    steps:
+      - run:
+          name: Base packages (git, curl, python before fetch_commit)
+          command: |
+            set -euo pipefail
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y --no-install-recommends ca-certificates curl git python3 python3-pip \
+              g++ clang spirv-tools ccache libdav1d-dev
+      - run:
+          name: Pinned SPIR-V and Vulkan headers (.forgejo/workflows/ci.yml)
+          command: |
+            set -euo pipefail
+            scripts/fetch_commit.sh https://github.com/KhronosGroup/SPIRV-Headers \
+              04f10f650d514df88b76d25e83db360142c7b174 _deps/spirv-headers
+            scripts/fetch_commit.sh https://github.com/KhronosGroup/Vulkan-Headers \
+              74d8a6cb930c68ef617b202c3ff3c59d919e086b _deps/vulkan-headers
+      - run:
+          name: Python packages for the tests (Forgejo ci.yml)
+          command: |
+            set -euo pipefail
+            python3 -m pip install --disable-pip-version-check --break-system-packages --no-deps \
+              zstandard==0.25.0 pillow==13.0.0 numpy==2.5.4
+      - run:
+          name: Pinned glslang 16.6.0 (x86_64 release tarball)
+          command: |
+            set -euo pipefail
+            tool_dir="$HOME/glslang-16.6.0"
+            mkdir -p "$tool_dir"
+            curl -fL --retry 3 -o "$tool_dir/glslang.tar.gz" \
+              https://github.com/KhronosGroup/glslang/releases/download/16.6.0/glslang-16.6.0-linux-x86_64-release.tar.gz
+            echo '2c34071f56ecf39d16233294d3739cf43f981fd39080f2fd9dccb782101191ce  '"$tool_dir/glslang.tar.gz" | sha256sum -c --strict
+            tar -xzf "$tool_dir/glslang.tar.gz" -C "$tool_dir"
+            "$tool_dir/bin/glslangValidator" --version | head -1
+      - run:
+          name: Compiler cache and test environment
+          command: |
+            set -euo pipefail
+            mkdir -p "$HOME/ccache" "$HOME/ccache-bin"
+            for c in cc c++ gcc g++ clang clang++; do ln -sf "$(command -v ccache)" "$HOME/ccache-bin/$c"; done
+            {
+              echo "export HOOKSHOT_SPIRV_HEADERS=$PWD/_deps/spirv-headers/include"
+              echo "export HOOKSHOT_VULKAN_HEADERS=$PWD/_deps/vulkan-headers/include"
+              echo "export PATH=\"$HOME/glslang-16.6.0/bin:$HOME/ccache-bin:\$PATH\""
+              echo 'export CCACHE_DIR=$HOME/ccache CCACHE_MAXSIZE=400M'
+            } >> "$BASH_ENV"
+            if ! command -v circleci >/dev/null; then
+              if [ -n "${CIRCLECI:-}" ] && [ "${CIRCLECI_LOCAL_HARNESS:-}" != "1" ]; then
+                echo "circleci CLI should be injected by the CircleCI agent in docker jobs"
+                exit 1
+              fi
+              cli_ver=1.14.0
+              curl -fsSL "https://github.com/CircleCI-Public/circleci-cli/releases/download/v${cli_ver}/circleci-cli_${cli_ver}_linux_amd64.tar.gz" \
+                -o /tmp/circleci-cli.tgz
+              echo '5d0227b38ad65b2fb23ef1fbebfe98851c77102f76a72df2273eacca941665c4  /tmp/circleci-cli.tgz' | sha256sum -c -
+              tar -xzf /tmp/circleci-cli.tgz -C /tmp circleci
+              install -m0755 /tmp/circleci /usr/local/bin/circleci
+            fi
+            circleci version
+  linux-builder-packages:
+    steps:
+      - run:
+          name: Package installs without fsync
+          command: echo force-unsafe-io > /etc/dpkg/dpkg.cfg.d/force-unsafe-io
+      - run:
+          name: System packages (build-linux.yml)
+          environment:
+            DEBIAN_FRONTEND: noninteractive
+          command: |
+            set -euo pipefail
+            retry_packages() {
+              for try in 1 2 3; do
+                if "$@"; then return 0; else package_status=$?; fi
+                if [ "$try" = 3 ]; then return "$package_status"; fi
+                sleep 20
+              done
+            }
+            base_packages() {
+              apt-get update &&
+                apt-get install -y --no-install-recommends software-properties-common gpg-agent
+            }
+            toolchain_packages() {
+              timeout --kill-after=5s 180s add-apt-repository -y --no-update ppa:ubuntu-toolchain-r/test &&
+                apt-get update &&
+                apt-get install -y --no-install-recommends g++-13 libstdc++-13-dev &&
+                apt-get install -y --no-install-recommends git ca-certificates curl xz-utils zstd file unzip python3 \
+                build-essential gcc-12 g++-12 libstdc++-12-dev nasm meson ninja-build cmake pkg-config \
+                libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxfixes-dev libxinerama-dev \
+                libxkbcommon-dev libwayland-dev wayland-protocols libdecor-0-dev libegl-dev libgles-dev libdrm-dev libgbm-dev \
+                libpulse-dev libasound2-dev libpipewire-0.3-dev libudev-dev libdbus-1-dev zlib1g-dev
+            }
+            retry_packages base_packages
+            retry_packages toolchain_packages
+  llvm-mingw:
+    parameters:
+      cache: # release builds pass false: no caches restored
+        type: boolean
+        default: true
+    steps:
+      - run:
+          name: llvm-mingw (tools.lock, linux host)
+          command: |
+            set -euo pipefail
+            echo "export LLVM_MINGW=\"$(python3 -I scripts/builder_package.py llvm-mingw "$HOME/llvm" --host linux)\"" >> "$BASH_ENV"
+            echo 'export PATH="$LLVM_MINGW/bin:$PATH"' >> "$BASH_ENV"
+            python3 -I scripts/builder_package.py llvm-mingw --name --host linux | tee /tmp/llvm-mingw-name
+      - when:
+          condition: << parameters.cache >>
+          steps:
+            - restore_cache:
+                keys:
+                  - v1-llvm-mingw-{{ checksum "/tmp/llvm-mingw-name" }}
+            - mb/save-cache-main:
+                fork-pr: << pipeline.parameters.fork_pr >>
+                git-branch: << pipeline.git.branch >>
+                key: v1-llvm-mingw-{{ checksum "/tmp/llvm-mingw-name" }}
+                paths: ~/llvm
+  fetch-release-history:
+    steps:
+      - run:
+          name: Unshallow with tags
+          command: |
+            set -euo pipefail
+            git fetch -q --filter=blob:none --unshallow origin 2>/dev/null || true
+            git fetch -q --tags origin main
+  main-release-py:
+    steps:
+      - run:
+          name: Pin release.py from origin/main
+          command: |
+            set -euo pipefail
+            git fetch -q origin main
+            mkdir -p .mb-main
+            git show origin/main:scripts/release.py > .mb-main/release.py
+            echo 'export MAIN_RELEASE_PY="$PWD/.mb-main/release.py"' >> "$BASH_ENV"
+  website-pr-sources:
+    steps:
+      - run:
+          name: Main lockfiles; PR website/ only (no symlinks)
+          command: |
+            set -euo pipefail
+            test -d website || exit 0
+            if ! command -v rsync >/dev/null; then
+              export DEBIAN_FRONTEND=noninteractive
+              sudo apt-get update -qq
+              sudo apt-get install -y --no-install-recommends rsync
+            fi
+            git fetch -q origin main
+            pr_ref=$(git rev-parse HEAD)
+            git archive origin/main website/package.json website/package-lock.json website/wrangler.jsonc | tar -x
+            git archive "$pr_ref" website | tar -x -C /tmp
+            rsync -a --delete --no-links \
+              --exclude package.json --exclude package-lock.json --exclude wrangler.jsonc \
+              /tmp/website/ website/
+jobs:
+  lint:
+    executor: small
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - mb/setup-mise:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          git-branch: << pipeline.git.branch >>
+      - run:
+          name: pre-commit
+          command: |
+            set -euo pipefail
+            BASE="$(git merge-base HEAD origin/main)"
+            # on main the merge-base is HEAD itself: check the pushed commit only
+            if [ "$BASE" = "$(git rev-parse HEAD)" ]; then BASE="$(git rev-parse HEAD~1)"; fi
+            mise exec -- pre-commit run --from-ref "$BASE" --to-ref HEAD --show-diff-on-failure
+      - run:
+          name: actionlint (.forgejo workflows)
+          command: mise exec -- actionlint -color -config-file .forgejo/actionlint.yaml .forgejo/workflows/*.yml
+      - run:
+          name: shellcheck (repository shell scripts)
+          command: |
+            set -euo pipefail
+            mapfile -d '' files < <(find scripts -type f -name '*.sh' -print0)
+            if [ ${#files[@]} -gt 0 ]; then mise exec -- shellcheck -S error "${files[@]}"; fi
+      - mb/commit-subjects
+      - mb/policy-check:
+          forks: .circleci/forks.yml
+
+  third-party:
+    executor: small
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - run:
+          name: scripts/check_third_party.py
+          command: |
+            set -euo pipefail
+            python3 -I scripts/check_third_party.py
+            if [ "<< pipeline.parameters.fork_pr >>" -gt 0 ]; then
+              git fetch -q origin main
+              base=$(git merge-base HEAD origin/main)
+              python3 -I scripts/check_third_party.py --base "$base"
+            elif [ "${CIRCLE_BRANCH:-}" != main ] && [ -n "${CIRCLE_BRANCH:-}" ]; then
+              git fetch -q origin main
+              python3 -I scripts/check_third_party.py --base FETCH_HEAD
+            fi
+
+  third-party-upstream:
+    executor: small
+    steps:
+      - checkout
+      - run:
+          name: Upstream comparison (nightly)
+          no_output_timeout: 20m
+          command: python3 -I scripts/check_third_party.py --upstream
+
+  guide-screenshots:
+    executor: small
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - run:
+          name: Integrity and local UI drift (guide-screenshots.yml)
+          command: python3 -I -B scripts/check_guide_screenshots.py --review-sources
+      - run:
+          name: Checker regression tests
+          command: python3 -I -B tests/test_guide_screenshots.py
+      - run:
+          name: Capture isolation and build-policy regression tests
+          command: python3 -I -B tests/test_launcher_capture.py
+
+  test-linux:
+    executor: ubuntu2404-large
+    parallelism: 4
+    retention:
+      caches: 5d
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - test-deps-linux
+      - restore_cache:
+          keys:
+            - v1-pip-{{ checksum "requirements.txt" }}-{{ checksum "nx2/prompt_requirements.txt" }}
+      - restore_cache:
+          keys:
+            - v1-ccache-{{ arch }}-{{ checksum "requirements.txt" }}
+            - v1-ccache-{{ arch }}-
+      - mb/save-cache-main:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          git-branch: << pipeline.git.branch >>
+          key: v1-pip-{{ checksum "requirements.txt" }}-{{ checksum "nx2/prompt_requirements.txt" }}
+          paths: ~/.cache/pip
+      - run:
+          name: Game-free checks (Smarter Testing, static split)
+          no_output_timeout: 30m
+          command: |
+            set -euo pipefail
+            mkdir -p test-results/run_all
+            circleci testsuite run "game-free checks"
+      - store_test_results:
+          path: test-results/run_all
+          when: always
+      - mb/save-cache-main:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          git-branch: << pipeline.git.branch >>
+          key: v1-ccache-{{ arch }}-{{ checksum "requirements.txt" }}
+          paths: ~/ccache
+
+  fork-test-linux:
+    executor: ubuntu2404-large
+    parallelism: 2
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - test-deps-linux
+      - restore_cache:
+          keys:
+            - v1-pip-{{ checksum "requirements.txt" }}-{{ checksum "nx2/prompt_requirements.txt" }}
+      - restore_cache:
+          keys:
+            - v1-ccache-{{ arch }}-{{ checksum "requirements.txt" }}
+            - v1-ccache-{{ arch }}-
+      - run:
+          name: Game-free checks (fork, Smarter Testing)
+          no_output_timeout: 30m
+          command: |
+            set -euo pipefail
+            mkdir -p test-results/run_all
+            circleci testsuite run "game-free checks"
+      - store_test_results:
+          path: test-results/run_all
+          when: always
+
+  builder-cli:
+    executor: dotnet8
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - run:
+          name: Python for --cli delivery
+          command: apt-get update -qq && apt-get install -y --no-install-recommends python3
+      - run:
+          name: Windows Builder compile and --cli delivery
+          no_output_timeout: 25m
+          command: |
+            set -euo pipefail
+            dotnet build builder/HookshotBuilder/HookshotBuilder.csproj --configuration Debug \
+              -p:NuGetAudit=false -p:EnableWindowsTargeting=true
+            dotnet restore tests/builder_cli/BuilderCliTests.csproj --configfile tests/builder_cli/NuGet.Config \
+              -p:EnableWindowsTargeting=true
+            dotnet run --project tests/builder_cli/BuilderCliTests.csproj --configuration Release --no-restore \
+              -p:EnableWindowsTargeting=true -- "$(command -v python3)"
+
+  spirv-fixtures:
+    executor: ubuntu2404
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - run:
+          name: SPIR-V headers and toolchain (.forgejo/workflows/ci.yml spirv-fixtures)
+          command: |
+            set -euo pipefail
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y --no-install-recommends ca-certificates curl clang spirv-tools ccache cmake make git
+            scripts/fetch_commit.sh https://github.com/KhronosGroup/SPIRV-Headers \
+              496543121ce6419f23d6fa5d7194ba66c36212d2 _deps/spirv-headers
+            export CCACHE_DIR=/tmp/ccache CCACHE_MAXSIZE=400M CMAKE_CXX_COMPILER_LAUNCHER=ccache
+            mkdir -p "$CCACHE_DIR"
+      - run:
+          name: SPIR-V fixtures (global_load_16, native_suatom, f2i_immediate)
+          no_output_timeout: 20m
+          command: |
+            set -euo pipefail
+            root="$PWD"
+            hdr="$root/_deps/spirv-headers"
+            fix=/tmp/spirv-fixtures
+            nproc="$(nproc)"
+            CC=clang CXX=clang++ cmake -S tests/global_load_16 -B "$fix/global-load-16" \
+              -DREPO_ROOT="$root" -DSPIRV_HEADERS_ROOT="$hdr"
+            cmake --build "$fix/global-load-16" --parallel "$nproc"
+            "$fix/global-load-16/global_load_16_ir" "$fix/global-load-16/modules"
+            RX_VK_FOLLOW_STORES=1 "$fix/global-load-16/global_load_16_ir" --cas-loops "$fix/global-load-16/modules"
+            for module in "$fix/global-load-16/modules"/*.spv; do
+              spirv-val --target-env vulkan1.3 --uniform-buffer-standard-layout "$module"
+            done
+            CC=clang CXX=clang++ cmake -S tests/native_suatom -B "$fix/native-suatom" \
+              -DREPO_ROOT="$root" -DSPIRV_HEADERS_ROOT="$hdr"
+            cmake --build "$fix/native-suatom" --parallel "$nproc"
+            "$fix/native-suatom/native_suatom" "$fix/native-suatom/modules"
+            for module in "$fix/native-suatom/modules"/*.spv; do
+              spirv-val --target-env vulkan1.3 "$module"
+            done
+            CC=clang CXX=clang++ cmake -S tests/f2i_immediate -B "$fix/f2i" \
+              -DREPO_ROOT="$root" -DSPIRV_HEADERS_ROOT="$hdr"
+            cmake --build "$fix/f2i" --parallel "$nproc"
+            "$fix/f2i/f2i_immediate" "$fix/f2i/modules"
+            for module in "$fix/f2i/modules"/*.spv; do
+              spirv-val --target-env vulkan1.3 --uniform-buffer-standard-layout "$module"
+            done
+            ccache --show-stats
+
+  linux-appimage:
+    executor: ubuntu22
+    environment:
+      DEBIAN_FRONTEND: noninteractive
+    retention:
+      caches: 5d
+    steps:
+      - linux-builder-packages
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - run:
+          name: Trust checkout
+          command: git config --global --add safe.directory "$PWD"
+      - unless:
+          condition: pipeline.parameters.release_dry_run == true or (pipeline.git.tag or "") != ""
+          steps:
+            - restore_cache:
+                keys:
+                  - v1-linux-deps-{{ checksum "scripts/linux/deps.sh" }}-{{ checksum "requirements.txt" }}
+      - run:
+          name: scripts/linux/deps.sh
+          no_output_timeout: 45m
+          command: scripts/linux/deps.sh
+      - mb/save-cache-main:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          git-branch: << pipeline.git.branch >>
+          key: v1-linux-deps-{{ checksum "scripts/linux/deps.sh" }}-{{ checksum "requirements.txt" }}
+          paths: build-linux/deps
+      - restore_cache:
+          keys:
+            - v1-linux-tools-{{ checksum "tools.lock" }}
+      - run:
+          name: tools.lock (linux-x64)
+          command: python3 -I scripts/tools.py install build-linux/tools --system linux-x64 --cache /tmp/tools-cache
+      - mb/save-cache-main:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          git-branch: << pipeline.git.branch >>
+          key: v1-linux-tools-{{ checksum "tools.lock" }}
+          paths: build-linux/tools
+      - run:
+          name: AppImage
+          no_output_timeout: 40m
+          command: scripts/linux/appimage.sh
+      - run:
+          name: hookshot_vk.so (build check)
+          no_output_timeout: 30m
+          command: |
+            set -euo pipefail
+            VKW="$PWD/build-linux/vk-work"
+            mkdir -p "$VKW"
+            rm -f "$VKW/sa/build/hookshot_vk.so"
+            VK_PGO=
+            if [ -f work/hookshot_vk.profdata ]; then
+              VK_PGO="$PWD/work/hookshot_vk.profdata"
+            elif [ -f assets/profiles/hookshot_vk.profdata.xz ]; then
+              xz -dc assets/profiles/hookshot_vk.profdata.xz > "$VKW/hookshot_vk.shipped.profdata"
+              VK_PGO="$VKW/hookshot_vk.shipped.profdata"
+            fi
+            echo "VK_PGO=$VK_PGO" >> "$BASH_ENV"
+            D="$PWD/build-linux/deps" T="$PWD/build-linux/tools"
+            OOT_WORK="$VKW" EMSDK="$T/usr/lib/hookshot/emsdk" RX_CPM="$T/usr/share/hookshot/cpm" RX_MARCH=x86-64-v3 \
+              RX_VK_ONLY=1 RX_RELEASE=1 RX_VK_PGO="$VK_PGO" "$D/python/bin/python3" -I nx2/build.py --standalone --jobs "$(nproc)"
+            test -f "$VKW/sa/build/hookshot_vk.so"
+      - run:
+          name: hookshot_vk.so with AMD FSR 4 (build check)
+          no_output_timeout: 30m
+          command: |
+            set -euo pipefail
+            cp -r build-linux/vk-work /tmp/vk-fsr
+            rm -f /tmp/vk-fsr/sa/build/hookshot_vk.so
+            D="$PWD/build-linux/deps" T="$PWD/build-linux/tools"
+            OOT_WORK=/tmp/vk-fsr EMSDK="$T/usr/lib/hookshot/emsdk" RX_CPM="$T/usr/share/hookshot/cpm" RX_MARCH=x86-64-v3 \
+              RX_VK_ONLY=1 RX_RELEASE=1 RX_VK_PGO="$VK_PGO" HOOKSHOT_FSR=1 "$D/python/bin/python3" -I nx2/build.py --standalone --jobs "$(nproc)" | tee /tmp/vk-fsr.log
+            test "${PIPESTATUS[0]}" -eq 0
+            grep -q "with AMD FSR 4" /tmp/vk-fsr.log
+            test -f /tmp/vk-fsr/sa/build/hookshot_vk.so
+      - run:
+          name: check_player_build.sh
+          command: scripts/linux/check_player_build.sh
+
+  windows-builder:
+    executor: ubuntu2404-vm
+    retention:
+      caches: 5d
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - run:
+          name: Python 3.12 (build-windows.yml)
+          command: |
+            set -euo pipefail
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends python3 python3-venv ca-certificates curl
+      - glslang
+      - llvm-mingw
+      - run:
+          name: Wine and xvfb
+          command: |
+            set -euo pipefail
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends wine wine64 xvfb xauth
+            export WINEPREFIX="/tmp/wine"
+            mkdir -p "$WINEPREFIX"
+            xvfb-run -a wineboot --init
+      - run:
+          name: Install .NET 8 SDK (linux x64, checksum)
+          command: |
+            set -euo pipefail
+            ver=8.0.404
+            curl -fsSL -o /tmp/dotnet.tar.gz "https://builds.dotnet.microsoft.com/dotnet/Sdk/${ver}/dotnet-sdk-${ver}-linux-x64.tar.gz"
+            echo '5bf340ba6acb314c703c2492a3a6e1530d7cdbfd3b5bf86788ee8b4afefd3573  /tmp/dotnet.tar.gz' | sha256sum -c --strict
+            mkdir -p "$HOME/.dotnet" && tar -xzf /tmp/dotnet.tar.gz -C "$HOME/.dotnet"
+            echo 'export DOTNET_ROOT="$HOME/.dotnet"' >> "$BASH_ENV"
+            echo 'export PATH="$HOME/.dotnet:$PATH"' >> "$BASH_ENV"
+      - run:
+          name: Version (build-windows.yml)
+          command: |
+            set -euo pipefail
+            tag=$(git describe --tags --long --match 'v[0-9]*' 2>/dev/null || echo "v0.0.0-0-g$(git rev-parse --short HEAD)")
+            version=0.0.0
+            if [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?)$ ]]; then version="${BASH_REMATCH[1]}"; fi
+            {
+              echo "export TAG=$tag"
+              echo "export VERSION=$version"
+            } >> "$BASH_ENV"
+            echo "version: $tag"
+      - run:
+          name: HookshotBuilder-Setup.exe
+          working_directory: builder/setup
+          command: |
+            set -euo pipefail
+            "$LLVM_MINGW/bin/x86_64-w64-mingw32-windres" setup.rc -O coff -o /tmp/setup_rc.o
+            "$LLVM_MINGW/bin/x86_64-w64-mingw32-clang" -O2 -mwindows -municode setup.c /tmp/setup_rc.o \
+              -lwinhttp -lbcrypt -lcomctl32 -lshell32 -lole32 -Wl,--dependent-load-flag=0x800 \
+              -o /tmp/HookshotBuilder-Setup.exe
+            ls -l /tmp/HookshotBuilder-Setup.exe
+      - run:
+          name: Hookshot Builder (dotnet publish)
+          command: |
+            set -euo pipefail
+            dotnet publish builder/HookshotBuilder/HookshotBuilder.csproj --configuration Release --runtime win-x64 \
+              -p:EnableWindowsTargeting=true -p:Version="$VERSION" -p:NuGetAudit=false --output /tmp/publish
+      - run:
+          name: The third-party objects
+          command: |
+            set -euo pipefail
+            python3 -I scripts/tools.py install /tmp/win-tools --system windows-x64 --only cpm --cache /tmp/tools-cache
+            W="/tmp/win-tools/HookshotBuilder/tools"
+            RX_TARGET=windows HOOKSHOT_MINGW="$LLVM_MINGW" RX_CPM="$W/cpm" \
+              python3 -I -B nx2/third_party_objects.py make /tmp/third_party_objects --jobs "$(nproc)"
+      - run:
+          name: Package folder
+          command: >-
+            python3 -I scripts/builder_package.py package /tmp/package
+            --publish /tmp/publish --setup /tmp/HookshotBuilder-Setup.exe
+            --third-party-objects /tmp/third_party_objects
+      - run:
+          name: The zip
+          command: |
+            set -euo pipefail
+            mkdir -p dist
+            python3 -I scripts/builder_package.py zip /tmp/package "$TAG" --setup /tmp/HookshotBuilder-Setup.exe \
+              --out "dist/HookshotBuilder-${TAG}-windows-x64.zip"
+            ls -l dist
+      - run:
+          name: Check the Windows files
+          command: >-
+            python3 -I scripts/check_windows_files.py --objdump "$LLVM_MINGW/bin/llvm-objdump"
+            --readobj "$LLVM_MINGW/bin/llvm-readobj" "dist/HookshotBuilder-${TAG}-windows-x64.zip"
+      - run:
+          name: Start them under Wine
+          command: |
+            set -euo pipefail
+            export WINEPREFIX="/tmp/wine" WINEDEBUG=-all WINEDLLOVERRIDES="mshtml="
+            mkdir -p "$WINEPREFIX"
+            wine_exe="$(command -v wine || command -v wine64 || echo /usr/lib/wine/wine64)"
+            xvfb-run -a python3 -I scripts/check_windows_files.py \
+              --wine "$wine_exe" "dist/HookshotBuilder-${TAG}-windows-x64.zip"
+      - run:
+          name: tools.lock dav1d (cpm)
+          command: |
+            set -euo pipefail
+            python3 -I scripts/tools.py install /tmp/cpm-tool --system windows-x64 --only cpm --cache /tmp/tools-cache
+            dav1d=(/tmp/cpm-tool/HookshotBuilder/tools/cpm/dav1d/*)
+            test -f "${dav1d[0]}/lib/libdav1d.a" || { echo "tools.lock cpm package has no dav1d"; exit 1; }
+            echo "export DAV1D=${dav1d[0]}" >> "$BASH_ENV"
+      - run:
+          name: host/dav1d_av1.c under Wine
+          command: |
+            set -euo pipefail
+            export WINEPREFIX="/tmp/wine" WINEDEBUG=-all WINEDLLOVERRIDES="mshtml="
+            mkdir -p "$WINEPREFIX"
+            wine_exe="$(command -v wine || command -v wine64 || echo /usr/lib/wine/wine64)"
+            python3 -I -B tests/test_dav1d_av1.py --cross "$LLVM_MINGW/bin/x86_64-w64-mingw32-clang" \
+              --run "$wine_exe" --dav1d "$DAV1D"
+
+  windows-vulkan:
+    executor: py312-large
+    retention:
+      caches: 5d
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - llvm-mingw
+      - run:
+          name: Pinned header trees
+          command: |
+            set -euo pipefail
+            scripts/fetch_commit.sh https://github.com/KhronosGroup/Vulkan-Headers 74d8a6cb930c68ef617b202c3ff3c59d919e086b _deps/cpm/vulkanheaders/v1.4.345
+            scripts/fetch_commit.sh https://github.com/KhronosGroup/SPIRV-Headers 04f10f650d514df88b76d25e83db360142c7b174 _deps/cpm/spirv-headers/vulkan-sdk-1.4.341.0
+            scripts/fetch_commit.sh https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator 1d8f600fd424278486eade7ed3e877c99f0846b1 _deps/cpm/vulkanmemoryallocator/v3.3.0
+      - run:
+          name: hookshot_vk.dll
+          no_output_timeout: 30m
+          environment:
+            RX_TARGET: windows
+            RX_VK_ONLY: "1"
+            RX_RELEASE: "1"
+          command: |
+            set -euo pipefail
+            HOOKSHOT_MINGW="$LLVM_MINGW" OOT_WORK=/tmp/vk-work RX_CPM="$PWD/_deps/cpm" \
+              python3 -I nx2/build.py --standalone --jobs "$(nproc)"
+            test -f /tmp/vk-work/sa/build/hookshot_vk.dll
+
+  vulkan-dlss:
+    executor: py312-large
+    retention:
+      caches: 5d
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - llvm-mingw
+      - run:
+          name: Pinned header trees for Windows Vulkan
+          command: |
+            set -euo pipefail
+            scripts/fetch_commit.sh https://github.com/KhronosGroup/Vulkan-Headers 74d8a6cb930c68ef617b202c3ff3c59d919e086b _deps/cpm/vulkanheaders/v1.4.345
+            scripts/fetch_commit.sh https://github.com/KhronosGroup/SPIRV-Headers 04f10f650d514df88b76d25e83db360142c7b174 _deps/cpm/spirv-headers/vulkan-sdk-1.4.341.0
+            scripts/fetch_commit.sh https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator 1d8f600fd424278486eade7ed3e877c99f0846b1 _deps/cpm/vulkanmemoryallocator/v3.3.0
+            echo "export RX_TARGET=windows HOOKSHOT_MINGW=$LLVM_MINGW" >> "$BASH_ENV"
+      - run:
+          name: NVIDIA DLSS SDK (this run only)
+          command: python3 -I scripts/ngx_sdk.py --platform windows --build-only --accept-nvidia-license /tmp/ngx-sdk
+      - run:
+          name: hookshot_vk.dll with NVIDIA DLSS and AMD FSR 4
+          no_output_timeout: 45m
+          environment:
+            RX_VK_ONLY: "1"
+            RX_RELEASE: "1"
+            HOOKSHOT_FSR: "1"
+          command: |
+            set -euo pipefail
+            OOT_WORK=/tmp/vk-work RX_CPM="$PWD/_deps/cpm" HOOKSHOT_NGX_SDK=/tmp/ngx-sdk \
+              python3 -I nx2/build.py --standalone --jobs "$(nproc)" | tee /tmp/vk-build.log
+            test "${PIPESTATUS[0]}" -eq 0
+            grep -q "with NVIDIA DLSS" /tmp/vk-build.log
+            grep -q "with AMD FSR 4" /tmp/vk-build.log
+      - run:
+          name: Imports must stay Windows-only
+          command: |
+            set -euo pipefail
+            dll=/tmp/vk-work/sa/build/hookshot_vk.dll
+            "$HOOKSHOT_MINGW/bin/llvm-objdump" -p "$dll" | sed -n 's/^ *\tDLL Name: //p' | tr -d '\r' | sort -u > /tmp/imports.txt
+            if grep -viE '^(kernel32|user32|gdi32|advapi32)\.dll$|^api-ms-win-crt-[a-z0-9-]+\.dll$' /tmp/imports.txt; then
+              echo "unexpected DLL imports"; exit 1
+            fi
+
+  website:
+    executor: node22
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - website-pr-sources
+      - run:
+          name: npm ci (main lockfiles) and check (PR sources)
+          working_directory: website
+          no_output_timeout: 20m
+          command: |
+            set -euo pipefail
+            test -f package.json || { echo "no website/"; exit 0; }
+            npm ci --ignore-scripts --no-audit --no-fund
+            npm run build # check-site.ts reads dist
+            npm run check
+
+  website-deploy:
+    executor: node22
+    steps:
+      # plain checkout: this job holds cloudflare-prod and only runs on main, never on PR or fork code
+      - checkout
+      - run:
+          name: wrangler deploy (production)
+          working_directory: website
+          command: |
+            set -euo pipefail
+            npm ci --no-audit --no-fund
+            npm run build
+            # dry-run until cutover: Forgejo's website.yml is still the live deployer (docs/ci.md)
+            if [ "<< pipeline.parameters.release_dry_run >>" = true ]; then
+              npx wrangler deploy --dry-run --message "main @ ${CIRCLE_SHA1:0:12}"
+              exit 0
+            fi
+            npx wrangler deploy --message "main @ ${CIRCLE_SHA1:0:12}"
+            # UNCONFIRMED: circleci run release / deploy tracking until a live pipeline with credentials.
+      - run:
+          name: Record deploy marker (advisory)
+          when: always
+          command: echo "Mark deploy in CircleCI Releases UI when CLI deploy tracking is verified (docs/ci.md)."
+
+  website-preview-build:
+    executor: node22
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - website-pr-sources
+      - run:
+          name: Build website for preview (no Cloudflare context)
+          working_directory: website
+          no_output_timeout: 20m
+          command: |
+            set -euo pipefail
+            npm ci --ignore-scripts --no-audit --no-fund
+            npm run build
+      - persist_to_workspace:
+          root: .
+          paths:
+            - website/dist
+
+  website-preview-artifact:
+    executor: node22
+    steps:
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - attach_workspace:
+          at: .
+      - run:
+          name: Preview artifact (dist copy, root-relative links, URL)
+          command: |
+            set -euo pipefail
+            test -d website/dist
+            rm -rf /tmp/preview
+            cp -a website/dist /tmp/preview
+            find /tmp/preview -type f \( -name '*.html' -o -name '*.htm' -o -name '*.css' -o -name '*.js' -o -name '*.svg' -o -name '*.xml' -o -name '*.json' \) \
+              -exec sed -E -i 's/(href|src)=(["'\''])\/([^"'\''\/][^"'\'']*)\2/\1=\2\3\2/g' {} +
+            printf '%s\n' \
+              "https://output.circle-artifacts.com/output/job/${CIRCLE_WORKFLOW_JOB_ID}/artifacts/0/preview/index.html" \
+              | tee preview-url.txt
+      - store_artifacts:
+          path: /tmp/preview
+          destination: preview
+      - persist_to_workspace:
+          root: .
+          paths:
+            - preview-url.txt
+
+  website-preview-comment:
+    executor: node22
+    steps:
+      - attach_workspace:
+          at: .
+      - mb/preview-comment:
+          repo: "<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>"
+          pr: << pipeline.parameters.fork_pr >>
+          commit-sha: "<< pipeline.parameters.fork_sha >>"
+          preview-url-file: preview-url.txt
+
+  release-version:
+    executor: small
+    steps:
+      - checkout:
+          method: full
+      - fetch-release-history
+      - main-release-py
+      - run:
+          name: Version (release.yml)
+          command: |
+            set -euo pipefail
+            if ! python3 -I scripts/tools.py check --require; then
+              echo "tools.lock lacks a required builder tool (RELEASING.md)"
+              exit 1
+            fi
+            ref=$(git rev-parse HEAD)
+            tag=""
+            checked=""
+            if [ -n "${CIRCLE_TAG:-}" ]; then
+              tag="${CIRCLE_TAG}"
+              python3 -I "$MAIN_RELEASE_PY" check-tag "$tag" --main origin/main
+              checked=$(python3 -I "$MAIN_RELEASE_PY" released-as "$ref" --not "$tag")
+              if [ -n "$checked" ] && [[ "$tag" == v* ]] && [[ "$tag" != *-rc.* ]] && [[ "$checked" == *-rc.* ]]; then
+                checked=""
+              fi
+              if [ -n "$checked" ] && [[ "$tag" == v* ]] && [[ "$checked" != v* ]]; then
+                checked=""
+              fi
+            elif [ "<< pipeline.parameters.nightly >>" = true ]; then
+              head=$(git rev-parse origin/main)
+              if [ "$head" != "$ref" ]; then
+                echo "main moved on: skip nightly for $ref"
+                tag=""
+              else
+                last=$(git tag -l 'nightly-*' --sort=-version:refname | head -1)
+                if [ -n "$last" ] && git diff --quiet "${last}^{commit}" HEAD -- . ':(exclude)docs/**' ':(exclude)*.md'; then
+                  echo "no shipped changes since $last"
+                  tag=""
+                else
+                  tag=$(python3 -I "$MAIN_RELEASE_PY" nightly-name)
+                fi
+              fi
+            fi
+            {
+              echo "TAG=$tag"
+              echo "REF=$ref"
+              echo "CHECKED=$checked"
+            } | tee release.env
+      - persist_to_workspace:
+          root: .
+          paths:
+            - release.env
+            - tools.lock
+
+  release-linux:
+    executor: ubuntu22
+    steps:
+      - attach_workspace:
+          at: .
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - run:
+          name: Load release.env
+          command: sed 's/^/export /' release.env >> "$BASH_ENV"
+      - run:
+          name: Skip when no tag
+          command: |
+            . release.env
+            if [ -z "${TAG:-}" ]; then circleci-agent step halt; fi
+      - release-checked-skip
+      - linux-builder-packages
+      - run:
+          name: Trust checkout
+          command: git config --global --add safe.directory "$PWD"
+      - run:
+          name: Fresh Linux builder (no caches)
+          no_output_timeout: 90m
+          command: |
+            set -euo pipefail
+            . release.env
+            if [ -z "${TAG:-}" ]; then circleci-agent step halt; fi
+            export HOOKSHOT_VERSION="$TAG"
+            scripts/linux/deps.sh
+            python3 -I scripts/tools.py install build-linux/tools --system linux-x64
+            scripts/linux/appimage.sh
+            ls -l build-linux/*.AppImage
+      - run:
+          name: A player's build from the AppImage (check_player_build.sh)
+          command: scripts/linux/check_player_build.sh
+      - persist_to_workspace:
+          root: .
+          paths:
+            - build-linux/Hookshot-*-x86_64.AppImage
+
+  release-windows:
+    executor: ubuntu2404-vm
+    resource_class: large
+    retention:
+      caches: 5d
+    steps:
+      - attach_workspace:
+          at: .
+      - mb/get-source:
+          fork-pr: << pipeline.parameters.fork_pr >>
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          repo-url: "https://git.magicbean.dev/<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>.git"
+      - run:
+          name: Python 3.12 and .NET 8 (release VM)
+          command: |
+            set -euo pipefail
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends python3 python3-venv ca-certificates curl
+      - run:
+          name: Load release.env
+          command: sed 's/^/export /' release.env >> "$BASH_ENV"
+      - run:
+          name: Install .NET 8 SDK (linux x64, checksum)
+          command: |
+            set -euo pipefail
+            ver=8.0.404
+            curl -fsSL -o /tmp/dotnet.tar.gz "https://builds.dotnet.microsoft.com/dotnet/Sdk/${ver}/dotnet-sdk-${ver}-linux-x64.tar.gz"
+            echo '5bf340ba6acb314c703c2492a3a6e1530d7cdbfd3b5bf86788ee8b4afefd3573  /tmp/dotnet.tar.gz' | sha256sum -c --strict
+            mkdir -p "$HOME/.dotnet" && tar -xzf /tmp/dotnet.tar.gz -C "$HOME/.dotnet"
+            echo 'export DOTNET_ROOT="$HOME/.dotnet"' >> "$BASH_ENV"
+            echo 'export PATH="$HOME/.dotnet:$PATH"' >> "$BASH_ENV"
+      - glslang
+      - llvm-mingw:
+          cache: false
+      - run:
+          name: Skip when no tag
+          command: |
+            . release.env
+            if [ -z "${TAG:-}" ]; then circleci-agent step halt; fi
+      - release-checked-skip
+      - run:
+          name: Fresh Windows builder zip (no caches)
+          no_output_timeout: 90m
+          command: |
+            set -euo pipefail
+            . release.env
+            if [ -z "${TAG:-}" ]; then circleci-agent step halt; fi
+            rel_tag="${TAG}"
+            VERSION=0.0.0 # a nightly (or anything but vX.Y.Z[-rc.N]) builds as 0.0.0, as build-windows.yml
+            if [[ "$rel_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?)$ ]]; then VERSION="${BASH_REMATCH[1]}"; fi
+            "$LLVM_MINGW/bin/x86_64-w64-mingw32-windres" builder/setup/setup.rc -O coff -o /tmp/setup_rc.o
+            "$LLVM_MINGW/bin/x86_64-w64-mingw32-clang" -O2 -mwindows -municode builder/setup/setup.c /tmp/setup_rc.o \
+              -lwinhttp -lbcrypt -lcomctl32 -lshell32 -lole32 -Wl,--dependent-load-flag=0x800 -o /tmp/HookshotBuilder-Setup.exe
+            dotnet publish builder/HookshotBuilder/HookshotBuilder.csproj --configuration Release --runtime win-x64 \
+              -p:EnableWindowsTargeting=true -p:Version="$VERSION" -p:NuGetAudit=false --output /tmp/publish
+            # the third-party objects a player's build links instead of compiling (build-windows.yml, #629)
+            python3 -I scripts/tools.py install /tmp/win-tools --system windows-x64 --only cpm --cache /tmp/tools-cache
+            W="/tmp/win-tools/HookshotBuilder/tools"
+            RX_TARGET=windows HOOKSHOT_MINGW="$LLVM_MINGW" RX_CPM="$W/cpm" \
+              python3 -I -B nx2/third_party_objects.py make /tmp/third_party_objects --jobs "$(nproc)"
+            python3 -I scripts/builder_package.py package /tmp/package --publish /tmp/publish --setup /tmp/HookshotBuilder-Setup.exe \
+              --third-party-objects /tmp/third_party_objects
+            mkdir -p dist
+            python3 -I scripts/builder_package.py zip /tmp/package "$rel_tag" --setup /tmp/HookshotBuilder-Setup.exe \
+              --out "dist/HookshotBuilder-${rel_tag}-windows-x64.zip"
+            ls -l dist
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist
+
+  release-stage:
+    executor: small
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Collect release artifacts into files/
+          command: |
+            set -euo pipefail
+            . release.env
+            if [ -z "${TAG:-}" ]; then
+              circleci-agent step halt
+            fi
+            rm -rf files
+            mkdir -p files
+            shopt -s nullglob
+            for f in build-linux/Hookshot-"$TAG"-x86_64.AppImage build-linux/*.AppImage; do
+              if [ -f "$f" ]; then
+                cp -a "$f" "files/Hookshot-${TAG}-x86_64.AppImage"
+                break
+              fi
+            done
+            for f in dist/HookshotBuilder-"$TAG"-windows-x64.zip dist/*.zip; do
+              if [ -f "$f" ]; then
+                cp -a "$f" "files/HookshotBuilder-${TAG}-windows-x64.zip"
+                break
+              fi
+            done
+            cp -a tools.lock files/
+            ls -la files/
+      - persist_to_workspace:
+          root: .
+          paths:
+            - files
+            - release.env

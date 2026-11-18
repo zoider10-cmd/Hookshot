@@ -1,4 +1,5 @@
-"""Compile real reprojection math and both upscalers' history decisions and reset sinks; no SDK or GPU."""
+"""Compile real reprojection math and both upscalers' history decisions and reset sinks (DLSS, FSR 4, XeSS and FSR 3.1);
+no SDK or GPU."""
 import argparse
 from pathlib import Path
 import re
@@ -24,17 +25,19 @@ def main():
     chain = (a.source / "gpu/vk/vk_temporal.cpp").read_text(encoding="utf-8")
     dlss = (a.source / "gpu/vk/vk_dlss.cpp").read_text(encoding="utf-8")
     fsr4 = (a.source / "gpu/vk/vk_fsr4.cpp").read_text(encoding="utf-8")
+    xess = (a.source / "gpu/vk/vk_xess.cpp").read_text(encoding="utf-8")
     fsr = (a.source / "gpu/vk/vk_fsr3_inputs.cpp").read_text(encoding="utf-8")
     fixture = (ROOT / "tests/temporal_history_test.cpp").read_text(encoding="utf-8")
     assert "engine.e->evaluate(cmd, f)" in chain, "the shared frame must reach the selected engine"
     chain_sink = re.search(r"f\.reset = [^;]+;", chain).group()
     dlss_sink = re.search(r"ep\.InReset = [^;]+;", dlss).group()
     fsr4_sink = re.search(r"d\.reset = [^;]+;", fsr4).group()
+    xess_sink = re.search(r"p\.resetHistory = [^;]+;", xess).group()
     fsr_sink = re.search(r"f\.reset = [^;]+;", fsr).group()
     for tag, value in [("/* CHAIN_POLICY */", decision(chain, "bool temporal_upscale(")),
                        ("/* FSR_POLICY */", decision(fsr, "bool prepare(")),
                        ("/* CHAIN_SINK */", chain_sink), ("/* DLSS_SINK */", dlss_sink),
-                       ("/* FSR4_SINK */", fsr4_sink), ("/* FSR_SINK */", fsr_sink)]:
+                       ("/* FSR4_SINK */", fsr4_sink), ("/* XESS_SINK */", xess_sink), ("/* FSR_SINK */", fsr_sink)]:
         fixture = fixture.replace(tag, value)
     with tempfile.TemporaryDirectory(prefix="temporal-history-") as folder:
         cpp, exe = Path(folder) / "fixture.cpp", Path(folder) / "fixture.exe"

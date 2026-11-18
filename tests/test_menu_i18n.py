@@ -73,6 +73,80 @@ class MenuI18nTests(unittest.TestCase):
             for name, hint in hints.items():
                 self.assertTrue(hint in keys, "%s: missing current %s hint" % (table, name))
 
+    def test_speaker_layout_texts_are_translated(self):
+        texts = ("Speaker layout",
+                 "5.1 when the selected/default output has 5.1 or more speakers at startup, else stereo.")
+        for text in texts:
+            self.assertIn(text, self.menu)
+        for table, pairs in self.tables.items():
+            translated = dict(pairs)
+            for text in texts:
+                with self.subTest(table=table, text=text):
+                    self.assertIn(text, translated)
+                    self.assertNotEqual(translated[text], text)
+
+    def test_output_device_texts_are_translated(self):
+        texts = (
+            "Output device", "Where the game plays sound. Changes apply without restarting the game.",
+            "Where the game plays sound. A change briefly restarts only the audio stream.",
+            "HOS_AUDIO_DEVICE overrides this run. The saved device choice is kept.",
+            "No playback output could be opened. The game keeps trying.",
+            "Default is used temporarily. The selected output is remembered and retried when available.",
+            "This playback device. Speaker layout changes still require a game restart.",
+            "Follow the Windows default playback device.", "Overridden by HOS_AUDIO_DEVICE",
+            "Follow the system default playback device.",
+            "Selected output", "Default", " (not connected)",
+        )
+        self.assertEqual(len(self.tables), 13)
+        for text in texts:
+            self.assertIn(text, self.menu)
+        for table, pairs in self.tables.items():
+            translated = dict(pairs)
+            for text in texts:
+                with self.subTest(table=table, text=text):
+                    self.assertIn(text, translated)
+                    self.assertNotEqual(translated[text], text)
+        source = (VK / "vk_menu.cpp").read_text(encoding="utf-8")
+        self.assertIn('std::string(i18n::tr("Selected output"))', source)
+        self.assertIn('+ i18n::tr(" (not connected)")', source)
+
+    def test_microphone_test_texts_are_translated(self):
+        explanation = (
+            r"Shows microphone signal strength, not note recognition.\n\n"
+            r"- First percentage: incoming peak before gain.\n"
+            r"- Second percentage: peak after Microphone gain, also shown by the bar.\n\n"
+            "At 100% gain they match. Increasing gain also raises noise and can clip the signal."
+        )
+        gain_help = (
+            "Adjust capture for Hookshot only; system volume is unchanged. Use the microphone test to see live levels "
+            "while adjusting gain. Changes apply to new samples."
+        )
+        test_help = (
+            "Start or stop microphone capture. No playback or audio files. You can adjust Microphone gain while testing. "
+            "Leaving Audio, closing the menu or selecting Off stops the test; the game can still use the mic."
+        )
+        texts = (
+            "Microphone gain", "Test microphone", gain_help, test_help, explanation,
+            "Testing: %d%% -> %d%%", "Test stopped", "Microphone unavailable", "Waiting for samples", "Clipping",
+            "Default fallback", " (Default fallback)", "Microphone Off", "Stop test", "Start test", "Unavailable",
+        )
+        self.assertEqual(len(self.tables), 13)
+        for text in texts:
+            self.assertIn(text, self.menu)
+        for table, pairs in self.tables.items():
+            translated = dict(pairs)
+            for text in texts:
+                with self.subTest(table=table, text=text):
+                    self.assertIn(text, translated)
+                    self.assertNotEqual(translated[text], text)
+            with self.subTest(table=table):
+                # Keep the overview, separate percentage bullets and gain/clipping note in every language.
+                self.assertEqual(translated[explanation].count(r"\n\n"), 2)
+                self.assertEqual(translated[explanation].count(r"\n- "), 2)
+                self.assertEqual(translated[explanation].count(r"\n"), explanation.count(r"\n"))
+                self.assertEqual(conversions(translated["Testing: %d%% -> %d%%"]), ["%d", "%%", "%d", "%%"])
+                self.assertIn(translated["Microphone gain"], translated[test_help])
+
     def test_custom_output_texts_are_translated(self):
         texts = (
             "Custom output size",

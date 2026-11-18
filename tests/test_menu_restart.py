@@ -144,8 +144,10 @@ def sources():
         raise SystemExit("display_sdl.c: no WM_APP + 9")
     relaunch = (ROOT / "host" / "hos_relaunch.c").read_text(encoding="utf-8")
     end = function(relaunch, "void hos_window_closed_exit(void) {")
-    if end.index("hos_log_flush();") > end.index("relaunch();") or end.index("relaunch();") > end.index("ExitProcess(0);"):
-        raise SystemExit("hos_relaunch.c: the restart is not the last step before the exit (after the log)")
+    finish = function(relaunch, "void hos_close_finish(void) {")
+    if "hos_log_flush();" not in finish or end.index("hos_close_finish();") > end.index("relaunch();") or \
+            end.index("relaunch();") > end.index("ExitProcess(0);"):
+        raise SystemExit("hos_relaunch.c: the restart is not the last step before the exit (after the shared log flush)")
     for need in ("GetModuleFileNameW(", "GetCommandLineW()", "CreateProcessW(", '"/proc/self/cmdline"', '"/proc/self/environ"',
                  'execve("/proc/self/exe"'):
         if need not in relaunch:
@@ -156,6 +158,13 @@ def sources():
     if not re.search(r"CreateProcessW\([^;]*CREATE_UNICODE_ENVIRONMENT[^;]*, env,", windows) or \
             "hos_relaunch_env_block(start_env, L\"HOS_RESTART_OF\"" not in windows:
         raise SystemExit("hos_relaunch.c: Windows' restart does not start the game with the environment it started with")
+    # (Windows: a game given its standard handles (a hookshot_ctl.py run's log.txt) passes them on, and only them: else the
+    # new game logs nowhere the run reads, and an open file of this one (its hookshot_log.txt) stops the new run moving it)
+    for need in ("STARTF_USESTDHANDLES", "PROC_THREAD_ATTRIBUTE_HANDLE_LIST", "EXTENDED_STARTUPINFO_PRESENT"):
+        if need not in windows:
+            raise SystemExit("hos_relaunch.c: Windows' restart does not pass on only its standard handles (no %s)" % need)
+    if "GetStdHandle(STD_ERROR_HANDLE)" not in function(relaunch, "void hos_relaunch_keep_env(void) {"):
+        raise SystemExit("hos_relaunch.c: hos_relaunch_keep_env does not keep the standard handles the game was given")
     if "GetEnvironmentStringsW()" not in function(relaunch, "void hos_relaunch_keep_env(void) {"):
         raise SystemExit("hos_relaunch.c: hos_relaunch_keep_env does not keep the environment block")
     hos_main = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")

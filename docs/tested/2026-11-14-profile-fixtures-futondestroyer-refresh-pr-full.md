@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-14 | this PR 328c326b; game-free checks | Windows 11 build26300; native Python3.14.7; no desktop interaction | Not used; no GPU work | i7-13700F; 32 GB RAM | Full game-free suite, 12 workers, NGX SDK environment unset | Authored fixtures; profile-fixtures-futondestroyer-refresh-pr-full; no game scene | 535 passed, 7 failed, 34 skipped; failures: tests/test_appimage_player_build.py, tests/test_cpm_discovery.py, tests/test_lift_cleanup_error.py, tests/test_oot_state_tap.py, tests/test_release.py, tests/test_tested_configurations.py, tests/test_walk_key.py; no game or performance claim |

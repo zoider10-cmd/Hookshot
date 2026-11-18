@@ -280,7 +280,9 @@ def compile_run(cxx, name, code, tmp):
 
 def check_predict(cxx, tmp):
     draw = (ROOT / "gpu/vk/vk_draw.cpp").read_text(encoding="utf-8")
-    exe = compile_run(cxx, "predict", PREDICT_HEAD + block(draw, "void predict_run(") + PREDICT_MAIN, tmp)
+    # (the unfinished-run marker is begun and ended through gpu/vk/crash_markers.h, as vk_draw.cpp includes it)
+    markers = '#include "%s"\n' % (ROOT / "gpu/vk/crash_markers.h").as_posix()
+    exe = compile_run(cxx, "predict", markers + PREDICT_HEAD + block(draw, "void predict_run(") + PREDICT_MAIN, tmp)
     env = dict(os.environ, RX_VK_PREDICT_STALL_S="1")
     for case, what in (("0", "every predicted pipeline built, the first alone"),
                        ("1", "the last pipelines never finish: the run goes on without them"),

@@ -25,11 +25,14 @@ test('the launcher download buttons get a channel picker, hidden until a script 
   const page = source.replace(/https:\/\/hookshot\.magicbean\.dev\//g, '/');
   const formatted = formatInstallHub(page);
   assert.equal((formatted.match(/data-launcher-channel /g) || []).length, 1);
-  assert.match(formatted, /<div class="launcher-channel" role="radiogroup" aria-labelledby="launcher-channel-label" data-launcher-channel hidden>[\s\S]*<\/p>\n<\/div>\n<div class="download-buttons">/);
+  assert.match(formatted, /<div class="launcher-channel" role="radiogroup" aria-labelledby="launcher-channel-label" data-launcher-channel hidden>[\s\S]*<\/p>\n<\/div>\n<p class="launcher-version">[\s\S]*<\/p>\n<div class="download-buttons">/);
+  assert.match(formatted, /data-launcher-version role="status"/);
+  assert.match(formatted, /This is the launcher's own version\. The game it builds is numbered as a Hookshot version/);
+  assert(!formatted.includes('See all versions'));
   for (const c of launcherChannels) assert(formatted.includes(`value="${c.value}"`), `Missing channel: ${c.name}`);
-  assert.equal((formatted.match(/ checked>/g) || []).length, 1);
-  assert(formatted.includes('value="rc" data-note="The next version, to try before it is stable." checked>'));
-  assert(formatted.includes('value="" data-note="For playing." disabled> Stable <small>coming soon</small>'));
+  assert.equal((formatted.match(/ checked>/g) || []).length, 0);
+  assert(formatted.includes('The recommended channel is chosen when you download.'));
+  assert(formatted.includes('value="stable" data-note="For playing."> Stable <small></small>'));
   // (no blank line inside, so Markdown keeps it one HTML block)
   assert(!/data-launcher-channel[\s\S]*\n\n[\s\S]*class="download-buttons"/.test(formatted));
   assert(!formatInstallHub('## Elsewhere\n- [Other](/download/other)\n').includes('launcher-channel'));

@@ -3,7 +3,8 @@
 A scripted or A/B test run brings its own switches this way, and the player's hookshot_env.txt is neither read nor
 changed. Unset or empty, the game reads hookshot_env.txt as before. A named file that does not exist sets nothing: the
 run does not fall back to the player's switches. A switch already in the environment the game was started with goes over
-the file's line for it.
+the file's line for it. HOS_CONTROL_PEER_SID, which lets another account into the control bridge's pipe, is refused from
+the player's file and still read from the environment.
 
 python -I -B tests/test_env_file.py [--cc gcc]
 """
@@ -11,18 +12,11 @@ import argparse
 import subprocess
 import tempfile
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: python -I leaves this folder off the path)
+from srccut import block   # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def block(text, marker):
-    start = text.index(marker)
-    end = text.index("{", start) + 1
-    depth = 1
-    while depth:
-        depth += (text[end] == "{") - (text[end] == "}")
-        end += 1
-    return text[start:end]
 
 
 def main():
@@ -44,7 +38,7 @@ def main():
             "SDL_AUDIODRIVER=pulseaudio\nHOS_T_UP=..\nHOS_SAMPLE_FILE=hookshot_vk.dll\nRX_VK_FRAME_LOG=x.txt\n"
             "RX_VK_DUMP_DIR=dumps\nHOS_PRESENT_TRACE=t.txt\nRX_VK_DLSS_DIR=\\\\server\\share\n"
             "HOS_AUDIO_DUMP=image.bin\nRX_VK_HANG_DUMP=hookshot_options.ini\nRX_VK_SHOTS=user\n"
-            "HOS_INPUT_SCRIPT=1:A,2:A\nRX_VK_MENU_SCRIPT=1:INS\n", encoding="utf-8")
+            "HOS_INPUT_SCRIPT=1:A,2:A\nRX_VK_MENU_SCRIPT=1:INS\nHOS_CONTROL_PEER_SID=S-1-5-21-1-2-3-1001\n", encoding="utf-8")
         (tmp / "test_env.txt").write_text("# a test run's own switches\nHOS_T_OTHER=1\nHOS_T_SHARED=other\n"
                                           "VK_T_LAYER=/y\n", encoding="utf-8")
         (tmp / "precedence.txt").write_text("HOS_T_LAUNCH=file\nHOS_T_TWICE=first\nHOS_T_FRESH=1\nHOS_T_TWICE=second\n",
@@ -84,6 +78,7 @@ int main(int argc, char **argv) {
     CHECK(is("HOS_SAMPLE_FILE", NULL) && is("RX_VK_DUMP_DIR", NULL) && is("HOS_T_HOME", NULL));
     CHECK(is("HOS_AUDIO_DUMP", NULL) && is("RX_VK_HANG_DUMP", NULL) && is("RX_VK_SHOTS", NULL));
     CHECK(is("HOS_INPUT_SCRIPT", NULL) && is("RX_VK_MENU_SCRIPT", NULL));
+    CHECK(is("HOS_CONTROL_PEER_SID", NULL));       /* (another account into the control pipe: never from a shared file) */
     CHECK(is("RX_VK_SKIP_CODE", "2c56,ab") && is("RX_VK_DLSS_DIR", "/opt/ngx"));
     CHECK(is("SDL_VULKAN_LIBRARY", NULL) && is("SDL_VIDEO_EGL_DRIVER", NULL) && is("HOS_T_UP", NULL));
     CHECK(is("SDL_AUDIODRIVER", "pulseaudio") && is("HOS_SAMPLE_FILE", NULL) && is("RX_VK_FRAME_LOG", NULL));
@@ -115,7 +110,14 @@ int main(int argc, char **argv) {
     CHECK(is("HOS_T_LAUNCH", "launch") && is("HOS_T_TWICE", "second") && is("HOS_T_FRESH", "1"));
     load_hookshot_env();                           /* (read again in the same run: the same) */
     CHECK(is("HOS_T_LAUNCH", "launch") && is("HOS_T_TWICE", "second") && is("HOS_T_FRESH", "1"));
-    printf("PASS: HOS_ENV_FILE replaces hookshot_env.txt; unset or empty reads it as before; the player's file sets only the game's switches; the environment goes over the file\n");
+    /* HOS_CONTROL_PEER_SID from the environment the game was started with (the Test Farm's agent sets it there): kept,
+       whatever the player's file says */
+    clear();
+    unsetenv("HOS_ENV_FILE");
+    setenv("HOS_CONTROL_PEER_SID", "S-1-5-21-7-8-9-1002", 1);
+    load_hookshot_env();
+    CHECK(is("HOS_CONTROL_PEER_SID", "S-1-5-21-7-8-9-1002") && is("HOS_T_BESIDE", "1"));
+    printf("PASS: HOS_ENV_FILE replaces hookshot_env.txt; unset or empty reads it as before; the player's file sets only the game's switches, never HOS_CONTROL_PEER_SID; the environment goes over the file\n");
     return 0;
 }
 '''

@@ -15,9 +15,13 @@ gamefile/
 *.nup
 *.nsz
 *.xcz
+# (saves: only the scrubbed ones in assets/saves, CONTRIBUTING.md)
+*.sav
+!/assets/saves/**/*.sav
 
 # ---- build output and caches ----
 build/
+/third_party_objects/
 __pycache__/
 *.pyc
 *.o
@@ -40,8 +44,22 @@ rando_inventory.txt
 rando_locations.txt
 rando_actors.txt
 rando_room.txt
+
+# ---- a checkout's own development builds on Windows (scripts/dev_build.py) ----
+build-windows/
+
 # ---- NVIDIA's DLSS SDK (scripts/ngx_sdk.py): NVIDIA's files, never committed ----
 ngx-sdk/
 
 # (Mako 4.0) the Send logs webhook: never in the public source
 launcher/report_webhook.txt
+test-results/
+_deps/
+
+# ---- a link to <build>/compile_commands.json (nx2/build.py write_compdb), for clangd and clang-tidy ----
+/compile_commands.json
+
+# ---- Visual Studio IDE files ----
+.vs/
+.vscode/
+CppProperties.json

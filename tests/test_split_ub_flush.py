@@ -80,15 +80,15 @@ def main():
     args = p.parse_args()
     src = (VK / "vk_replay.cpp").read_text(encoding="utf-8")
 
-    split = block(src, "void maybe_split(VkCommandBuffer& cmd) {")
+    split = block(src, "void split_part(VkCommandBuffer& cmd) {")   # (the part's end: maybe_split says when)
     if "static const bool part_flush = [] {" not in split:
-        raise SystemExit("FAIL: maybe_split writes the uniform updates at every part's end (no part_flush decision)")
+        raise SystemExit("FAIL: split_part writes the uniform updates at every part's end (no part_flush decision)")
     code = "\n".join(line.split("//")[0] for line in split.splitlines())
     if code.count("flush_ub_updates(") != 1 or "if (part_flush) flush_ub_updates(cmd);" not in code:
-        raise SystemExit("FAIL: maybe_split writes the uniform updates at a part's end without asking part_flush")
+        raise SystemExit("FAIL: split_part writes the uniform updates at a part's end without asking part_flush")
     if code.count("ub_first_of_recording =") != 1 or \
             "if (part_flush) ub_first_of_recording = ub_updates.size();" not in code:
-        raise SystemExit("FAIL: maybe_split moves ub_first_of_recording when the part's end did not write the updates: "
+        raise SystemExit("FAIL: split_part moves ub_first_of_recording when the part's end did not write the updates: "
                          "the last part would leave the earlier parts' updates unwritten")
     finish = block(src, "void finish_recording(uint64_t value) {")
     if "flush_ub_updates(r.cmd);" not in finish:

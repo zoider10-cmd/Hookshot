@@ -15,6 +15,7 @@ RX_MAPS=<game folder>/bin names the frames as for scripts/crit.py), the function
 import bisect, collections, os, struct, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import samples  # noqa: E402
 
 WAIT, WOKE, SIGNAL, SLEEP, AWAKE, PRESENT = 1, 2, 3, 4, 5, 6
 REC = struct.Struct("<qQQHB5x")
@@ -192,7 +193,7 @@ def samples_on_path(path, names, segs, top):
 
     t0 = at = None
     by_thread = collections.defaultdict(list)   # sample thread name -> [(ns, frames)]
-    for line in open(path, encoding="utf-8", errors="replace"):
+    for line in samples.lines(path):   # (plain or packed)
         if line.startswith("# t0_ns "):
             if t0 is None:
                 t0 = int(line.split()[2])

@@ -4,7 +4,8 @@
 
    Off unless HOS_CONTROL is set. Linux: a Unix domain socket at that path, made 0600 (the umask around bind too), never
    over an existing file that is not a socket, and a client of another user is turned away (SO_PEERCRED). Windows: a named
-   pipe (\\.\pipe\<name>; a name without the prefix gets it), its DACL the current user's alone, remote clients refused.
+   pipe (\\.\pipe\<name>; a name without the prefix gets it), its DACL the current user's alone (and the game's
+   AppContainer's when it runs in one, and HOS_CONTROL_PEER_SID's user when that is set), remote clients refused.
    There is no TCP. The guest's memory is read or written only with a second opt-in, HOS_CONTROL_MEM (ro, rw).
 
    Newline-delimited JSON: one request object a line ({"id": ..., "cmd": "status", ...}), one reply a line with the id
@@ -16,7 +17,7 @@
 
    Commands: status, press, stick, sequence, release, shot, wait, option_get, option_set, saves, teleport and age (OoT),
    subscribe,
-   unsubscribe, quit, and guest memory (mem_read, mem_read_many, mem_write) when HOS_CONTROL_MEM allows it.
+   unsubscribe, quit, relaunch, and guest memory (mem_read, mem_read_many, mem_write) when HOS_CONTROL_MEM allows it.
    Inputs are timed in frames, from the first controller read after the request. The state (intro, menu, loading,
    play) is a guess from the draws a frame, as test scripts made it from the log: ~2 draws at the intro, 15-70 in menus,
    ~5 while loading, hundreds in play.
@@ -1487,6 +1488,20 @@ static void cmd_quit(int ci, const char *id) {
     transport_cleanup();
     G.game->quit();
 }
+/* the game started again (the Insert menu's Restart now): the reply first, then the socket goes with this process, and
+   the new one serves it again under the same name (the client reconnects: scripts/hookshot_ctl.py relaunch) */
+static void cmd_relaunch(int ci, const char *id) {
+    Conn *c = &G.conns[ci];
+    if (!G.game->relaunch) return reply_error(c, id, "unavailable", "this game cannot start again from the bridge");
+    Buf b = {0};
+    reply_start(&b, id, 1);
+    buf_puts(&b, ",\"relaunching\":true");
+    reply_end(c, &b);
+    conn_flush_now(c);
+    ctl_log("control: relaunch asked by a client");
+    transport_cleanup();
+    G.game->relaunch();
+}
 
 /* ---- guest memory (host/control.c's HOS_CONTROL_MEM, docs/control.md): mem_read, mem_read_many, mem_write ---- */
 static void buf_hex(Buf *b, const uint8_t *p, uint64_t n) {
@@ -1882,6 +1897,7 @@ static void request(int ci, const char *line, size_t len) {
         log_wanted_update();
         reply_ok(c, id);
     } else if (!strcmp(cmd, "quit")) cmd_quit(ci, id);
+    else if (!strcmp(cmd, "relaunch")) cmd_relaunch(ci, id);
     else if (!strncmp(cmd, "mem_", 4) || !strcmp(cmd, "symbols")) cmd_mem(ci, &d, req, id, cmd);
     else reply_error(c, id, "unknown_cmd", "no command %.60s", cmd);
 }
@@ -2135,19 +2151,102 @@ static void linger(HANDLE h) {
     CloseHandle(h);
 }
 
-static int pipe_security(void) {   /* a DACL with the current user alone */
+/* HOS_CONTROL_PEER_SID: one more account the pipe lets in (read and write, as a client), for a game run as another
+   account than its driver's (the Beanstalk agent's runner account). Only a user's own SID: S-1-5-21-<3 numbers>-<RID>,
+   canonical (the string ConvertSidToStringSid gives back, nothing else), a RID of 1000 or more (the well-known
+   accounts and groups of a machine or a domain are below), and the account a user's (LookupAccountSid). Never a group:
+   the well-known ones below are named in the log line. 1 ok; 0 refused, why says so */
+static const char *const peer_sid_refused[][2] = {
+    {"S-1-1-0", "Everyone"}, {"S-1-5-11", "Authenticated Users"}, {"S-1-5-32-545", "Users"},
+    {"S-1-5-32-544", "Administrators"}, {"S-1-5-32-546", "Guests"}, {"S-1-5-4", "Interactive"},
+    {"S-1-5-7", "Anonymous Logon"}, {"S-1-5-18", "SYSTEM"}, {"S-1-2-0", "Local"}, {"S-1-15-2-1", "ALL APPLICATION PACKAGES"},
+};
+int hos_control_peer_sid_check(const char *s, char *why, size_t cap) {
+    if (!s || !*s || strlen(s) > 184) return snprintf(why, cap, "not a SID"), 0;
+    PSID sid = NULL;
+    if (!ConvertStringSidToSidA(s, &sid)) return snprintf(why, cap, "not a SID"), 0;
+    int ok = 0;
+    char *back = NULL;
+    if (!IsValidSid(sid)) {
+        snprintf(why, cap, "not a valid SID");
+        goto done;
+    }
+    for (size_t i = 0; i < sizeof peer_sid_refused / sizeof *peer_sid_refused; i++) {
+        PSID group = NULL;
+        const int same = ConvertStringSidToSidA(peer_sid_refused[i][0], &group) && EqualSid(sid, group);
+        if (group) LocalFree(group);
+        if (same) {
+            snprintf(why, cap, "%s (%s) is a group, not one user", peer_sid_refused[i][1], peer_sid_refused[i][0]);
+            goto done;
+        }
+    }
+    if (!ConvertSidToStringSidA(sid, &back) || strcmp(back, s)) {   /* (an SDDL alias, leading zeros, hex, spaces, ...) */
+        snprintf(why, cap, "not a SID written as Windows writes it");
+        goto done;
+    }
+    if (strncmp(s, "S-1-5-21-", 9) || *GetSidSubAuthorityCount(sid) != 5) {
+        snprintf(why, cap, "not a user's SID (S-1-5-21-...)");
+        goto done;
+    }
+    if (*GetSidSubAuthority(sid, 4) < 1000) {
+        snprintf(why, cap, "a well-known account or group (RID %lu), not a user of this PC", (unsigned long)*GetSidSubAuthority(sid, 4));
+        goto done;
+    }
+    char name[256], domain[256];
+    DWORD nn = sizeof name, dn = sizeof domain;
+    SID_NAME_USE use;
+    if (!LookupAccountSidA(NULL, sid, name, &nn, domain, &dn, &use)) {
+        snprintf(why, cap, "no such account here (%lu)", GetLastError());
+        goto done;
+    }
+    if (use != SidTypeUser) {
+        snprintf(why, cap, "a group or other non-user account (type %d)", (int)use);
+        goto done;
+    }
+    ok = 1;
+done:
+    if (back) LocalFree(back);
+    LocalFree(sid);
+    return ok;
+}
+
+/* The pipe's DACL: the current user (full); the game's AppContainer, when its token is one (full: a pipe's next instance
+   is checked against the pipe's DACL with the creator's token, and an AppContainer's access check needs its own SID
+   granted besides its user's); HOS_CONTROL_PEER_SID's account (GRGW: to connect as a client) */
+static int pipe_security(void) {
     HANDLE token;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return 0;
-    char info[256];
+    DWORD64 info[64];   /* (a SID is at most 68 bytes) */
     DWORD len = 0;
-    const BOOL got = GetTokenInformation(token, TokenUser, info, sizeof info, &len);
+    char *user = NULL, *ac = NULL;
+    if (!GetTokenInformation(token, TokenUser, info, sizeof info, &len) ||
+        !ConvertSidToStringSidA(((TOKEN_USER *)info)->User.Sid, &user))
+        return CloseHandle(token), 0;
+    DWORD is_ac = 0;
+    if (GetTokenInformation(token, TokenIsAppContainer, &is_ac, sizeof is_ac, &len) && is_ac) {
+        const TOKEN_APPCONTAINER_INFORMATION *t = (const TOKEN_APPCONTAINER_INFORMATION *)info;
+        if (!GetTokenInformation(token, TokenAppContainerSid, info, sizeof info, &len) || !t->TokenAppContainer ||
+            !ConvertSidToStringSidA(t->TokenAppContainer, &ac)) {
+            ctl_log("control: an AppContainer token whose SID could not be read (%lu)", GetLastError());
+            CloseHandle(token), LocalFree(user);
+            return 0;
+        }
+    }
     CloseHandle(token);
-    if (!got) return 0;
-    char *sid = NULL;
-    if (!ConvertSidToStringSidA(((TOKEN_USER *)info)->User.Sid, &sid)) return 0;
-    char sddl[300];
-    snprintf(sddl, sizeof sddl, "D:P(A;;GA;;;%s)", sid);
-    LocalFree(sid);
+    char sddl[700];
+    int n = snprintf(sddl, sizeof sddl, "D:P(A;;GA;;;%s)", user);
+    if (ac) n += snprintf(sddl + n, sizeof sddl - n, "(A;;GA;;;%s)", ac), LocalFree(ac);
+    const char *peer = getenv("HOS_CONTROL_PEER_SID");
+    if (peer && *peer) {
+        char why[160];
+        if (!hos_control_peer_sid_check(peer, why, sizeof why))
+            ctl_log("control: HOS_CONTROL_PEER_SID refused: %s; the pipe stays this user's alone", why);
+        else if (strcmp(peer, user)) {
+            snprintf(sddl + n, sizeof sddl - n, "(A;;GRGW;;;%s)", peer);
+            ctl_log("control: the pipe lets in HOS_CONTROL_PEER_SID's account too");
+        }
+    }
+    LocalFree(user);
     PSECURITY_DESCRIPTOR sd = NULL;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorA(sddl, SDDL_REVISION_1, &sd, NULL)) return 0;
     pipe_sa.nLength = sizeof pipe_sa, pipe_sa.lpSecurityDescriptor = sd, pipe_sa.bInheritHandle = FALSE;
@@ -2395,13 +2494,19 @@ static int game_save_root(char *out, size_t cap) {
 static int64_t game_frame(void) { return __atomic_load_n(&hos_present_count, __ATOMIC_RELAXED); }
 static void game_log(const char *line) { hos_log("%s", line); }
 void rx_close_asked(void);   /* (rx_backend.c) */
+void hos_close_finish(void);   /* (hos_relaunch.c: the shared close tail, without a window message or restart) */
 static void game_quit(void) {   /* (as the window's close: the pipelines made since the last save kept, then out) */
     rx_close_asked();
     hos_log("control: exiting");
-    hos_log_flush();
-    void hos_crash_clean_end(void);
-    hos_crash_clean_end();
+    hos_close_finish();
     ExitProcess(0);
+}
+void hos_relaunch_ask(void);         /* (hos_relaunch.c: the Insert menu's Restart now) */
+void hos_window_closed_exit(void);   /* (hos_relaunch.c: the exit, started again first when asked) */
+static void game_relaunch(void) {   /* (as quit, then started again with the command and environment it began with) */
+    rx_close_asked();
+    hos_relaunch_ask();
+    hos_window_closed_exit();
 }
 static const char *game_renderer(void) { return rx_describe(); }
 int hos_oot_current_map(char *out, size_t cap);                              /* (hos_main.c) */
@@ -2424,7 +2529,8 @@ static HosControlGame game = {
     .teleport = hos_oot_teleport_ask, .teleport_result = hos_oot_teleport_result,
     .teleport_cancel = hos_oot_teleport_cancel, .age = hos_oot_age_ask, .oot_state = hos_oot_state,
     .oot_sample_ask = hos_oot_sample_ask, .oot_sample_cancel = hos_oot_sample_cancel,
-    .oot_sample = hos_oot_sample, .oot_watch = hos_oot_watch, .oot_poll = hos_oot_poll};
+    .oot_sample = hos_oot_sample, .oot_watch = hos_oot_watch, .oot_poll = hos_oot_poll,
+    .relaunch = game_relaunch};
 
 void hos_control_start(const char *version) {
     const char *path = getenv("HOS_CONTROL");

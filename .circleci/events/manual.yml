@@ -1,0 +1,30 @@
+# API-triggered manual jobs (release dry-run or vulkan link). Docs: docs/ci.md.
+workflows:
+  manual-vulkan-dlss:
+    when: pipeline.parameters.vulkan_dlss
+    jobs:
+      - lint
+      - vulkan-dlss:
+          requires: [lint]
+      - mb/gate:
+          name: gate
+          requires: [vulkan-dlss]
+  manual-release-dry-run:
+    when: pipeline.parameters.release_dry_run
+    jobs:
+      - release-version
+      - release-linux:
+          requires: [release-version]
+      - release-windows:
+          requires: [release-version]
+      - release-stage:
+          requires: [release-linux, release-windows]
+      - mb/release-sign:
+          name: release-sign
+          context: release-signing
+          workspace: .
+          dry-run: true
+          requires: [release-stage]
+      - mb/gate:
+          name: gate
+          requires: [release-sign]

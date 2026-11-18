@@ -22,6 +22,7 @@
 #include "menu_i18n.h"
 #include "vk_menu.h"
 #include "vk_paths.h"
+#include "../../host/hos_atomic_file.h"   // (language.txt is written whole or not at all)
 
 namespace mkwvk::i18n {
 
@@ -222,12 +223,11 @@ bool set_game_language(int index) {
         l = std::string(code) + "\n", set = true;
     }
     if (!set) lines.push_back(std::string(code) + "\n");
-    // (written whole or not at all: a folder that cannot be written keeps language.txt, and the row goes back to it)
-    FILE* f = fopen(language_txt().c_str(), "w");
-    if (!f) return false;
-    bool ok = true;
-    for (const auto& l : lines) ok = fputs(l.c_str(), f) >= 0 && ok;
-    ok = fclose(f) == 0 && ok;
+    // (written whole or not at all: beside language.txt and moved over it, so a kill, or a folder that cannot be written, keeps
+    // language.txt as it was, and the row goes back to it)
+    std::string text;
+    for (const auto& l : lines) text += l;
+    const bool ok = hos_atomic_write(language_txt().c_str(), text.data(), text.size());
     if (ok) game_language_saved() = code;
     return ok;
 }

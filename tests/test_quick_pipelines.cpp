@@ -33,6 +33,7 @@ struct {
     void* device = nullptr;
 } dev;
 struct Program { uint64_t key = 0x1234; };
+bool program_modules_dropped(const Program&) { return false; }
 struct NvnState {};
 struct Targets {};
 std::vector<std::string> logs;

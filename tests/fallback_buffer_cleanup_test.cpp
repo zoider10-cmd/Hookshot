@@ -155,6 +155,43 @@ static void run(const std::string& name) {
         Program next;
         require(fallback_buffers_of(next, out) && out && out->records_address, "another program inherited failure");
         require(live.size() == 2 && destroy_calls == 1, "another program's buffers were freed or leaked");
+    } else if (name == "payload_growth_keeps_records") {
+        // (the record arena is the same size for every program: a program whose payloads need more takes a bigger payload
+        // buffer, and the records it has already)
+        require(fallback_buffers_of(p, out) && out && out->payload_bytes == 44 && create_calls == 2, "first program's pair");
+        const VkBuffer records = out->records;
+        const uint64_t records_address = out->records_address;
+        Program bigger;
+        bigger.fallback_payload_words = 8;
+        require(fallback_buffers_of(bigger, out) && out && out->payload_bytes == 116, "a bigger payload was not made");
+        require(out->records == records && out->records_address == records_address && create_calls == 3 && live.size() == 3,
+                "a bigger payload made another record arena");
+        const auto calls = create_calls;
+        require(fallback_buffers_of(p, out) && out->payload_bytes == 116 && create_calls == calls, "the smaller program made more");
+    } else if (name == "shared_records_payload_failure") {
+        // (a growth step that shares the record arena and then cannot make its payload: its create fails, and on a retry its
+        // address comes back 0. The shared arena must stay, and the set before it still serve. Passes on main trivially, where a
+        // growth makes its own arena and never shares; guards that the fix's cleanup leaves a shared arena alone)
+        require(fallback_buffers_of(p, out) && out && create_calls == 2 && address_calls == 2, "first program's pair");
+        const VkBuffer records = out->records;
+        const uint64_t payload_bytes = out->payload_bytes;
+        const auto still_usable = [&](const char* why) {
+            const auto calls = create_calls;
+            require(live.contains(records), why);
+            require(fallback_buffers_of(p, out) && out->records == records && out->payload_bytes == payload_bytes &&
+                    create_calls == calls, why);
+        };
+        Program bigger;
+        bigger.fallback_payload_words = 8;
+        fail_create = 3;
+        require(!fallback_buffers_of(bigger, out), "a failed payload create was accepted");
+        require(live.size() == 2 && destroy_calls == 0, "a failed payload create destroyed the shared record arena");
+        still_usable("the set before a failed payload create is gone");
+        zero_address = address_calls + 1;   // (the next address asked: the payload's when the arena is shared)
+        require(!fallback_buffers_of(bigger, out), "a payload with no address was accepted");
+        require(create_calls == 4 && destroy_calls == 1 && live.size() == 2,
+                "a payload with no address left a buffer or took the shared record arena");
+        still_usable("the set before a payload with no address is gone");
     } else throw std::runtime_error("unknown authored case");
 }
 int main(int argc, char** argv) {

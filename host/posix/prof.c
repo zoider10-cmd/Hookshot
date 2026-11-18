@@ -1,5 +1,5 @@
 /* (linux) host/mkw_glue.c's profilers, with the same variables and the same lines in the log and files:
-   HOS_PROFILE=<seconds> (the busiest threads), HOS_THREAD_TIMES=<seconds> (threads over 5% of a core), HOS_SAMPLE=<thread
+   HOS_PROFILE_EVERY=<seconds> (the busiest threads), HOS_THREAD_TIMES=<seconds> (threads over 5% of a core), HOS_SAMPLE=<thread
    name> + HOS_SAMPLE_FILE (one thread's stacks every millisecond), HOS_SAMPLE_ALL=<path> (every guest thread and the
    renderer's at once, every 2 ms, while <path>.go exists) and HOS_WATCH=<file> (data breakpoints on guest addresses).
    Windows reads other threads with SuspendThread + GetThreadContext + RtlVirtualUnwind and sets debug registers; here:
@@ -92,7 +92,7 @@ static int tasks(Task *out, int max) {
     return n;
 }
 
-/* HOS_PROFILE=<seconds>: every interval, the busiest threads and their share of a core */
+/* HOS_PROFILE_EVERY=<seconds>: every interval, the busiest threads and their share of a core */
 static DWORD WINAPI prof_thread(void *p) {
     const DWORD ms = (DWORD)(uintptr_t)p * 1000;
     enum { MAXT = 512 };
@@ -242,12 +242,12 @@ static uintptr_t exe_base(void) {
     return base;
 }
 
-/* HOS_SAMPLE=<thread name> (with HOS_PROFILE=<seconds>): that thread sampled every millisecond; every interval its
+/* HOS_SAMPLE=<thread name> (with HOS_PROFILE_EVERY=<seconds>): that thread sampled every millisecond; every interval its
    most frequent places, as module+offset of the leaf and of the first frame in the runtime under it. HOS_SAMPLE_FILE:
    every sample's whole stack too, a line of frames leaf first (scripts/prof.py) */
 static DWORD WINAPI sample_thread(void *p) {
     const char *want = (const char *)p;
-    const DWORD ms = (DWORD)atoi(getenv("HOS_PROFILE")) * 1000;
+    const DWORD ms = (DWORD)atoi(getenv("HOS_PROFILE_EVERY")) * 1000;
     sampling_init();
     int tid = 0;
     while (!tid) {   /* (the renderer's threads start late) */
@@ -320,7 +320,7 @@ static DWORD WINAPI sample_thread(void *p) {
     return 0;
 }
 
-/* HOS_SAMPLE_ALL=<path> (with HOS_PROFILE): while <path>.go exists, every 2 ms every guest thread and the renderer's
+/* HOS_SAMPLE_ALL=<path> (on its own: not HOS_PROFILE_EVERY): while <path>.go exists, every 2 ms every guest thread and the renderer's
    threads (names starting "mkw_vk") sampled one after another: a line per thread, "<ms> <name>|<frames>", 16 frames
    at most (scripts/crit.py, scripts/hotlist.py) */
 static DWORD WINAPI sample_all_thread(void *p) {
@@ -338,7 +338,7 @@ static DWORD WINAPI sample_all_thread(void *p) {
     /* (with HOS_CHAIN: "# at <ns>" before each sample, when it was taken: the threads are sampled one after another, a
        millisecond or more apart, and scripts/chain.py lays the samples on its exact path) */
     const int at = getenv("HOS_CHAIN") != NULL;
-    /* (longshot) HOS_SLOW_FRAMES (host/slow_frames.c): sampled the whole run into its ring, the thread list taken again every
+    /* (hookshot) HOS_SLOW_FRAMES (host/slow_frames.c): sampled the whole run into its ring, the thread list taken again every
        5 s (threads come and go), nothing written here */
     const int ring = path == hos_slow_frames_path();
     int64_t listed_at = 0;
@@ -348,11 +348,15 @@ static DWORD WINAPI sample_all_thread(void *p) {
             Sleep(200);
             continue;
         }
-        if (ring ? !listed_at || hos_now_ns() - listed_at > 5000000000LL : !out) {
-            if (!ring) {
-                out = fopen(path, "a");
-                if (!out) { Sleep(1000); continue; }
-            }
+        int opened = 0;
+        if (!ring && !out) {
+            out = fopen(path, "a");
+            if (!out) { Sleep(1000); continue; }
+            opened = 1;
+        }
+        /* (the thread list taken again every 5 s, in both modes: threads come and go, and the profiling mode (HOS_PROFILE=1)
+           starts sampling at the boot, before the game's and the renderer's threads are made) */
+        if (opened || !listed_at || hos_now_ns() - listed_at > 5000000000LL) {
             static Task all[512];
             const int n = tasks(all, 512);
             nt = 0;
@@ -366,12 +370,12 @@ static DWORD WINAPI sample_all_thread(void *p) {
             if (ring) {
                 if (!listed_at) hos_log("prof: slow frames: %d threads sampled every %d ms, written for a slow frame to %s-<n>.txt", nt,
                                         hos_slow_frames_every_ms(), path);
-                listed_at = hos_now_ns();
-            } else {
+            } else if (opened) {
                 t0 = hos_now_ns();
                 fprintf(out, "# t0_ns %lld\n", (long long)t0);   /* (the clock of HOS_CHAIN's records: scripts/chain.py) */
                 hos_log("prof: all-thread sampling of %d threads into %s", nt, path);
             }
+            listed_at = hos_now_ns();
         }
         Sleep(ring ? hos_slow_frames_every_ms() : 2);
         const int64_t sweep_ns = hos_now_ns();   /* (the ring's: one time a sweep) */
@@ -390,7 +394,7 @@ static DWORD WINAPI sample_all_thread(void *p) {
                                 (unsigned long long)(pcs[depth] - base));
             }
             if (ring) hos_slow_sample(sweep_ns, strchr(line, ' ') + 1);
-            else fprintf(out, "%s\n", line);
+            else hos_sample_write(out, line);   /* (packed with HOS_SAMPLE_PACKED: host/profiling.c) */
         }
         if (ring) hos_slow_sweep_done();
     }
@@ -516,14 +520,15 @@ static DWORD WINAPI watch_thread(void *p) {
 void hos_prof_start(void) {
     const char *tt = getenv("HOS_THREAD_TIMES");
     if (tt && atoi(tt) > 0) CreateThread(NULL, 0, thread_times_thread, (void *)(uintptr_t)atoi(tt), 0, NULL);
-    const char *e = getenv("HOS_PROFILE");
+    const char *e = getenv("HOS_PROFILE_EVERY");
     if (e && atoi(e) > 0) CreateThread(NULL, 0, prof_thread, (void *)(uintptr_t)atoi(e), 0, NULL);
     const char *s = getenv("HOS_SAMPLE");
     if (e && atoi(e) > 0 && s && *s) CreateThread(NULL, 0, sample_thread, (void *)s, 0, NULL);
     const char *all = getenv("HOS_SAMPLE_ALL");
     if (all && *all) CreateThread(NULL, 0, sample_all_thread, (void *)all, 0, NULL);
-    const char *slow = hos_slow_frames_path();   /* (longshot: the slow-frame recorder, host/slow_frames.c) */
+    const char *slow = hos_slow_frames_path();   /* (hookshot: the slow-frame recorder, host/slow_frames.c) */
     if (slow) CreateThread(NULL, 0, sample_all_thread, (void *)slow, 0, NULL);
     const char *watch = getenv("HOS_WATCH");
     if (watch && *watch) CreateThread(NULL, 0, watch_thread, (void *)watch, 0, NULL);
+    hos_profiling_start();   /* (hookshot: HOS_PROFILE=1, the profiling mode: host/profiling.c) */
 }

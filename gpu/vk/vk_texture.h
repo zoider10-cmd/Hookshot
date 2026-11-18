@@ -37,6 +37,8 @@ struct Texture {
     std::vector<uint8_t> tail_bound;            // (per layer, or [0] with SINGLE_MIPTAIL: its mip tail has memory)
     std::vector<VkDeviceMemory> sparse_chunks;  // (the device memory blocks are taken from, 64 MB at a time)
     VkDeviceSize chunk_used = 0;
+    struct SparseFree { VkDeviceMemory memory; VkDeviceSize offset, size; };
+    std::vector<SparseFree> sparse_free;        // (taken for binds that failed: given out again before the chunks)
     VkSparseImageMemoryRequirements sparse_req{};
     uint32_t sparse_type = 0;
     VkDeviceSize sparse_align = 0;
@@ -73,7 +75,7 @@ struct Texture {
     bool writeback_noted = false;  // (in the list of textures waiting for that)
     uint64_t written_back_hash = 0; // (its memory's hash after that write-back: still its own texels there, or the CPU's since)
     uint64_t verify_hash = 0;      // (RX_VK_VERIFY_DIM: its guest memory's hash when last uploaded)
-    uint64_t blocks_hash = 0;      // (longshot) decoded ASTC: its blocks' hash at its last whole upload, 0 when unknown (astc_reuse.h)
+    uint64_t blocks_hash = 0;      // (hookshot) decoded ASTC: its blocks' hash at its last whole upload, 0 when unknown (astc_reuse.h)
     bool freed_listed = false;     // (finalized by the game and listed by blocks_hash: its image may serve a new texture)
     bool reuse_retire = false;     // (its image served one: it goes at the next texture_frame unless used again first)
     uint32_t checked_epoch = 0;
@@ -240,5 +242,10 @@ bool texture_drawn_at(uint64_t gpu);
 /// ReadTexels / WriteTexels: the CPU's copy of a region of the texture in guest memory (vk_texture.cpp)
 void texture_read_texels(const nvn_tex* t, unsigned level, unsigned layer0, const NVNcopyRegion* r, uint8_t* dst,
                          uint64_t row, uint64_t img, bool write);
+
+/// (hookshot) Called first on a thread that the replaying thread may have made: on Linux a new thread inherits its maker's
+/// affinity, the replay's one core inside a ReplayPin (vk_replay.cpp), until it registers with host/posix/win32_posix.c,
+/// which gives it the process's affinity, as Windows starts a new thread. Nothing on Windows (vk_texture.cpp)
+void helper_thread_start();
 
 } // namespace mkwvk

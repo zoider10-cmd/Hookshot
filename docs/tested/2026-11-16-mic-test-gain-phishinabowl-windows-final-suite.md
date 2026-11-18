@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-16 | bc0997d444f951445653a7d7aa49f78471a18a7e plus reviewed guide documentation | Windows 10 Pro 19045 | RTX 3080; driver 32.0.16.2124 | Ryzen 9 5900XT; 64 GB | Installed Clang 23 and isolated Python; four fixture jobs; normal OS skips; source hashes verified unchanged | final-full-suite; maintained tests/run_all.py with JUnit; game-free only | 600 passed, 25 failed, 42 skipped, 667 checks in 322.91 s. All 25 failed names match the prior topic and pinned-main controls; no new failing names. No game build or launch. |

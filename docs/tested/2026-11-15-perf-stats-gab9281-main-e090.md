@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-15 | main e090cc48 (v3.0.0-rc.4), both renderer packs over one base (`scripts/dev_packs.py`) | Linux (CachyOS, kernel 7.3.4), KDE Wayland | RTX 3060 Laptop 6 GB, 620.70.06 | Ryzen 7 6800H, 15 GB | 2048x1152, preset Auto (DLSS), no frame generation, `HOS_FPS_MAX=1000` (uncapped), `HOS_AUDIO=0` | The start: intro and title, 75 s a run, frames from 20 s on (`RX_VK_FRAME_LOG`), 3 runs interleaved with main and the PR's other side (main first each round; the PC busy and swapping, every side slower each round) | Median of 3: 127.0 fps (136.7, 127.0, 121.5), 1% low 50.7, frame time 6.46 ms (run perf-stats-main-e090) |

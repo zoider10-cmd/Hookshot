@@ -8,7 +8,7 @@
 # version), so it is always made again. It is a workflow artifact; called by release.yml with the version's name, it is
 # the release's. dav1d for the AV1 movies is not built here: it is in tools.lock's CPM cache (the cpm package), and the
 # zip's job checks that package's dav1d under Wine.
-# Every job runs on the Linux runner (ubuntu-24.04): there is no Windows one (docs/forgejo-runners.md). The setup and the
+# Every job runs on a Linux runner (label release): there is no Windows one (docs/forgejo-runners.md). The setup and the
 # Vulkan back end are cross-compiled with llvm-mingw's Linux build of tools.lock's release (scripts/builder_package.py,
 # LINUX_LLVM_MINGW), the builder (command-line only) is published for win-x64 with EnableWindowsTargeting, and the files are checked as
 # Windows files (their PE headers, resources and runtime) and started under Wine. What only a Windows PC can check is in
@@ -56,7 +56,7 @@ defaults:
 jobs:
   package:
     name: Hookshot Builder zip
-    runs-on: ubuntu-24.04
+    runs-on: release  # (a release's build: only the runners kept for them take it, docs/forgejo-runners.md)
     timeout-minutes: 30
     steps:
       - name: Check out source
@@ -75,19 +75,31 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # (llvm-objdump and llvm-readobj below read the Windows files; Wine starts them)
-      - name: Wine
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends wine64 xvfb xauth
+      # (llvm-objdump and llvm-readobj below read the Windows files; Wine starts them. Wine's apt, about 30 s, runs in the
+      # background beside the build steps that do not need it, and "Wine, installed" waits for it before the first that does.
+      # Detached (setsid, every descriptor elsewhere), so this step ends at once; its status is written last, whole, by mv)
+      - name: Wine (installed in the background)
+        run: |
+          setsid nohup bash -c 'sudo apt-get update && sudo apt-get install -y --no-install-recommends wine64 xvfb xauth
+            echo $? > "$1.tmp" && mv "$1.tmp" "$1.status"' wine "$RUNNER_TEMP/wine-apt" \
+            > "$RUNNER_TEMP/wine-apt.log" 2>&1 < /dev/null &
 
       - name: llvm-mingw version
         id: llvm
         run: echo "name=$(python -I scripts/builder_package.py llvm-mingw --name --host linux)" >> "$GITHUB_OUTPUT"
-      # (a release unpacks llvm-mingw from its checked download, not from a cache other runs write)
+      # (a release unpacks llvm-mingw, which compiles the setup and the third-party objects the zip carries, from its checked
+      # download, not from an unpacked folder a cache holds: its archive is kept, and builder_package.py checks a kept one's
+      # size and SHA-256 before it takes it. Other runs keep the unpacked folder)
       - if: env.RELEASE_TAG == ''
         uses: https://github.com/actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/llvm
           key: ${{ steps.llvm.outputs.name }}
+      - if: env.RELEASE_TAG != ''
+        uses: https://github.com/actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/llvm/.cache
+          key: ${{ steps.llvm.outputs.name }}-archive
       - name: llvm-mingw
         run: echo "LLVM_MINGW=$(python -I scripts/builder_package.py llvm-mingw "$RUNNER_TEMP/llvm" --host linux)" >> "$GITHUB_ENV"
 
@@ -126,11 +138,27 @@ jobs:
           --runtime win-x64 -p:EnableWindowsTargeting=true
           -p:Version="$VERSION" -p:NuGetAudit=false --output "$RUNNER_TEMP/publish"
 
+      # (the third-party code's objects a player's build links instead of compiling (nx2/third_party_objects.py): made with
+      # what a player's build compiles them with, llvm-mingw's same release and tools.lock's cpm (the Vulkan, SPIR-V and VMA
+      # headers). Found by their keys alone: a set that does not fit is not used)
+      # (tools.lock's downloads, the cpm package here and for dav1d below, kept for every run, a release's too: scripts/tools.py
+      # checks a kept archive's size and SHA-256 each time it takes one, and fetches it again when they differ)
+      - uses: https://github.com/actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/tools-cache
+          key: windows-tools-downloads-${{ hashFiles('tools.lock') }}
+      - name: The third-party objects
+        run: |
+          python -I scripts/tools.py install "$RUNNER_TEMP/win-tools" --system windows-x64 --only cpm --cache "$RUNNER_TEMP/tools-cache"
+          W="$RUNNER_TEMP/win-tools/HookshotBuilder/tools"
+          RX_TARGET=windows HOOKSHOT_MINGW="$LLVM_MINGW" RX_CPM="$W/cpm" \
+            python -I -B nx2/third_party_objects.py make "$RUNNER_TEMP/third_party_objects" --jobs "$(nproc)"
       # (it stops when assets/pipeline_states/, the sources of the pipeline state list every release ships, hold none or one does not read)
       - name: Package folder
         run: >-
           python -I scripts/builder_package.py package "$RUNNER_TEMP/package"
           --publish "$RUNNER_TEMP/publish" --setup "$RUNNER_TEMP/HookshotBuilder-Setup.exe"
+          --third-party-objects "$RUNNER_TEMP/third_party_objects"
       # (the release's file: the setup as HookshotBuilder.exe, the package, tools.lock, VERSION and recomplauncher.json)
       - name: The zip
         run: |
@@ -146,6 +174,14 @@ jobs:
         run: >-
           python -I scripts/check_windows_files.py --objdump "$LLVM_MINGW/bin/llvm-objdump"
           --readobj "$LLVM_MINGW/bin/llvm-readobj" "dist/HookshotBuilder-$TAG-windows-x64.zip"
+      # (the background install the Wine step started: its log, then its status; one that never ends stops here in 10 minutes)
+      - name: Wine, installed
+        run: |
+          for _ in $(seq 600); do [ -f "$RUNNER_TEMP/wine-apt.status" ] && break; sleep 1; done
+          cat "$RUNNER_TEMP/wine-apt.log"
+          [ -f "$RUNNER_TEMP/wine-apt.status" ] || { echo "::error::Wine's install did not end in 10 minutes"; exit 1; }
+          status=$(cat "$RUNNER_TEMP/wine-apt.status")
+          [ "$status" = 0 ] || { echo "::error::Wine's install failed ($status)"; exit 1; }
       # (the setup's --play of an empty folder and the builder's --cli with no Python: each says why it stops, with no
       # window and nothing downloaded. A sign that they load and their imports and .NET resolve, not a test of what
       # they do. Wine's mscoree must stay on: its loader maps .NET's IL assemblies through it. Gecko is not wanted)
@@ -190,7 +226,7 @@ jobs:
 
   vulkan:
     name: Windows Vulkan back end (llvm-mingw)
-    runs-on: ubuntu-24.04
+    runs-on: release  # (a release's build: only the runners kept for them take it, docs/forgejo-runners.md)
     timeout-minutes: 45
     steps:
       - name: Check out source
@@ -218,8 +254,8 @@ jobs:
         if: env.RELEASE_CHECKED == ''
         id: llvm
         run: echo "name=$(python -I scripts/builder_package.py llvm-mingw --name --host linux)" >> "$GITHUB_OUTPUT"
-      # (a release unpacks llvm-mingw from its checked download, not from a cache other runs write)
-      - if: env.RELEASE_CHECKED == '' && env.RELEASE_TAG == ''
+      # (kept for every run, a release's too: here llvm-mingw only builds the back end, a build check no release file carries)
+      - if: env.RELEASE_CHECKED == ''
         uses: https://github.com/actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/llvm
@@ -231,13 +267,13 @@ jobs:
           echo "HOOKSHOT_MINGW=$(python -I scripts/builder_package.py llvm-mingw "$RUNNER_TEMP/llvm" --host linux)" >> "$GITHUB_ENV"
           echo "RX_TARGET=windows" >> "$GITHUB_ENV"
       # The back end's compiled objects (nx2/build.py's object cache, vk-work/objcache: each object under the SHA-1 of its
-      # source, its flags and the headers it can see), for pull requests, as the Linux AppImage workflow keeps its own: a
-      # pull request compiles only the files its change reaches, not all of them (about 160 s here). Written after every
-      # build but a release's (a pull request's own, for its next push; main's, for every pull request). Read only by pull
-      # requests: a push to main and a release compile every object themselves. The key also names llvm-mingw (its C and
-      # C++ library headers, which the objects' own keys leave out) and this file (the pinned header checkouts above).
+      # source, its flags and the headers it can see), as the Linux AppImage workflow keeps its own: a build compiles only
+      # the files a change reaches, not all of them (about 30 s of a release's build, 160 s on a smaller runner). Read and
+      # written by every build of the back end, the nightly's and a release's too: it is a build check, which no release
+      # file carries, and the cache is the runner's own. The key also names llvm-mingw (its C and C++ library headers,
+      # which the objects' own keys leave out) and this file (the pinned header checkouts above).
       - name: Object cache key
-        if: env.RELEASE_CHECKED == '' && env.RELEASE_TAG == ''
+        if: env.RELEASE_CHECKED == ''
         id: objkey
         env:
           COMPILER: ${{ steps.llvm.outputs.name }}
@@ -246,7 +282,7 @@ jobs:
         run: |
           echo "prefix=windows-vk-objects-$COMPILER-${PINS:0:16}-" >> "$GITHUB_OUTPUT"
           echo "key=windows-vk-objects-$COMPILER-${PINS:0:16}-$SOURCES" >> "$GITHUB_OUTPUT"
-      - if: env.RELEASE_CHECKED == '' && env.RELEASE_TAG == '' && github.event_name == 'pull_request'
+      - if: env.RELEASE_CHECKED == ''
         uses: https://github.com/actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/vk-work/objcache
@@ -264,8 +300,8 @@ jobs:
           ls -l "$RUNNER_TEMP/vk-work/sa/build/hookshot_vk.dll"
       # (the object cache down to the objects this build used, as the Linux AppImage workflow prunes its own: each object
       # in sa/build/obj names its key in <obj>.sha1. Nothing goes when no stamp is found)
-      - name: Object cache for pull requests
-        if: env.RELEASE_CHECKED == '' && env.RELEASE_TAG == ''
+      - name: The object cache, down to this build's objects
+        if: env.RELEASE_CHECKED == ''
         run: |
           W="$RUNNER_TEMP/vk-work"
           shopt -s nullglob
@@ -280,7 +316,7 @@ jobs:
           done
           left=("$W"/objcache/*.o)
           echo "objcache: ${#left[@]} objects, $(du -sh "$W/objcache" | cut -f1)"
-      - if: env.RELEASE_CHECKED == '' && env.RELEASE_TAG == ''
+      - if: env.RELEASE_CHECKED == ''
         uses: https://github.com/actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/vk-work/objcache

@@ -36,14 +36,14 @@ def fixture(source):
     tabs = re.search(r"enum MenuTab \{.*?\};", menu, re.S).group()
     names = dict((member, name) for name, member in re.findall(r'\{TAB_\w+, "([^"]+)", &opts\.(\w+),', menu))
     controls = "\n".join(definition(menu, signature) for signature in (
-        "void apply_preset", "void apply_auto", "void sync_preset_budgets", "void vram_budget_sync"))
+        "void apply_preset", "void apply_auto"))
     auto_members = sorted(set(re.findall(r"opts\.(\w+)\s*=", controls)) & names.keys())
     text_functions = {
         "ultrawide": "tx_ultrawide", "output_res": "tx_output_res", "resolution": "tx_resolution",
         "dlss": "tx_upscaler", "dlss_model": "tx_dlss_model", "preset": "tx_preset", "gpu_device": "tx_gpu", "mic": "tx_mic",
     }
     # (the rows a preset sets whose texts are fixed: the built-in defaults for a Custom player Auto never chose for)
-    preset_rows = ["sharpness", "pace", "realtime", "handheld", "vram_budget"]
+    preset_rows = ["sharpness", "pace", "realtime", "handheld"]
     members = list(dict.fromkeys(["ultrawide", "output_res", "resolution", "dlss", *auto_members, *preset_rows,
                                  "framegen_by", "game_lang", "dlss_model", "gpu_device", "mic", "fov"]))
     rows = "\n".join('    {TAB_GRAPHICS, "%s", &opts.%s, 0, 100, 1, %s, nullptr},' %
@@ -99,6 +99,8 @@ bool screen_size(uint32_t* w, uint32_t* h) {
 bool host_screen_size(uint32_t* w, uint32_t* h) { return screen_size(w, h); }
 std::vector<display_modes::Size> screen_modes() { return {}; }
 int upscaler() { return opts.dlss; } // authored available engine; no backend/GPU call
+uint64_t vram; // the card's video memory, as device_vram_bytes gives it (0: not known)
+uint64_t device_vram_bytes() { return vram; }
 std::vector<std::string> gpu_device_names{"Authored GPU"};
 int mic_calls;
 struct Host { const char* (*mic_name)(int); };
@@ -117,6 +119,8 @@ int ultrawide_read = 1;
 ''' + definition(menu, "void outputs_sync") + r'''
 static bool pending_restart;
 bool restart_changed(const Row& r) { return pending_restart && r.value == &opts.output_res; }
+bool dlss_fg_forced_here = false; // RX_VK_DLSS_FG=1 fixes Frame generation by at DLSS FG (vk_dlss.cpp dlss_fg_forced)
+bool framegen_by_fixed() { return dlss_fg_forced_here; }
 ''' + policy + "\n" + known + "\n" + formatter + r'''
 int failures;
 const char* case_name;
@@ -148,7 +152,10 @@ int main(int argc, char** argv) {
         if (which == "custom-never-auto") known = {''' + custom_lines + r'''};
     } else if (which == "framegen-by") {
         opts.framegen_by = 1;
-        known = {"''' + names["framegen_by"] + r''': 1 (default: Auto)"}; // not the row's live text at Auto
+        known = {"''' + names["framegen_by"] + r''': 1 (default: 0)"}; // Built-in FG, the default DLSS FG
+    } else if (which == "framegen-by-forced") {
+        dlss_fg_forced_here = true; opts.framegen_by = 1; // RX_VK_DLSS_FG=1: nothing the player chose, whatever is saved
+        at_default = {"''' + names["framegen_by"] + r''': "};
     } else if (which == "lang-saved") {
         i18n::lang_saved = 3; opts.game_lang = 3;
         at_default = {"''' + names["game_lang"] + r''': ", "''' + names["framegen_by"] + r''': "};
@@ -175,11 +182,13 @@ int main(int argc, char** argv) {
     } else if (which == "auto-profile") {
         opts.preset = 6; opts.dlss = ur::DLSS; opts.resolution = 3;
         opts.output_res = parse_output("1920x1080"); opts.upscale = 2;
-        opts.sharpness = 50; opts.pace = 1; opts.handheld = 0; opts.vram_budget = 7;
+        opts.sharpness = 50; opts.pace = 1; opts.handheld = 0;
     } else if (which == "stable-sentinels") {
         opts.gpu_device = 1; opts.mic = 2; opts.fov = 110;
     } else if (which == "model-env" || which == "model-fixed") {
         opts.dlss_model = 1;
+    } else if (which == "model-small-card") {
+        vram = 6ull << 30; // (the K row draws CNN preset E under 7 GB: upscaler_rows.h cnn_for_vram)
     } else return 2;
     const Options before = opts;
     std::string pc;
@@ -221,6 +230,11 @@ int main(int argc, char** argv) {
         CHECK(changed.find("DLSS model: ") == std::string::npos && pc.find("DLSS model: Preset M") != std::string::npos,
               "environment-dependent model default invented");
     }
+    if (which == "model-small-card") {
+        CHECK(changed.find("DLSS model: ") == std::string::npos &&
+              pc.find("DLSS model: CNN (E) (default depends on this PC") != std::string::npos,
+              "a card under 7 GB: the report does not name the CNN preset E that draws");
+    }
     if (which == "model-fixed") {
         CHECK(changed.find("DLSS model: Transformer 2 (M) (default: Transformer (K))") != std::string::npos,
               "fixed model default not retained without override");
@@ -239,8 +253,8 @@ def main():
     parser.add_argument("--cxx", default="g++")
     args = parser.parse_args()
     cases = ("aspect-default", "reordered-shapes", "aspect-changed", "aspect-changed-wide", "output-context", "render-context",
-             "upscaler-context", "auto-profile", "custom-never-auto", "custom-after-auto", "framegen-by", "lang-saved",
-             "lang-changed", "stable-sentinels", "model-env", "model-fixed")
+             "upscaler-context", "auto-profile", "custom-never-auto", "custom-after-auto", "framegen-by", "framegen-by-forced",
+             "lang-saved", "lang-changed", "stable-sentinels", "model-env", "model-fixed", "model-small-card")
     failed = []
     with tempfile.TemporaryDirectory(prefix="report-defaults-") as tmp:
         cpp = Path(tmp) / "defaults.cpp"

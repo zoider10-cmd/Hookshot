@@ -43,7 +43,7 @@ def test_route():
     check("a host change builds the game", r(["host/hos_thread.c"]) == "game")
     check("a game patch builds the game", r(["nx2/oot_patches.py"]) == "game")
     check("a renderer file and a host file build the game (both modules)", r(["gpu/vk/vk_draw.cpp", "host/nvn_native.c"]) == "game")
-    check("the WebGPU renderer is in the game", r(["gpu/render/x.c"]) == "game")
+    check("gpu/render (the op stream host/ includes) builds the game", r(["gpu/render/x.h"]) == "game")
     check("a build script builds the game", r(["nx2/build.py"]) == "game")
     check("docs and tests build nothing", r(["docs/development.md", "tests/test_a.py", "README.md"]) is None)
     check("a renderer shader and its generated header build the renderer alone (only the renderer is kept)",
@@ -200,8 +200,8 @@ def test_guards(d):
 
 
 def test_pack_folders(d):
-    """The lift key hashes the work and game folders' paths (make_game passes them to the lift as OOT_WORK and OOT_DUMP): a game
-    pack reuses a translation only when every pack of a base builds in the same two folders"""
+    """Every pack of a base builds in the same two folders, so a game pack after the first finds the translation there. The lift
+    key leaves the folders' paths out (make_game.py LIFT_PATH_ENV): the same in another folder"""
     f = packs.pack_folders(str(d))
     check("the same folders for every pack", f == packs.pack_folders(str(d)) and not f["game_work"].startswith(os.path.join(str(d), "packs")))
     exefs, work, out = d / "exefs", Path(f["game_work"]), Path(f["game_out"])
@@ -209,8 +209,8 @@ def test_pack_folders(d):
     env = lambda w, o: {"OOT_WORK": str(w), "OOT_DUMP": str(o), "RX_RELEASE": "1", "A64_HOT_CHUNK": "1"}
     key = make_game.lift_key(str(exefs), str(work), env(work, out))
     check("the key is the same in the same folders", key == make_game.lift_key(str(exefs), str(work), env(work, out)))
-    check("...and differs in another (why packs share one folder)",
-          key != make_game.lift_key(str(exefs), str(d / "other"), env(d / "other", out)))
+    check("...and in another (the folders' paths are not in it)",
+          key == make_game.lift_key(str(exefs), str(d / "other"), env(d / "other", out)))
     base = d / "base-work"
     write(base / "objcache" / "ab" / "abcdef.o", b"object")
     write(base / "system_headers.txt", b"headers")
@@ -626,6 +626,40 @@ def test_busy(d):
     check("the other job's marker is untouched", (base_dir / packs.BUSY).read_text() == "1234 pack 2026-11-12T12:00:00Z")
 
 
+def test_busy_folders_above_hidden(d):
+    """The Beanstalk agent's Windows sandbox may open the base's folder but not see the folders above it (they look missing,
+    and making one is refused): taking and leaving the busy marker, and adopting into the folder, still work"""
+    base = (d / "granted" / "base").resolve()
+    base.mkdir(parents=True)
+    real_exists, real_isdir, real_mkdir = os.path.exists, os.path.isdir, os.mkdir
+
+    def inside(p):
+        p = os.path.abspath(p)
+        return p == str(base) or p.startswith(str(base) + os.sep)
+
+    def exists(p):
+        return real_exists(p) if inside(p) else False
+
+    def isdir(p):
+        return real_isdir(p) if inside(p) else False
+
+    def mkdir(p, *args, **kwargs):
+        if not inside(p):
+            raise PermissionError(13, "Access is denied", p)
+        return real_mkdir(p, *args, **kwargs)
+
+    os.path.exists, os.path.isdir, os.mkdir = exists, isdir, mkdir
+    try:
+        with packs.Busy(str(base), "pack"):
+            check("the marker is taken", real_exists(base / packs.BUSY))
+        packs.ensure_dir(str(base))
+        packs.ensure_dir(str(base / "new"))
+    finally:
+        os.path.exists, os.path.isdir, os.mkdir = real_exists, real_isdir, real_mkdir
+    check("and left", not (base / packs.BUSY).exists())
+    check("a folder inside is still made", (base / "new").is_dir())
+
+
 def main():
     test_route()
     test_renderer_files_the_game_reads()
@@ -635,7 +669,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="hookshot-dev-packs-") as d:
         d = Path(d)
         for name, t in (("mc", test_module_changed), ("pf", test_pack_folders), ("rt", test_generated_and_runtime),
-                        ("guard", test_guards), ("inside", test_resolves_inside), ("predict", test_predict_budget), ("outputs", test_outputs_before_prepare), ("prepare", test_prepare_outcomes), ("seed", test_seed), ("warm", test_warm), ("busy", test_busy),
+                        ("guard", test_guards), ("inside", test_resolves_inside), ("predict", test_predict_budget), ("outputs", test_outputs_before_prepare), ("prepare", test_prepare_outcomes), ("seed", test_seed), ("warm", test_warm), ("busy", test_busy), ("hidden", test_busy_folders_above_hidden),
                         ("stamp", test_stamp_matches_build)):
             (d / name).mkdir()
             t(d / name)

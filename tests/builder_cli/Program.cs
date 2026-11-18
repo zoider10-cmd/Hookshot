@@ -42,8 +42,8 @@ static class Program
         Require(Env(info, "PYTHONIOENCODING") == "utf-8", "make_game.py must write UTF-8.");
         Require(Env(info, "HOOKSHOT_BUILDER_EXE") == Environment.ProcessPath, "The game folder's builder= must name this program.");
         Require(Env(info, "HOOKSHOT_SETUP_BASE") == BuilderHome.Base, "The builder's home was not passed on.");
-        Require(Env(info, "HOOKSHOT_NGX_SDK") == null && Env(info, "HOOKSHOT_FFX_SDK") == null,
-            "An SDK folder set on the PC must not reach the build: DLSS and FSR only when its arguments ask.");
+        Require(Env(info, "HOOKSHOT_NGX_SDK") == null && Env(info, "HOOKSHOT_FFX_SDK") == null && Env(info, "HOOKSHOT_XESS_SDK") == null,
+            "An SDK folder set on the PC must not reach the build: DLSS, FSR and XeSS only when its arguments ask.");
         foreach (var key in new[] { "HOOKSHOT_JOBS", "HOOKSHOT_MEM_LIMIT_GB" })
             Require(Env(info, key) == Environment.GetEnvironmentVariable(key), key + " must be passed on as inherited.");
     }
@@ -76,8 +76,8 @@ static class Program
         if (args.Length is < 1 or > 2) throw new Exception("Pass the Python executable for the authored child.");
         var emptyParent = args.Length == 2 && args[0] == "--empty-parent";
         var python = Path.GetFullPath(args[^1]);
-        var saved = new[] { "HOOKSHOT_JOBS", "HOOKSHOT_MEM_LIMIT_GB", "HOOKSHOT_NGX_SDK", "HOOKSHOT_FFX_SDK", "HOOKSHOT_SETUP_BASE",
-                            "HOOKSHOT_BUILDER_PORTABLE" }.ToDictionary(k => k, Environment.GetEnvironmentVariable);
+        var saved = new[] { "HOOKSHOT_JOBS", "HOOKSHOT_MEM_LIMIT_GB", "HOOKSHOT_NGX_SDK", "HOOKSHOT_FFX_SDK", "HOOKSHOT_XESS_SDK",
+                            "HOOKSHOT_SETUP_BASE", "HOOKSHOT_BUILDER_PORTABLE" }.ToDictionary(k => k, Environment.GetEnvironmentVariable);
         var root = Path.Combine(Path.GetTempPath(), "hookshot-builder-cli-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "nx2"));
         Environment.SetEnvironmentVariable("HOOKSHOT_SETUP_BASE", root);
@@ -88,7 +88,8 @@ static class Program
             // This is authored test content, not the real pipeline, game files or a compiler invocation.
             File.WriteAllText(Path.Combine(root, "nx2", "make_game.py"), """
                 import json, os, sys
-                keys = ('HOOKSHOT_JOBS', 'HOOKSHOT_MEM_LIMIT_GB', 'HOOKSHOT_NGX_SDK', 'HOOKSHOT_FFX_SDK', 'HOOKSHOT_SETUP_BASE')
+                keys = ('HOOKSHOT_JOBS', 'HOOKSHOT_MEM_LIMIT_GB', 'HOOKSHOT_NGX_SDK', 'HOOKSHOT_FFX_SDK', 'HOOKSHOT_XESS_SDK',
+                        'HOOKSHOT_SETUP_BASE')
                 print(json.dumps({'argv': sys.argv[1:], 'jobs': os.environ.get('HOOKSHOT_JOBS'),
                                   'env': {k: os.environ.get(k) for k in keys}}), flush=True)
                 if '--authored-fail' in sys.argv:
@@ -116,6 +117,7 @@ static class Program
             };
             Environment.SetEnvironmentVariable("HOOKSHOT_NGX_SDK", Path.Combine(root, "authored ngx"));
             Environment.SetEnvironmentVariable("HOOKSHOT_FFX_SDK", Path.Combine(root, "authored ffx"));
+            Environment.SetEnvironmentVariable("HOOKSHOT_XESS_SDK", Path.Combine(root, "authored xess"));
             foreach (var inherited in new string?[] { null, "4", "0", "not a number" })
             {
                 Environment.SetEnvironmentVariable("HOOKSHOT_JOBS", inherited);
@@ -132,7 +134,8 @@ static class Program
                 var env = value.GetProperty("env");
                 Require(env.GetProperty("HOOKSHOT_JOBS").GetString() == inherited && env.GetProperty("HOOKSHOT_MEM_LIMIT_GB").GetString() == inherited,
                     "The inherited build workers or memory did not reach the child unchanged.");
-                Require(env.GetProperty("HOOKSHOT_NGX_SDK").ValueKind == JsonValueKind.Null && env.GetProperty("HOOKSHOT_FFX_SDK").ValueKind == JsonValueKind.Null,
+                Require(env.GetProperty("HOOKSHOT_NGX_SDK").ValueKind == JsonValueKind.Null && env.GetProperty("HOOKSHOT_FFX_SDK").ValueKind == JsonValueKind.Null
+                    && env.GetProperty("HOOKSHOT_XESS_SDK").ValueKind == JsonValueKind.Null,
                     "An SDK folder set on the PC reached the child.");
                 Require(env.GetProperty("HOOKSHOT_SETUP_BASE").GetString() == root, "The builder's home did not reach the child.");
             }

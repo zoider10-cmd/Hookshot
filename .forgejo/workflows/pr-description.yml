@@ -1,5 +1,6 @@
 # A pull request's description must follow the template (.forgejo/pull_request_template.md, CONTRIBUTING.md "Commits and
-# pull requests"): Why and Measurements filled in, the Before/After commits and table, every "For everyone" box ticked.
+# pull requests"): the status line, every section filled in, the measurements named by commit, every "Everyone" box
+# ticked (the rules: the opening comment of scripts/check_pr_description.py).
 # A PR in work in progress (WIP: or [WIP] at the start of the title) passes with a notice: it is checked once it is
 # marked ready. `forge.py pr ready` runs the same check before it takes the WIP: off. Only the description is read, from
 # the API, with main's script: the pull request's code is never checked out, so pull_request_target, which also runs

@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-13 | game v3.0.0-rc.3-15-gfbd42024 (main fbd42024, `host/nn_hid.c` as main 514591a3) | Windows 11 Pro 26300, a window that never takes focus (`-Window`) | RTX 3080 10 GB, 621.14 | i9-12900K, 64 GB | Default; `HOS_INPUT_SCRIPT_BACKGROUND=1`, `HOS_INPUT_LIVE`, `HOS_SKIP_OPENING=1`, no `HOS_INPUT_EXCLUSIVE` | The test save, in play, the window behind others; the user pressed Enter in other windows and typed in a chat | 3 pauses and unpauses (`control: state play -> menu`), Link jumped and moved while the user typed elsewhere (run main) |

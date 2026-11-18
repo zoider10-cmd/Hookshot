@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-15 | fix/vk-ptl-native-fadd over main 53f96d78 (dev_packs runtime, renderer pack), A/B with main 53f96d78 | Windows 11 Insider 26220 | Intel Arc B390 (Panther Lake iGPU, 0xB080, no VRAM mirror) / 32.0.101.9150 | Intel Core Ultra X7 358H / 32 GB | Auto (this PC) preset, defaults, RX_VK_NO_INTEL_SERIAL=1 | Kokiri Forest: Saria by Link's house, 4 interleaved runs (main, fix, main, fix), 1-2 min each | Float adds native by default; the haze of issue 618 gone in both fix runs and present in both main runs (screen linear mean 0.205 against 0.778, medians of 2); no device loss; run02 |

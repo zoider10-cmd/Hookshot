@@ -52,11 +52,12 @@ def main():
     # (an ask that compiles nothing never waits behind a worker's compile: it is answered cold, HumanBean's review of #252)
     need("std::try_to_lock" in gate and "busy = !hold.owns_lock();" in gate, "an ask waits for the lock")
     menu = (ROOT / "gpu/vk/vk_menu.cpp").read_text(encoding="utf-8")
-    need("bool intel_compiles_side_by_side() { return opts.intel_compiles != 0; }" in menu,
-         "the lock does not read the Intel shader compiles row")
-    need('if (const char* e = getenv("RX_VK_NO_INTEL_SERIAL")) env_override(&opts.intel_compiles, !env_value_off(e));'
+    side = block(menu, "bool intel_compiles_side_by_side() {")
+    need("return intel_side_by_side_chosen(opts.intel_compiles, dev.props.deviceID, dev.props.driverVersion);" in side,
+         "the lock does not read the Intel shader compiles row (its Auto with the GPU and the driver: intel_compiles.h)")
+    need('if (const char* e = getenv("RX_VK_NO_INTEL_SERIAL")) env_override(&opts.intel_compiles, env_value_off(e) ? 2 : 1);'
          in block(menu, "void menu_init() {"), "RX_VK_NO_INTEL_SERIAL does not turn the lock off")
-    need('{TAB_DEBUG, "Intel shader compiles", &opts.intel_compiles, 0, 1, 1, tx_intel_compiles,' in menu,
+    need('{TAB_DEBUG, "Intel shader compiles", &opts.intel_compiles, 0, 2, 1, tx_intel_compiles,' in menu,
          "no Intel shader compiles row")
     shown = block(menu, "bool intel_compiler_row() {")
     need("#ifdef _WIN32" in shown and "dev.props.vendorID == 0x8086" in shown, "the row shows where the lock never holds")
@@ -89,7 +90,7 @@ def main():
     # prepared pipeline is had at once, and left to the worker, not waited for, while a worker holds it. Its code is looked
     # at under the cache's lock once the CAS is won, not before)
     dispatch = draw[draw.index("bool on_worker = false;"):]
-    dispatch = dispatch[:dispatch.index("jobs_push_serial")]
+    dispatch = dispatch[:dispatch.index("if (serial) jobs_push_serial(std::move(build)")]
     need("(program_cache_complete_ask(p, &on_worker) || on_worker ||" in dispatch and "if (!program_cache_complete(q))" in dispatch,
          "on Intel a dispatch waits for the gate to make its module on the replay thread")
     need("code_words" not in dispatch, "the dispatch reads a program's code_words before its CAS is won")

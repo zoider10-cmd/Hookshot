@@ -2,12 +2,15 @@
 // Only these are published; other notes stay on Forgejo until they are added here.
 export const contentPages: Record<string, string> = {
   'install': 'docs/getting-started.md',
+  'install/steam-deck': 'docs/steam-deck-playbook.md',
   'settings': 'docs/graphics-and-controls.md',
   'tested-configurations': 'docs/tested-configurations.md',
   'saves': 'docs/updates-and-saves.md',
   'saves/transfer': 'docs/saves.md',
+  'mods': 'docs/using-mods.md',
   'help': 'docs/common-issues.md',
   'help/report': 'docs/reporting-and-contributing.md',
+  'help/performance': 'docs/performance-report.md',
   'contributing': 'CONTRIBUTING.md',
 };
 

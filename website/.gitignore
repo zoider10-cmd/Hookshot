@@ -5,3 +5,5 @@ dist/
 public/assets/
 public/branding/
 .wrangler/
+# Guide screenshots copied unchanged from docs/images/guide/.
+public/docs/images/guide/

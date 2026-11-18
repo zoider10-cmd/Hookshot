@@ -20,11 +20,14 @@
 
 #include "dlss_math.h"
 #include "temporal_jitter.h"
+#include "upscaler_rows.h"
 #include "vk_draw.h"   // (descriptors_disturbed)
 #include "vk_fsr3.h"
 #include "vk_fsr3fi.h"
+#include "vk_menu.h"
 #include "vk_texture.h"
 
+#include "vk_builtin_spv.h"   // (RX_VK_SHADER_DIR)
 #include "shaders/fsr3_prep_comp_spv.h"
 #include "vk_work.h"   // (after the others: counts the commands that do GPU work, for full_barrier)
 
@@ -69,15 +72,22 @@ struct State {
     float last_vp[16]{};      // (the frame before's view-projection, and its jitter)
     float last_jitter[2]{};
     uint64_t last_frame = 0;  // (the frame prepare last ran, 0: none)
+    VkFormat last_format = VK_FORMAT_UNDEFINED;
+    bool last_psycho = false;
     std::chrono::steady_clock::time_point last_time{};
     Frame frame;              // (the last one prepared: take())
     bool have_frame = false;
     TemporalJitter jitter;
-    struct Dead { uint64_t frame; std::function<void()> free; };
+    // (value: vk_retirement_value when let go. The frames counted are the replay's: with no window (HOS_HEADLESS, as test runs
+    // use) nothing waits for the present ring, and only the 48-slot recording ring bounds how far behind the GPU is, many frames
+    // when a frame has few recordings, so 4 frames on did not prove the GPU done with it. Freed once both have passed; never at 0)
+    struct Dead { uint64_t frame; uint64_t value; std::function<void()> free; };
     std::vector<Dead> dead;   // (what work in flight may still use: freed a few frames on)
     const char* reason = nullptr;
     int reason_repeats = 0;
     bool told = false;
+    bool told_chain = false;  // (take_motion's line, once)
+    std::atomic<uint64_t> taken{0};   // (take_motion's copies, for frame interpolation's log: motions_taken)
 };
 State& st() {
     static State s;
@@ -91,12 +101,12 @@ bool fail(const char* why) {   // (why, when it changes and every 600th time)
     return false;
 }
 
-void later(std::function<void()> f) { st().dead.push_back({texture_frame_no(), std::move(f)}); }
+void later(std::function<void()> f) { st().dead.push_back({texture_frame_no(), vk_retirement_value(), std::move(f)}); }
 void free_dead() {
     State& s = st();
-    const uint64_t now = texture_frame_no();
+    const uint64_t now = texture_frame_no(), done = vk_timeline_completed();
     for (size_t i = 0; i < s.dead.size();) {
-        if (now - s.dead[i].frame > 4) {
+        if (now - s.dead[i].frame > 4 && s.dead[i].value && done >= s.dead[i].value) {
             s.dead[i].free();
             s.dead[i] = std::move(s.dead.back());
             s.dead.pop_back();
@@ -119,7 +129,8 @@ bool make_image(VkCommandBuffer cmd, Image& im, VkFormat format, uint32_t w, uin
     VkImageCreateInfo ic{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     ic.imageType = VK_IMAGE_TYPE_2D, ic.format = format, ic.extent = {w, h, 1}, ic.mipLevels = 1, ic.arrayLayers = 1;
     ic.samples = VK_SAMPLE_COUNT_1_BIT, ic.tiling = VK_IMAGE_TILING_OPTIMAL;
-    ic.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    // (TRANSFER_DST: the chain's motion copied over this one's, take_motion)
+    ic.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     if (!create_image(ic, im.image, im.memory)) return im = {}, false;
     VkImageViewCreateInfo vc{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     vc.image = im.image, vc.viewType = VK_IMAGE_VIEW_TYPE_2D, vc.format = format;
@@ -160,7 +171,8 @@ bool make_pipeline() {
     pi.setLayoutCount = 1, pi.pSetLayouts = &s.set, pi.pushConstantRangeCount = 1, pi.pPushConstantRanges = &pr;
     if (vkCreatePipelineLayout(dev.device, &pi, nullptr, &s.layout) != VK_SUCCESS) return false;
     VkShaderModuleCreateInfo mi{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-    mi.codeSize = sizeof FSR3_PREP_COMP_SPV, mi.pCode = FSR3_PREP_COMP_SPV;
+    const auto spv = BUILTIN_SPV(FSR3_PREP_COMP_SPV);
+    mi.codeSize = spv.size, mi.pCode = spv.code;
     VkShaderModule m = VK_NULL_HANDLE;
     VkResult r;
     {
@@ -211,12 +223,23 @@ VkImageView depth_view(Texture* t) {
 
 } // namespace
 
-bool wanted() { return fsr3_wanted() || fsr3fi::frames_wanted() != 0; }
+bool wanted() { return fsr3_wanted() || fsr3fi::motion_wanted() != 0; }
+
+bool scene_format(VkFormat format) {
+    if (format == VK_FORMAT_B10G11R11_UFLOAT_PACK32) return true;
+    static const bool enabled = upscaler_rows::psychov35_compatibility(env_switch("RX_VK_PSYCHOV35_DLSS"));
+    // (frame interpolation at any multiplier and at Auto: frames_wanted says whether Frame generation is on and asks for it)
+    return enabled && format == VK_FORMAT_R16G16B16A16_SFLOAT && scene_tonemap_on() && fsr3fi::motion_wanted() != 0;
+}
+
+bool colour_pair(VkFormat input, VkFormat output) {
+    return input == output && scene_format(input);
+}
 
 void note_scene_draw(const Texture* color0, uint32_t width, uint32_t height, Texture* depth, uint64_t camera,
                      uint64_t camera_size) {
     if (!color0 || !depth || !camera || camera_size < 0x230 || width < 640 || height < 360) return;
-    if (color0->format != VK_FORMAT_B10G11R11_UFLOAT_PACK32 || !wanted()) return;
+    if (!scene_format(color0->format) || !wanted()) return;
     State& s = st();
     std::lock_guard lk(s.mu);
     const uint64_t now = texture_frame_no();
@@ -251,6 +274,7 @@ bool prepare(VkCommandBuffer cmd, Texture* in, VkImageView in_view, Frame& out) 
     const Camera cam = s.cam;
     s.cam.valid = false;   // (each frame's own camera)
     if (!in || !in_view) return fail("no input view");
+    if (!scene_format(in->format)) return fail("unexpected scene colour format");
     const uint64_t now = texture_frame_no();
     if (!cam.valid || now - cam.frame > 1) return fail("no scene camera this frame");
     if (cam.depth_gen != texture_destroy_generation()) return fail("the scene depth may be gone");
@@ -275,7 +299,9 @@ bool prepare(VkCommandBuffer cmd, Texture* in, VkImageView in_view, Frame& out) 
         !make_image(cmd, s.motion, VK_FORMAT_R16G16_SFLOAT, rw, rh))
         return fail("its images were not made");
 
-    bool reset = !s.last_frame || now - s.last_frame > 2 || s.frame.width != rw || s.frame.height != rh;
+    const bool psycho = scene_tonemap_on();
+    bool reset = !s.last_frame || now - s.last_frame > 2 || s.frame.width != rw || s.frame.height != rh ||
+                 s.last_format != in->format || s.last_psycho != psycho;
     struct {
         float reproject[16];
         float jitter[2];
@@ -328,6 +354,7 @@ bool prepare(VkCommandBuffer cmd, Texture* in, VkImageView in_view, Frame& out) 
     s.frame = f, s.have_frame = true;
     s.last_time = t;
     s.last_frame = now;
+    s.last_format = in->format, s.last_psycho = psycho;
     std::memcpy(s.last_vp, cam.current, sizeof s.last_vp);
     s.last_jitter[0] = cam.jitter[0], s.last_jitter[1] = cam.jitter[1];
     if (s.reason) logf("vk: fsr3 inputs: made again (frame %llu)", (unsigned long long)now);
@@ -352,6 +379,41 @@ bool take(Frame& out) {
     if (have) out = s.frame;
     return have;
 }
+
+bool take_motion(VkCommandBuffer cmd, VkImage motion, uint32_t width, uint32_t height) {
+    State& s = st();
+    std::lock_guard lk(s.mu);
+    // (this frame's inputs, made at this dispatch, at the chain's size, with a frame before: the chain's then has one too)
+    if (!motion || !s.have_frame || s.frame.frame != texture_frame_no() || s.frame.reset || s.frame.width != width ||
+        s.frame.height != height || !s.motion.image)
+        return false;
+    const auto barrier = [cmd](VkPipelineStageFlags2 src, VkAccessFlags2 src_access, VkPipelineStageFlags2 dst,
+                               VkAccessFlags2 dst_access) {
+        VkMemoryBarrier2 b{VK_STRUCTURE_TYPE_MEMORY_BARRIER_2};
+        b.srcStageMask = src, b.srcAccessMask = src_access, b.dstStageMask = dst, b.dstAccessMask = dst_access;
+        VkDependencyInfo di{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+        di.memoryBarrierCount = 1, di.pMemoryBarriers = &b;
+        vkCmdPipelineBarrier2(cmd, &di);
+    };
+    // (the chain's motion written by its prep pass and its actor draws; this one's by fsr3_prep.comp)
+    barrier(VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT);
+    const VkImageCopy c{{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {0, 0, 0}, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {0, 0, 0},
+                        {width, height, 1}};
+    vkCmdCopyImage(cmd, motion, VK_IMAGE_LAYOUT_GENERAL, s.motion.image, VK_IMAGE_LAYOUT_GENERAL, 1, &c);
+    barrier(VK_PIPELINE_STAGE_2_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_TRANSFER_READ_BIT);
+    s.taken.fetch_add(1, std::memory_order_relaxed);
+    if (!s.told_chain) {
+        s.told_chain = true;
+        logf("vk: fsr3 inputs: the temporal chain's motion (the skinned draws' own in it) in place of the camera's alone, "
+             "%ux%u (frame %llu)", width, height, (unsigned long long)s.frame.frame);
+    }
+    return true;
+}
+
+uint64_t motions_taken() { return st().taken.load(std::memory_order_relaxed); }
 
 void upscaled(uint32_t rw, uint32_t rh, uint32_t dw, uint32_t dh) {
     State& s = st();

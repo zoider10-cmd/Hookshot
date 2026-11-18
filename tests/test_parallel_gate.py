@@ -44,7 +44,7 @@ def main():
     internal = (vk / "vk_internal.h").read_text(encoding="utf-8")
 
     # (off unless RX_VK_PARALLEL asks: the gate does not turn it on)
-    threads = block(replay, "int par_threads()")
+    threads = block(replay, "int par_threads() {")   # (with its body: vk_replay.cpp declares it first, above occ_copy_wanted)
     if 'getenv("RX_VK_PARALLEL") ? atoi(getenv("RX_VK_PARALLEL")) : 0' not in threads:
         raise SystemExit("vk_replay.cpp: par_threads is no longer off unless RX_VK_PARALLEL is set")
     if 'getenv("RX_VK_PARALLEL_MIN")' not in block(replay, "int64_t par_min_work()") or ": 700;" not in block(replay, "int64_t par_min_work()"):

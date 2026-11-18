@@ -1,7 +1,7 @@
 # Saves: the files, the script and the emulators
 
 The details behind [moving your saves](saves.md): the save files, where Hookshot, Hookshot and every emulator keep them,
-`scripts/oot_saves.py` (the command line that does what the launcher's Saves page does, and more), copying by hand,
+`scripts/hookshot_saves.py` (the command line that does what the launcher's Saves page does, and more), copying by hand,
 and what was tested. Most players only need the launcher: see [moving your saves](saves.md).
 
 Hookshot, Hookshot and the supported emulators use the same save-file layout, so a transfer copies the files without
@@ -34,15 +34,15 @@ saves in `<folder>/save/<user id>/` instead.
 
 ## The script
 
-`scripts/oot_saves.py` needs Python 3 and nothing else. Run it from the Hookshot folder (or a clone):
+`scripts/hookshot_saves.py` needs Python 3 and nothing else. Run it from the Hookshot folder (or a clone):
 
 ```sh
-python -I scripts/oot_saves.py list              # every save it finds, its slots and when each was saved
-python -I scripts/oot_saves.py import hookshot   # Hookshot -> Hookshot
-python -I scripts/oot_saves.py import lichii     # Lichii -> Hookshot
-python -I scripts/oot_saves.py export lichii     # Hookshot -> Lichii
-python -I scripts/oot_saves.py import --from ~/Downloads/my-save   # any folder holding a save -> Hookshot
-python -I scripts/oot_saves.py export --to ~/Lichii/user           # Hookshot -> a portable emulator
+python -I scripts/hookshot_saves.py list              # every save it finds, its slots and when each was saved
+python -I scripts/hookshot_saves.py import hookshot   # Hookshot -> Hookshot
+python -I scripts/hookshot_saves.py import lichii     # Lichii -> Hookshot
+python -I scripts/hookshot_saves.py export lichii     # Hookshot -> Lichii
+python -I scripts/hookshot_saves.py import --from ~/Downloads/my-save   # any folder holding a save -> Hookshot
+python -I scripts/hookshot_saves.py export --to ~/Lichii/user           # Hookshot -> a portable emulator
 ```
 
 `import` copies into Hookshot, `export` copies out of it. The names are `hookshot`, `lichii`, `frizti` (or `fritchii`),
@@ -51,7 +51,7 @@ python -I scripts/oot_saves.py export --to ~/Lichii/user           # Hookshot ->
 On Windows, a game folder other than `%USERPROFILE%\Games\Hookshot` has to be named:
 
 ```powershell
-python -I scripts\oot_saves.py import lichii --hookshot "D:\Games\Hookshot"
+python -I scripts\hookshot_saves.py import lichii --hookshot "D:\Games\Hookshot"
 ```
 
 | Option | What it does |
@@ -88,7 +88,7 @@ in the same layout, with the same user id, so a Hookshot save carries on in Hook
 for byte.
 
 ```sh
-python -I scripts/oot_saves.py import hookshot
+python -I scripts/hookshot_saves.py import hookshot
 ```
 
 It looks for Hookshot's save in:
@@ -163,13 +163,80 @@ its folder.
 
 Backups pile up, one per copy: delete old ones from `oot-save-backups` when you no longer need them.
 
+## Saves in the repository
+
+A few saves live in the repository, under [`assets/saves/`](../assets/saves/README.md), so the Test Farm, the tests and
+everyone can start a run from the same spot: `python -I scripts/hookshot_ctl.py launch <game folder> --repo-save
+<name>` ([control](control.md#saves)). They are the one exception to the rule in
+[CONTRIBUTING.md](../CONTRIBUTING.md#the-rule-with-no-exceptions), and the rules are on that page: made fresh for the
+farm, scrubbed, only `progress.sav` and `caption.sav` of one slot (never `account.sav` or `option.sav`: the game makes
+them), checked, and added by a pull request two maintainers approve.
+
+### Making one
+
+1. Start the game with a new, empty profile (`--user` with a new folder, or an empty `XDG_DATA_HOME` on Linux), start
+   a new file, play to where the save is needed, save and quit.
+2. Scrub that slot into the repository:
+
+   ```sh
+   python -I scripts/hookshot_saves.py scrub <the profile's save folder> --slot 00 --out assets/saves/<name>
+   ```
+
+   `<name>` is a-z, 0-9 and `-`. It writes `slot_00/progress.sav`, `slot_00/caption.sav` and a `README.md` to fill in
+   (its first line says where the save stands), and prints every change it made. Nothing is written when a step fails.
+
+   Without Python, the website's [save scrubber](https://hookshot.magicbean.dev/saves/scrub/) does the same in the
+   browser (the files are not uploaded) and gives the folder back as a zip: the same bytes, held to this script's
+   output by `website/tests/save-scrub.test.ts`.
+3. `python -I scripts/hookshot_saves.py check-repo-saves` must pass. Then open the pull request, saying how the save was made.
+
+### What scrub changes
+
+- **The picture → grey.** `caption.sav`'s JPEG (the Load screen's picture, 543x306) becomes a plain mid-grey JPEG of
+  the same size, written by the script (baseline, YCbCr 4:2:0, the standard tables, every block one value), and the
+  JPEG's length in the header with it.
+- **The date → 2026-01-01 00:00.** The Load screen's date and time come from `caption.sav`'s header, not from the
+  files' modification times. Part of that header is a list of 8-byte entries, a 32-bit little-endian key (a hash) and a
+  32-bit little-endian value. Six of them are the date: year `0x9811a3f7`, month `0xdfd840d3`, day `0xbd46f485`, hour
+  `0x23f3d75e`, minute `0x27853bf7`, second `0x5ee50bed` (none of them occurs in `progress.sav`). Scrub finds each by its
+  key, which must be there exactly once before offset 1392 and on the same 8-byte grid as the others, sets it to
+  2026-01-01 00:00:00 and prints each change (`caption.sav: the save date (month at 280): 11 -> 1`). It refuses,
+  writing nothing, when a key is missing or repeated. It also sets both files' modification times to the same moment,
+  so the files themselves say nothing about when they were made.
+- **The rest of the header stays:** the scene's and map's names, the hearts (`0x1e55ecc5` looks like the current health
+  in quarter hearts) and everything else.
+- **No player name exists.** The Load screen shows each slot's picture, date and time, place, hearts and "Autosave",
+  and no name, so there is none to scrub. `--name-field progress.sav:OFFSET:LENGTH[:ascii|utf16le]` stays for a field
+  found later.
+- **No `account.sav` or `option.sav`.** They are never shipped: a slot folder alone in an empty data folder loads
+  (title, Load, gameplay), and the game then makes both itself. A first boot with no saves writes no files at all.
+- `progress.sav` is copied otherwise unchanged, from a slot renamed `slot_00`.
+
+Tested with a real save and the real game on 2026-11-14 (the AMD lab PC): the scrubbed slot shows a plain grey picture
+and loads, from a data folder that held only that slot.
+
+`caption.sav`'s layout is taken from `host/control.c` (`caption_json`) and from every `caption.sav` looked at so far (12
+files from Hookshot and Hookshot): the magic `04 03 02 01`; the scene's and the map's names at 684 and 748; a 32-bit
+little-endian 1392 at 540; the JPEG's length, 32-bit little-endian, at 1392; the JPEG from 1396 to the end of the file.
+No other field in the header holds the JPEG's length or the file's size. Scrub refuses a file laid out any other way,
+and `check-repo-saves` does too.
+
+### check-repo-saves
+
+`python -I scripts/hookshot_saves.py check-repo-saves [DIR]` (default: this checkout's `assets/saves`) passes only when:
+the folder holds `README.md` and save folders named a-z, 0-9 and `-`, each exactly `README.md` (a first line, not the
+template's) and `slot_00/` with `progress.sav` and `caption.sav`; there is no `_profile/` folder and no `account.sav`
+or `option.sav` anywhere; nothing is a link; no file is empty or over its cap (`progress.sav` 512 KB, `caption.sav`
+16 KB, `README.md` 16 KB); and every `caption.sav` has the layout above with a flat mid-grey picture (its JPEG read to
+every block's coefficients: all of them 0) and its six date fields reading 2026-01-01 00:00:00. `tests/test_hookshot_saves.py` runs it on made-up saves.
+
 ## What was tested
 
 - Linux (Arch-based), Hookshot v2.0.5 and Lichii built from source on the same day.
 - A Hookshot save copied to Lichii loads in Lichii at the same spot (Kokiri Forest, the spawn by the flower patch).
 - A Lichii save copied to Hookshot arrives identical, but has not been played through on the Hookshot side.
 - The script's discovery for every program above, its copies, backups and checks are covered by
-  `tests/test_oot_saves.py`, on temporary folders with made-up saves.
+  `tests/test_hookshot_saves.py`, on temporary folders with made-up saves.
 - **Not tested:** Windows, every emulator but Lichii, and a Hookshot save played on in Hookshot. That one rests on the
   code: Hookshot's save code is Hookshot's, unchanged by the rename (the same user id and folder layout, and the files
   are the game's own). The emulators' folders come from their source or, for NX2navi, its documentation.

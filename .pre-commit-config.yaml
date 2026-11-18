@@ -1,0 +1,49 @@
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+        exclude: ^scripts/(cpu_candidates|cpu_functions)\.json$
+      - id: end-of-file-fixer
+        exclude: ^(third_party/|gpu/third_party/|gpu/vk/sirit/|website/public/fonts/)
+      - id: trailing-whitespace
+        exclude: ^(third_party/|gpu/third_party/|gpu/vk/sirit/|website/public/fonts/)
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.22.1
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    # v4.5.0
+    rev: 33b50eb042bee26eac0ee96ad84aa9c1b4dccdd8
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          - feat
+          - fix
+          - perf
+          - refactor
+          - docs
+          - test
+          - ci
+          - build
+          - chore
+          - revert
+  - repo: local
+    hooks:
+      # manual until magicbeandev/ci@0.1.0 is published (hook needs the registry orb).
+      - id: circleci-config-validate
+        name: circleci config validate
+        stages: [manual]
+        entry: bash -c 'MB_ORB_DIR="${MB_ORB_DIR:?}"; bash "$MB_ORB_DIR/tools/validate.sh" "$(git rev-parse --show-toplevel)"'
+        language: system
+        pass_filenames: false
+      - id: shellcheck-ci-scripts
+        name: ShellCheck (ci and packaging scripts)
+        entry: bash -c 'shellcheck -x -S error "$@"' --
+        language: system
+        types: [shell]
+        files: ^(ci/|scripts/(linux|windows)/).*\.sh$

@@ -1,4 +1,4 @@
-"""The mouse's sensitivity and inversion are the Insert menu's (options 7 and 8), and - and = change the menu's value.
+"""The mouse's sensitivity and inversions are the Insert menu's (options 7, 8 and 61), and - and = change the menu's value.
 
 Reads the sources: the menu's rows and their options, the renderer's option_set back to the menu, and the host reading
 both options where the mouse is used (host/nn_hid.c's stick, host/mouse_native.c).
@@ -23,11 +23,14 @@ def read(*parts):
 def main():
     menu, replay, api = read("gpu", "vk", "vk_menu.cpp"), read("gpu", "vk", "vk_replay.cpp"), read("gpu", "vk", "vk_api.h")
     hid, native, backend = read("host", "nn_hid.c"), read("host", "mouse_native.c"), read("host", "rx_backend.c")
-    for row in ('"Mouse sensitivity", &opts.mouse_sens, 10, 500,', '"Invert mouse vertical", &opts.mouse_invert, 0, 1,'):
+    for row in ('"Mouse sensitivity", &opts.mouse_sens, 10, 500,', '"Invert mouse vertical", &opts.mouse_invert, 0, 1,',
+                '"Invert mouse horizontal", &opts.mouse_invert_x, 0, 1,'):
         if row not in menu:
             raise SystemExit("the menu lost a mouse row: " + row)
     if "id == 7 ? opts.mouse_sens" not in replay or "id == 8 ? opts.mouse_invert" not in replay:
         raise SystemExit("options 7 and 8 do not reach the host")
+    if "HOS_OPT_MOUSE_INVERT_X = 61" not in api or "id == HOS_OPT_MOUSE_INVERT_X) return opts.mouse_invert_x;" not in replay:
+        raise SystemExit("option 61, the mouse's left and right swapped, does not reach the host")
     if "t.option_set = menu_option_set" not in replay or "void (*option_set)(int id, int value);" not in api:
         raise SystemExit("the host cannot change the menu's sensitivity")
     if "vk->option_set(id, value)" not in backend:
@@ -40,7 +43,9 @@ def main():
         raise SystemExit("HOS_MOUSE_SENS no longer wins over the menu")
     if "rx_option(8, 0)" not in hid or "rx_option(8, 0)" not in native:
         raise SystemExit("the menu's inversion is not read by both mouse paths")
-    if not preset_exempt(menu, "mouse_sens"):
+    if "rx_option(61, 0)" not in hid or "rx_option(61, 0)" not in native:
+        raise SystemExit("the menu's horizontal inversion is not read by both mouse paths")
+    if not preset_exempt(menu, "mouse_sens") or not preset_exempt(menu, "mouse_invert_x"):
         raise SystemExit("a mouse setting turns the quality preset to Custom")
     print("PASS: the mouse's settings are the menu's")
 

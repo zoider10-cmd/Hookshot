@@ -7,6 +7,7 @@ exact same fail-before checks.
 """
 import argparse
 import contextlib
+from functools import partial
 import importlib.util
 import io
 import os
@@ -58,6 +59,7 @@ class LinuxPreflightTests(unittest.TestCase):
         self.real_compile = False
         self.runner = self.stack.enter_context(mock.patch.object(subprocess, "run", side_effect=self.run_process))
         self.make = load("linux_make_game", SOURCE / "nx2/make_game.py")
+        self.addCleanup(getattr(self.make, "release_work", lambda: None))   # (Windows deletes no work folder with its lock open)
         self.build = load("build", SOURCE / "nx2/build.py")
         sys.modules["build"] = self.build
         self.processes.clear()
@@ -65,6 +67,9 @@ class LinuxPreflightTests(unittest.TestCase):
         self.checkout.mkdir()
         (self.checkout / "requirements.txt").write_bytes((ROOT / "requirements.txt").read_bytes())
         self.stack.enter_context(mock.patch.object(self.make, "ROOT", str(self.checkout)))
+        # Keep the shipped-profile lookup in the authored checkout, not the import-time ROOT.
+        self.stack.enter_context(mock.patch.object(self.make, "vk_profile_for",
+                                                  partial(self.make.vk_profile_for, root=str(self.checkout))))
         self.stack.enter_context(mock.patch.object(self.make, "LINUX", True))
         self.stack.enter_context(mock.patch.object(self.make, "CROSS", False))
         self.stack.enter_context(mock.patch.object(self.build, "LINUX", True))
@@ -91,7 +96,7 @@ class LinuxPreflightTests(unittest.TestCase):
             return isfile(path)
 
         self.stack.enter_context(mock.patch.object(os.path, "isfile", side_effect=file_exists))
-        for name in ("no_throttle", "check_cpu", "warn_slow_disk", "stop_stray_compilers", "drop_stale_objects"):
+        for name in ("no_throttle", "warn_slow_disk", "stop_stray_compilers", "drop_stale_objects"):
             self.stack.enter_context(mock.patch.object(self.make, name))
         self.stack.enter_context(mock.patch("ctypes.WinDLL", create=True))
         self.stack.enter_context(mock.patch.object(os, "system", side_effect=AssertionError("shell command")))
@@ -236,38 +241,37 @@ class LinuxPreflightTests(unittest.TestCase):
         os.environ.pop("RX_CPM")
         self.assertEqual(self.invoke(), "game", self.output.getvalue())
 
-    def test_prebuilt_renderer_needs_no_renderer_headers(self):
+    def test_every_build_needs_the_renderer_headers(self):
+        # (no prebuilt renderer since 2026-11-14: every build compiles the Vulkan back end. A HOOKSHOT_VK_PREBUILT left in the
+        # shell from an older AppImage is not read, and stands in for nothing)
         renderer = self.root / "prebuilt.so"
         renderer.write_bytes(b"authored renderer path")
         os.environ["HOOKSHOT_VK_PREBUILT"] = str(renderer)
-        self.assertEqual(self.invoke(), "game", self.output.getvalue())
-        self.assertIn(mock.call("clang++"), self.find.call_args_list)   # a64emit still builds from source
+        self.assertEqual(self.invoke(), 1)
+        self.assertIn("SPIR-V", self.output.getvalue())
+        self.assertNotIn("prebuilt.so", self.output.getvalue())
+        self.assertEqual(self.events, [])
 
-    def test_source_prebuilt_still_needs_native_cpp_compiler(self):
-        renderer = self.root / "prebuilt.so"
-        renderer.write_bytes(b"authored renderer path")
-        os.environ["HOOKSHOT_VK_PREBUILT"] = str(renderer)
+    def test_every_build_needs_the_cpp_compiler(self):
+        # (the Vulkan back end and a64emit: clang++ in a source checkout and in the AppImage alike)
+        self.headers()
         self.cxx.unlink()
         self.assertEqual(self.invoke(), 1)
         self.assertIn("clang++", self.output.getvalue())
         self.assertNotIn("VMA", self.output.getvalue())
         self.assertEqual(self.events, [])
 
-    def test_ngx_overrides_prebuilt_renderer(self):
-        os.environ["HOOKSHOT_VK_PREBUILT"] = str(self.root / "ignored.so")
+    def test_ngx_needs_the_renderer_headers(self):
         self.build.NGX_SDK = str(self.root / "sdk")
         self.assertEqual(self.invoke(), 1)
         self.assertIn("SPIR-V", self.output.getvalue())
-        self.assertNotIn("ignored.so", self.output.getvalue())
         self.assertEqual(self.events, [])
 
-    def test_fsr_overrides_prebuilt_renderer(self):
-        # (AMD FSR 4: the AppImage's prebuilt back end has none, so the build compiles its own and needs its headers)
-        os.environ["HOOKSHOT_VK_PREBUILT"] = str(self.root / "ignored.so")
+    def test_fsr_needs_the_renderer_headers(self):
+        # (AMD FSR 4: compiled into the back end, which needs its headers)
         self.build.FSR = True
         self.assertEqual(self.invoke(), 1)
         self.assertIn("SPIR-V", self.output.getvalue())
-        self.assertNotIn("ignored.so", self.output.getvalue())
         self.assertEqual(self.events, [])
 
     def test_fsr_without_its_headers_says_so_first(self):
@@ -287,10 +291,7 @@ class LinuxPreflightTests(unittest.TestCase):
 
     def test_bundled_static_ffmpeg_avoids_system_pkg_config(self):
         (self.checkout / "requirements.txt").unlink()  # AppImage packaging carries Python, not requirements.txt.
-        self.cxx.unlink()   # the bundle carries a64emit too; no renderer or helper C++ compile
-        renderer = self.root / "prebuilt.so"
-        renderer.write_bytes(b"authored renderer path")
-        os.environ["HOOKSHOT_VK_PREBUILT"] = str(renderer)
+        self.headers()   # (the renderer is compiled there too, from tools.lock's headers)
         prefix = self.root / "ffmpeg"
         os.environ["HOOKSHOT_FFMPEG"] = str(prefix)
         for lib in self.build.FFMPEG_LIBS:

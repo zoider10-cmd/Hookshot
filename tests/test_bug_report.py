@@ -197,8 +197,11 @@ def wiring():
           "a prompt (the menu's, or the compact bar's) does not say Save for the row")
     save = menu[menu.index("void bug_report_save() {"):]
     save = save[:save.index("\n}\n")]
-    for call in ("fill_here(in)", "device_report_text()", "changed_rows_text(in.pc_options)", "ini_path()", "bug_report::start("):
+    for call in ("fill_here(in)", "device_report_text()", "changed_rows_text(in.pc_options)", "bug_report::start("):
         check(call in save, "bug_report_save does not call " + call)
+    # (the report's folder and the logs are the game folder's: the settings file is in the user folder, vk_paths.h options_path)
+    check("in.game_dir = game_folder_path();" in save and "ini_path()" not in save,
+          "bug_report_save does not take the game folder (game_folder_path) for the report and the logs")
     picture = menu[menu.index("bool bug_report_picture(const char* path, uint64_t ticket) {"):]
     picture = picture[:picture.index("\n}\n")]
     check("in.ask_picture = bug_report_picture;" in save and "shot_ask_next(path," in picture and

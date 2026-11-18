@@ -14,8 +14,22 @@
 #define HOS_H
 #include "a64.h"
 #include <stdarg.h>
+#include <stddef.h>
 
-#define HLE(sym) void imp_##sym(Ctx *c)
+/* HOS_HLE_STATS=1 (off by default): each HLE function counts its calls, and hos_hostcall.c logs every 5 s how often each
+   ran. Off, a call costs a test of the switch and a branch more: the counted arm is a tail call, so the function saves
+   no registers for it and the body stays inlined in the other. */
+typedef struct HleCount { const char *name; volatile long calls, listed; long before; struct HleCount *next; } HleCount;
+extern int hos_hle_stats;
+void hos_hle_counted(HleCount *h, void (*fn)(Ctx *c), Ctx *c);
+#define HLE(sym) \
+    static void hle_##sym(Ctx *c); \
+    void imp_##sym(Ctx *c) { \
+        static HleCount h = {#sym}; \
+        if (hos_hle_stats) hos_hle_counted(&h, hle_##sym, c); \
+        else hle_##sym(c); \
+    } \
+    static void hle_##sym(Ctx *c)
 /* HOS_GAME_VERSION: the game update the address hooks below are for, from the build (build.py reads the main
    module's build id). An update moves the game's functions, so a hook compiles the address of the version it is
    for and the other version's hooks are left out (ENTRY_HOOKs: the address is not in the lift; SPLICE_AFTERs:
@@ -53,6 +67,17 @@ int hos_game_is_mkw(void);
 #define HOS_GAME_TITLE "Mako"
 uint64_t hos_used_memory(uint64_t base);   /* (hos_mem.c) base + heap + the game's mapped pages: the used memory it is told */
 int hos_commit(uint64_t addr, uint64_t size);          /* (mkw_glue.c) guest pages made usable by host APIs: 1, or 0 if refused */
+/* (mkw_glue.c, issue 333) host memory the game cannot go on without: never NULL (but for 0 bytes). At the commit limit a failed
+   allocation is tried again for up to 5 s, as a guest commit is; then the out-of-memory line and notice, and the game stops.
+   what names it in the log. hos_out_of_memory: that line and notice, once a run (wait: shown here, or waited for, before the
+   caller stops the game) */
+void *hos_xmalloc(size_t size, const char *what);
+void *hos_xcalloc(size_t count, size_t size, const char *what);
+void *hos_xrealloc(void *old, size_t size, const char *what);
+void hos_out_of_memory(int wait);
+/* (mkw_glue.c, issue 1280) the end of hos_alloc_failed's wait: the line, the notice and the stop (n 0: the size not known, as for
+   the renderer's C++ allocations, MkwVkHost out_of_memory). Does not return */
+void hos_alloc_gave_up(size_t n, const char *what);
 int hos_mem_region(uint64_t addr, uint64_t size);      /* (hos_mem.c) the control bridge: 0 if not wholly in mapped guest memory */
 #if defined(A64_WRITE_TRACK) && !defined(__EMSCRIPTEN__)
 void hos_mark_written(const void *p, size_t n);   /* (hos_mem.c: guest memory written by host code, native soft watch) */
@@ -84,13 +109,21 @@ extern int hos_trace;
 void hos_log(const char *fmt, ...);
 void hos_log_at(int level, const char *fmt, ...);
 void hos_log_flush(void);
-/* (longshot) the slow-frame recorder (host/slow_frames.c, HOS_SLOW_FRAMES): its path (NULL: off), the sampler's interval, a
+/* (hookshot) the slow-frame recorder (host/slow_frames.c, HOS_SLOW_FRAMES): its path (NULL: off), the sampler's interval, a
    present (rx_nvn_present), a sample and a sweep's end (the all-thread samplers) */
 const char *hos_slow_frames_path(void);
 int hos_slow_frames_every_ms(void);
 void hos_slow_frame_present(void);
 void hos_slow_sample(int64_t sweep_ns, const char *text);
 void hos_slow_sweep_done(void);
+/* (hookshot) the profiling mode (host/profiling.c, HOS_PROFILE=1): its folder (NULL: off), its switches set (after
+   hookshot_env.txt), its threads started (hos_prof_start), a timed event into its events.txt, and a sampler's line written
+   (packed with HOS_SAMPLE_PACKED) */
+const char *hos_profiling_dir(void);
+void hos_profiling_env(void);
+void hos_profiling_start(void);
+void hos_profiling_event(const char *fmt, ...);
+void hos_sample_write(void *file, const char *line);   /* (a FILE *: hos.h reads no stdio.h) */
 #define HOS_TRACE_CALL(name) do { if (hos_trace) hos_log_at(HOS_LOG_TRACE, "%s(%#llx, %#llx, %#llx, %#llx) lr %#llx", name, \
     (unsigned long long)c->x[0], (unsigned long long)c->x[1], (unsigned long long)c->x[2], \
     (unsigned long long)c->x[3], (unsigned long long)c->x[30]); } while (0)

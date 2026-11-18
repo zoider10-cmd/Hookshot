@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """When kept programs are loaded by default (gpu/vk/load_default.h): RX_VK_LOAD always wins; without it, at their create calls
-only where the GPU has mesh shaders and no earlier session left the marker; the safety net's limits against the measured
-sessions; the marker written and found. And the source: the choice is made once the device is up, a first use's time with a
-load goes through the safety net, and a preparation removes the marker. Compiled and run alone: no game or GPU is needed.
+wherever no earlier session left the marker, with mesh shaders or through the compute fallback; the safety net's limits
+against the measured sessions; the marker written and found. And the source: the choice is made once the device is up, a
+first use's time with a load goes through the safety net, and a preparation removes the marker. Compiled and run alone: no
+game or GPU is needed.
 """
 import argparse
 import subprocess

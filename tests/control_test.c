@@ -2,9 +2,10 @@
    Unix socket on Linux, a named pipe on Windows. A thread stands in for the game (a controller read, then a present,
    every 2 ms; draws a frame as a case sets them), and the test is the client. tests/test_control.py builds and runs it.
 
-   control_test <folder> [quit | level | mem]: the cases, quit (a child serving while the parent asks it to quit), the
-   HOS_CONTROL_MEM levels, or the memory cases at the level in the environment. (Windows: quitserve <pipe> and
-   servefail <pipe> are the children those start.) */
+   control_test <folder> [quit | relaunch | level | mem | peersid]: the cases, quit (a child serving while the parent
+   asks it to quit), relaunch (the same, asked to start again), the HOS_CONTROL_MEM levels, or the memory cases at the
+   level in the environment. (Windows: peersid, HOS_CONTROL_PEER_SID's check; quitserve <pipe>, relaunchserve <pipe>
+   and servefail <pipe> are the children those start.) */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -150,6 +151,14 @@ static void fake_quit(void) {
     ExitProcess(0);
 #else
     _exit(0);
+#endif
+}
+static void fake_relaunch(void) {   /* (relaunch_case's child: its own exit code, after the bridge let go of the socket) */
+    fflush(NULL);
+#ifdef _WIN32
+    ExitProcess(7);
+#else
+    _exit(7);
 #endif
 }
 static const char *fake_renderer(void) { return "fake"; }
@@ -498,6 +507,41 @@ static void quit_case(const char *folder) {
 #endif
 }
 
+/* relaunch: the reply comes first, then the bridge lets go of its socket and the game's relaunch runs (here: an exit
+   with its own code), so that the game started again can serve the same name */
+static void relaunch_case(const char *folder) {
+    transport_name(folder, "relaunch");
+#ifdef _WIN32
+    HANDLE child = spawn_self("relaunchserve", sock_path);
+#else
+    const pid_t child = fork();
+    if (child == 0) {
+        game.relaunch = fake_relaunch;
+        if (!hos_control_serve(sock_path, &game)) _exit(3);
+        start_thread(game_thread, NULL);
+        for (;;) pause();
+    }
+    struct stat st;
+    for (int i = 0; i < 500 && stat(sock_path, &st); i++) sleep_ms(2);
+#endif
+    Client *c = dial();
+    char line[4096];
+    ask(c, "{\"id\":11,\"cmd\":\"relaunch\"}\n", "11", line, sizeof line, 2000);
+    CHECK(strstr(line, "\"ok\":true") && strstr(line, "\"relaunching\":true"));
+#ifdef _WIN32
+    CHECK(wait_exit(child, 5000) == 7);
+    hangup(c);
+    CHECK(CreateFileA(sock_path, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL) == INVALID_HANDLE_VALUE);
+    puts("PASS: relaunch: the reply, then the game's relaunch, the pipe free for the next process");
+#else
+    int status = 0;
+    CHECK(waitpid(child, &status, 0) == child);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 7);
+    CHECK(stat(sock_path, &st) != 0);   /* (the socket removed: the next process binds it again) */
+    puts("PASS: relaunch: the reply, then the game's relaunch, the socket free for the next process");
+#endif
+}
+
 static void level_unit(void) {
     struct { const char *v; int lvl; } cases[] = {
         {NULL, 0}, {"", 0}, {"ro", 1}, {"RO", 1}, {"r", 1}, {"read", 1}, {"Read", 1},
@@ -577,7 +621,8 @@ static void mem_case(const char *folder) {
 }
 
 #ifdef _WIN32
-/* The pipe's DACL, read back through a client's handle: protected, one ACE, allowing this user alone */
+/* The pipe's DACL, read back through a client's handle: protected, one ACE, allowing this user alone (this run has no
+   HOS_CONTROL_PEER_SID and no AppContainer) */
 static void dacl_case(Client *c) {
     PACL dacl = NULL;
     PSECURITY_DESCRIPTOR sd = NULL;
@@ -598,6 +643,40 @@ static void dacl_case(Client *c) {
     LocalFree(sd);
     puts("PASS: the pipe's DACL: protected, one ACE, this user alone");
 }
+
+/* HOS_CONTROL_PEER_SID's check (host/control.c): a user's own SID, canonical, never a group or a well-known account */
+int hos_control_peer_sid_check(const char *s, char *why, size_t cap);   /* (host/control.c) */
+static void peer_sid_unit(void) {
+    static const char *const refused[] = {
+        NULL, "", "junk", "WD", "AU", "BU", "BA", "S-1-1-0", "S-1-5-11", "S-1-5-32-545", "S-1-5-32-544", "S-1-5-18",
+        "S-1-15-2-1", "S-1-5-21-1-2-3-500", "S-1-5-21-1-2-3-513", "S-1-5-21-1-2-1001", "S-1-5-21-1-2-3-4-1001",
+        " S-1-5-21-1-2-3-1001", "S-1-5-21-1-2-3-1001 ", "S-1-5-21-01-2-3-1001", "s-1-5-21-1-2-3-1001",
+        "S-1-5-21-1-2-3-1001;", "S-1-5-21-1-2-3-1001)(A;;GA;;;WD"};
+    char why[160];
+    for (unsigned i = 0; i < sizeof refused / sizeof *refused; i++) {
+        why[0] = 0;
+        CHECK(!hos_control_peer_sid_check(refused[i], why, sizeof why) && why[0]);
+    }
+    CHECK(!hos_control_peer_sid_check("S-1-1-0", why, sizeof why) && strstr(why, "Everyone"));
+    CHECK(!hos_control_peer_sid_check("S-1-5-32-544", why, sizeof why) && strstr(why, "Administrators"));
+    HANDLE token;
+    CHECK(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token));
+    DWORD64 info[64];
+    DWORD len = 0;
+    CHECK(GetTokenInformation(token, TokenUser, info, sizeof info, &len));
+    CloseHandle(token);
+    char *me = NULL;
+    CHECK(ConvertSidToStringSidA(((TOKEN_USER *)info)->User.Sid, &me));
+    PSID sid = ((TOKEN_USER *)info)->User.Sid;
+    if (!strncmp(me, "S-1-5-21-", 9) && *GetSidSubAuthorityCount(sid) == 5 && *GetSidSubAuthority(sid, 4) >= 1000) {
+        CHECK(hos_control_peer_sid_check(me, why, sizeof why));
+        puts("PASS: HOS_CONTROL_PEER_SID: this user's SID taken; groups, well-known and odd forms refused");
+    } else {
+        puts("PASS: HOS_CONTROL_PEER_SID: groups, well-known and odd forms refused (this user's SID is not a plain user's: "
+             "the accepting half skipped)");
+    }
+    LocalFree(me);
+}
 #endif
 
 int main(int argc, char **argv) {
@@ -609,12 +688,23 @@ int main(int argc, char **argv) {
         start_thread(game_thread, NULL);
         for (;;) sleep_ms(1000);
     }
+    if (argc > 3 && !strcmp(argv[2], "relaunchserve")) {   /* (relaunch_case's child) */
+        snprintf(sock_path, sizeof sock_path, "%s", argv[3]);
+        game.relaunch = fake_relaunch;
+        if (!hos_control_serve(sock_path, &game)) return 3;
+        start_thread(game_thread, NULL);
+        for (;;) sleep_ms(1000);
+    }
     if (argc > 3 && !strcmp(argv[2], "servefail")) {   /* (a second bridge on a name in use: refused) */
         snprintf(sock_path, sizeof sock_path, "%s", argv[3]);
         return hos_control_serve(sock_path, &game) ? 0 : 3;
     }
 #endif
+#ifdef _WIN32
+    if (argc > 2 && !strcmp(argv[2], "peersid")) return peer_sid_unit(), 0;
+#endif
     if (argc > 2 && !strcmp(argv[2], "quit")) return quit_case(argv[1]), 0;
+    if (argc > 2 && !strcmp(argv[2], "relaunch")) return relaunch_case(argv[1]), 0;
     if (argc > 2 && !strcmp(argv[2], "level")) return level_unit(), 0;
     if (argc > 2 && !strcmp(argv[2], "mem")) return mem_case(argv[1]), 0;
     static char line[70000];
@@ -674,6 +764,9 @@ int main(int argc, char **argv) {
     CHECK(hear(c, line, sizeof line, 2000) && strstr(line, "\"id\":null") && strstr(line, "\"error\":\"bad_json\""));
     ask(c, "{\"id\":\"x\",\"cmd\":\"fly\"}\n", "\"x\"", line, sizeof line, 2000);
     CHECK(strstr(line, "\"error\":\"unknown_cmd\""));
+    /* (a game that cannot start again: relaunch refused, and the connection goes on) */
+    ask(c, "{\"id\":\"r\",\"cmd\":\"relaunch\"}\n", "\"r\"", line, sizeof line, 2000);
+    CHECK(strstr(line, "\"error\":\"unavailable\""));
     say(c, "[1,2]\n");
     CHECK(hear(c, line, sizeof line, 2000) && strstr(line, "\"error\":\"bad_request\""));
     ask(c, "{\"id\":{\"a\":[1,true]}}\n", "{\"a\":[1,true]}", line, sizeof line, 2000);

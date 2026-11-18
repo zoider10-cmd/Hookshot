@@ -495,8 +495,14 @@ void program_cache_read(FILE* in, std::mutex* mu, uint64_t key, const std::vecto
             Stage& st = p->stages.back();
             st.nvn_stage = r.get<int>();
             st.vk_stage = r.get<VkShaderStageFlagBits>();
+            const uint8_t* const code_p = r.p;
             std::vector<uint32_t> spirv;
             r.list(spirv);
+            if (!(d.kind & kCompressedKind) && !spirv.empty()) {
+                st.code_at = d.at + (int64_t)(code_p + 8 - payload);
+                st.code_words = spirv.size();
+                st.record_at = d.at, st.record_size = d.size;
+            }
             r.list(st.c1);
             get_info(r, st.info);
             if (r.bad || spirv.empty()) {
@@ -849,6 +855,178 @@ void program_cache_borrow(uint64_t key, const std::function<void(Program&)>& fn)
         if (p->layout) vkDestroyPipelineLayout(dev.device, p->layout, nullptr);
         if (p->set_layout) vkDestroyDescriptorSetLayout(dev.device, p->set_layout, nullptr);
     }
+}
+
+// (hookshot) Which programs' graphics modules program_cache_drop_modules let go, and which of those did not make again: kept
+// here and not in Program, whose size is part of the translator's stamp (vk_shader.cpp translator_stamp, abi[]): members added
+// there made every player prepare every shader again at the first start after the update (251.6 s on a Steam Deck). By key and
+// variant, with the program let go beside them: one borrowed for the prepare (program_cache_borrow) has the same key and
+// variant as the one in play, and its own modules. The programs in play live for the session, so an entry does not outlive
+// its program. mu is taken last (after shader_mu and light_mu), and nothing is taken under it
+namespace module_remake {
+struct KeyVariant {
+    uint64_t key = 0, variant = 0;
+    bool operator==(const KeyVariant& o) const { return key == o.key && variant == o.variant; }
+};
+struct KeyVariantHash {
+    size_t operator()(const KeyVariant& k) const { return (size_t)(k.key ^ (k.variant * 0x9E3779B97F4A7C15ull)); }
+};
+struct Dropped {
+    const Program* program = nullptr;   // (the program whose graphics modules were let go)
+    bool failed = false;                // (they did not read or make again: its new pipeline states are left out, not its built ones)
+};
+std::mutex mu;
+std::unordered_set<KeyVariant, KeyVariantHash> built;   // (precompile_run built their noted graphics pipelines)
+std::unordered_map<KeyVariant, Dropped, KeyVariantHash> dropped;
+std::atomic<bool> any{false};   // (set by program_cache_drop_modules: until then, and on Windows, nothing here is looked up)
+}   // namespace module_remake
+
+void program_cache_note_built(const Program& p) {
+    const module_remake::KeyVariant kv{p.key, p.variant};
+    std::lock_guard rk(module_remake::mu);
+    module_remake::built.insert(kv);
+}
+
+bool program_modules_dropped(const Program& p) {
+    if (!module_remake::any.load(std::memory_order_acquire)) return false;
+    const module_remake::KeyVariant kv{p.key, p.variant};
+    std::lock_guard rk(module_remake::mu);
+    const auto it = module_remake::dropped.find(kv);
+    return it != module_remake::dropped.end() && it->second.program == &p;
+}
+
+bool program_cache_complete_graphics(const Program& prog) {
+    if (prog.failed) return false;
+    if (!module_remake::any.load(std::memory_order_acquire)) return true;
+    const module_remake::KeyVariant kv{prog.key, prog.variant};
+    {
+        std::lock_guard rk(module_remake::mu);
+        const auto it = module_remake::dropped.find(kv);
+        if (it == module_remake::dropped.end() || it->second.program != &prog) return true;
+        if (it->second.failed) return false;
+    }
+    const auto skipped = [&](const Stage& st) {   // (a fallback program's compute stages: not in its graphics pipeline)
+        return prog.fallback && (st.vk_stage & (VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT));
+    };
+    const size_t head_size = disk_zstd ? kZstdHead : 16;
+    // (read with the worker's own handle on the file, and the modules made before taking light_mu: neither light_mu nor disk_mu is
+    // held across the disk reads or vkCreateShaderModule, so a dispatch or pick on the replay thread never waits behind them)
+    FILE* own_in = !disk_path.empty() ? fopen(disk_path.c_str(), "rb") : nullptr;
+    auto read_at = [&](int64_t pos, void* dst, size_t bytes) -> bool {
+        if (own_in) return _fseeki64(own_in, pos, SEEK_SET) == 0 && fread(dst, 1, bytes, own_in) == bytes;
+        std::lock_guard dk(disk_mu);
+        return disk_in && _fseeki64(disk_in, pos, SEEK_SET) == 0 && fread(dst, 1, bytes, disk_in) == bytes;
+    };
+    // (each stage's record head is checked before its code is read: a stale place is a failure, not another program's code)
+    int64_t checked_at = -1;
+    bool ok = true;
+    std::vector<VkShaderModule> made(prog.stages.size(), VK_NULL_HANDLE);
+    for (size_t i = 0; ok && i < prog.stages.size(); i++) {
+        const Stage& st = prog.stages[i];
+        if (skipped(st) || !st.code_words) continue;
+        if (st.record_at != checked_at) {
+            uint64_t head[2]{};
+            ok = st.record_size && st.record_at >= (int64_t)head_size &&
+                 read_at(st.record_at - (int64_t)head_size, head, 16) && head[0] == prog.key && head[1] == st.record_size;
+            checked_at = st.record_at;
+        }
+        std::vector<uint32_t> spirv((size_t)st.code_words);
+        ok = ok && read_at(st.code_at, spirv.data(), spirv.size() * 4);
+        if (ok) made[i] = make_module(spirv, prog.key, nullptr);
+        if (!made[i]) {
+            ok = false;
+            static std::atomic<int> logged{0};
+            if (logged++ < 20)
+                logf("vk: program cache: the code of program %016llx at %lld did not read or made no module: left out",
+                     (unsigned long long)prog.key, (long long)st.code_at);
+        }
+    }
+    if (own_in) fclose(own_in);
+    const auto destroy_made = [&] {
+        for (VkShaderModule m : made)
+            if (m) vkDestroyShaderModule(dev.device, m, nullptr);
+    };
+    std::lock_guard lk(light_mu);
+    std::lock_guard rk(module_remake::mu);
+    const auto it = module_remake::dropped.find(kv);
+    if (it == module_remake::dropped.end() || it->second.program != &prog) {   // (another worker made them first)
+        destroy_made();
+        return true;
+    }
+    if (!ok) {
+        destroy_made();
+        it->second.failed = true;
+        return false;
+    }
+    Program& p = const_cast<Program&>(prog);
+    for (size_t i = 0; i < p.stages.size(); i++) {
+        if (!made[i]) continue;
+        if (!p.stages[i].module) p.stages[i].module = made[i];
+        else vkDestroyShaderModule(dev.device, made[i], nullptr);
+    }
+    module_remake::dropped.erase(it);
+    return true;
+}
+
+size_t program_cache_drop_modules() {
+    std::lock_guard sk(shader_mu);
+    std::lock_guard lk(light_mu);
+    std::lock_guard rk(module_remake::mu);
+    // (before the first module goes: a pipeline build from here on asks the table, and waits on mu until this walk is done)
+    module_remake::any.store(true, std::memory_order_release);
+    size_t dropped = 0;
+    for (auto& kv : programs) {
+        for (auto& p : kv.second) {
+            if (!p || !p->ready.load(std::memory_order_acquire) || p->failed) continue;
+            if (p->compute) {
+                if ((p->compute_pipeline != VK_NULL_HANDLE || p->compute_state.load(std::memory_order_acquire) == 2) &&
+                    !p->stages.empty() && p->stages[0].module) {
+                    vkDestroyShaderModule(dev.device, p->stages[0].module, nullptr);
+                    p->stages[0].module = VK_NULL_HANDLE;
+                    dropped++;
+                }
+                continue;
+            }
+            if (p->fallback && p->compute_state.load(std::memory_order_acquire) == 2) {
+                for (Stage& st : p->stages) {
+                    if (st.module && st.vk_stage == VK_SHADER_STAGE_COMPUTE_BIT) {
+                        vkDestroyShaderModule(dev.device, st.module, nullptr);
+                        st.module = VK_NULL_HANDLE;
+                        dropped++;
+                    }
+                }
+            }
+            // (for an un-noted program or variant, or when no graphics pipeline was built before the title: keep its vertex and
+            // fragment modules so its first draw in play builds from memory without a disk read)
+            const module_remake::KeyVariant key_variant{p->key, p->variant};
+            if (!module_remake::built.count(key_variant)) continue;
+            // (one program let go by key and variant: another of the same ones in memory keeps its modules)
+            if (const auto it = module_remake::dropped.find(key_variant);
+                it != module_remake::dropped.end() && it->second.program != p.get())
+                continue;
+            bool can_drop = true;
+            for (const Stage& st : p->stages) {
+                if (!st.module) continue;
+                if (p->fallback && (st.vk_stage & (VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT)))
+                    continue;
+                if (!st.code_words || !st.record_size) { can_drop = false; break; }
+            }
+            if (!can_drop) continue;
+            bool any_gfx = false;
+            for (Stage& st : p->stages) {
+                if (p->fallback && (st.vk_stage & (VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT)))
+                    continue;
+                if (st.module) {
+                    vkDestroyShaderModule(dev.device, st.module, nullptr);
+                    st.module = VK_NULL_HANDLE;
+                    dropped++;
+                    any_gfx = true;
+                }
+            }
+            if (any_gfx) module_remake::dropped[key_variant] = module_remake::Dropped{p.get(), false};
+        }
+    }
+    return dropped;
 }
 
 /// (hookshot, the prepare's driver part: vk_draw.cpp warm_libraries) the key of every kept graphics and mesh program, whoever made

@@ -10,6 +10,7 @@ typedef UINT MMRESULT;
 typedef void *HWAVEOUT;
 #define MMSYSERR_NOERROR 0
 #define MMSYSERR_ERROR 1
+#define MMSYSERR_NODRIVER 6
 #define WAVE_MAPPER ((UINT)-1)
 #define WAVE_FORMAT_PCM 1
 #define CALLBACK_NULL 0

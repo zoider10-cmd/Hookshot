@@ -20,12 +20,15 @@ int main(int argc, char** argv) {
             CHECK(std::strstr(choose("create", mesh, marker, true).why, "RX_VK_PROGRAM_CACHE_ZSTD"));
             CHECK(choose("create", mesh, marker, false).create);
         }
-    // the default: create only with mesh shaders and no marker; anything else the switch says is not a choice
+    // the default: create wherever no marker is there, with mesh shaders or through the compute fallback (a start there kept
+    // 32,645 pipelines and every fallback program before the title, and left a 16 GB PC near its commit limit: issues 869
+    // and 933); anything else the switch says is not a choice
     CHECK(choose(nullptr, true, false).create);
-    CHECK(!choose(nullptr, false, false).create);
+    CHECK(choose(nullptr, false, false).create);
     CHECK(!choose(nullptr, true, true).create);
     CHECK(!choose(nullptr, false, true).create);
-    CHECK(choose("", true, false).create && choose("1", true, false).create && !choose("yes", false, false).create);
+    CHECK(choose("", true, false).create && choose("1", true, false).create && choose("yes", false, false).create);
+    CHECK(std::strstr(choose(nullptr, false, false).why, "compute fallback"));
     CHECK(std::strstr(choose(nullptr, true, true).why, "hookshot_load_start.txt"));
     // the safety net: the measured good sessions pass, the measured bad ones do not; at the limits it has not fired
     using load_default::Waits;

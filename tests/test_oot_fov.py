@@ -46,7 +46,7 @@ class InstallTests(unittest.TestCase):
 
     def test_lift_and_menu_wiring(self):
         lift = (ROOT / "nx2/lift.py").read_text(encoding="utf-8")
-        self.assertLess(lift.index("oot_fov.install("), lift.index("L.discover("))
+        self.assertLess(lift.index("oot_fov.install("), lift.index("discover.discover(L"))
         menu = (ROOT / "gpu/vk/vk_menu.cpp").read_text(encoding="utf-8")
         api = (ROOT / "gpu/vk/vk_api.h").read_text(encoding="utf-8")
         options = (ROOT / "gpu/vk/vk_menu.h").read_text(encoding="utf-8")

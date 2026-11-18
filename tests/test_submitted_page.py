@@ -12,18 +12,11 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: python -I leaves this folder off the path)
+from srccut import block   # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def block(text, marker):
-    start = text.index(marker)
-    end = text.index("{", start) + 1
-    depth = 1
-    while depth:
-        depth += (text[end] == "{") - (text[end] == "}")
-        end += 1
-    return text[start:end]
 
 
 def main():
@@ -32,15 +25,22 @@ def main():
     a = p.parse_args()
     source = (ROOT / "gpu" / "vk" / "vk_memory.cpp").read_text(encoding="utf-8")
     fn = block(source, "bool submitted_page_reuse(")
-    read = block(source, "bool memory_read_as_submitted(")
-    reuse_at = read.index("submitted_page_reuse(")
-    lock_at = read.index("std::lock_guard lk(pools_mu)")
-    if reuse_at > lock_at:
+    # (a read is the part without the pool lock, which asks the per-page cache, and the part under it, which copies the
+    # captures' pages and keeps the answer for a page in none: memory_read_as_submitted makes one read, and
+    # memory_read_as_submitted_many a draw's reads, the lock taken once for all of them)
+    unlocked = block(source, "int submitted_read_unlocked(")
+    locked = block(source, "int64_t submitted_read_locked(")
+    if "submitted_page_reuse(" not in unlocked or "lock_guard" in unlocked or "unique_lock" in unlocked:
         raise SystemExit("the page is looked up under the pool lock before the cache")
-    if read.count("submitted_page_for(page0)") != 1:
+    if unlocked.count("submitted_page_for(page0)") != 1:
         raise SystemExit("memory_read_as_submitted does not look its page up in the per-page cache")
-    if "page0 == page1 && from == 0" not in read:
+    if "page0 == page1 && from == 0" not in locked:
         raise SystemExit("memory_read_as_submitted keeps an answer for a page a capture holds")
+    for name in ("bool memory_read_as_submitted(", "void memory_read_as_submitted_many("):
+        read = block(source, name)
+        lock_at = read.index("std::lock_guard lk(pools_mu)")
+        if not 0 <= read.find("submitted_read_unlocked(") < lock_at < read.find("submitted_read_locked("):
+            raise SystemExit(name + "): the cache is not asked before the pool lock, or the captures not read under it")
     struct = block(source, "struct SubmittedPage {") + ";"
     count = source[source.index("constexpr int kSubmittedPages"):]
     count = count[:count.index(";") + 1]

@@ -1,22 +1,16 @@
-"""Run the custom ImGui texture uploader with coherent and noncoherent host caches."""
+"""Run the custom ImGui texture uploader with coherent and noncoherent host caches. headless: with no window (RX_VK_SHOT_MENU's
+overlays, recorded on the replay's timeline) what it lets go also waits for the timeline value past its last use."""
 import argparse
 from pathlib import Path
 import subprocess
 import tempfile
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: python -I leaves this folder off the path)
+from srccut import block   # noqa: E402
 
 RUN_ALL_ARGS = ["--cxx", "{cxx}", "--headers", "{vulkan_headers}"]
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def block(text, marker):
-    start = text.index(marker)
-    at = text.index("{", start) + 1
-    depth = 1
-    while depth:
-        depth += (text[at] == "{") - (text[at] == "}")
-        at += 1
-    return text[start:at]
 
 
 def main():
@@ -35,7 +29,7 @@ def main():
     fixture = fixture.replace("/* STATE */", state).replace("/* UPLOADER */", actual)
     fixture = fixture.replace("/* DESTROY_PIXELS */", block(draw, "void ImTextureData::DestroyPixels()"))
     cases = ["rgba-create", "alpha-create", "rgba-dirty", "alpha-dirty", "rgba-fallback", "alpha-fallback",
-             "failure-buffer", "failure-image", "failure-view", "failure-descriptor", "destroy", "no-backend", "empty"]
+             "failure-buffer", "failure-image", "failure-view", "failure-descriptor", "destroy", "no-backend", "empty", "headless"]
     if a.case != "all":
         assert a.case in cases
         cases = [a.case]

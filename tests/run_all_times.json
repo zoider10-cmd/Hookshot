@@ -72,7 +72,7 @@
   "tests/test_mesh_args_cleanup.py": 2.8,
   "tests/test_mesh_unreachable_outputs.py": 36.0,
   "tests/test_native_suatom.py": 4.3,
-  "tests/test_oot_saves.py": 2.1,
+  "tests/test_hookshot_saves.py": 2.1,
   "tests/test_output_resolution.py": 3.5,
   "tests/test_parallel_init_order.py": 4.9,
   "tests/test_parallel_rb_refresh.py": 5.9,

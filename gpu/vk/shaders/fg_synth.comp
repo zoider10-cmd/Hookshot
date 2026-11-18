@@ -18,7 +18,9 @@ void main() {
     if (any(greaterThanEqual(g, d))) return;
     const float t = pc.t;
     const vec3 a0 = texelFetch(fa, g, 0).rgb, b0 = texelFetch(fb, g, 0).rgb;
-    const vec3 still = mix(a0, b0, t);
+    // (Mako 4.2: never a blend of the two frames, seen as a motion blur from the title screen on: the nearer one, sharp)
+    const vec3 near = t <= 0.5 ? a0 : b0;
+    const vec3 still = near;
     const float moved = smoothstep(0.03, 0.09, gap(a0, b0));
     if (moved <= 0.0) { imageStore(dst, g, vec4(still, 1.0)); return; }
     const vec2 p = vec2(g) + 0.5;
@@ -27,11 +29,10 @@ void main() {
     const vec2 w = fp - floor(fp);
     const vec2 v = mix(mix(fl(i), fl(i + ivec2(1, 0)), w.x), mix(fl(i + ivec2(0, 1)), fl(i + ivec2(1, 1)), w.x), w.y);
     const vec2 size = vec2(d);
-    const vec3 a = textureLod(fa, (p - t * v) / size, 0.0).rgb;
-    const vec3 b = textureLod(fb, (p + (1.0 - t) * v) / size, 0.0).rgb;
+    const vec3 a = texelFetch(fa, clamp(ivec2(floor(p - t * v)), ivec2(0), d - 1), 0).rgb;
+    const vec3 b = texelFetch(fb, clamp(ivec2(floor(p + (1.0 - t) * v)), ivec2(0), d - 1), 0).rgb;
     const float agree = 1.0 - smoothstep(0.05, 0.16, gap(a, b));
     // (where no vector explains the change, the nearer of the two frames as it is: a blend there was a double image, and
     // over a camera cut or a fade a picture that neither frame shows)
-    const vec3 near = t <= 0.5 ? a0 : b0;
-    imageStore(dst, g, vec4(mix(mix(still, near, moved), mix(a, b, t), moved * agree), 1.0));
+    imageStore(dst, g, vec4(mix(near, t <= 0.5 ? a : b, step(0.5, moved * agree)), 1.0));
 }

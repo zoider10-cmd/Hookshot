@@ -1,5 +1,5 @@
 # The player website (website/, Astro) on Cloudflare: hookshot.magicbean.dev, the Worker hookshot-website.
-# - A push to main that changes website/ or the tested-run sources (or Run workflow) builds it, runs its checks and
+# - A push to main that changes website/ or the docs it publishes (or Run workflow) builds it, runs its checks and
 #   deploys it. It is also rebuilt every hour, since the build collects progress data from Forgejo (website/PROGRESS.md).
 # - A pull request that changes those sources gets a preview: the build is uploaded as a new version of the Worker
 #   (`wrangler versions upload`, which leaves the site as it is) with the alias pr-<number>, served at
@@ -25,10 +25,10 @@ name: Website
 on:
   push:
     branches: [main]
-    paths: ['website/**', 'docs/tested-configurations.md', 'docs/tested/**', '.forgejo/workflows/website.yml']
+    paths: ['website/**', 'docs/**', 'CONTRIBUTING.md', '.forgejo/workflows/website.yml']
   pull_request:
     types: [opened, synchronize, reopened]
-    paths: ['website/**', 'docs/tested-configurations.md', 'docs/tested/**', '.forgejo/workflows/website.yml']
+    paths: ['website/**', 'docs/**', 'CONTRIBUTING.md', '.forgejo/workflows/website.yml']
   pull_request_target:
     types: [labeled]
   schedule:

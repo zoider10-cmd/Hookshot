@@ -4,6 +4,7 @@ import ast
 import hashlib
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -20,13 +21,18 @@ def main():
     p.add_argument("--cxx", default="g++")
     a = p.parse_args()
     tree = ast.parse(a.build_script.read_text(encoding="utf-8"))
-    functions = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in ("tree_headers", "flag_text", "object_key")]
+    # (renderer_deps and its helpers: the back end's files are keyed by their depfile's headers once they have one)
+    wanted = ("tree_headers", "flag_text", "object_key", "renderer_deps", "depfile_paths", "depfile_of")
+    functions = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in wanted]
     def assigned(n, names):
         return isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id in names for t in n.targets)
-    inputs = [n for n in ast.walk(tree) if assigned(n, ("ngx_flags", "ngx_deps", "vdeps"))]
+    inputs = [n for n in ast.walk(tree) if assigned(n, ("HEADER_EXTS", "_HEADER_DIGESTS", "DEPFILE_JOBS", "ngx_flags", "ngx_deps",
+                                                         "vdeps_roots", "vdeps"))]
     loops = [n for n in ast.walk(tree) if isinstance(n, ast.For) and isinstance(n.target, ast.Name) and n.target.id == "src"
              and isinstance(n.iter, ast.Call) and isinstance(n.iter.func, ast.Name) and n.iter.func.id == "vk_sources"]
-    assert len(functions) == 3 and len(loops) == 1, "actual dependency/key functions and Vulkan producer loop are required"
+    # (the depfile helpers are a later build.py's: an older --build-script has the first three alone)
+    assert set(wanted[:3]) <= {n.name for n in functions} and len(loops) == 1, \
+        "actual dependency/key functions and Vulkan producer loop are required"
     code = compile(ast.Module(body=functions + inputs + loops, type_ignores=[]), str(a.build_script), "exec")
     flags = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
     with tempfile.TemporaryDirectory(prefix="dlss-sdk-cache-") as folder:
@@ -45,21 +51,25 @@ def main():
         other = vk / "vk_other.cpp"
         other.write_text("// unrelated backend source\n", encoding="utf-8")
         def jobs(sdk_path=sdk):
-            ns = dict(os=os, hashlib=hashlib, kit=SimpleNamespace(ROOT=str(root)), NGX_SDK=str(sdk_path) if sdk_path else "",
+            ns = dict(os=os, re=re, hashlib=hashlib, kit=SimpleNamespace(ROOT=str(root)), NGX_SDK=str(sdk_path) if sdk_path else "",
                       vk=str(vk), GPU=str(root / "gpu"), vk_jobs=[], cxx=a.cxx, obj_dir=str(root / "obj"),
                       vflags=["-std=c++17", "-O0"], imgui_flags=[], imgui_users=(), shader_stamp="", stamp_def="",
-                      vk_lib_deps=b"", logo_text=b"", imgui_deps=b"", vk_sources=lambda: [str(src), str(other)])
+                      vk_lib_deps=b"", logo_text=b"", imgui_deps=b"", vk_sources=lambda: [str(src), str(other)],
+                      vk_pgo_flags=[])   # (RX_VK_PGO: no profile, as by default)
             exec(code, ns)
             return {Path(j[1]).name: (ns["object_key"](j[1], j[3], j[4]), j) for j in ns["vk_jobs"]}
 
         cache = {}
         def result(job):
+            # (the job's flags preprocess the source, and its SDK_VALUE is read from the text: nothing is linked or run. A
+            # tiny new program run from the temp folder is what Defender's machine-learning guess quarantines as a trojan,
+            # Trojan:Win32/Bearfoos.A!ml, which failed this check and alarmed whoever ran it. -MD is left out: no depfile)
             key, (_, source, _, compile_flags, _) = job
             if key not in cache:
-                exe = root / (str(len(cache)) + (".exe" if os.name == "nt" else ".out"))
-                subprocess.run([a.cxx, *compile_flags, source, "-o", str(exe)], check=True, **flags)
-                cache[key] = exe
-            return subprocess.run([str(cache[key])], check=False, **flags).returncode
+                text = subprocess.run([a.cxx, *[f for f in compile_flags if f not in ("-MD", "-MMD")], "-E", "-P", source],
+                                      check=True, capture_output=True, text=True, cwd=root, **flags).stdout
+                cache[key] = int(re.search(r"return (\d+);", text).group(1))
+            return cache[key]
 
         first = jobs()
         disabled = jobs(None)

@@ -15,7 +15,8 @@
    The protocol is Discord's documented IPC (discord-rpc's rpc_connection.h): a frame is <opcode u32 LE><length u32 LE><JSON>,
    Handshake 0, Frame 1, Close 2, Ping 3, Pong 4. The handshake {"v":1,"client_id":...} is answered by a Ready frame; a
    SET_ACTIVITY frame by a frame; a Ping is echoed as a Pong. */
-#include "hos_paths.h"   /* (first: hos_game_path_a, and windows.h on Windows) */
+#include "hos_paths.h"   /* (first: windows.h on Windows) */
+#include "options_path.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -185,12 +186,8 @@ static void read_discord_settings(DiscordSettings *s) {
     setting_copy(s->small_image, sizeof s->small_image, HOOKSHOT_DISCORD_SMALL_IMAGE_DEFAULT);
     setting_copy(s->small_text, sizeof s->small_text, HOOKSHOT_DISCORD_SMALL_TEXT_DEFAULT);
 
-    char path[1024];
-    const DWORD n = hos_game_path_a(path, (DWORD)sizeof path);
-    char *slash = n ? (strrchr(path, '\\') ? strrchr(path, '\\') : strrchr(path, '/')) : NULL;
-    if (slash) {
-        snprintf(slash + 1, (size_t)(path + sizeof path - slash - 1), "hookshot_options.ini");
-        FILE *f = fopen(path, "r");
+    {   /* (Mako 4.2: the options file where Longshot keeps it now, host/options_path.c) */
+        FILE *f = fopen(hos_options_file(), "r");
         if (f) {
             char line[512];
             while (fgets(line, sizeof line, f)) {

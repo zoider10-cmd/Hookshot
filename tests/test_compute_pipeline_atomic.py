@@ -3,8 +3,7 @@
 The dispatch's build worker, the dispatch itself and the precompile's threads write Program::compute_pipeline while other
 recording threads read it (dispatch() reads it before taking ParLock). Plain reads and writes of it there were a data
 race. Every use of it in vk_draw.cpp now goes through std::atomic_ref (release stores, acquire loads), and the
-synchronous build makes the pipeline into a local and publishes it only once made. Ported from HeyListen bfb16fc1 /
-Longshot 86abfce5 (#621). (vk_programs.cpp's load writes it into a program not yet published: not checked here.)
+synchronous build makes the pipeline into a local and publishes it only once made.
 
 python -I -B tests/test_compute_pipeline_atomic.py
 """

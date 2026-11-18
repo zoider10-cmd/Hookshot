@@ -63,7 +63,8 @@ def main():
         raise SystemExit("invalidate no longer asks the late rule before its wait")
     # (the by-range notes take a lock at every readback: only with their switch)
     notes = inv[inv.index('static const bool log_ranges = env_on("RX_VK_LOG_READBACK_RANGES");'):]
-    if not notes.startswith('static const bool log_ranges = env_on("RX_VK_LOG_READBACK_RANGES");\n            if (log_ranges)\n                rb_range_note('):
+    if not notes.startswith('static const bool log_ranges = env_on("RX_VK_LOG_READBACK_RANGES");\n            if (log_ranges) {\n'
+                            '                rb_range_note(') or "rb_range_age(" not in notes[:notes.index("\n            }\n")]:
         raise SystemExit("the readbacks are noted by range without RX_VK_LOG_READBACK_RANGES")
     if "if (log_ranges) rb_ranges_log();" not in notes[:1200]:
         raise SystemExit("the by-range log is written without RX_VK_LOG_READBACK_RANGES")

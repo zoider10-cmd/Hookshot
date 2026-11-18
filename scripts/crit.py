@@ -14,6 +14,7 @@ import collections, os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import prof  # noqa: E402
+import samples  # noqa: E402
 
 RUN_MODS = prof.RUN_MODS
 
@@ -39,7 +40,7 @@ def main():
         return r
 
     ticks = collections.defaultdict(dict)   # ms -> thread -> (running, frames named)
-    for line in open(path, encoding="utf-8", errors="replace"):
+    for line in samples.lines(path):   # (plain or packed)
         head, _, stack = line.rstrip("\n").partition("|")
         ms, _, thread = head.partition(" ")
         if not stack or not ms.isdigit():
@@ -65,9 +66,9 @@ def main():
 
     def guest_frame(frames):
         """the innermost game function (f_...) and the import it called, if any"""
-        imp = next((f for f in frames if ":imp_" in f), None)
+        imp = next((f for f in frames if ":imp_" in f or ":hle_" in f), None)   # (hle_<sym>: an HLE body not inlined)
         fn = next((f for f in frames if ":f_" in f), None)
-        return (imp.split(":imp_")[1][:48] + " <- " if imp else "") + (fn or frames[-1])
+        return (imp.replace(":hle_", ":imp_", 1).split(":imp_")[1][:48] + " <- " if imp else "") + (fn or frames[-1])
 
     idle = [t for t in ticks.values() if not any(r for th, (r, _) in t.items() if is_game(th))]
     print("-- no game thread running: %.1f%% of instants" % (100.0 * len(idle) / max(1, n)))

@@ -1,0 +1,70 @@
+# Push to main (not a schedule or tag pipeline).
+workflows:
+  ci:
+    jobs:
+      - lint
+      - third-party
+      - guide-screenshots
+      - test-linux:
+          requires: [lint]
+      - spirv-fixtures:
+          requires: [lint]
+      - linux-appimage:
+          requires: [lint, test-linux, spirv-fixtures]
+          filters: pipeline.parameters.linux or pipeline.parameters.full
+      - windows-builder:
+          requires: [lint]
+          filters: pipeline.parameters.windows or pipeline.parameters.full
+      - windows-vulkan:
+          requires: [lint, spirv-fixtures]
+          filters: >-
+            pipeline.parameters.gpu or pipeline.parameters.windows
+            or pipeline.parameters.full
+      - website:
+          filters: pipeline.parameters.website
+      - website-deploy:
+          context: cloudflare-prod
+          requires: [website]
+          filters: pipeline.parameters.website
+      - release-version:
+          requires:
+            - lint
+            - third-party
+            - test-linux
+            - spirv-fixtures
+            - linux-appimage
+            - windows-builder
+            - windows-vulkan
+      - release-linux:
+          requires: [release-version]
+      - release-windows:
+          requires: [release-version]
+      - release-stage:
+          requires: [release-linux, release-windows]
+      - mb/release-sign:
+          name: release-sign
+          context: release-signing
+          workspace: .
+          dry-run: << pipeline.parameters.release_dry_run >>
+          requires: [release-stage]
+      - mb/release-publish:
+          name: release-publish
+          context: forgejo-bot
+          serial-group: << pipeline.project.slug >>/release
+          workspace: .
+          dry-run: << pipeline.parameters.release_dry_run >>
+          requires: [release-sign]
+      - mb/gate:
+          name: gate
+          requires:
+            - lint
+            - third-party
+            - guide-screenshots
+            - test-linux
+            - spirv-fixtures
+            - linux-appimage
+            - windows-builder
+            - windows-vulkan
+            - website
+            - website-deploy
+            - release-publish

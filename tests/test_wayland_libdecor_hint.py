@@ -37,6 +37,14 @@ static void hos_sdl_hint(const char* name, const char* value) {
 static int hos_sdl_init(unsigned) { ++inits; return 1; }
 static const char* hos_sdl_error() { return ""; }
 static int hos_sdl_desktop_size(int* w, int* h) { *w = 2560; *h = 1440; return 1; }
+// Monitor metadata is unrelated to libdecor. Keep the extracted init's dependencies inert and
+// reject calls before successful SDL initialization, without creating a display or reading settings.
+static void hos_monitor_load() { if (inits != 1) std::abort(); }
+static void refresh_monitors() { if (inits != 1) std::abort(); }
+static int hos_monitor_screen_size(int* w, int* h) {
+    if (inits != 1) std::abort();
+    *w = 2560; *h = 1440; return 1;
+}
 static int hos_posix_window[4];
 static int sdl_ready;
 int hos_display_owns_sdl(void) { return sdl_ready; }

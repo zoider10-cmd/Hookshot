@@ -32,7 +32,12 @@ using VkShaderStageFlags = uint32_t;
 constexpr uint32_t VK_DRIVER_ID_AMD_PROPRIETARY = 1;
 struct {
     uint32_t sg32_stages = 0, subgroup_size = 32, subgroup_max = 32, driver_id = 0;
-    struct { bool shaderFloat16 = true; } vk12;   // (k10: f16 lowered where the GPU has none; here it has)
+    struct {
+        bool shaderFloat16 = true;   // (k10: f16 lowered where the GPU has none; here it has)
+        // (make_profile: storage image and texel buffer arrays indexed nonuniformly where the GPU can)
+        bool shaderStorageImageArrayNonUniformIndexing = true, shaderUniformTexelBufferArrayNonUniformIndexing = true,
+             shaderStorageTexelBufferArrayNonUniformIndexing = true;
+    } vk12;
     bool float_atomic_add = false;
     struct { struct { uint64_t minStorageBufferOffsetAlignment = 16; } limits; } props;
     struct { bool gather_offset = false; } fixes;   // (vk_vendor.h: make_profile reads the gather offset from it)

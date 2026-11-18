@@ -23,12 +23,11 @@ unless named); the Linux builder reads its lines with this file too (builder/lin
     python -I scripts/tools.py assemble python --requirements nx2/prompt_requirements.txt --out <zip>
     python -I scripts/tools.py assemble cpm --add <CPM folder> --out <zip>
     python -I scripts/tools.py assemble third-party --from <archive with tools/third_party> --out <zip>
-    python -I scripts/tools.py assemble profile --work <folder> --out <zip>
         a new archive from the tool's current one with what Hookshot adds: the pinned prompt packages (installed by this
         Python's pip for the archive's Python version and win_amd64), packages for the CPM cache (dav1d, scripts/windows/
-        dav1d.sh), the prebuilt files of third_party (a64emit.dll, lld-link.exe, SDL2.dll, SDL3.dll, zbic.dll) only, or the
-        play profile (work/: hookshot_pieces.prof, hot_funcs.txt, hot_order.txt, hookshot.res; addresses and counts, no game
-        data). Then `add` it. Each archive is deterministic: the same files give the same bytes
+        dav1d.sh), or the prebuilt files of third_party (a64emit.dll, lld-link.exe, SDL2.dll, SDL3.dll, zbic.dll) only. Then
+        `add` it. Each archive is deterministic: the same files give the same bytes. (No play profile here: play profiles are
+        committed in assets/profiles/)
 """
 import argparse
 import hashlib
@@ -53,10 +52,9 @@ CDN = "https://git-cdn.magicbean.dev"
 OWNER = REPO.split("/")[0]
 SYSTEMS = ("windows-x64", "linux-x64")
 # (the tools each builder needs: the release workflow refuses a lock without one of them. The Linux builder's AppImage carries
-# its Python; the rest is here, builder/linux/linux_tools.py). The play profile is not required: without its line the game is
-# built without one (nx2/make_game.py copies work/'s files only when they are there), a little slower in play; `assemble
-# profile` and `add` put one in when there is one
-REQUIRED = {"windows-x64": ("llvm-mingw", "python", "emsdk", "cpm", "wgpu-native", "third-party"),
+# its Python; the rest is here, builder/linux/linux_tools.py). No play profile is a tool: play profiles are committed in
+# assets/profiles/
+REQUIRED = {"windows-x64": ("llvm-mingw", "python", "emsdk", "cpm", "third-party"),
             "linux-x64": ("emsdk", "cpm", "ffmpeg", "sdl2", "sysroot")}
 NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$")
@@ -428,18 +426,6 @@ def assemble_third_party(source, prefix, out, tracked):
     return result
 
 
-PROFILE = ("hookshot_pieces.prof", "hot_funcs.txt", "hot_order.txt", "hookshot.res", "hookshot.ico")
-
-
-def assemble_profile(work, out):
-    files = {n: os.path.join(work, n) for n in PROFILE if os.path.isfile(os.path.join(work, n))}
-    if "hot_order.txt" not in files:
-        fail("%s: no hot_order.txt (make_game.py's profile)" % work)
-    result = write_zip(out, files, "work")
-    print("profile: %s (%s)" % (out, ", ".join(sorted(files))))
-    return result
-
-
 # ---- Hookshot's store: Forgejo's generic package registry ----
 # Each archive Hookshot keeps a copy of, or makes, is a file of a generic package of the MagicBeanDev organization (its
 # Packages tab): the package <name>-<system>, its version the tool's version, the file <sha256>-<name>.zip. A package
@@ -555,12 +541,11 @@ def main(argv=None):
     s.add_argument("folder")
     s.add_argument("--out", required=True)
     s = sub.add_parser("assemble")
-    s.add_argument("what", choices=("python", "cpm", "third-party", "profile"))
+    s.add_argument("what", choices=("python", "cpm", "third-party"))
     s.add_argument("--requirements")
     s.add_argument("--add")
     s.add_argument("--from", dest="source")
     s.add_argument("--from-prefix", default="HookshotBuilder/tools/third_party")
-    s.add_argument("--work")
     s.add_argument("--out", required=True)
     s.add_argument("--cache", default=CACHE)
     a = p.parse_args(argv)
@@ -624,10 +609,8 @@ def main(argv=None):
         elif a.what == "cpm":
             t = named(tools, "cpm")
             assemble_cpm(t, fetch(t, a.cache), a.add or fail("--add <CPM folder>"), a.out)
-        elif a.what == "third-party":
-            assemble_third_party(a.source or fail("--from <archive>"), a.from_prefix, a.out, tracked_files("third_party"))
         else:
-            assemble_profile(a.work or fail("--work <folder>"), a.out)
+            assemble_third_party(a.source or fail("--from <archive>"), a.from_prefix, a.out, tracked_files("third_party"))
     return 0
 
 

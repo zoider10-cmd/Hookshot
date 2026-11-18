@@ -47,6 +47,7 @@ static bool wb_skips_log() { return false; }
 static void wb_skip_note(uint64_t, uint64_t) {}
 static bool mirror_on() { return mirrors; }
 static void note_in_place_read(bool = false) {}   // (the readback's part wait: tests/test_readback_part.py checks every such read is noted)
+static void early_in_place_write(uint64_t, uint64_t, uint64_t) {}   // (RX_VK_READBACK_EARLY: tests/test_readback_early.py)
 static Pool* pool_of(uint64_t guest, uint64_t size) {
     ++lookups;
     return have_pool && guest >= pool.lo && guest <= pool.hi && size <= pool.hi - guest ? &pool : nullptr;

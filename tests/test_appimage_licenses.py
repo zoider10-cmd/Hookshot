@@ -63,7 +63,7 @@ class AppImageLicences(unittest.TestCase):
         build = (ROOT / "nx2/build.py").read_text(encoding="utf-8")
         self.assertIn('cp -a third_party/fidelityfx "$T/third_party/"', script)
         self.assertIn('FSR_HEADERS = os.path.join(kit.HERE, "..", "third_party", "fidelityfx")', build)
-        self.assertIn('return "" if NGX_SDK or FSR else os.environ.get("HOOKSHOT_VK_PREBUILT", "")', build)
+        self.assertNotIn("HOOKSHOT_VK_PREBUILT", build)   # (every build compiles the back end: no prebuilt one to fall back on)
         self.assertTrue((ROOT / "third_party/fidelityfx/api/include/ffx_api.h").is_file())
 
 

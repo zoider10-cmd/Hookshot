@@ -117,6 +117,8 @@ static const Av1Decoder av1_decoders[] = {
     {"Media Foundation", mf_av1_open, mf_av1_decode, mf_av1_flush, mf_av1_close},
 };
 
+static int64_t movie_totals[5];   /* (hookshot) the performance summary's: hos_movie_stats, below */
+
 typedef struct {
     AVCodecContext *ctx;
     void *mf;                        /* (hookshot) an AV1 decoder of our own instead of ctx (av1: which one) */
@@ -177,8 +179,7 @@ static void set_host(uint64_t obj, uint32_t magic, void *p) {
         if (i == nhost_objs) {
             if (nhost_objs == cap_host_objs) {
                 cap_host_objs = cap_host_objs ? cap_host_objs * 2 : 16;
-                host_objs = (HostObj *)realloc(host_objs, cap_host_objs * sizeof *host_objs);
-                if (!host_objs) hos_fatal(NULL, "video: out of memory");
+                host_objs = (HostObj *)hos_xrealloc(host_objs, cap_host_objs * sizeof *host_objs, "video: decoder table");
             }
             nhost_objs++;
         }
@@ -214,8 +215,7 @@ HLE(_ZN2nn5codec31CalculateDecoderImagePoolBufferEPmS1_RKNS0_27VideoDecoderImage
 /* InitializeDecoderImagePool(pool, void* memory, size, Preference const&, u32 count) */
 HLE(_ZN2nn5codec26InitializeDecoderImagePoolEPNS0_25VideoDecoderImagePoolTypeEPvmRKNS0_27VideoDecoderImagePreferenceEj) {
     const Pref *p = (const Pref *)GP(ARG(3));
-    Pool *o = (Pool *)calloc(1, sizeof *o);
-    if (!o) hos_fatal(NULL, "video: out of memory for an image pool");
+    Pool *o = (Pool *)hos_xcalloc(1, sizeof *o, "video: image pool");
     o->w = p->magic == PREF_MAGIC && p->w ? p->w : 1280, o->h = p->magic == PREF_MAGIC && p->h ? p->h : 720;
     o->format = p->magic == PREF_MAGIC ? (int)p->format : 2;
     o->count = (int)ARG(4) > 0 ? (int)ARG(4) : 1;
@@ -439,6 +439,7 @@ static void queue_frame(Dec *d, const AVFrame *f) {
     p.nv12 = (uint8_t *)malloc(nv12_size);
     if (!p.nv12 || (!lazy_rgba && !p.rgba)) {   /* (out of memory: this frame is dropped, not written through NULL; issue 342) */
         static volatile LONG told;
+        __atomic_add_fetch(&movie_totals[1], 1, __ATOMIC_RELAXED);
         if (InterlockedIncrement(&told) <= 4) hos_log("video: no memory for a %dx%d frame: dropped", w, h);
         free(p.rgba), free(p.nv12);
         return;
@@ -548,11 +549,20 @@ static void decode_next(Dec *d) {
         }
         const int64_t ns = hos_now_ns() - t0;
         d->decode_ns += ns;
+        __atomic_add_fetch(&movie_totals[3], ns, __ATOMIC_RELAXED);   /* (the performance summary's: hos_movie_stats) */
         if (ns > d->decode_worst_ns) d->decode_worst_ns = ns;
         if (picture) d->recent_ns = d->recent_ns ? (d->recent_ns * 7 + ns) / 8 : ns;   /* (about the last 8) */
         free(n);
     }
 }
+/* (hookshot) every movie's totals this session, for the performance summary (hos_perf_info, gpu/vk/perf_report.cpp): pictures
+   shown (taken by the game), skipped to keep up with the sound (and dropped for want of memory), shown late (50 ms or more
+   after the one before), decoding time in ns, decoders that did not start. Added as each happens, so a movie still playing
+   at a summary counts too (movie_totals: above) */
+void hos_movie_stats(int64_t out[5]) {
+    for (int i = 0; i < 5; i++) out[i] = __atomic_load_n(&movie_totals[i], __ATOMIC_RELAXED);
+}
+void hos_movie_fallback(void) { __atomic_add_fetch(&movie_totals[4], 1, __ATOMIC_RELAXED); }
 /* (hookshot, issue 2316) one line when a movie stops: its decoder, the time it took for each submission against the time
    between the movie's pictures, and the pictures the catch-up skipped. A decoder slower than the movie leaves the picture
    behind the sound, whatever the catch-up does: the line says which it was in a report's hookshot_log.txt */
@@ -821,6 +831,7 @@ static void dec_acquire(Ctx *c) {
             skipped++;
         }
         d->skipped += skipped;
+        __atomic_add_fetch(&movie_totals[1], skipped, __ATOMIC_RELAXED);
         if (skipped && video_log()) hos_log("video: %d pictures skipped to catch up with the movie's clock", skipped);
     }
     Picture *p = &d->queue[d->qhead];
@@ -859,6 +870,8 @@ static void dec_acquire(Ctx *c) {
         if (gap > d->gap_worst_ns) d->gap_worst_ns = gap;
         if (d->out_ns) d->gaps[now - d->clock_ns >= 5000000000ll][gap < 20000000 ? 0 : gap < 50000000 ? 1 : gap < 90000000 ? 2 : 3]++;
         d->out_ns = now;
+        __atomic_add_fetch(&movie_totals[0], 1, __ATOMIC_RELAXED);   /* (shown: a picture the game took) */
+        if (gap >= 50000000) __atomic_add_fetch(&movie_totals[2], 1, __ATOMIC_RELAXED);   /* (and late) */
     }
     {   /* (hookshot) HOS_VIDEO_LOG: the picture's time against this decoder's movie clock, to see it fall behind the sound */
         if (video_log() && d->acquires % 60 == 0) {

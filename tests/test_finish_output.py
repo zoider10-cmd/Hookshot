@@ -80,7 +80,8 @@ class FinishOutputTests(unittest.TestCase):
         self.assertEqual((self.out / "image.bin").read_bytes(), b"existing synthetic image")
 
     def assert_no_staging_files(self):
-        self.assertEqual(sorted(path.name for path in self.out.iterdir()), ["hookshot.exe", "image.bin"])
+        self.assertEqual(sorted(path.name for path in self.out.iterdir() if path.name != make_game.INSTALLED_NOTE),
+                         ["hookshot.exe", "image.bin"])
 
     def stopped_output(self):
         output = io.StringIO()
@@ -206,6 +207,62 @@ class FinishOutputTests(unittest.TestCase):
         self.assertFalse(self.destination.stat().st_mode & stat.S_IWRITE)
         self.assertEqual((self.out / "image.bin").read_bytes(), self.image.read_bytes())
         self.assert_no_staging_files()
+
+    def copied_by_finish(self):
+        copy = make_game.shutil.copy2
+        copied = []
+
+        def observe_copy(source, destination):
+            copied.append(Path(source))
+            return copy(source, destination)
+
+        with mock.patch.object(make_game.shutil, "copy2", side_effect=observe_copy):
+            self.finish()
+        return copied
+
+    def test_a_file_the_last_finish_put_there_is_neither_copied_nor_swapped(self):
+        """An update that links the same exe again: the installed one stays (the same file), a leftover .new of it goes;
+        the image, which changed, is staged and swapped as before"""
+        self.assertEqual(self.copied_by_finish(), [self.source, self.image])
+        self.image.write_bytes(b"newer synthetic image")
+        (self.out / "hookshot.exe.new").write_bytes(b"left by a stopped build")
+        before = self.destination.stat()
+        self.assertEqual(self.copied_by_finish(), [self.image])
+        after = self.destination.stat()
+        self.assertEqual((after.st_ino, after.st_mtime_ns), (before.st_ino, before.st_mtime_ns))
+        self.assertEqual(self.destination.read_bytes(), self.source.read_bytes())
+        self.assertEqual((self.out / "image.bin").read_bytes(), b"newer synthetic image")
+        self.assert_no_staging_files()
+        self.assertEqual(self.copied_by_finish(), [])
+
+    def test_identical_bytes_not_from_the_last_finish_are_copied(self):
+        """No note (a folder from before, or one the note did not reach): copied as before, the installed file never read"""
+        self.destination.write_bytes(self.source.read_bytes())
+        self.destination.chmod(stat.S_IMODE(self.source.stat().st_mode))
+        with mock.patch.object(make_game.filecmp, "cmp", side_effect=AssertionError("the installed file was read")):
+            self.assertEqual(self.copied_by_finish(), [self.source, self.image])
+        (self.out / make_game.INSTALLED_NOTE).write_text("{", encoding="utf-8")
+        self.assertEqual(self.copied_by_finish(), [self.source, self.image])
+
+    def test_a_changed_build_of_the_same_size_is_copied(self):
+        self.copied_by_finish()
+        self.source.write_bytes(bytes(len(self.source.read_bytes())))
+        self.assertEqual(self.copied_by_finish(), [self.source])
+        self.assertEqual(self.destination.read_bytes(), self.source.read_bytes())
+
+    def test_an_installed_file_replaced_since_is_copied(self):
+        self.copied_by_finish()
+        other = self.out / "other"
+        other.write_bytes(b"another synthetic exec")   # (another file put in its place: another file id, whatever its bytes)
+        os.replace(other, self.destination)
+        self.assertEqual(self.copied_by_finish(), [self.source])
+        self.assertEqual(self.destination.read_bytes(), self.source.read_bytes())
+
+    def test_a_new_mode_is_copied(self):
+        self.copied_by_finish()
+        self.source.chmod(0o700 if os.name != "nt" else stat.S_IREAD)
+        self.assertEqual(self.copied_by_finish(), [self.source])
+        self.assertEqual(stat.S_IMODE(self.destination.stat().st_mode), stat.S_IMODE(self.source.stat().st_mode))
 
     def test_denied_swap_keeps_complete_readonly_staging_file(self):
         self.source.chmod(stat.S_IREAD)

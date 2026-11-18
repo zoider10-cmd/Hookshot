@@ -5,7 +5,9 @@ during the prediction left the rest unbuilt for good: the next start found the p
 compiled those pipelines as they were first drawn. predict_run (gpu/vk/vk_draw.cpp) now keeps hookshot_pipelines.bin.predicting from
 its start to its end (not removed when stopped), and every caller (the Builder's run, the start-up screen, the console start) runs
 the prediction when the marker is there even if nothing was translated. The marker counts the starts that ended inside it (two
-and it is let go); a start closed in it writes the count back unchanged, so closing the window is not taken for a crash.
+and it is let go); a start closed in it has the count written back unchanged by the close (gpu/vk/crash_markers.h,
+mkwvk_close_asked), whether its workers stopped in time or not, so closing the window is not taken for a crash
+(tests/test_quit_not_crash.py runs it).
 
 Source checks only. python -I -B tests/test_predict_resume.py
 """
@@ -31,16 +33,16 @@ def main():
     draw = (ROOT / "gpu/vk/vk_draw.cpp").read_text(encoding="utf-8")
     main_cpp = (ROOT / "gpu/vk/vk_main.cpp").read_text(encoding="utf-8")
     run = body(draw, "void predict_run(void (*progress)(size_t done, size_t total)) {")
-    made = run.index('fopen(predict_pending_path().c_str(), "wb")')
-    if made > run.index("predict_pipelines("):
+    begin = "crash_markers::begin(predict_pending_path(), began + 1, began);"
+    if begin not in run:
+        raise SystemExit("FAIL: the marker is not begun with this start counted, and the count before it for a close to put "
+                         "back (only a crash should count)")
+    if run.index(begin) > run.index("predict_pipelines("):
         raise SystemExit("FAIL: the marker is made after the prediction has begun deciding")
-    if "if (!prepare_stopped()) remove(predict_pending_path().c_str());" not in run:
+    if "if (!prepare_stopped()) crash_markers::end(predict_pending_path());" not in run:
         raise SystemExit("FAIL: a stopped prediction's marker is removed (or a finished one's kept)")
-    stopped = run[run.rindex("if (!prepare_stopped()) remove(predict_pending_path().c_str());"):]
-    if 'fprintf(f, "%d\\n", began)' not in stopped.split("\n")[1]:
+    if "crash_markers::close();" not in body(main_cpp, "void mkwvk_close_asked(void) {"):
         raise SystemExit("FAIL: a start closed during the prediction counts toward the two that give it up (only a crash should)")
-    if 'fprintf(f, "%d\\n", began + 1)' not in run or run.index('fprintf(f, "%d\\n", began + 1)') > run.index("predict_pipelines("):
-        raise SystemExit("FAIL: a start that ends in the prediction is not counted before it begins")
     started = body(main_cpp, "bool started_up() {")
     screen = main_cpp[main_cpp.index("void prepare_with_screen() {"):main_cpp.index("bool started_up() {")]
     for where, text in (("the Builder's run and the console start", started), ("the start-up screen", screen)):

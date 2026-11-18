@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-15 | main 9e6f231d0ded199793e8270d20ec60cdb765d28f production sources with the new test from ed097a30 | Ubuntu 24.04.5 WSL2; kernel 6.18.58.1-microsoft-standard-WSL2; no window | Not used; game-free fixture | CPU/RAM not recorded | Python 3.12.3; GCC/G++ 13.3.0; fake SDL; 70 recording endpoints | tests/test_audio_in.py, unchanged-main control | linux-control01: expected failure at expanded-list/boundary assertion, native exit 43; Python driver exit 1; no real audio capture |

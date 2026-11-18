@@ -10,7 +10,7 @@
    Here there is always one device of each kind (as on the console, whose microphone is always there). The started streams
    of one format share a source: one microphone opened once, through SDL3, or SDL2 as the Linux AppImage carries
    (host/hos_sdl.c), converted to that format; what it records goes to each stream's own buffer, the newest capacity's
-   worth kept. Which one is the Insert menu's choice (gpu/vk/vk_menu.cpp, Gameplay: Microphone), told by hos_mic_select:
+   worth kept. Which one is the Insert menu's choice (gpu/vk/vk_menu.cpp, Audio: Microphone), told by hos_mic_select:
    off, the system's default, or a microphone by its name. One that is not there, does not open, stops sending, or is no
    longer listed (pulled out: looked for every 5 s, as one pulled out can go on sending zeros): the default stands in for
    it (silence when there is none either) and it is tried again, found by its name in a list made then (it may come back
@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #ifndef HOOKSHOT_ENV_H   /* (env_on: the switches' one rule) */
@@ -31,7 +32,7 @@
 
 #define MIC_MAGIC 0x4D494349u   /* "MICI": the high word of our handle in the game's InputStreamType */
 #define MAX_STREAMS 4
-#define MAX_DEVICES 16
+#define MAX_DEVICES 64
 #define QUIET_NS 2000000000LL   /* a microphone that gives nothing this long is taken as gone */
 #define RETRY_NS 3000000000LL   /* a chosen microphone that is not there: tried again after this, */
 #define RETRY_MAX_NS 60000000000LL   /* twice as long each time up to this */
@@ -55,6 +56,8 @@ typedef struct {
     int64_t retry_ns, retry_wait;   /* (the wanted microphone not open: when to try again, and the wait after that) */
     int64_t silence_from_ns, silence_made;   /* (silence: counted from here, frames of it made) */
     int failures;                /* (in a row, since it last gave sound: logged at the first) */
+    int input_peak, output_peak; /* normalized permille, a short peak-hold window */
+    int64_t level_ns, level_window_ns, clip_until;
 } Source;
 
 typedef struct {
@@ -68,7 +71,10 @@ typedef struct {
 } InStream;
 
 static InStream streams[MAX_STREAMS];
-static Source sources[MAX_STREAMS];
+/* One extra source permits a 48 kHz mono test even if all guest streams use other formats. */
+static Source sources[MAX_STREAMS + 1];
+static InStream test_stream;   /* a source reference only: never a guest ring */
+static int testing, mic_gain = 100; /* under lock, independent of the guest's gain API */
 static SRWLOCK lock = SRWLOCK_INIT;        /* the streams and the sources (the game's threads) */
 static SRWLOCK list_lock = SRWLOCK_INIT;   /* the device list (the menu's thread too): never held while listing them */
 static uint32_t dev_ids[MAX_DEVICES];
@@ -110,6 +116,47 @@ static uint16_t sdl_format(int f) {   /* (SDL_AudioFormat: little-endian, signed
 }
 static int sample_bytes(int f) { return f == FMT_PCM8 ? 1 : f == FMT_PCM16 ? 2 : f == FMT_PCM24 ? 3 : 4; }
 
+/* Shared SDL2/SDL3 path, once per fresh block before fan-out. Unity preserves in-range finite samples bit-for-bit.
+   Read/write through memcpy: SDL buffers need not have the alignment of a float or int32_t. */
+static void mic_process(Source *src, uint8_t *buf, int bytes, int64_t now) {
+    const int width = sample_bytes(src->format);
+    int input = 0, output = 0, clipped = 0;
+    for (int at = 0; at + width <= bytes; at += width) {
+        double value, scale, top;
+        if (src->format == FMT_FLOAT) {
+            float v; memcpy(&v, buf + at, 4);
+            value = isfinite(v) ? v : 0.0; scale = 1.0; top = 1.0;
+        } else {
+            if (width == 1) { int8_t v; memcpy(&v, buf + at, 1); value = v; scale = 128.0; }
+            else if (width == 2) { int16_t v; memcpy(&v, buf + at, 2); value = v; scale = 32768.0; }
+            else { int32_t v; memcpy(&v, buf + at, 4); value = v; scale = 2147483648.0; }
+            top = scale - 1.0;
+        }
+        double magnitude = value < 0 ? -value : value;
+        int level = (int)((magnitude > scale ? scale : magnitude) * 1000.0 / scale);
+        if (level > input) input = level;
+        double adjusted = value * mic_gain / 100.0;
+        if (adjusted > top) adjusted = top, clipped = 1;
+        if (adjusted < -scale) adjusted = -scale, clipped = 1;
+        magnitude = adjusted < 0 ? -adjusted : adjusted;
+        level = (int)(magnitude * 1000.0 / scale);
+        if (level > output) output = level;
+        if (src->format == FMT_FLOAT) { float v = (float)adjusted; memcpy(buf + at, &v, 4); }
+        else if (width == 1) { int8_t v = (int8_t)adjusted; memcpy(buf + at, &v, 1); }
+        else if (width == 2) { int16_t v = (int16_t)adjusted; memcpy(buf + at, &v, 2); }
+        else { int32_t v = (int32_t)adjusted; memcpy(buf + at, &v, 4); }
+        if (value >= top || value <= -scale) clipped = 1;
+    }
+    if (now - src->level_window_ns > 150000000LL) {
+        src->input_peak = src->output_peak = 0;
+        src->level_window_ns = now;
+    }
+    if (input > src->input_peak) src->input_peak = input;
+    if (output > src->output_peak) src->output_peak = output;
+    if (bytes > 0) src->level_ns = now;
+    if (clipped) src->clip_until = now + 1000000000LL;
+}
+
 static void push(InStream *s, const uint8_t *in, int n) {   /* (into the stream's ring: the oldest dropped when full) */
     const int cap = s->capacity * s->frame_bytes;
     if (n > cap) {   /* (the newest capacity's worth) */
@@ -125,7 +172,8 @@ static void push(InStream *s, const uint8_t *in, int n) {   /* (into the stream'
 }
 static void push_all(const Source *src, const uint8_t *in, int n) {
     for (int i = 0; i < MAX_STREAMS; i++)
-        if (streams[i].used && streams[i].started && &sources[streams[i].source] == src) push(&streams[i], in, n);
+        if (streams[i].used && streams[i].started && streams[i].source >= 0 && &sources[streams[i].source] == src)
+            push(&streams[i], in, n);
 }
 
 /* a device's name is the wanted one: the same, or its start when the wanted one is the menu's kept name (cut at kMicNameKept
@@ -161,6 +209,8 @@ static void close_mic(Source *src, int64_t now) {
         src->silence_from_ns = now, src->silence_made = 0;   /* (silence from here) */
     }
     src->mic = NULL, src->standin = 0;
+    src->level_ns = src->level_window_ns = src->clip_until = 0;
+    src->input_peak = src->output_peak = 0;
 }
 static void use(Source *src, void *mic, int standin, int64_t now) {   /* (a microphone opened: in place of the one before) */
     close_mic(src, now);
@@ -246,10 +296,12 @@ static void pump(Source *src) {
     if (src->mic) {
         int most = 0;   /* (the largest stream's capacity: more than that backlog is dropped before it reaches them) */
         for (int i = 0; i < MAX_STREAMS; i++)
-            if (streams[i].used && streams[i].started && &sources[streams[i].source] == src) {
+            if (streams[i].used && streams[i].started && streams[i].source >= 0 && &sources[streams[i].source] == src) {
                 const int bytes = streams[i].capacity * streams[i].frame_bytes;
                 if (bytes > most) most = bytes;
             }
+        if (testing && test_stream.source == (int)(src - sources) && most < src->rate / 10 * src->frame_bytes)
+            most = src->rate / 10 * src->frame_bytes;
         uint8_t buf[4096];
         const int chunk = (int)sizeof buf - (int)sizeof buf % src->frame_bytes;
         int heard = 0, avail = hos_sdl_mic_available(src->mic);
@@ -261,6 +313,7 @@ static void pump(Source *src) {
         while (avail > 0) {
             const int got = hos_sdl_mic_read(src->mic, buf, avail < chunk ? avail - avail % src->frame_bytes : chunk);
             if (got <= 0) break;
+            mic_process(src, buf, got, now);
             push_all(src, buf, got), heard = 1;
             avail -= got;
         }
@@ -287,7 +340,7 @@ static void pump(Source *src) {
     if (due > 0) push_all(src, NULL, (int)due * src->frame_bytes);
 }
 static void pump_all(void) {
-    for (int i = 0; i < MAX_STREAMS; i++)
+    for (int i = 0; i < MAX_STREAMS + 1; i++)
         if (sources[i].used) {
             choose(&sources[i]);
             pump(&sources[i]);
@@ -304,9 +357,15 @@ static InStream *stream_of(uint64_t obj) {
 }
 static void attach(InStream *s) {   /* (the source of its format, made when there is none) */
     int free_at = -1;
-    for (int i = 0; i < MAX_STREAMS; i++) {
+    for (int i = 0; i < MAX_STREAMS + 1; i++) {
         const Source *src = &sources[i];
         if (src->used && src->format == s->format && src->channels == s->channels && src->rate == s->rate) {
+            /* Drain test-only capture before the first guest joins: old test notes are never delivered later. */
+            if (s != &test_stream && testing && test_stream.source == i && src->users == 1) {
+                choose(&sources[i]);
+                pump(&sources[i]);
+                if (sources[i].mic) hos_sdl_mic_clear(sources[i].mic);
+            }
             s->source = i, sources[i].users++;
             return;
         }
@@ -326,6 +385,44 @@ static void detach(InStream *s) {
     if (--src->users > 0) return;
     close_mic(src, hos_now_ns());
     memset(src, 0, sizeof *src);
+}
+
+/* The menu calls this once per tick, including a final disabled call on leaving Audio, closing or losing focus.
+   Same lock as every guest read: one drainer, no SDL callback/UI races and no second consumer stealing samples.
+   Result bits: 1 testing, 2 capture open, 4 default stand-in, 8 fresh samples, 16 clipping, 32 Off.
+   levels[0..1]: pre/post gain peak permille. Never writes audio files or plays capture to an output device. */
+int hos_mic_test(int enabled, int gain, int *levels) {
+    AcquireSRWLockExclusive(&lock);
+    mic_gain = gain < 0 ? 0 : gain > 400 ? 400 : gain;
+    AcquireSRWLockShared(&list_lock);
+    const int off = sel_mode <= 0;
+    ReleaseSRWLockShared(&list_lock);
+    if (!enabled || off) {
+        if (testing) detach(&test_stream);
+        testing = 0;
+    } else if (!testing) {
+        memset(&test_stream, 0, sizeof test_stream);
+        test_stream.source = -1;
+        test_stream.format = FMT_PCM16, test_stream.channels = 1, test_stream.rate = 48000;
+        test_stream.frame_bytes = 2;
+        attach(&test_stream);
+        testing = 1;
+    }
+    int state = off ? 32 : 0;
+    levels[0] = levels[1] = 0;
+    if (testing) {
+        pump_all();
+        const Source *src = &sources[test_stream.source];
+        const int64_t now = hos_now_ns();
+        state |= 1 | (src->mic ? 2 : 0) | (src->standin ? 4 : 0);
+        if (src->level_ns && now - src->level_ns <= 250000000LL) {
+            state |= 8;
+            levels[0] = src->input_peak, levels[1] = src->output_peak;
+        }
+        if (src->clip_until > now) state |= 16;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    return state;
 }
 static void note_read(InStream *s, const uint8_t *p, int frames) {
     s->frames_read += frames;
@@ -500,7 +597,7 @@ HLE(_ZN2nn5audio15ReadInputStreamEPNS0_15InputStreamTypeEPvi) {
 HLE(_ZN2nn5audio24GetInputStreamStatisticsEPNS0_15InputStreamTypeEb) {
     if (c->x[8]) memset(GP(c->x[8]), 0, 16);
 }
-HLE(_ZN2nn5audio18SetInputStreamGainEPNS0_15InputStreamTypeEfNS_8TimeSpanE) { (void)c; }   /* (the device's level as the system has it) */
+HLE(_ZN2nn5audio18SetInputStreamGainEPNS0_15InputStreamTypeEfNS_8TimeSpanE) { (void)c; }   /* guest gain remains unimplemented; menu gain is independent */
 HLE(_ZN2nn5audio18GetInputStreamGainEPKNS0_15InputStreamTypeE) {
     const float one = 1.0f;
     c->vreg[0][0] = c->vreg[0][1] = 0;

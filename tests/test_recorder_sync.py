@@ -32,7 +32,8 @@ python -I -B tests/test_recorder_sync.py --headers <Vulkan-Headers/include> [--c
    Thread (each run with --only thread, so the recorder thread's checks alone catch it): no wait before vkEndCommandBuffer, before
    vkQueueSubmit2, at the replay lock's release, before vkResetCommandPool; no backpressure (the ring overwritten); no join at
    teardown; a packet bigger than its room written into the ring when the ring has more free; the recorder's exception swallowed
-   (--throw).
+   (--throw). Destruction leaves a copy unpublished, with the recorder awake until a boundary publishes it: skipping the destruction
+   boundary must put that copy after destruction, even if the producer is paused before it calls the fake driver.
 4. (Windows) the process ends cleanly with the recorder parked in idle() holding its lock: tests/recorder_exit_test.cpp, a DLL with
    the real headers and an exe that calls ExitProcess (as the window's close does); exit code 0 within 20 s (a watchdog ends only
    that child) and the DLL's last global destructor run. Broken: the old global recorder with its destructor (wake, join).
@@ -96,7 +97,9 @@ C_COMMENT_OR_STRING = re.compile(r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\\n])*"|\'(?:\
 UI_RECORD_CALL = re.compile(r"\bui\s*::\s*record(?:_to)?\s*\(")
 NGX_RECORD_CALL = re.compile(r"\bNGX_(?:VULKAN_\w+_EXT|VK_\w+_DLSSG)\s*\(")   # (NVIDIA NGX's create/evaluate, DLSS's and frame generation's: its own commands into cmd)
 FFX_RECORD_CALL = re.compile(r"\bl\s*\.\s*dispatch\s*\(")   # (AMD FidelityFX's ffxDispatch, through its loaded pointer: its own commands into cmd)
-OPAQUE_RECORD_CALL = re.compile(UI_RECORD_CALL.pattern + "|" + NGX_RECORD_CALL.pattern + "|" + FFX_RECORD_CALL.pattern)
+XESS_RECORD_CALL = re.compile(r"\bl\s*\.\s*execute\s*\(")   # (Intel XeSS's xessVKExecute, through its loaded pointer: its own commands into cmd)
+OPAQUE_RECORD_CALL = re.compile(UI_RECORD_CALL.pattern + "|" + NGX_RECORD_CALL.pattern + "|" + FFX_RECORD_CALL.pattern + "|" +
+                                XESS_RECORD_CALL.pattern)
 B_DIRECT_BEFORE = re.compile(r"::\s*mkwvk\s*::\s*rec\s*::\s*boundary\s*\(\s*::\s*mkwvk\s*::\s*rec\s*::\s*B_DIRECT\s*\)\s*;\Z")
 
 
@@ -241,6 +244,13 @@ def check_sources():
         problems.append("vk_fsr4.cpp: no ffxDispatch call (l.dispatch) found: update FFX_RECORD_CALL")
     elif not direct_unbounded(fsr4.replace(B_DIRECT_STMT, "", 1), "vk_fsr4.cpp", FFX_RECORD_CALL):
         problems.append("the B_DIRECT check missed an ffxDispatch recording without its boundary")
+    # (Intel XeSS records into cmd through xessVKExecute: after a B_DIRECT boundary; control: that boundary removed)
+    xess = (VK / "vk_xess.cpp").read_text(encoding="utf-8")
+    problems += direct_unbounded(xess, "vk_xess.cpp", XESS_RECORD_CALL)
+    if not XESS_RECORD_CALL.search(blank_comments(xess)):
+        problems.append("vk_xess.cpp: no xessVKExecute call (l.execute) found: update XESS_RECORD_CALL")
+    elif not direct_unbounded(xess.replace(B_DIRECT_STMT, "", 1), "vk_xess.cpp", XESS_RECORD_CALL):
+        problems.append("the B_DIRECT check missed an xessVKExecute recording without its boundary")
     # (and any other recording vk_work.h does not see must be registered: every hand-written note_work() follows a known one)
     for path in sorted(VK.glob("*.cpp")):
         problems += opaque_unregistered(path.read_text(encoding="utf-8"), path.name)
@@ -272,6 +282,7 @@ def build(cxx, headers, out, recorder_text, name, extra=(), work_text=None):
     (d / "vk_work.h").write_text(work_text or (VK / "vk_work.h").read_text(encoding="utf-8"), encoding="utf-8")
     (d / "vk_recorder.h").write_text(recorder_text, encoding="utf-8")
     (d / "gpu_wait_stats.h").write_text((VK / "gpu_wait_stats.h").read_text(encoding="utf-8"), encoding="utf-8")
+    (d / "vk_new.h").write_text((VK / "vk_new.h").read_text(encoding="utf-8"), encoding="utf-8")   # (NewNothrow, issue 1280)
     exe = d / "recorder_sync_test.exe"
     cmd = [cxx, "-std=c++20", "-include", ENV_ON_H, "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", "-Wno-missing-field-initializers", "-DVK_NO_PROTOTYPES",
            "-D_CRT_SECURE_NO_WARNINGS",

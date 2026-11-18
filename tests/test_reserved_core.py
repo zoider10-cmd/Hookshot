@@ -11,14 +11,20 @@ affinity: a process kept to some processors has its replay on one of those).
 The replay runs on that core on Linux too (replay_pin_mask, gpu/vk/vk_replay.cpp), and a thread made inside a pinned
 replay starts with the process's affinity, not the pin (host/posix/win32_posix.c).
 
-python -I -B tests/test_reserved_core.py [--cxx clang++]
+On Linux, with real threads over host/posix/win32_posix.c as it is (its thread records counted): inside the real ReplayPin,
+guest_bytes' helper threads (gpu/vk/vk_texture.cpp) read on the process's logical processors and the replaying thread on
+the pin, which is undone after; std::threads that register with the shim and end leave no thread record behind; a
+CreateThread thread and a registered thread that calls ExitThread each give theirs back once.
+
+python -I -B tests/test_reserved_core.py [--cxx clang++] [--cc clang]
 """
 import argparse
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
-RUN_ALL_ARGS = ["--cxx", "g++"]
+RUN_ALL_ARGS = ["--cxx", "g++", "--cc", "gcc"]
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -36,6 +42,7 @@ def block(text, marker):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--cxx', default='g++')
+    parser.add_argument('--cc', default='gcc')
     parser.add_argument('--source', type=Path, default=ROOT / 'host/hos_thread.c')
     args = parser.parse_args()
     helper = block(args.source.read_text(encoding='utf-8'), 'static uint64_t pick_reserved_core(')
@@ -183,6 +190,169 @@ int main() {
         cpp.write_text(fixture, encoding='utf-8')
         subprocess.run([args.cxx, '-std=c++20', '-Wall', '-Wextra', '-Werror', str(cpp), '-o', str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
+    if sys.platform.startswith('linux'):
+        threads_check(args.cxx, args.cc)
+    else:
+        print('skip: the helper threads and thread records on Linux (host/posix/win32_posix.c is not built here)')
+
+
+THREADS = r'''
+#include <windows.h>
+#include <pthread.h>
+#include <sched.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <map>
+#include <mutex>
+#include <set>
+#include <thread>
+#include <vector>
+#define CHECK(ok) do { if (!(ok)) { std::fprintf(stderr, "failed line %d\n", __LINE__); std::exit(1); } } while (0)
+extern "C" long hthread_made, hthread_freed;   // (the shim's thread records: thread_new's, and thread_unref's frees)
+static uint64_t mask_now() {
+    cpu_set_t s;
+    CPU_ZERO(&s);
+    CHECK(sched_getaffinity(0, sizeof s, &s) == 0);
+    uint64_t m = 0;
+    for (int i = 0; i < 64; i++) if (CPU_ISSET(i, &s)) m |= 1ull << i;
+    return m;
+}
+static uint64_t reserved;
+static std::mutex seen_mu;
+static std::map<long, std::set<uint64_t>> seen;   // (each reading thread's masks)
+namespace mkwvk {
+static void logf(const char*, ...) {}
+struct Host {
+    uint8_t* (*gpu_ptr)(uint64_t gpu, uint64_t* avail);
+    int (*gpu_read)(uint64_t gpu, void* dst, uint64_t n);
+    uint64_t (*reserved_cpus)(void);
+};
+static Host host_v = {
+    [](uint64_t, uint64_t* avail) -> uint8_t* { *avail = 0; return nullptr; },
+    [](uint64_t gpu, void* dst, uint64_t n) -> int {
+        { std::lock_guard<std::mutex> l(seen_mu); seen[syscall(SYS_gettid)].insert(mask_now()); }
+        for (uint64_t i = 0; i < n; i++) ((uint8_t*)dst)[i] = (uint8_t)((gpu + i) * 13);
+        return 1;
+    },
+    [] { return reserved; },
+};
+static Host* host = &host_v;
+static bool async_on() { return false; }
+static const uint8_t* memory_as_submitted(uint64_t, const uint8_t* p, uint64_t, std::vector<uint8_t>&) { return p; }
+@REPLAY@
+@TEXTURE@
+}
+static void* registered_exit(void*) {
+    GetCurrentThreadId();
+    ExitThread(7);
+}
+static DWORD WINAPI created(void*) { return 3; }
+static void wait_freed(long want) {   // (a thread gives its record back after it is marked done)
+    for (int i = 0; i < 1000 && __atomic_load_n(&hthread_freed, __ATOMIC_ACQUIRE) < want; i++) usleep(1000);
+    usleep(20000);
+}
+int main() {
+    const uint64_t process = mask_now();
+    if (__builtin_popcountll(process) < 2 || std::thread::hardware_concurrency() < 4) {
+        std::puts("skip: fewer than 4 logical processors for the helper threads");
+        return 0;
+    }
+    reserved = 1ull << (63 - __builtin_clzll(process));
+    GetCurrentThreadId();   // (the main thread's record, kept: made before the counts are taken)
+    {   // the helpers made inside the pin
+        std::vector<uint8_t> scratch;
+        const uint64_t gpu = 3ull << 40, n = 32ull << 20;
+        const long tid = syscall(SYS_gettid);
+        {
+            mkwvk::ReplayPin pin;
+            CHECK(mask_now() == reserved);
+            const uint8_t* got = mkwvk::guest_bytes(gpu, n, scratch);
+            for (uint64_t i = 0; i < n; i += 4093) CHECK(got[i] == (uint8_t)((gpu + i) * 13));
+        }
+        CHECK(mask_now() == process);   // (the pin undone)
+        CHECK(seen.count(tid) && seen[tid] == std::set<uint64_t>{reserved});   // (the replaying thread's share on the pin)
+        CHECK(seen.size() >= 2);
+        for (auto& [t, masks] : seen)
+            if (t != tid) {
+                if (masks != std::set<uint64_t>{process})
+                    std::fprintf(stderr, "helper %ld read with mask %#llx, not the process's %#llx\n", t,
+                                 (unsigned long long)*masks.begin(), (unsigned long long)process);
+                CHECK(masks == std::set<uint64_t>{process});
+            }
+    }
+    {   // registered std::threads that end give their records back
+        const long made = hthread_made, freed = hthread_freed;
+        for (int round = 0; round < 20; round++) {
+            std::vector<std::thread> pool;
+            for (int i = 0; i < 10; i++) pool.emplace_back([] { GetCurrentThreadId(); });
+            for (auto& t : pool) t.join();
+        }
+        wait_freed(freed + 200);
+        if (hthread_freed - freed != 200)
+            std::fprintf(stderr, "200 registered threads ended: %ld records made, %ld given back\n", hthread_made - made,
+                         hthread_freed - freed);
+        CHECK(hthread_made - made == 200 && hthread_freed - freed == 200);
+    }
+    {   // a CreateThread thread, and a registered thread that calls ExitThread: each record given back once
+        long made = hthread_made, freed = hthread_freed;
+        HANDLE h = CreateThread(nullptr, 0, created, nullptr, 0, nullptr);
+        CHECK(h && WaitForSingleObject(h, INFINITE) == WAIT_OBJECT_0);
+        DWORD code = 0;
+        CHECK(GetExitCodeThread(h, &code) && code == 3);
+        CloseHandle(h);
+        wait_freed(freed + 1);
+        CHECK(hthread_made - made == 1 && hthread_freed - freed == 1);
+        made = hthread_made, freed = hthread_freed;
+        pthread_t th;
+        CHECK(pthread_create(&th, nullptr, registered_exit, nullptr) == 0);
+        CHECK(pthread_join(th, nullptr) == 0);
+        wait_freed(freed + 1);
+        CHECK(hthread_made - made == 1 && hthread_freed - freed == 1);
+    }
+    std::puts("PASS: a pinned replay's helper threads read on the process's logical processors, its own share on the pin; "
+              "200 registered threads that ended left no thread record; CreateThread's and ExitThread's given back once");
+}
+'''
+
+
+def threads_check(cxx, cc):
+    posix = (ROOT / 'host/posix/win32_posix.c').read_text(encoding='utf-8')
+    new = block(posix, 'static HThread *thread_new(void) {')
+    unref = block(posix, 'static void thread_unref(HThread *t) {')
+    assert 'calloc(1, sizeof *t)' in new and 'free(t);' in unref, 'win32_posix.c thread_new / thread_unref changed'
+    counted = posix.replace(new, new.replace('calloc(1, sizeof *t);', 'calloc(1, sizeof *t);\n    __atomic_add_fetch(&hthread_made, 1, '
+                                                                          '__ATOMIC_RELEASE);'), 1)
+    counted = counted.replace(unref, unref.replace('free(t);', 'free(t);\n        __atomic_add_fetch(&hthread_freed, 1, '
+                                                                 '__ATOMIC_RELEASE);'), 1)
+    counted = 'long hthread_made, hthread_freed;\n' + counted
+    replay = (ROOT / 'gpu/vk/vk_replay.cpp').read_text(encoding='utf-8')
+    pin = '\n'.join([block(replay, 'uint64_t replay_pin_mask() {'),
+                     'thread_local int replay_pin_depth = 0;', 'thread_local DWORD_PTR replay_pin_prev = 0;',
+                     block(replay, 'struct ReplayPin {') + ';'])
+    texture = (ROOT / 'gpu/vk/vk_texture.cpp').read_text(encoding='utf-8')
+    gather = block(texture, 'const uint8_t* guest_bytes(uint64_t gpu, uint64_t n, std::vector<uint8_t>& scratch) {')
+    helpers = block(texture, 'void helper_thread_start() {') + '\n' if 'void helper_thread_start() {' in texture else ''
+    fixture = THREADS.replace('@REPLAY@', pin).replace('@TEXTURE@', helpers + gather)
+    with tempfile.TemporaryDirectory(prefix='reserved-core-threads-') as tmp:
+        tmp = Path(tmp)
+        (tmp / 'posix.c').write_text(counted, encoding='utf-8')
+        (tmp / 'threads.cpp').write_text(fixture, encoding='utf-8')
+        exe = tmp / 'threads'
+        asan = subprocess.run([cxx, '-fsanitize=address', '-x', 'c++', '-', '-o', str(tmp / 'probe')], input='int main(){}',
+                              capture_output=True, text=True).returncode == 0
+        san = ['-fsanitize=address'] if asan else []   # (a record given back twice: a use after free)
+        subprocess.run([cc, '-std=gnu11', '-D_GNU_SOURCE', '-w', '-g', *san, '-I', str(ROOT / 'host/posix'), '-c', str(tmp / 'posix.c'),
+                        '-o', str(tmp / 'posix.o')], check=True)
+        subprocess.run([cxx, '-std=c++20', '-D_GNU_SOURCE', '-Wall', '-Wextra', '-Wno-unused-function', '-g', *san, '-pthread',
+                        '-I', str(ROOT / 'host/posix'), str(tmp / 'threads.cpp'), str(tmp / 'posix.o'), '-o', str(exe), '-ldl'],
+                       check=True)
+        env = {'PATH': '/usr/bin:/bin', 'ASAN_OPTIONS': 'detect_leaks=0'}
+        subprocess.run([str(exe)], check=True, timeout=120, env=env)
 
 
 if __name__ == '__main__':

@@ -10,8 +10,9 @@
 //  - the camera: the same uniform buffer and the same checks as vk_temporal.cpp's temporal_note_scene_draw; the near plane and the
 //    field of view are read from its projection (fsr3_math.h), so nothing in the game is hooked for them;
 //  - the motion: the camera's, from the scene depth with dlss_prep.comp's math (shaders/fsr3_prep.comp). #841's actor motion
-//    (the skinned draws drawn again with last frame's bones) is in vk_temporal.cpp, in every build since #1008; FSR 3.1
-//    gets it when these inputs move onto that chain.
+//    (the skinned draws drawn again with last frame's bones) is in vk_temporal.cpp, in every build since #1008: FSR 3.1's
+//    upscaler takes it on the chain, and its frame interpolation from the chain's motion copied over this file's
+//    (take_motion), whether an engine draws or not (vk_temporal.h temporal_fg_inputs).
 #pragma once
 
 #include <cstdint>
@@ -42,6 +43,11 @@ struct Frame {
 /// scene's camera is kept only then
 bool wanted();
 
+/// Matching scene/network formats for the independent input path. RGBA16F is limited to
+/// opt-in Native PsychoV35 frame interpolation; it does not enable the legacy upscaler.
+bool scene_format(VkFormat format);
+bool colour_pair(VkFormat input, VkFormat output);
+
 /// A draw into a scene-sized target with the vertex stage's uniform buffer 3 at `camera`: what vk_temporal.cpp's
 /// temporal_note_scene_draw is given, read the same way (the largest such target of the frame is the scene)
 void note_scene_draw(const Texture* color0, uint32_t width, uint32_t height, Texture* depth, uint64_t camera,
@@ -59,6 +65,14 @@ bool prepare(VkCommandBuffer cmd, Texture* in, VkImageView in_view, Frame& out);
 /// The frame prepare made last, for frame interpolation at the present, once: false when none was made since the last take
 /// (or it is older than the frame before), so a present never interpolates with another frame's depth and motion
 bool take(Frame& out);
+
+/// (hookshot) The temporal chain's motion for this frame (vk_temporal.cpp: an engine's, or temporal_fg_inputs' with none), the
+/// skinned draws' own in it, copied over the camera's alone that prepare made: the same units (render pixels toward the frame
+/// before, the jitter taken off) from the same camera, so only the actors change. Taken only for the frame prepare made at
+/// this dispatch, at the same size, with a frame before (false otherwise, and the camera's motion stays)
+bool take_motion(VkCommandBuffer cmd, VkImage motion, uint32_t width, uint32_t height);
+/// How many frames took the chain's motion so far (take_motion), for the log
+uint64_t motions_taken();
 
 /// FSR 3.1's upscaler drew this frame, rw x rh into dw x dh: the host's jitter follows FSR (jitter_size)
 void upscaled(uint32_t rw, uint32_t rh, uint32_t dw, uint32_t dh);

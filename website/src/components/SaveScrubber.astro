@@ -1,0 +1,72 @@
+---
+// The save scrubber (/saves/scrub/): the markup; the work is in lib/save-scrub-page.ts and lib/save-scrub.ts.
+---
+<save-scrubber class="not-content" data-pagefind-ignore>
+  <noscript><p class="scrub-error">The scrubber runs in your browser and needs JavaScript. Without it, use
+    the <code>scrub</code> command of <a href="https://git.magicbean.dev/MagicBeanDev/Hookshot/src/branch/main/scripts/hookshot_saves.py"><code>scripts/hookshot_saves.py</code></a> from a copy of the source.</p></noscript>
+  <div data-ready hidden>
+    <div class="scrub-drop" data-drop>
+      <p class="scrub-drop-title">Drop a save here</p>
+      <p class="scrub-note">A slot folder (<code>slot_00</code>, <code>slot_01</code>…), the save folder that holds them, or a
+        slot's <code>progress.sav</code> and <code>caption.sav</code>.</p>
+      <div class="scrub-pickers">
+        <label class="scrub-button">Choose files<input type="file" multiple accept=".sav" /></label>
+        <label class="scrub-button">Choose a folder<input type="file" webkitdirectory /></label>
+      </div>
+    </div>
+    <p data-status role="status" aria-live="polite"></p>
+    <p data-ignored class="scrub-note" hidden></p>
+    <form data-pick hidden>
+      <fieldset>
+        <legend>Slot</legend>
+        <div data-slots class="scrub-slots"></div>
+      </fieldset>
+      <label class="scrub-name"><span>The save's name (its folder in <code>assets/saves</code>)</span>
+        <input name="name" value="my-save" required pattern="[a-z0-9][a-z0-9\-]{0,47}" autocomplete="off" spellcheck="false" />
+      </label>
+      <button type="submit" data-go class="scrub-go">Scrub</button>
+    </form>
+    <section data-result hidden aria-label="The scrubbed save">
+      <a data-download class="scrub-go" href="#">Download</a>
+      <p class="scrub-note">What changed, as <code>hookshot_saves.py scrub</code> prints it:</p>
+      <ul data-changes class="scrub-changes"></ul>
+    </section>
+  </div>
+</save-scrubber>
+
+<script>
+  import { SaveScrubber } from '../lib/save-scrub-page';
+  if (!customElements.get('save-scrubber')) customElements.define('save-scrubber', SaveScrubber);
+</script>
+
+<style is:global>
+  save-scrubber { display: block; margin: 1.5rem 0; }
+  save-scrubber [hidden] { display: none !important; }
+  save-scrubber p { margin: .65rem 0; }
+  save-scrubber [data-result] { margin-top: 1.2rem; }
+  save-scrubber code { overflow-wrap: anywhere; }
+  .scrub-drop { padding: 1.6rem 1.4rem; text-align: center; background: var(--panel); border: 2px dashed var(--sl-color-gray-4); border-radius: .6rem; }
+  .scrub-drop[data-over] { border-color: var(--sl-color-text-accent); background: var(--panel-hover); }
+  .scrub-drop-title { font-family: var(--heading-font); font-weight: 600; font-size: var(--text-xl); }
+  .scrub-note { font-size: var(--text-xs); color: var(--sl-color-gray-2); }
+  .scrub-pickers { display: flex; flex-wrap: wrap; justify-content: center; gap: .6rem; margin-top: 1rem; }
+  save-scrubber :is(button, input) { font: inherit; }
+  .scrub-button, .scrub-go { display: inline-flex; align-items: center; min-height: 44px; padding: .55rem .9rem; border-radius: .3rem; cursor: pointer; }
+  .scrub-button { color: var(--sl-color-white); background: var(--sl-color-bg); border: 1px solid var(--sl-color-gray-3); }
+  .scrub-button:hover { background: var(--panel-hover); }
+  .scrub-button:focus-within { outline: 2px solid var(--sl-color-text-accent); outline-offset: 3px; }
+  .scrub-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .scrub-go { color: var(--button-text); background: var(--button); border: 0; font-weight: 700; text-decoration: none; }
+  .scrub-go:hover { background: var(--button-hover); color: var(--button-text); }
+  .scrub-go:disabled { cursor: not-allowed; opacity: .6; }
+  save-scrubber :is(.scrub-go, input):focus-visible { outline: 2px solid var(--sl-color-text-accent); outline-offset: 3px; }
+  save-scrubber fieldset { border: 1px solid var(--border); border-radius: .5rem; padding: .6rem 1rem 1rem; margin: 1rem 0; }
+  save-scrubber legend { font-weight: 700; padding: 0 .3rem; }
+  .scrub-slots { display: grid; gap: .5rem; }
+  .scrub-slots label { display: flex; gap: .6rem; align-items: baseline; overflow-wrap: anywhere; }
+  .scrub-slots label:has(input:disabled) { color: var(--sl-color-gray-3); }
+  .scrub-name { display: grid; gap: .4rem; font-weight: 700; margin-bottom: 1rem; }
+  .scrub-name input { color: var(--sl-color-white); background: var(--sl-color-bg); border: 1px solid var(--sl-color-gray-3); border-radius: .3rem; padding: .6rem; min-height: 44px; font-weight: 400; max-width: 24rem; }
+  .scrub-error { border-left: 3px solid #e0796b; padding: .6rem .9rem; background: var(--panel); }
+  .scrub-changes { font-size: var(--text-xs); font-family: var(--sl-font-mono, ui-monospace, monospace); overflow-wrap: anywhere; }
+</style>

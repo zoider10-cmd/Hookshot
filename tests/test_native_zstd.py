@@ -18,6 +18,13 @@ zstd decoder over a small guest window, on frames made here with python-zstandar
   taken back once a call (kept with HOS_NATIVE_ZSTD=2);
 - a broken copy (the staging buffer's fill never stored) must fail.
 
+The game's whole-buffer decode (hos_zstd_frames for f_8010b380, HOS_NATIVE_ZSTD_FRAMES) on the same kinds of frames in one
+call, and two frames with a skippable one between: the result is the content's size and the output the original; failures
+give zstd's error code (wrong checksum, too little room, a wrong or missing dictionary, a bad magic, bytes after the frame);
+a DDict made again in place is taken anew; the switch off, a raw dictionary or another format are left to the lifted code,
+writing nothing; nothing is written outside the output room, and all of it is marked; the core is kept. A broken copy (the
+DDict never passed to libzstd) must fail.
+
 Byte-for-byte equality with the game's own decoder (f_80115c80 run in Unicorn on the game's image) needs the game: checked
 locally, not here.
 
@@ -43,6 +50,16 @@ SOURCES = ["common/debug.c", "common/entropy_common.c", "common/error_private.c"
            "decompress/zstd_decompress_block.c"]
 ENV_ON_H = ROOT / "gpu/vk/compat/hookshot_env.h"
 BROKEN = ("                S_STAGED(g) = (uint32_t)staged;\n", "")   # (the staging fill never stored)
+BROKEN_F = ("ZSTD_decompress_usingDDict(z, GP(dst), room, GP(src), n, d->dd)",   # (the whole-buffer decode's DDict not passed)
+            "ZSTD_decompress_usingDDict(z, GP(dst), room, GP(src), n, NULL)")
+F_LOG = 'hos_log("zstd: the game\'s whole-buffer decode on the host\'s libzstd %s (HOS_NATIVE_ZSTD_FRAMES)", ZSTD_versionString());'
+BROKEN_ONCE = ("if (zs_publish(&mode, m) && m) " + F_LOG + "\n",
+               "if (m) " + F_LOG + "\n        zs_publish(&mode, m);\n")   # (the old way: logged, then published)
+BROKEN_STORE = ("    int unset = -1;\n    return __atomic_compare_exchange_n(mode, &unset, m, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);\n",
+                "    __atomic_store_n(mode, m, __ATOMIC_RELAXED);\n    return 1;\n")   # (every first caller publishes and logs)
+BROKEN_NOTE = ("    zs_unlock();\n    if (first) hos_log(", "    if (first) hos_log(")   # (logged under zs_lock...)
+BROKEN_NOTE2 = ('hos_log("zstd: a decode runs lifted: %s", why);\n}', 'hos_log("zstd: a decode runs lifted: %s", why);\n'
+                "    zs_unlock();\n}")   # (...and released after)
 
 # the guest window: base, size, and where things are in it
 BASE, SIZE = 0x10000000, 4 << 20
@@ -116,13 +133,15 @@ int main(int argc, char **argv) {
             rd(GP(a), n);
         }
         Ctx c;
+        uint32_t frames;
         memset(&c, 0, sizeof c);
-        rd(c.x, 32);
-        const uint64_t g = c.x[0];
+        rd(&frames, 4);   /* (1: the whole-buffer decode, x0-x7; else a stream call, x0-x3) */
+        rd(c.x, 64);
+        const uint64_t g = frames ? 0x%xull : c.x[0];   /* (for the whole-buffer decode: the stream fields read anywhere) */
         memcpy(before, zs_mem, SIZE);
         memset(marks, 0, sizeof marks);
         aways = backs = 0;
-        const int32_t handled = hos_zstd_stream(&c);
+        const int32_t handled = frames ? hos_zstd_frames(&c) : hos_zstd_stream(&c);
         int32_t changed = 0, unmarked = 0;
         for (size_t q = 0; q < SIZE >> 12; q++)
             if (memcmp(before + (q << 12), zs_mem + (q << 12), 4096))   /* (unmarked, or written after its last mark) */
@@ -138,7 +157,126 @@ int main(int argc, char **argv) {
     fclose(out);
     return 0;
 }
-''' % SIZE
+''' % (SIZE, S0)
+
+# first calls from two threads at once. Held in the log: the second runs start to end while the first is in its first log
+# line (a stand-in hos_log holds it there), so a switch published after its log line, or a log line written under zs_lock,
+# shows every time. Cold ("cold" argument): a stand-in env_on holds each caller that reads a switch unset until two have, so
+# both go on to publish it and only one may log. (The fallback table's lock itself is not shown by either: no probe holds a
+# thread between its read and its write.)
+CONC = r'''
+#ifdef _WIN32   /* (Windows threads with every compiler there: the Microsoft runtime has no pthread.h or sched.h) */
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+typedef HANDLE thr_t;
+#define THR_FN(name) static DWORD WINAPI name(LPVOID p)
+#define THR_RET return 0
+static void thr_start(thr_t *t, LPTHREAD_START_ROUTINE f, void *p) { *t = CreateThread(NULL, 0, f, p, 0, NULL); }
+static void thr_join(thr_t t) {
+    WaitForSingleObject(t, INFINITE);
+    CloseHandle(t);
+}
+static void thr_yield(void) { SwitchToThread(); }
+#else
+#include <pthread.h>
+#include <sched.h>
+typedef pthread_t thr_t;
+#define THR_FN(name) static void *name(void *p)
+#define THR_RET return NULL
+static void thr_start(thr_t *t, void *(*f)(void *), void *p) { pthread_create(t, NULL, f, p); }
+static void thr_join(thr_t t) { pthread_join(t, NULL); }
+static void thr_yield(void) { sched_yield(); }
+#endif
+#include <stdio.h>
+#include <time.h>
+#include "hos.h"
+uint8_t *zs_mem;
+void zs_mark(const void *p, size_t n) { (void)p, (void)n; }
+int hos_vcore_away(void) { return 1; }
+void hos_vcore_back(void) {}
+static int armed, b_done, stuck, n_on, n_note;
+static int (*fn)(Ctx *);
+static Ctx cb;
+static thr_t tb;
+THR_FN(second) {
+    (void)p;
+    fn(&cb);
+    __atomic_store_n(&b_done, 1, __ATOMIC_SEQ_CST);
+    THR_RET;
+}
+void hos_log(const char *fmt, ...) {
+    __atomic_fetch_add(strstr(fmt, "runs lifted") ? &n_note : &n_on, 1, __ATOMIC_SEQ_CST);
+    if (!__atomic_exchange_n(&armed, 0, __ATOMIC_SEQ_CST)) return;
+    thr_start(&tb, second, NULL);
+    const time_t t0 = time(NULL);
+    while (!__atomic_load_n(&b_done, __ATOMIC_SEQ_CST) && time(NULL) - t0 < 3) thr_yield();
+    stuck = !__atomic_load_n(&b_done, __ATOMIC_SEQ_CST);
+}
+static int meet, met;
+static int cold_env_on(const char *name) {
+    if (__atomic_load_n(&meet, __ATOMIC_SEQ_CST)) {
+        __atomic_fetch_add(&met, 1, __ATOMIC_SEQ_CST);
+        const time_t t0 = time(NULL);
+        while (__atomic_load_n(&met, __ATOMIC_SEQ_CST) < 2 && time(NULL) - t0 < 10) thr_yield();
+    }
+    return env_on(name);
+}
+#define env_on cold_env_on
+#include "hos_zstd.c"
+#undef env_on
+THR_FN(call) {
+    fn((Ctx *)p);
+    THR_RET;
+}
+static void cold(const char *name, int (*f)(Ctx *), Ctx a) {
+    Ctx b = a;
+    thr_t t1, t2;
+    fn = f, n_on = n_note = met = 0, meet = 1;
+    thr_start(&t1, call, &a);
+    thr_start(&t2, call, &b);
+    thr_join(t1);
+    thr_join(t2);
+    meet = 0;
+    printf("%s %d %d %d 0\n", name, met, n_on, n_note);
+}
+static void phase(const char *name, int (*f)(Ctx *), Ctx a) {
+    fn = f, cb = a, n_on = n_note = b_done = stuck = 0, armed = 1;
+    f(&a);
+    const int started = !armed;
+    if (started) thr_join(tb);
+    printf("%s %d %d %d %d\n", name, started, n_on, n_note, stuck);
+}
+int main(int argc, char **argv) {
+    zs_mem = calloc(1, 0x10000);
+    Ctx s = {{0}}, raw = {{0}}, fmt = {{0}};
+    s.x[0] = ZS_BASE + 0x100;                                     /* a stream the host has no entry for */
+    raw.x[0] = ZS_BASE, raw.x[5] = ZS_BASE + 0x400, raw.x[6] = 16;   /* a raw dictionary */
+    fmt.x[0] = ZS_BASE + 0x8000, G32(ZS_BASE + 0x8000 + 0x7110) = 1;  /* another frame format */
+    if (argc > 1 && argv[1][0]) {   /* cold: two first callers that both read the switch unset */
+        cold("cold-stream", hos_zstd_stream, s);
+        cold("cold-raw", hos_zstd_frames, raw);
+        return 0;
+    }
+    phase("stream", hos_zstd_stream, s);
+    phase("raw", hos_zstd_frames, raw);
+    phase("format", hos_zstd_frames, fmt);
+    return 0;
+}
+'''
+
+
+def conc_checks(exe, tmp, quick=False):
+    got, bad = {}, []
+    for arg in ([], ["cold"]):
+        r = subprocess.run([str(exe)] + arg, env=dict(os.environ, HOS_NATIVE_ZSTD="1", HOS_NATIVE_ZSTD_FRAMES="1"),
+                           capture_output=True, text=True, timeout=60)
+        got.update((ln.split()[0], tuple(map(int, ln.split()[1:]))) for ln in r.stdout.splitlines() if ln.strip())
+        bad += ["exit %d %s" % (r.returncode, arg)] if r.returncode else []
+    want = {"stream": (1, 1, 0, 0), "raw": (1, 1, 1, 0), "format": (1, 0, 1, 0),   # (held in the log)
+            "cold-stream": (2, 1, 0, 0), "cold-raw": (2, 1, 1, 0)}                  # (both read the switch unset)
+    return ["first calls at once, %s: (second call made or switch read unset by, switch lines, fallback lines, second call "
+            "held) %s, not %s" % (k, got.get(k), v) for k, v in want.items() if got.get(k) != v] + bad
 
 
 # ---------------------------------------------------------------- content (made here)
@@ -242,9 +380,9 @@ def run(exe, tmp, ops, mode="1", pre=()):
         parts.append(struct.pack("<I", len(writes)))
         for a, b in writes:
             parts.append(struct.pack("<QI", a, len(b)) + b)
-        parts.append(struct.pack("<4Q", *x))
+        parts.append(struct.pack("<I8Q", len(x) == 8, *(list(x) + [0] * (8 - len(x)))))
     case.write_bytes(b"".join(parts))
-    r = subprocess.run([str(exe), str(case), str(res)], env=dict(os.environ, HOS_NATIVE_ZSTD=mode))
+    r = subprocess.run([str(exe), str(case), str(res)], env=dict(os.environ, HOS_NATIVE_ZSTD=mode, HOS_NATIVE_ZSTD_FRAMES=mode))
     if r.returncode:
         raise Crash("the fixture stopped with %#x" % (r.returncode & 0xFFFFFFFF))
     raw = res.read_bytes()
@@ -398,21 +536,117 @@ def checks(exe, tmp, quick=False):
     return chk.failed
 
 
-def build(cxx, tmp, broken=False):
+# ---------------------------------------------------------------- the whole-buffer decode (f_8010b380)
+D_FORMAT = 0x7110   # (the game's context: its format)
+E_CHECKSUM, E_DICT, E_PREFIX, E_ROOM, E_SRCSIZE = 22, 32, 10, 70, 72   # (zstd's error codes: the game's are the same)
+
+
+def whole(frame, room, dd=0, raw=(0, 0)):
+    """one call of the whole-buffer decode: the frames at SRC[0], the output at DST, nonzero guard bytes on both sides of
+    the output room (a write past it shows even when it writes zero)"""
+    guard = bytes([0xA5]) * 64
+    return ([(SRC[0], frame), (DST - 64, guard), (DST + room, guard)], [WORK, DST, room, SRC[0], len(frame), raw[0], raw[1], dd])
+
+
+def zerr(x0):
+    return (1 << 64) - x0 if x0 > (1 << 64) - 120 else 0
+
+
+def frames_checks(exe, tmp, quick=False):
+    """the failed checks' messages; quick: the dictionary frames only (the broken copy)"""
+    chk = Checker()
+    full = zstandard.train_dictionary(8192, [synth("text", 3000, 100 + i) for i in range(200)])
+    other = zstandard.train_dictionary(8192, [synth("mesh", 3000, 300 + i) for i in range(200)])
+    raw = zstandard.ZstdCompressionDict(synth("text", 16 << 10, 7), dict_type=zstandard.DICT_TYPE_RAWCONTENT)
+    text, mesh, mixed = synth("text", 200 << 10, 1), synth("mesh", 64 << 10, 2), synth("mixed", 300 << 10, 3)
+    zero, noise, small = synth("zero", 300 << 10, 4), synth("noise", 150 << 10, 5), synth("text", 48 << 10, 6)
+    skip = struct.pack("<II", 0x184D2A55, 5) + b"skip!"
+    cases = [("dict-ck", small, compress(small, 9, True, full), full, "full"),
+             ("raw-dict", small, compress(small, 3, False, raw), raw, "raw")]
+    if not quick:
+        cases += [("text", text, compress(text, 3), None, None), ("mesh-l19-ck", mesh, compress(mesh, 19, True), None, None),
+                  ("mixed-ck", mixed, compress(mixed, 6, True), None, None), ("rle", zero, compress(zero, 1), None, None),
+                  ("raw-ck", noise, compress(noise, 1, True), None, None), ("empty", b"", compress(b""), None, None),
+                  ("one-byte-ck", b"A", compress(b"A", 3, True), None, None),
+                  ("unknown content size", small, compress(small, size=False), None, None),
+                  ("two frames, a skippable one between", text + small, compress(text, 3) + skip + compress(small, 9, True),
+                   None, None)]
+        cases += [(name + ", 64 KB more room", data, frame, d, kind, len(data) + (64 << 10))
+                  for name, data, frame, d, kind in cases[:4]]
+    for name, data, frame, d, kind, *more in cases:
+        pre = []
+        dd = place(pre, 0, d, kind) if d else 0
+        room = more[0] if more else len(data)
+        x = whole(frame, room, dd)
+        calls, mem = run(exe, tmp, [x], pre=pre)
+        h, changed, unmarked, aways, backs, x0 = calls[0][:6]
+        chk(h == 1 and x0 == len(data), "whole %s: handled %d, result %#x" % (name, h, x0))
+        chk(mem[DST - BASE:DST - BASE + len(data)] == data, "whole %s: the output is not the original" % name)
+        chk(unmarked == 0 and aways == backs == 0, "whole %s: %d page(s) unmarked, core given up %d" % (name, unmarked, aways))
+        off = run(exe, tmp, [x], mode="0", pre=pre)[1]   # (memory as it was: nothing changes outside the output room)
+        chk(mem[:DST - BASE] == off[:DST - BASE] and mem[DST - BASE + room:] == off[DST - BASE + room:],
+            "whole %s: memory outside the output room changed" % name)
+    if quick:
+        return chk.failed
+    ck = compress(mesh, 19, True)
+    pre = []
+    dd_other = place(pre, 1, other, "full")
+    for name, frame, room, dd, want in (("wrong checksum", ck[:-1] + bytes([ck[-1] ^ 1]), len(mesh), 0, E_CHECKSUM),
+                                        ("output room short", compress(text), len(text) - 1, 0, E_ROOM),
+                                        ("wrong dictionary", compress(small, 3, False, full), len(small), dd_other, E_DICT),
+                                        ("no dictionary", compress(small, 3, False, full), len(small), 0, E_DICT),
+                                        ("bad magic", b"\x29" + compress(small)[1:], len(small), 0, E_PREFIX),
+                                        ("bytes after the frame", compress(small) + b"\x28\xb5", len(small), 0, E_SRCSIZE)):
+        calls, mem = run(exe, tmp, [whole(frame, room, dd)], pre=pre)
+        h, changed, unmarked, x0 = calls[0][0], calls[0][1], calls[0][2], calls[0][5]
+        chk(h == 1 and zerr(x0) == want, "whole %s: handled %d, error %d, wanted %d" % (name, h, zerr(x0), want))
+        chk(unmarked == 0, "whole %s: %d page(s) unmarked" % (name, unmarked))
+        off = run(exe, tmp, [whole(frame, room, dd)], mode="0", pre=pre)[1]   # (nothing written outside the output room)
+        chk(mem[:DST - BASE] == off[:DST - BASE] and mem[DST - BASE + room:] == off[DST - BASE + room:],
+            "whole %s: memory outside the output room changed" % name)
+    # the game's DDict made again in place for another dictionary with the same ID and size
+    same_a, same_b = (zstandard.train_dictionary(8192, [synth(k, 3000, s + i) for i in range(200)], dict_id=12345).as_bytes()
+                      for k, s in (("text", 500), ("mesh", 700)))
+    n = max(len(same_a), len(same_b))
+    same_a, same_b = (zstandard.ZstdCompressionDict(x + synth("text", n - len(x), 9), dict_type=zstandard.DICT_TYPE_FULLDICT)
+                      for x in (same_a, same_b))
+    pre = []
+    dd = place(pre, 0, same_a, "full")
+    tiny_a, tiny_b = synth("text", 300, 11), synth("mesh", 300, 12)
+    second = whole(compress(tiny_b, 3, True, same_b), len(tiny_b), dd)
+    place(second[0], 0, same_b, "full")
+    ops = [whole(compress(tiny_a, 3, True, same_a), len(tiny_a), dd), second]
+    calls, mem = run(exe, tmp, ops, pre=pre)
+    chk(calls[1][5] == len(tiny_b) and mem[DST - BASE:DST - BASE + len(tiny_b)] == tiny_b,
+        "whole: DDict made again in place (same ID and size): the second decode %#x" % calls[1][5])
+    off, room = run(exe, tmp, ops, mode="0", pre=pre)[1], max(len(tiny_a), len(tiny_b))
+    chk(mem[:DST - BASE] == off[:DST - BASE] and mem[DST - BASE + room:] == off[DST - BASE + room:],
+        "whole: DDict made again: memory outside the output room changed")
+    # left to the lifted code, writing nothing: switch off, a raw dictionary, another format
+    fmt = [(WORK + D_FORMAT, struct.pack("<I", 1))]
+    for name, mode, x, pre in (("switch off", "0", whole(compress(small), len(small)), []),
+                               ("a raw dictionary", "1", whole(compress(small), len(small), raw=(DICT[0], 1000)), []),
+                               ("another format", "1", whole(compress(small), len(small)), fmt)):
+        calls, _ = run(exe, tmp, [x], mode=mode, pre=pre)
+        chk(calls[0][0] == 0 and calls[0][1] == 0, "whole %s: done on the host (%s)" % (name, calls[0][:2]))
+    return chk.failed
+
+
+def build(cxx, tmp, broken=False, conc=False):
     stem, ext = os.path.splitext(cxx) if cxx.lower().endswith(".exe") else (cxx, "")
     cc = stem[:-2] + ext if stem.endswith("++") else "cc"   # (the C compiler beside the C++ one)
     if Path(cc).name == "g" or cc.endswith("-g"):
         cc += "cc"
-    d = Path(tmp) / ("broken" if broken else "ok")
+    d = Path(tmp) / ("broken%d" % len(list(Path(tmp).glob("broken*"))) if broken else "conc" if conc else "ok")
     d.mkdir()
     src = (ROOT / "host/hos_zstd.c").read_text(encoding="utf-8")
-    if broken:
-        if src.count(BROKEN[0]) != 1:
-            raise SystemExit("FAIL: the broken variant's line is not in host/hos_zstd.c: %r" % BROKEN[0])
-        src = src.replace(*BROKEN)
+    for old, new in ([broken] if broken and isinstance(broken[0], str) else broken or []):
+        if src.count(old) != 1:
+            raise SystemExit("FAIL: the broken variant's line is not in host/hos_zstd.c: %r" % old)
+        src = src.replace(old, new)
     (d / "hos_zstd.c").write_text(src, encoding="utf-8")   # (beside the stand-in hos.h: quotes look there first)
     (d / "hos.h").write_text(HOS_H, encoding="utf-8")
-    (d / "fixture.c").write_text(FIXTURE, encoding="utf-8")
+    (d / "fixture.c").write_text(CONC if conc else FIXTURE, encoding="utf-8")
     flags = ["-O1", "-DZSTD_DISABLE_ASM", "-DZSTD_LEGACY_SUPPORT=0", "-DZSTD_MULTITHREAD=0", "-D_CRT_SECURE_NO_WARNINGS",
              "-I" + str(ZSTD)]
     objs = []
@@ -425,7 +659,7 @@ def build(cxx, tmp, broken=False):
         objs.append(str(o))
     exe = d / "fixture.exe"
     subprocess.run([cc, "-std=gnu11", "-include", str(ENV_ON_H), "-Wall", "-Wextra", "-I", str(d), str(d / "fixture.c"),
-                    "-o", str(exe)] + flags + objs, check=True)
+                    "-o", str(exe)] + flags + objs + (["-pthread"] if conc and os.name != "nt" else []), check=True)
     return exe
 
 
@@ -434,17 +668,32 @@ def main():
     p.add_argument("--cxx", default="g++")
     a = p.parse_args()
     with tempfile.TemporaryDirectory(prefix="native-zstd-") as tmp:
-        failed = checks(build(a.cxx, tmp), tmp)
+        exe = build(a.cxx, tmp)
+        failed = checks(exe, tmp)
         if failed:
             raise SystemExit("FAIL:\n  " + "\n  ".join(failed))
         print("PASS: the host's zstd stream decode answers, writes and marks as the game's wrapper does")
-        try:
-            broken = checks(build(a.cxx, tmp, broken=True), tmp, quick=True)
-        except Crash as e:
-            broken = [str(e)]
-        if not broken:
-            raise SystemExit("FAIL: the broken copy (staging fill never stored) passed: the checks prove nothing")
-        print("PASS: the broken copy fails (%d checks, e.g. %s)" % (len(broken), broken[0]))
+        failed = frames_checks(exe, tmp)
+        if failed:
+            raise SystemExit("FAIL:\n  " + "\n  ".join(failed))
+        print("PASS: the host's whole-buffer decode answers and writes as the game's does")
+        failed = conc_checks(build(a.cxx, tmp, conc=True), tmp)
+        if failed:
+            raise SystemExit("FAIL:\n  " + "\n  ".join(failed))
+        print("PASS: first calls from two threads at once (one held in its log line, or both reading the switch unset) log "
+              "the switch and each fallback once, outside zs_lock")
+        for what, fault, run_checks in (("staging fill never stored", BROKEN, checks),
+                                        ("whole-buffer DDict not passed", BROKEN_F, frames_checks),
+                                        ("switch published after its log line", BROKEN_ONCE, conc_checks),
+                                        ("switch always stored, every first caller logs", BROKEN_STORE, conc_checks),
+                                        ("fallback logged under zs_lock", [BROKEN_NOTE, BROKEN_NOTE2], conc_checks)):
+            try:
+                broken = run_checks(build(a.cxx, tmp, broken=fault, conc=run_checks is conc_checks), tmp, quick=True)
+            except Crash as e:
+                broken = [str(e)]
+            if not broken:
+                raise SystemExit("FAIL: the broken copy (%s) passed: the checks prove nothing" % what)
+            print("PASS: the broken copy (%s) fails (%d checks, e.g. %s)" % (what, len(broken), broken[0]))
 
 
 if __name__ == "__main__":

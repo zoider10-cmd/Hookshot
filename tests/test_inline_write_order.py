@@ -1,7 +1,8 @@
 """Overlapping inline GPU writes retain stream order, including with barrier deduplication.
 
-Compile the real gpu_write, full_barrier, note_work and work wrappers with a recording spy.
-No GPU or game files. Removing the write's barrier or its work count must fail.
+Compile the real gpu_write (with gpu_piece_bind and gpu_put), full_barrier, note_work and work wrappers with a recording spy.
+Unaligned writes are copied from the recording's stream, in order with the rest; only writes no import holds fall back to the
+CPU. No GPU or game files. Removing the write's barrier or its work count must fail.
 """
 import argparse
 import os
@@ -38,7 +39,7 @@ constexpr uint64_t base = 0x1000;
 std::vector<uint8_t> memory(131104);
 struct Range { uint64_t lo, hi; };
 std::vector<Range> pending;
-unsigned hazards, updates, barriers, fallbacks;
+unsigned hazards, updates, copies, barriers, fallbacks;
 std::atomic<uint64_t> work_epoch{0};
 std::atomic<bool> par_active{false};
 std::atomic<int64_t> st_barriers_left_out{0}, st_barriers_made{0};
@@ -51,6 +52,21 @@ BufferRef gpu_buffer_bind(uint64_t gpu, uint64_t n, bool write) {
     assert(write);
     return gpu >= base && gpu - base <= memory.size() && n <= memory.size() - (gpu - base)
         ? BufferRef{buffer, gpu - base} : BufferRef{};
+}
+uint64_t gpu_pool_piece(uint64_t gpu, uint64_t n, bool& in_pool) {   // (one pool, [base, base + memory.size()))
+    in_pool = gpu >= base && gpu - base < memory.size();
+    return in_pool ? std::min<uint64_t>(n, memory.size() - (gpu - base)) : gpu < base ? std::min<uint64_t>(n, base - gpu) : n;
+}
+const VkBuffer stream = (VkBuffer)(uintptr_t)2;
+std::vector<uint8_t> stream_bytes(65536);
+uint64_t stream_used;
+bool stream_full;
+BufferRef stream_copy(const void* src, uint64_t n) {
+    const uint64_t at = (stream_used + 255) & ~255ull;
+    if (stream_full || !n || at + n > stream_bytes.size()) return {};
+    std::memcpy(stream_bytes.data() + at, src, n);
+    stream_used = at + n;
+    return {stream, at};
 }
 void guest_cpu_write(uint64_t, const void*, uint64_t) { ++fallbacks; }
 namespace rec {
@@ -70,12 +86,19 @@ void rx_vkCmdUpdateBuffer(VkCommandBuffer cmd, VkBuffer target, VkDeviceSize off
     pending.push_back({offset, offset + n}); ++updates;
     std::memcpy(memory.data() + offset, data, n);
 }
+void rx_vkCmdCopyBuffer(VkCommandBuffer cmd, VkBuffer src, VkBuffer target, uint32_t count, const VkBufferCopy* r) {
+    assert(cmd == cb && src == stream && target == buffer && count == 1);
+    assert(r->size && r->srcOffset + r->size <= stream_used && r->dstOffset + r->size <= memory.size());
+    for (auto p : pending) if (r->dstOffset < p.hi && p.lo < r->dstOffset + r->size) ++hazards;
+    pending.push_back({r->dstOffset, r->dstOffset + r->size}); ++copies;
+    std::memcpy(memory.data() + r->dstOffset, stream_bytes.data() + r->srcOffset, r->size);
+}
 }
 '''
 
 SUFFIX = r'''
 void reset() {
-    pending.clear(); hazards = updates = barriers = fallbacks = 0;
+    pending.clear(); hazards = updates = copies = barriers = fallbacks = 0; stream_used = 0; stream_full = false;
     last_barrier_cmd = VK_NULL_HANDLE;
     std::fill(memory.begin(), memory.end(), 0);
 }
@@ -98,14 +121,18 @@ int check() {
     assert(updates == 3 && std::equal(second.begin(), second.begin() + 16, memory.begin() + 65536));
     reset();
     gpu_write(cb, base + 1, first.data(), 4);
-    gpu_write(cb, base, first.data(), 3);
+    gpu_write(cb, base, second.data(), 3);
+    const unsigned copy_overlap = hazards;
+    assert(copies == 2 && !updates && !fallbacks && memory[0] == 0x22 && memory[2] == 0x22 && memory[3] == 0x11 && memory[4] == 0x11);
     gpu_write(cb, 0, first.data(), 4);
     gpu_write(cb, base, nullptr, 0);
-    assert(fallbacks == 3 && !updates && !barriers);
-    if (overlap || chunk_overlap) {
+    stream_full = true;
+    gpu_write(cb, base + 1, first.data(), 4);
+    assert(fallbacks == 2 && copies == 2 && !updates);
+    if (overlap || chunk_overlap || copy_overlap) {
         std::puts("FAIL: overlapping inline GPU writes are unordered"); return 1;
     }
-    std::puts("PASS: overlapping writes, chunks, fallbacks and barrier deduplication"); return 0;
+    std::puts("PASS: overlapping writes, chunks, unaligned copies, fallbacks and barrier deduplication"); return 0;
 }
 }
 int main() { return mkwvk::check(); }
@@ -118,7 +145,8 @@ def main():
     parser.add_argument("--headers", required=True, type=Path)
     args = parser.parse_args()
     vk = ROOT / "gpu/vk"
-    write = block((vk / "vk_replay.cpp").read_text(encoding="utf-8"), "void gpu_write(")
+    replay = (vk / "vk_replay.cpp").read_text(encoding="utf-8")
+    write = "".join(block(replay, marker) for marker in ("BufferRef gpu_piece_bind(", "bool gpu_put(", "void gpu_write("))
     barrier = block((vk / "vk_texture.cpp").read_text(encoding="utf-8"), "void full_barrier(VkCommandBuffer cmd, const char* why)")
     declarations = [line for line in (vk / "vk_texture.h").read_text(encoding="utf-8").splitlines()
                     if line.startswith("void full_barrier(")]
@@ -127,7 +155,7 @@ def main():
     work = (vk / "vk_work.h").read_text(encoding="utf-8")
     note = block(work, "inline void note_work()")
     wrappers = []
-    for name in ("vkCmdPipelineBarrier2", "vkCmdUpdateBuffer"):
+    for name in ("vkCmdPipelineBarrier2", "vkCmdUpdateBuffer", "vkCmdCopyBuffer"):
         lines = [line for line in work.splitlines() if line.startswith("#define " + name + "(")]
         if len(lines) != 1:
             raise SystemExit("vk_work.h: wrapper not found once: " + name)

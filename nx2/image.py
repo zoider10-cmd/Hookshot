@@ -10,6 +10,8 @@ the same offset.
 rtld is part of this image: in the emulator it runs first and binds the GOTs itself, to the same values this
 builder binds them to (same module order, same lookup).
 """
+import sys
+
 import kit  # noqa: F401  (sys.path)
 import nso2  # noqa: F401  (DT_RELR)
 import nso
@@ -62,5 +64,29 @@ class EdenImage(nx_image.NxImage):
                 self.hook_syms[name] = sym
         self._relocate()
         self.code = [(m.base + lo, m.base + hi, m.name) for m in self.modules for lo, hi in [m.code_range()]]
+        self.lookups()
         self._entries()
         self.names = self.symbol_names()
+
+    def lookups(self):
+        """(after self.mem and self.code are made) the lift's discovery reads every instruction it walks through word() and
+        in_code(), 40 million times each for OoT, where NxImage's unpack a word with struct and loop over self.code each time.
+        Here the words are a view of the image as 32-bit numbers and the code ranges a flat tuple, with the same answers
+        (tests/test_lift_lookups.py)"""
+        self._base = nx_image.MAIN_BASE
+        self._spans = tuple((lo, hi) for lo, hi, _ in self.code)
+        self._words = memoryview(self.mem).cast("I") if sys.byteorder == "little" and len(self.mem) % 4 == 0 else None
+
+    def in_code(self, a):
+        if a & 3:
+            return False
+        for lo, hi in self._spans:
+            if lo <= a < hi:
+                return True
+        return False
+
+    def word(self, a):
+        off = a - self._base
+        if self._words is not None and not off & 3 and 0 <= off < len(self.mem):
+            return self._words[off >> 2]
+        return super().word(a)

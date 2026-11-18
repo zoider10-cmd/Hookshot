@@ -2,9 +2,10 @@
 repository reads and names only https links; a bad line is refused; a tool comes from the first URL that gives the bytes the
 lock names (the next one when upstream is gone or changed); the download cache is shared; only the archive's prefix is
 unpacked, and nothing outside the install; a line is replaced in place; and the archives Hookshot assembles (Python with the
-prompt packages, the CPM cache with dav1d, the third_party prebuilt files, the play profile) are deterministic and hold only
-what they should. The Linux lines (linux-x64) unpack with their modes and relative links, a changed line is unpacked again,
-and an archive packed from a folder is deterministic. builder/setup/setup.c, builder/linux/linux_tools.py and the
+prompt packages, the CPM cache with dav1d, the third_party prebuilt files) are deterministic and hold only what they
+should; no play profile is a tool (play profiles are committed in assets/profiles/). The Linux lines (linux-x64) unpack
+with their modes and relative links, a changed line is unpacked again, and an archive packed from a folder is
+deterministic. builder/setup/setup.c, builder/linux/linux_tools.py and the
 launcher's Core/ToolsLock.cs read the same lines.
 
     python -I tests/test_tools_lock.py
@@ -147,9 +148,9 @@ class Lock(unittest.TestCase):
         self.assertEqual(len(after.splitlines()), len(before.splitlines()))
         self.assertIn("tool cpm dav1d windows-x64", after)
         self.assertTrue(after.startswith("# "))
-        tools.write_line(tools.Tool("profile", "1", "windows-x64", "b" * 64, 5, "HookshotBuilder/tools/work", "work",
-                                    ["https://git.magicbean.dev/api/packages/MagicBeanDev/generic/profile-windows-x64/1/p.zip"]), str(lock))
-        self.assertEqual(tools.named(tools.load(str(lock)), "profile").prefix, "work")
+        tools.write_line(tools.Tool("zlib", "1", "windows-x64", "b" * 64, 5, "HookshotBuilder/tools/zlib", "zlib",
+                                    ["https://git.magicbean.dev/api/packages/MagicBeanDev/generic/zlib-windows-x64/1/z.zip"]), str(lock))
+        self.assertEqual(tools.named(tools.load(str(lock)), "zlib").prefix, "zlib")
 
     def test_the_store_is_the_package_registry(self):
         t = tools.parse("tool emsdk 23.1.5 linux-x64 %s 10 usr/lib/hookshot/emsdk emsdk https://x/e" % ("a" * 64))[0]
@@ -214,9 +215,8 @@ class Lock(unittest.TestCase):
             self.assertEqual(tools.main(["--lock", str(lock), "check", "--require"]), 1)
         self.assertIn("zlib (linux-x64): its first URLs are not", err.getvalue())
         lock.write_text(good)
-        # (the play profile is optional: a release is made without one, and the game built without it)
+        # (no play profile is required: play profiles are committed in assets/profiles/, not tools)
         self.assertNotIn("profile", tools.REQUIRED["windows-x64"] + tools.REQUIRED["linux-x64"])
-        self.assertIn("work/hot_order.txt", [n for n in ("work/" + f for f in tools.PROFILE)])   # (assemble profile stays)
         lock.write_text("".join("tool %s 1 %s %s 10 %s - https://x/%s\n" % (n, s, "a" * 64, d, n) for s, n, d in full
                                 if (s, n) != ("linux-x64", "emsdk")))
         with contextlib.redirect_stderr(io.StringIO()) as err:
@@ -324,14 +324,16 @@ class Assemble(unittest.TestCase):
         with zipfile.ZipFile(self.dir / "o.zip") as z:
             self.assertEqual(sorted(z.namelist()), ["third_party/a64-kit/lift/a64emit.dll", "third_party/sdl2/SDL3.dll"])
 
-    def test_the_profile(self):
-        work = self.dir / "work"
-        work.mkdir()
-        for n in ("hot_order.txt", "hookshot_pieces.prof", "image.bin", "dump.txt"):
-            (work / n).write_text(n)
-        tools.assemble_profile(str(work), str(self.dir / "p.zip"))
-        with zipfile.ZipFile(self.dir / "p.zip") as z:
-            self.assertEqual(sorted(z.namelist()), ["work/hot_order.txt", "work/hookshot_pieces.prof"])   # (nothing of the game)
+    def test_no_play_profile_is_a_tool(self):
+        # (play profiles are committed in assets/profiles/: tools.py assembles none, and tools.lock names none)
+        self.assertFalse(hasattr(tools, "assemble_profile") or hasattr(tools, "PROFILE"))
+        source = (ROOT / "scripts" / "tools.py").read_text(encoding="utf-8")
+        self.assertNotIn("assemble profile", source)
+        self.assertNotIn('"profile"', source)
+        self.assertNotIn("profile", [t.name for t in tools.load(tools.LOCK)])
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            tools.main(["assemble", "profile", "--work", str(self.dir), "--out", str(self.dir / "p.zip")])
+        self.assertNotIn("--only profile", (ROOT / ".forgejo" / "workflows" / "build-linux.yml").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

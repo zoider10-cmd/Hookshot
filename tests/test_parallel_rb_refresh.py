@@ -20,6 +20,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: python -I leaves this folder off the path)
+from srccut import block   # noqa: E402
 
 # (env_on, the switches' rule, before the code cut out of the sources: gpu/vk/compat/hookshot_env.h)
 ENV_ON_H = str(Path(__file__).resolve().parents[1] / "gpu" / "vk" / "compat" / "hookshot_env.h")
@@ -28,16 +30,6 @@ RUN_ALL_ARGS = ["--cxx", "{cxx}"]
 
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ("parallel", "untracked", "serial")
-
-
-def block(source, marker):
-    start = source.index(marker)
-    end = source.index("{", start) + 1
-    depth = 1
-    while depth:
-        depth += (source[end] == "{") - (source[end] == "}")
-        end += 1
-    return source[start:end]
 
 
 def cut(source, start, end):
@@ -70,6 +62,10 @@ def main():
     inc = {
         "rb_bufferref.inc": block(internal, "struct BufferRef {") + ";\n",
         "rb_pool.inc": block(memory, "struct Pool {") + ";\n",
+        # (the table's only ways in and out, which keep the live imports' reach memory_note_gpu_write's scan stops at)
+        "rb_table.inc": cut(memory, "import_reach::Reach live_reach;", "\n") + "\n"
+        + block(memory, "std::map<uint64_t, Pool>::iterator imported_add(") + "\n"
+        + block(memory, "std::map<uint64_t, Pool>::node_type imported_take("),
         "rb_writeback.inc": block(memory, "struct WriteBack {") + ";\n",
         "rb_refresh.inc": cut(memory, "// ---- (from PR 430, YunaraDebugs) Readback pages", "BufferRef gpu_buffer(uint64_t gpu, uint64_t size) {"),
         "rb_bindtail.inc": cut(block(memory, "BufferRef gpu_buffer_bind("),

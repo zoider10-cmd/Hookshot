@@ -23,6 +23,7 @@
 #include "../gpu/vk/compat/hookshot_env.h"   /* (env_on, env_int: the switches' one rule) */
 
 void hos_log(const char *fmt, ...);
+void hos_movie_fallback(void);   /* nn_video.c */
 
 /* a picture: luma rows and the interleaved chroma rows, both `stride` bytes apart */
 typedef void (*dav1d_av1_picture_fn)(void *user, const uint8_t *y, const uint8_t *uv, int w, int h, int stride, int64_t pts);
@@ -65,6 +66,7 @@ void *dav1d_av1_open(int w, int h) {
     if (!d) return NULL;
     if (dav1d_open(&d->ctx, &s) < 0) {
         hos_log("video: dav1d %s did not start: AV1 on Media Foundation instead", dav1d_version());
+        hos_movie_fallback();   /* (the performance summary's movie fallbacks: nn_video.c) */
         free(d);
         return NULL;
     }

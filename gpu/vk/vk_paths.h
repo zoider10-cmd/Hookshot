@@ -15,6 +15,7 @@
 #undef min
 #undef max
 #include <cstring>
+#include <filesystem>
 #include <string>
 
 namespace mkwvk {
@@ -54,4 +55,27 @@ inline std::string game_sub_path(const char* sub, const char* name) {
 inline std::string cache_path(const char* name) { return game_sub_path("cache", name); }
 /// <game folder>/logs/<name>: the logs and traces a run writes
 inline std::string log_path(const char* name) { return game_sub_path("logs", name); }
+/// The player's settings, hookshot_options.ini: the host's (MkwVkHost.options_path, host/options_path.c: in the user folder
+/// --user names, else beside the game), "" when it has none (no file: every row at its default). Without the host (a tool), the
+/// game folder's. vk_main.cpp. The build's compile_shaders= stays in the game folder's file (vk_draw.cpp compile_all)
+std::string options_path();
+/// The game folder as a path, game_module_path's rule. On Windows from GetModuleFileNameW: a folder with characters outside
+/// the ANSI code page, or longer than MAX_PATH, is still the right one (open it with std::filesystem or the streams)
+inline std::filesystem::path game_dir_path() {
+#ifdef _WIN32
+    std::wstring exe(32768, L'\0');
+    const DWORD n = GetModuleFileNameW(nullptr, exe.data(), (DWORD)exe.size());
+    if (!n || n >= exe.size()) return {};
+    exe.resize(n);
+    std::filesystem::path dir = std::filesystem::path(exe).parent_path();
+    if (!_wcsicmp(dir.filename().c_str(), L"bin") &&
+        GetFileAttributesW((dir.parent_path() / L"image.bin").c_str()) != INVALID_FILE_ATTRIBUTES)
+        dir = dir.parent_path();
+    return dir;
+#else
+    char exe[MAX_PATH];
+    const DWORD n = game_module_path(exe, MAX_PATH);
+    return std::filesystem::path(std::string(exe, n)).parent_path();
+#endif
+}
 }  // namespace mkwvk

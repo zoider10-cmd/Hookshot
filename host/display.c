@@ -1,4 +1,4 @@
-/* The game's window (Windows): the renderer's surface (gpu/render/, WebGPU). The native NVN layer (nvn_native.c)
+/* The game's window (Windows): the renderer's surface (the Vulkan back end, gpu/vk). The native NVN layer (nvn_native.c)
    presents the game's window textures into it (rx_nvn_present). The title bar carries live numbers.
    TOTKPort's hos/display.c, without its emulated-GPU fallback (the window buffer read from guest memory): MKW has
    no emulated GPU, so the renderer is the only way to a picture.
@@ -17,10 +17,12 @@ void hos_input_clear_toggles(void);
 #include <string.h>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include "hos_paths.h"   /* (hos_game_title: the game's own name, from its folder) */
 #include "../gpu/render/rx.h"
 void rx_close_asked(void);   /* host/rx_backend.c */
 #include "../gpu/vk/vk_api.h"
 #include "display_pointer.h"
+#include "fullscreen_monitor.h"
 #ifndef HOOKSHOT_ENV_H   /* (env_on: the switches' one rule) */
 #include "../gpu/vk/compat/hookshot_env.h"
 #endif
@@ -127,28 +129,117 @@ static void pointer_update(HWND w, uint32_t pressed, int wheel) {
 static HANDLE renderer_up;
 static int fullscreen;
 static WINDOWPLACEMENT windowed_place;
+static MkwVkMonitor window_monitors[HOS_MONITOR_MAX];
+static HMONITOR window_monitor_handles[HOS_MONITOR_MAX];
+static int window_monitor_count;
+static void
+mouse_capture(HWND w,int on);
+
+/* The monitor driver's DeviceString can be "Generic PnP Monitor" even when EDID supplies a model.
+   Match the target's interface path, never its model name or current enumeration ordinal. */
+static int monitor_friendly_name(const WCHAR *id,char *out,int size) {
+    for (int attempt=0;attempt<3;attempt++) {
+        UINT32 paths=0,modes=0;
+        if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS,&paths,&modes)!=ERROR_SUCCESS || !paths) return 0;
+        DISPLAYCONFIG_PATH_INFO *p=calloc(paths,sizeof *p);
+        DISPLAYCONFIG_MODE_INFO *m=calloc(modes?modes:1,sizeof *m);
+        if (!p || !m) { free(p); free(m); return 0; }
+        LONG status=QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS,&paths,p,&modes,m,NULL);
+        if (status==ERROR_INSUFFICIENT_BUFFER) { free(p); free(m); continue; }
+        int found=0;
+        if (status==ERROR_SUCCESS) for (UINT32 i=0;i<paths;i++) {
+            DISPLAYCONFIG_TARGET_DEVICE_NAME target={0};
+            target.header.type=DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+            target.header.size=sizeof target;
+            target.header.adapterId=p[i].targetInfo.adapterId;
+            target.header.id=p[i].targetInfo.id;
+            if (DisplayConfigGetDeviceInfo(&target.header)==ERROR_SUCCESS &&
+                !lstrcmpiW(id,target.monitorDevicePath) && target.monitorFriendlyDeviceName[0]) {
+                found=WideCharToMultiByte(CP_UTF8,0,target.monitorFriendlyDeviceName,-1,out,size,NULL,NULL)!=0;
+                break;
+            }
+        }
+        free(p); free(m);
+        return found;
+    }
+    return 0; /* Display hotplug kept changing the required buffers. */
+}
+
+static BOOL CALLBACK collect_monitor(HMONITOR mon,HDC dc,LPRECT rect,LPARAM data) {
+    (void)dc; (void)rect; (void)data;
+    if (window_monitor_count==HOS_MONITOR_MAX) return FALSE;
+    MONITORINFOEXW mi={0}; DISPLAY_DEVICEW device={0};
+    mi.cbSize=sizeof mi; device.cb=sizeof device;
+    if (!GetMonitorInfoW(mon,(MONITORINFO *)&mi)) return TRUE;
+    /* EDD_GET_DEVICE_INTERFACE_NAME returns a monitor interface path, not DISPLAY1's current ordinal. */
+    if (!EnumDisplayDevicesW(mi.szDevice,0,&device,1) || !device.DeviceID[0]) return TRUE;
+    MkwVkMonitor item={0};
+    if (!WideCharToMultiByte(CP_UTF8,0,device.DeviceID,-1,item.id,sizeof item.id,NULL,NULL)) return TRUE;
+    if (!monitor_friendly_name(device.DeviceID,item.name,sizeof item.name) &&
+        !WideCharToMultiByte(CP_UTF8,0,device.DeviceString,-1,item.name,sizeof item.name,NULL,NULL)) return TRUE;
+    item.width=mi.rcMonitor.right-mi.rcMonitor.left; item.height=mi.rcMonitor.bottom-mi.rcMonitor.top;
+    item.flags=(mi.dwFlags&MONITORINFOF_PRIMARY)?HOS_MONITOR_PRIMARY:0;
+    if (hwnd && mon==MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST)) item.flags|=HOS_MONITOR_CURRENT;
+    window_monitor_handles[window_monitor_count]=mon;
+    window_monitors[window_monitor_count++]=item;
+    return TRUE;
+}
+static void refresh_monitors(void) {
+    window_monitor_count=0;
+    EnumDisplayMonitors(NULL,NULL,collect_monitor,0);
+    hos_monitor_publish(window_monitors,window_monitor_count,hwnd!=NULL);
+}
+void hos_monitor_prepare(void) { hos_monitor_load(); refresh_monitors(); }
+static HMONITOR fullscreen_target(HWND w) {
+    char wanted[512]; hos_monitor_wanted(wanted);
+    int pick=hos_monitor_find(window_monitors,window_monitor_count,wanted);
+    return pick>=0?window_monitor_handles[pick]:MonitorFromWindow(w,MONITOR_DEFAULTTONEAREST);
+}
 
 static void set_fullscreen(HWND w, int on) {
-    if (on == fullscreen) return;
+    if (!on && !fullscreen) return;
     const LONG style = GetWindowLongA(w, GWL_STYLE);
     if (on) {
         MONITORINFO mi;
         mi.cbSize = sizeof mi;
-        windowed_place.length = sizeof windowed_place;
-        if (!GetWindowPlacement(w, &windowed_place) ||
-            !GetMonitorInfoA(MonitorFromWindow(w, MONITOR_DEFAULTTONEAREST), &mi))
+        if (!GetMonitorInfoA(fullscreen_target(w), &mi)) return;
+        RECT current;
+        if (fullscreen && GetWindowRect(w,&current) && EqualRect(&current,&mi.rcMonitor)) return;
+        if (!fullscreen) {
+            windowed_place.length = sizeof windowed_place;
+            if (!GetWindowPlacement(w,&windowed_place)) return;
+        }
+        SetWindowLongA(w,GWL_STYLE,style&~WS_OVERLAPPEDWINDOW);
+        if (GetWindowLongA(w,GWL_STYLE)!=(style&~WS_OVERLAPPEDWINDOW)) {
+            hos_log("display: fullscreen style request failed");
             return;
-        fullscreen = 1;
-        SetWindowLongA(w, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
-        SetWindowPos(w, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
-                     mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        }
+        const int was_fullscreen=fullscreen;
+        fullscreen=1; /* re-entrant WM_DPICHANGED must not apply a windowed suggested rectangle */
+        if (!SetWindowPos(w,HWND_TOP,mi.rcMonitor.left,mi.rcMonitor.top,mi.rcMonitor.right-mi.rcMonitor.left,
+                          mi.rcMonitor.bottom-mi.rcMonitor.top,SWP_NOOWNERZORDER|SWP_FRAMECHANGED)) {
+            SetWindowLongA(w,GWL_STYLE,style);
+            fullscreen=was_fullscreen;
+            hos_log("display: fullscreen monitor request failed (%lu)",(unsigned long)GetLastError());
+            return;
+        }
+        fullscreen=1;
     } else {
-        fullscreen = 0;
         SetWindowLongA(w, GWL_STYLE, style | WS_OVERLAPPEDWINDOW);
-        SetWindowPlacement(w, &windowed_place);
-        SetWindowPos(w, NULL, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        fullscreen=0;
+        if (GetWindowLongA(w,GWL_STYLE)!=(style|WS_OVERLAPPEDWINDOW) || !SetWindowPlacement(w,&windowed_place)) {
+            SetWindowLongA(w,GWL_STYLE,style);
+            fullscreen=1;
+            hos_log("display: restoring window placement failed (%lu)",(unsigned long)GetLastError());
+            return;
+        }
+        fullscreen=0;
+        if (!SetWindowPos(w, NULL, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED))
+            hos_log("display: refreshing restored window frame failed (%lu)",(unsigned long)GetLastError());
     }
+    if (mouse_captured) { mouse_capture(w,0); mouse_capture(w,1); }
+    refresh_monitors();
     hos_log("display: %s", on ? "fullscreen (F11 for a window)" : "windowed");
 }
 
@@ -352,6 +443,15 @@ static LRESULT CALLBACK wndproc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         if (game_menu_open) menus_mouse(w, menu_open, 0);
         return 0;
     case WM_TIMER: {
+        static DWORD monitor_poll;
+        static char previous_monitor[512];
+        char wanted_monitor[512]; hos_monitor_wanted(wanted_monitor);
+        DWORD monitor_now=GetTickCount();
+        if (monitor_now-monitor_poll>=1000 || strcmp(previous_monitor,wanted_monitor)) {
+            monitor_poll=monitor_now; strcpy(previous_monitor,wanted_monitor);
+            refresh_monitors();
+            if (fullscreen) set_fullscreen(w,1); /* selection/hotplug changes, on the window thread */
+        }
         pointer_update(w, 0, 0);
         /* (hookshot, #1532) a controller is not input to Windows: playing with one, the display went off at the power
            plan's timeout. While the game's window is in front and not minimized, the display's idle timer is reset every
@@ -428,6 +528,11 @@ static LRESULT CALLBACK wndproc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_SYSKEYDOWN:   /* Alt+Enter, as on Linux (display_sdl.c); other Alt keys (Alt+F4) go on to Windows */
+        if (wp == VK_F10 && !(lp & (1 << 29))) {
+            extern void hos_vk_note_key_press(unsigned key);
+            if (!(lp & (1 << 30))) hos_vk_note_key_press(VK_F10);
+            return 0;
+        }
         if (wp == VK_RETURN && (lp & (1 << 29))) {
             if (!(lp & (1 << 30))) set_fullscreen(w, !fullscreen);
             return 0;
@@ -437,6 +542,7 @@ static LRESULT CALLBACK wndproc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         if (wp == '\r') return 0;
         break;
     case WM_APP + 7:   /* (the Insert menu's row) */
+        refresh_monitors();
         set_fullscreen(w, (int)wp);
         return 0;
     case WM_APP + 12:   /* (hookshot: the Insert menu's Paste, MkwVkHost.take_text) */
@@ -541,17 +647,24 @@ static DWORD WINAPI display_main(void *p) {
         AdjustWindowRect(&s, WS_OVERLAPPEDWINDOW, FALSE);
         SetWindowPos(hwnd, NULL, 0, 0, s.right - s.left, s.bottom - s.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
+    {   /* the game's own name for the window (host/hos_paths.h hos_game_title), as Unicode: the class is an ANSI one */
+        wchar_t title[256];
+        if (MultiByteToWideChar(CP_UTF8, 0, hos_game_title(HOS_GAME_TITLE), -1, title, 256))
+            DefWindowProcW(hwnd, WM_SETTEXT, 0, (LPARAM)title);
+    }
     /* (no activate: shown at the bottom of the z-order, so a game in front keeps its focus) */
     if (noactivate)
         SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
     else
         ShowWindow(hwnd, SW_SHOW);
-    if (getenv("HOS_FULLSCREEN") && atoi(getenv("HOS_FULLSCREEN"))) set_fullscreen(hwnd, 1);
+    hos_monitor_load();
+    refresh_monitors();
+    if (hos_monitor_start_fullscreen()) set_fullscreen(hwnd, 1);
     RAWINPUTDEVICE rid = {1, 2, 0, hwnd};   /* generic desktop mouse: WM_INPUT while the window is in front */
     RegisterRawInputDevices(&rid, 1, sizeof rid);
     pointer_update(hwnd, 0, 0);
     renderer = rx_start(hwnd);
-    if (!renderer) hos_log("display: no WebGPU device: the window stays black");
+    if (!renderer) hos_log("display: no renderer: the window stays black");
     SetEvent(renderer_up);
     SetTimer(hwnd, 1, 250, NULL);
     MSG m;
@@ -573,6 +686,10 @@ void hos_renderer_wait(void) {
 void hos_display_start(void) {
     if (env_on("HOS_HEADLESS")) {   /* no window: the renderer still draws, offscreen (screenshots, frame dumps) */
         rx_start(NULL);
+        /* The renderer's startup may attach/free a console, which resets Windows' console handlers.
+           Install the stop route afterwards; it needs neither a rendered frame nor the game's input loop. */
+        int hos_windows_stop_start(void);
+        if (!hos_windows_stop_start()) hos_log("stop: windowless stop route unavailable; use the control bridge");
         return;
     }
     renderer_up = CreateEventA(NULL, TRUE, FALSE, NULL);

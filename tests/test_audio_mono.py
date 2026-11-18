@@ -75,7 +75,7 @@ int main(void) {
     assert "if (id == HOS_OPT_AUDIO_OUTPUT) return opts.audio_output;" in read("gpu/vk/vk_replay.cpp")
     assert re.search(r"int audio_output\s*=\s*0;", read("gpu/vk/vk_menu.h"))
     assert re.search(
-        r'\{TAB_AUDIO, "Audio output", &opts.audio_output, 0, 3, 1, tx_audio_output,\s*'
+        r'\{TAB_AUDIO, "Speaker layout", &opts.audio_output, 0, 3, 1, tx_audio_output,\s*'
         r'"[^"]+", hn_audio_output, true, true\}', read("gpu/vk/vk_menu.cpp"))
     assert "mono_audio" not in read("gpu/vk/vk_menu.h")
     assert '"Mono audio"' not in read("gpu/vk/vk_menu.cpp")

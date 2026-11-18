@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createMarkdownProcessor } from '@astrojs/markdown-remark';
 import { contentPages, pageForSource } from '../content-pages.ts';
 import { editUrl, siteUrl, sourceUrl } from '../site.ts';
+import { repositoryAssets } from './assets.ts';
 import { formatInstallHub } from './format-install.ts';
 import { formatGraphicsSettings } from './graphics-settings.ts';
 import { formatCommonIssues } from './format-common-issues.ts';
@@ -15,7 +16,7 @@ export const repoRoot = path.resolve('..');
 const repoFile = (file: string) => path.join(repoRoot, file);
 
 // Repository files the site serves itself (copied into public/ by the repoAssets integration).
-const publicAssets = new Set(['assets/hookshot.png']);
+const publicAssets = repositoryAssets;
 
 /** Every file a page is made from, for rebuilding the pages when one changes in dev. */
 export const sourceFiles = [...new Set([...Object.values(contentPages), 'gpu/vk/vk_menu.cpp'])].map(repoFile);
@@ -36,7 +37,7 @@ function urlFor(value: string, source: string) {
   const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(source), pathname));
   const page = pageForSource.get(resolved);
   if (page !== undefined) return '/' + (page ? `${page}/` : '') + fragment;
-  if (publicAssets.has(resolved)) return '/' + resolved + fragment;
+  if (Object.hasOwn(publicAssets, resolved)) return '/' + publicAssets[resolved] + fragment;
   return sourceUrl(resolved) + fragment;
 }
 
@@ -62,6 +63,7 @@ export async function renderPage(slug: string): Promise<RepoPage> {
   text = rewriteRepoLinks(text, source);
   if (source === 'docs/getting-started.md') text = formatInstallHub(text);
   if (source === 'docs/common-issues.md') text = formatCommonIssues(text);
+  if (source === 'docs/saves.md') text = '\n<div class="save-transfer-guide">\n\n' + text.trim() + '\n\n</div>\n';
   if (source === 'docs/graphics-and-controls.md') {
     text = await formatGraphicsSettings(text, await readFile(repoFile('README.md'), 'utf8'),
       await readFile(repoFile('gpu/vk/vk_menu.cpp'), 'utf8'), await createMarkdownProcessor());

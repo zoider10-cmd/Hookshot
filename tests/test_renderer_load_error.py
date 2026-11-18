@@ -55,6 +55,8 @@ def check_source():
     linux = failed.split("#else")[1].split("#endif")[0]
     if "why += n_path + 2;" not in linux or ": WebGPU" in linux or ": nothing is drawn" not in linux:
         raise SystemExit("load_vulkan: the Linux line repeats dlerror()'s path, or names a WebGPU Linux does not have")
+    if ": WebGPU" in load or ": nothing is drawn" not in failed.split("#else")[0]:   # (Windows has none either now)
+        raise SystemExit("load_vulkan: a failure names a WebGPU renderer the build does not have")
     vk = (ROOT / "gpu" / "vk" / "vk_main.cpp").read_text(encoding="utf-8")
     vk_failed = vk[vk.index("if (!load_global()) {"):]
     vk_failed = vk_failed[:vk_failed.index("return nullptr;")]

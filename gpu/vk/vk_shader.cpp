@@ -32,6 +32,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "vk_new.h"   // (NewNothrow)
 #include "shader_recompiler/backend/spirv/mma_layout.h"
 #include "shader_recompiler/ir_opt/passes.h"
 #include "shader_recompiler/ir_opt/fragment_output_guard.h"
@@ -54,9 +55,9 @@
 
 #include "vk_paths.h"
 #include "vk_internal.h"
+#include "flat_map.h"
 #include "vk_jobs.h"
 #include "vk_draw.h"
-#include "flat_map.h"
 #include "vk_progcache.h"
 #include "vk_menu.h"
 
@@ -101,6 +102,7 @@ void ptr_diag_log(uint64_t key, const char* kind) {
 }
 } // namespace
 #include "vk_shader.h"
+#include "mesh_mode.h"
 #ifndef HOOKSHOT_ENV_H   // (env_on: the switches' one rule)
 #include "hookshot_env.h"
 #endif
@@ -259,16 +261,22 @@ Code parse_code_locked(const uint8_t* ctl, const std::vector<uint8_t>& area) {
     using Shader::Ampere::Instruction;
     std::vector<Instruction> native;
     Shader::Ampere::ProgramCaptureState capture;
+    // (hookshot) A word the capture reads as a branch that would leave every program (to before its start, between two
+    // instructions, or past the largest program, 16 MiB: program_address_map.h) is no instruction of this one. The
+    // capture's end rules are narrower than the lowering's (a loop left only by predicated EXITs, a library function that
+    // ends the shader), so it can read on past the program's end into what follows it there. The program ends before
+    // that word: the lowering, which takes a program only to its own end with every branch inside it (an indirect one's
+    // targets when it translates), says whether it does, and only if it does not is the program refused, naming the word
+    // as before.
+    uint32_t outside = ~0u;   // (that word's instruction number)
     for (uint32_t i = 0; hdr + (i + 1) * sizeof(Instruction) <= len; i++) {
         Instruction& insn = native.emplace_back();
         std::memcpy(&insn, area.data() + hdr + i * sizeof(Instruction), sizeof insn);
         const auto r = capture.Observe(insn, i);
         if (r == Shader::Ampere::ProgramCaptureState::Result::InvalidTarget) {
-            char why[96];
-            snprintf(why, sizeof why, "the branch at instruction %u (+%#x) goes outside the program", i,
-                     (unsigned)(i * sizeof(Instruction)));
-            c.why = why;
-            return c;
+            native.pop_back();
+            outside = i;
+            break;
         }
         if (r == Shader::Ampere::ProgramCaptureState::Result::Complete) break;
     }
@@ -371,10 +379,24 @@ Code parse_code_locked(const uint8_t* ctl, const std::vector<uint8_t>& area) {
                 }
             }
         }
-        char why[160];
-        snprintf(why, sizeof why, "does not lower at +%#x: %s", lowered.error_offset, std::string(lowered.error).c_str());
+        char why[256];
+        if (outside != ~0u)   // (the code before the word the capture stopped at does not lower: refused for that word, as before)
+            snprintf(why, sizeof why, "the branch at instruction %u (+%#x) goes outside the program (%#x code bytes), and the "
+                     "code before it does not lower at +%#x: %s", outside, (unsigned)(outside * sizeof(Instruction)),
+                     len - hdr, lowered.error_offset, std::string(lowered.error).c_str());
+        else
+            snprintf(why, sizeof why, "does not lower at +%#x: %s", lowered.error_offset, std::string(lowered.error).c_str());
         c.why = why;
         return c;
+    }
+    if (outside != ~0u) {   // (hookshot: each program once, up to 64: it ended before the word the capture stopped at)
+        static std::mutex mu;
+        static std::unordered_set<uint64_t> seen;
+        std::lock_guard lk(mu);
+        if (seen.size() < 64 && seen.insert(c.key).second)
+            logf("vk: NVN2 program %016llx (stage %u) ends at +%#x, before the word at +%#x that would branch outside it "
+                 "(%#x code bytes)", (unsigned long long)c.key, st, lowered.source_size,
+                 (unsigned)(outside * sizeof(Instruction)), len - hdr);
     }
     c.texture_bound = lowered.required_texture_buffer;
     c.code.assign(sizeof(Shader::ProgramHeader) / 8, 0);
@@ -667,6 +689,13 @@ Shader::Profile make_profile() {
     p.support_scaled_attributes = false;   // (*_UI2F / *_I2F read as integers, converted in the shader: R32 has no scaled format)
     p.support_multi_viewport = true;
     p.support_sampled_image_array_nonuniform_indexing = true;
+    // (storage images, image buffers and texture buffers picked by an index that can differ between invocations: NonUniform on the
+    // index and what it reaches, as for sampled images, where the GPU indexes that kind of array nonuniformly (Vulkan 1.2's
+    // descriptor indexing; vk_main.cpp creates the device with every feature it reports). Without the feature the index is taken
+    // as the same in every invocation, as before: there an index that differs is undefined. In the cache's stamp)
+    p.support_storage_image_array_nonuniform_indexing = dev.vk12.shaderStorageImageArrayNonUniformIndexing;
+    p.support_uniform_texel_buffer_array_nonuniform_indexing = dev.vk12.shaderUniformTexelBufferArrayNonUniformIndexing;
+    p.support_storage_texel_buffer_array_nonuniform_indexing = dev.vk12.shaderStorageTexelBufferArrayNonUniformIndexing;
     // Unpinned SPIR-V 1.6 stages can use any supported subgroup size, even when the default is 32.
     // The stage-specific profiles below keep the short path only where pin_subgroup actually pins 32 lanes.
     p.warp_size_potentially_larger_than_guest = dev.subgroup_max > 32;
@@ -1135,6 +1164,13 @@ const std::vector<Code>& codes_of(const NvnState& s) {
 }
 
 std::atomic<int64_t> st_translated, st_failed, st_translate_ns;
+// (hookshot) The "not translated" lines name 30 programs each, so that a log is not flooded; these count every program each
+// line stands for, the ones past its 30 too, and shader_fail_lines logs them after the preparation's "N failed". Each failure
+// st_failed counts is in exactly one of them: a Mac start's "70 failed" named 31 programs, and the other 39 networks left out
+// were counted nowhere
+constexpr int64_t kFailNamed = 30;
+std::atomic<int64_t> st_left_out, st_not_translated, st_mesh_not_translated, st_stage_failed;
+std::atomic<int64_t> st_translate_wait_ns;   // (the translations a draw waited for, program_pick: the performance summary's hitches)
 
 } // namespace
 
@@ -1270,6 +1306,18 @@ bool mesh_nocull_wanted(uint64_t code_key) {
     return false;
 }
 
+} // namespace
+uint32_t mesh_fallback_layout() {
+    static const uint32_t layout = [] {
+        const mesh_rule::Choice c = mesh_rule::fb_layout(getenv("RX_VK_MESH_FB_LAYOUT"));
+        // (once, on a GPU that translates a fallback program: which layout its records take, set or not)
+        logf("vk: mesh fallback records: %s (%s)", c.mode == 1 ? "line after line (soa)" : "record after record (aos)", c.why);
+        return (uint32_t)c.mode;
+    }();
+    return layout;
+}
+namespace {
+
 bool reads_c3_2320_bit4(const Shader::IR::Value& v) {   // (BitwiseAnd32 of #4 and GetCbufU32 #3, #2320, through Identity)
     using namespace Shader::IR;
     const Value r = v.Resolve();
@@ -1373,7 +1421,9 @@ uint64_t translator_stamp() {
         // (and the vendor fixes of the translation, vk_vendor.h: out-of-bounds fetches, NaN tests, the gather offset)
         const uint32_t flags = (position_invariant ? 1u : 0u) | (frag_nan_guard ? 2u : 0u) | (mma_software ? 4u : 0u) |
                                (global_table_loop ? 8u : 0u) | (fetch_bounds ? 16u : 0u) | (nan_bits ? 32u : 0u) |
-                               (profile().need_gather_subpixel_offset ? 64u : 0u) | (fetch_bounds_buffers ? 128u : 0u);
+                               (profile().need_gather_subpixel_offset ? 64u : 0u) | (fetch_bounds_buffers ? 128u : 0u) |
+                               // (and the software multiplies' form, vk_coopmat.cpp choose_software_form: 0 for the loop, as before)
+                               (mma_software ? mma_software_form << 8 | (mma_software_form && mma_software_quad ? 1024u : 0u) : 0u);
         add(&flags, sizeof flags);
         add(mma_order_a.data(), sizeof(uint32_t) * mma_order_a.size());
         add(mma_order_b.data(), sizeof(uint32_t) * mma_order_b.size());
@@ -1383,6 +1433,15 @@ uint64_t translator_stamp() {
     // without it, nor one made with RX_VK_NATIVE_FADD=0's loop wanted back once it is native again)
     const uint32_t float_add = profile().support_float32_atomic_add ? 1u : 0u;
     add(&float_add, sizeof float_add);
+    // (and which descriptor arrays the GPU indexes nonuniformly (make_profile): a program made with NonUniform on a storage image,
+    // image buffer or texture buffer array and that kind's capability is no use to a GPU without the feature, nor one made
+    // without them to a GPU that has it. Only when one is missing, so the GPUs that have all three keep one cache)
+    if (const uint32_t missing = (profile().support_storage_image_array_nonuniform_indexing ? 0u : 1u) |
+                                 (profile().support_uniform_texel_buffer_array_nonuniform_indexing ? 0u : 2u) |
+                                 (profile().support_storage_texel_buffer_array_nonuniform_indexing ? 0u : 4u)) {
+        const uint32_t no_nonuniform[] = {0x6e6e7561u, missing};   // ("nnua", and which)
+        add(no_nonuniform, sizeof no_nonuniform);
+    }
     // (RX_VK_GP_, not RX_VK_GP: that took RX_VK_GPL with it, which changes no translation, and switching the stage libraries on
     // threw the whole program cache away. What the libraries are good for is the prepare's second stamp, vk_draw.cpp warmed_stamp)
     // (and every other switch the translation reads: the storage buffer pass's (RX_VK_NO_CBUF_LOAD_RULE, RX_VK_PTR_SPLIT_FALLBACK,
@@ -1508,6 +1567,9 @@ void translate_into(Program& p, const NvnState& s, const Code* vsc, const Code* 
         ~ModuleProgram() { module_program = 0; }
     } module_for{p.key};
     try {
+        // (issue 1280: an allocation refused in the translation fails this program, as before the renderer's new_handler,
+        // rather than wait 5 s and stop the game: a bad shader can ask for a size no PC has)
+        const NewNothrow nothrow;
         if (driver_faulted_program(p.key)) throw std::runtime_error("the driver faulted on this program before: not asked of it again");
         Shader::Backend::Bindings bindings{};
         int questions = 0;
@@ -1692,10 +1754,9 @@ void translate_into(Program& p, const NvnState& s, const Code* vsc, const Code* 
         const bool trial = forced && !forced->want.empty();   // (an answer seed_compute tries: it may well not translate)
         if (!trial) st_failed++;
         // (a network left out on purpose is a trace line, counted apart: the dozen of them on every AMD card took the 30 lines a failure gets)
-        static std::atomic<int> logged, left_out;
         if (!strcmp(e.what(), network_left_out)) {
-            if (!trial && left_out++ < 30) logf_at(log_trace, "vk: program %016llx not translated: %s", (unsigned long long)p.key, e.what());
-        } else if (!trial && logged++ < 30) logf("vk: program %016llx not translated: %s", (unsigned long long)p.key, e.what());
+            if (!trial && st_left_out++ < kFailNamed) logf_at(log_trace, "vk: program %016llx not translated: %s", (unsigned long long)p.key, e.what());
+        } else if (!trial && st_not_translated++ < kFailNamed) logf("vk: program %016llx not translated: %s", (unsigned long long)p.key, e.what());
     }
     st_translate_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
     p.ready.store(true, std::memory_order_release);
@@ -1754,6 +1815,9 @@ void translate_mesh_into(Program& p, const NvnState& s, const Code* task, const 
         Shader::Optimization::g_nvn2_miss_log_this = !only || !strncmp(hex, only, strlen(only));
     }
     try {
+        // (issue 1280: an allocation refused in the translation fails this program, as before the renderer's new_handler,
+        // rather than wait 5 s and stop the game: a bad shader can ask for a size no PC has)
+        const NewNothrow nothrow;
         Shader::Backend::Bindings bindings{};
         std::vector<std::vector<uint32_t>> kept;   // (each stage's SPIR-V, for the program cache: mesh programs were never kept,
                                                    // so each was translated and its pipeline built in the middle of play, every run)
@@ -1806,6 +1870,7 @@ void translate_mesh_into(Program& p, const NvnState& s, const Code* task, const 
         mrt.mesh_fallback_capacity = Shader::Backend::SPIRV::MESH_FALLBACK_CAPACITY;
         mrt.mesh_fallback_task = task_t != nullptr;
         mrt.mesh_fallback_task_threads = task_t ? task_t->program.workgroup_size[0] : 0;
+        mrt.mesh_fallback_layout = fallback ? mesh_fallback_layout() : 0;
         const std::vector<uint32_t> mspirv = Shader::Backend::SPIRV::EmitSPIRV(fallback ? profile_pinned() : profile_graphics(VK_SHADER_STAGE_MESH_BIT_EXT), mrt, mesh_t->program, bindings);
         kept.push_back(mspirv);
         Stage ms;
@@ -1821,6 +1886,7 @@ void translate_mesh_into(Program& p, const NvnState& s, const Code* task, const 
             vrt.mesh_fallback = true;
             vrt.mesh_fallback_vertex = true;
             vrt.mesh_fallback_capacity = Shader::Backend::SPIRV::MESH_FALLBACK_CAPACITY;
+            vrt.mesh_fallback_layout = mrt.mesh_fallback_layout;
             vrt.convert_depth_mode = host->depth_minus_w() != 0;
             const Shader::Stage saved_stage{mesh_t->program.stage};
             // (the generated vertex stage has no descriptors of its own: its inputs are the records. Only the stores
@@ -1927,8 +1993,7 @@ void translate_mesh_into(Program& p, const NvnState& s, const Code* task, const 
     } catch (const std::exception& e) {
         p.failed = true;
         st_failed++;
-        static std::atomic<int> logged;
-        if (logged++ < 30) logf("vk: mesh program %016llx not translated: %s", (unsigned long long)p.key, e.what());
+        if (st_mesh_not_translated++ < kFailNamed) logf("vk: mesh program %016llx not translated: %s", (unsigned long long)p.key, e.what());
     }
     st_translate_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
     p.ready.store(true, std::memory_order_release);
@@ -2010,7 +2075,7 @@ struct Pick {
     const Program* p = nullptr;
     std::vector<uint32_t> handles;   // (at its answers' descriptors: their slots and the slots' versions)
 };
-thread_local FlatMap<Pick> picks;   // (each recording thread's: program_pick has its own lock; flat, flat_map.h)
+thread_local FlatMap<uint64_t, Pick> picks;   // (each recording thread's: program_pick has its own lock)
 uint64_t pick_inputs(const NvnState& s, const uint8_t color_types[8]) {
     uint64_t h = 0x9E37;
     for (int i = 0; i < 16; i++) h = h * 1099511628211ull ^ (uint64_t)s.vattr[i];
@@ -2162,7 +2227,10 @@ const Program* program_for(const NvnState& s, ProgramKind kind, const uint8_t co
         }
     }
     const uint64_t key = (compute ? 0x5EED : pick_inputs(s, color_types)) * 1099511628211ull ^ s.prog.serial;
-    Pick& pk = picks[key];   // (flat_map.h: an insert into picks can move it; not held across program_pick)
+    // (held across program_pick below and written through after it, though an insert into the FlatMap picks would move it
+    // (flat_map.h): nothing in between inserts into this thread's picks. program_pick takes shader_mu, which is not recursive,
+    // so it cannot reach program_for again; a callback from it into the draw path would have to look pk up anew)
+    Pick& pk = picks[key];
     auto keep = [&](const Program* p) {
         if (!p || !p->ready.load(std::memory_order_acquire) || p->failed) return p;
         if (!(prog_fast[0].on && prog_fast[0].p == p)) prog_fast[1] = prog_fast[0];
@@ -2189,12 +2257,11 @@ const Program* program_for(const NvnState& s, ProgramKind kind, const uint8_t co
         st_none++;
     }
     const Program* picked = program_pick(s, kind, color_types);
-    Pick& pw = picks[key];   // (looked up again: nothing program_pick does is meant to reach this thread's picks, but a move would be silent)
     if (picked && picked->ready.load(std::memory_order_acquire) && !picked->failed) {
-        pw.p = picked;
-        answer_handles(s, *picked, pw.handles);
+        pk.p = picked;
+        answer_handles(s, *picked, pk.handles);
     } else {
-        pw.p = nullptr;
+        pk.p = nullptr;
     }
     if (picks.size() > 65536) picks.clear();
     return keep(picked);
@@ -2267,7 +2334,9 @@ const Program* program_pick(const NvnState& s, ProgramKind kind, const uint8_t c
         uint8_t ct[8];
         std::memcpy(ct, color_types, 8);
         lk.unlock();
+        const auto t0 = std::chrono::steady_clock::now();
         translate_into(*raw, s, has[0] ? &c0 : nullptr, has[1] ? &c1 : nullptr, has[2] ? &c5 : nullptr, ct);
+        st_translate_wait_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
         jobs_notify();   // (a thread in jobs_wait for this one wakes)
         return raw->failed ? nullptr : raw;
     }
@@ -2334,8 +2403,7 @@ Code stage_of_seed(const SeedStage& st) {
 }
 /// (hookshot) A seed stage that does not parse fails its program: which one, and why (the prepare's "1 failed" named nothing)
 void seed_stage_failed(const Code& c, uint64_t program) {
-    static std::atomic<int> logged{0};
-    if (logged++ < 30)
+    if (st_stage_failed++ < kFailNamed)
         logf("vk: program %016llx not translated: its NVN stage %d (code %016llx) %s", (unsigned long long)program, c.stage,
              (unsigned long long)c.key, c.why.empty() ? "does not parse" : c.why.c_str());
 }
@@ -2354,6 +2422,7 @@ size_t seed_open() {
         fclose(f);
     }
     if (seed.blob.empty()) return 0;
+    static const bool seed_check = env_on("RX_VK_SEED_CHECK");
     disk_init();
     disk_listing = true;
     size_t at = 16;
@@ -2382,7 +2451,9 @@ size_t seed_open() {
             continue;
         }
         st.key = code_key(seed.blob.data() + st.control, seed.blob.data() + st.code, st.end);
-        seed_keys.insert(st.key);
+        // (only for RX_VK_SEED_CHECK, whose miss_note reads it: a seed opened in play (prepare_background) filled it while the
+        // replay's misses read it, an unordered_set rehashed under a reader)
+        if (seed_check) seed_keys.insert(st.key);
         seed.index.emplace(st.key, (uint32_t)(&st - seed.stages.data()));
         std::memcpy(st.sph, seed.blob.data() + st.code, std::min<size_t>(sizeof st.sph, st.end));
     }
@@ -2758,8 +2829,26 @@ void shader_stats(int64_t* translated, int64_t* failed) {
     if (st_cache_hits.load() >= hits_logged + 500) logf("vk: %lld programs from the program cache", (long long)(hits_logged = st_cache_hits.load()));
     *translated = st_translated, *failed = st_failed;
 }
+/// (hookshot) After the preparation's "N failed" (vk_draw.cpp prepare_run): how many programs each "not translated" line stands
+/// for, whenever it stood for any. Those lines stop at kFailNamed programs each; these add up to N, so no failure goes uncounted.
+/// where: where those lines are, as a reader at the default level sees it (the networks' are trace lines, hidden there)
+void shader_fail_lines() {
+    const auto line = [](const char* what, int64_t n, const char* where) {
+        if (n > kFailNamed)
+            logf("vk: not translated%s: %lld programs (the first %lld named %s)", what, (long long)n, (long long)kFailNamed, where);
+        else if (n)
+            logf("vk: not translated%s: %lld program%s (named %s)", what, (long long)n, n == 1 ? "" : "s", where);
+    };
+    line(", a network left out on this card", st_left_out.load(), "at trace level");
+    line("", st_not_translated.load(), "above");
+    line(", mesh", st_mesh_not_translated.load(), "above");
+    line(", a seed stage that does not parse", st_stage_failed.load(), "above");
+}
 double shader_translate_ms() {
     return st_translate_ns.load() / 1e6;
+}
+double shader_translate_wait_ms() {
+    return st_translate_wait_ns.load() / 1e6;
 }
 
 void program_released(const nvn_prog* p) {

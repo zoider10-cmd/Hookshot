@@ -79,3 +79,40 @@ static inline DWORD hos_game_path_a(char *buf, DWORD size) {
     return (DWORD)strlen(buf);
 }
 #endif
+
+/* (hookshot) The window's title: the game's own name, "The Legend of Zelda: Ocarina of Time (Hookshot)", the first line of
+   hookshot_title.txt in the game folder (UTF-8), which the builder writes from the game's .nup (nx2/game_title.py); fallback
+   when the folder has none (a build from an unpacked dump, a development build). Read once */
+#include <stdio.h>
+static inline const char *hos_game_title(const char *fallback) {
+    static char title[256];
+    static int done;
+    if (!done) {
+        done = 1;
+        FILE *f = NULL;
+#ifdef _WIN32
+        wchar_t path[MAX_PATH + 32];
+        DWORD n = hos_game_path_w(path, MAX_PATH);
+        if (n && n < MAX_PATH) {
+            while (n && path[n - 1] != L'\\' && path[n - 1] != L'/') n--;
+            wcscpy(path + n, L"hookshot_title.txt");
+            f = _wfopen(path, L"rb");
+        }
+#else
+        char path[MAX_PATH + 32];
+        DWORD n = hos_game_path_a(path, MAX_PATH);
+        if (n && n < MAX_PATH) {
+            while (n && path[n - 1] != '/') n--;
+            strcpy(path + n, "hookshot_title.txt");
+            f = fopen(path, "rb");
+        }
+#endif
+        if (f) {
+            if (!fgets(title, sizeof title, f)) title[0] = 0;
+            fclose(f);
+            size_t len = strcspn(title, "\r\n");
+            title[len] = 0;
+        }
+    }
+    return title[0] ? title : fallback;
+}

@@ -25,6 +25,9 @@ def main():
     chunking=source[source.index('uint64_t import_chunk() {'):source.index('Pool* pool_lookup(uint64_t guest, uint64_t size) {')]
     cache=block(source,'Pool* pool_of(uint64_t guest, uint64_t size) {')
     prefetch=block(source,'void prefetch_chunks(uint64_t lo, uint64_t hi, uint64_t chunk) {')
+    # (the table's only ways in and out, which keep the live imports' reach the scans stop at: gpu/vk/import_reach.h)
+    reach_at=source.index('import_reach::Reach live_reach;');reach=source[reach_at:source.index('\n',reach_at)]
+    table=block(source,'std::map<uint64_t, Pool>::iterator imported_add(')+'\n'+block(source,'std::map<uint64_t, Pool>::node_type imported_take(')
     fixture='''#include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -35,22 +38,24 @@ def main():
 #include <map>
 #include <mutex>
 #include <vector>
+#include "gpu/vk/import_reach.h"
 #define CHECK(x) do { if(!(x)){std::fprintf(stderr,"FAIL:%d %s\\n",__LINE__,#x);std::exit(1);} }while(0)
 struct Pool { uint64_t lo=0,hi=0,range_lo=0,range_hi=0,address=0; bool prefetched=false,gpu_only=false,gpu_written=false; uint8_t trims=0; uint64_t trim_epoch=0; };
 struct GuestPool { uint64_t lo,hi; };
 std::vector<GuestPool> guest_pools;
 std::map<uint64_t,Pool> imported;
+'''+reach+'\n'+table+'''
 Pool *last_pool=nullptr,*pool_cache[4096]{};
 uint64_t max_import_size=128ull<<20;
 int failures=0,imports=0,retires=0,bg_starts=0;
 int64_t st_bg_waits=0,st_prefetch_used=0,st_prefetch_sent=0,st_prefetch_dropped=0;
 struct { bool external_memory_host=true; } dev;
-std::mutex bg_mu;std::condition_variable bg_done_cv,bg_cv;std::vector<uint64_t> bg_inflight;
+std::mutex bg_mu;std::condition_variable bg_done_cv,bg_cv;std::map<uint64_t,uint64_t> bg_inflight;
 std::deque<std::pair<uint64_t,uint64_t>> bg_queue;
 void bg_start() { bg_starts++; } // Recording spy: no thread or GPU import is started.
 void logf(const char*,...){} void bg_drain(){}
 void guest_pages_set(uint64_t,uint64_t,uint64_t){}
-void retire_pool(std::map<uint64_t,Pool>::iterator it) { imported.erase(it);last_pool=nullptr;std::fill(std::begin(pool_cache),std::end(pool_cache),nullptr);retires++; }
+void retire_pool(std::map<uint64_t,Pool>::iterator it) { imported_take(it);last_pool=nullptr;std::fill(std::begin(pool_cache),std::end(pool_cache),nullptr);retires++; }
 enum { VK_SUCCESS = 0 };
 thread_local bool import_cooling = false;
 thread_local int import_result = 0;
@@ -66,7 +71,7 @@ int check_prefetch(int mode) {
     guest_pools.push_back({base,base+8*chunk});
     dev.external_memory_host=mode!=2;
     Pool seed;seed.lo=base+3*chunk;seed.hi=base+4*chunk;seed.prefetched=true;
-    auto &ready=imported.emplace(seed.lo,seed).first->second;
+    auto &ready=imported_add(seed)->second;
     CHECK(pool_lookup(seed.lo+64,64)==&ready && !ready.prefetched && st_prefetch_used==1 && imports==0);
     if(mode==1) {
         CHECK(bg_queue.size()==2 && bg_starts==2 && st_prefetch_sent==2);
@@ -75,13 +80,14 @@ int check_prefetch(int mode) {
     } else CHECK(bg_queue.empty() && bg_starts==0 && st_prefetch_sent==0);
     CHECK(pool_lookup(seed.lo+128,64)==&ready && st_prefetch_used==1 && imports==0);
     Pool plain;plain.lo=base+6*chunk;plain.hi=base+7*chunk;
-    auto &unprefetched=imported.emplace(plain.lo,plain).first->second;
+    auto &unprefetched=imported_add(plain)->second;
     CHECK(pool_lookup(plain.lo+64,64)==&unprefetched && !unprefetched.prefetched && st_prefetch_used==1 && imports==0);
     CHECK(bg_starts==(mode==1?2:0) && st_prefetch_sent==(mode==1?2:0));
     auto demand=pool_lookup(base+64,64);
     CHECK(demand && !demand->prefetched && imports==1 && st_prefetch_used==1);
     CHECK(bg_queue.size()==(mode==1?3u:0u) && bg_starts==(mode==1?3:0) && st_prefetch_sent==(mode==1?3:0));
     CHECK(bg_inflight.size()==bg_queue.size() && st_prefetch_dropped==0 && st_bg_waits==0);
+    for(const auto& [lo, hi] : bg_queue) CHECK(bg_inflight.at(lo)==hi);
     std::printf("PASS: prefetched first use, reuse, unprefetched lookup, neighbour queueing (mode %d)\\n",mode);
     return 0;
 }
@@ -129,7 +135,7 @@ int main(int argc,char **argv) {
     work=ROOT/'work';work.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='import-windows-',dir=work) as temp:
         directory=Path(temp).resolve();directory.relative_to(work.resolve());cpp=directory/'fixture.cpp';exe=directory/'fixture.exe';cpp.write_text(fixture,encoding='utf-8')
-        subprocess.run([a.cxx,'-std=c++20','-O2','-D_CRT_SECURE_NO_WARNINGS',str(cpp),'-o',str(exe)],check=True)
+        subprocess.run([a.cxx,'-std=c++20','-O2','-D_CRT_SECURE_NO_WARNINGS','-I'+str(ROOT),str(cpp),'-o',str(exe)],check=True)
         for chunk in ('16','3','0'):
             subprocess.run([str(exe)],env=dict(os.environ,RX_VK_IMPORT_CHUNK_MB=chunk,RX_VK_PREFETCH_CHUNKS='0'),check=True)
         for mode in ('1','0','2'):

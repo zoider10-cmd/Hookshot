@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-16 | main bbe421f508a3aa6c32014265067a5031ef333b32 | Windows; OS build not recorded; no window | Not used; game-free fixtures | Not recorded for this fixture run | Python 3.14; llvm-mingw Clang 23.1.5; fake audio/UI; tests/run_all.py, 4 jobs; existing tools only | Selected game-free baseline/setup control; no gameplay | windows-main-initial: 0 passed, 12 failed, 0 skipped in 5.22 s. Partial control before Tooling-path correction; all 12 selected names failed. Superseded by windows-main. Source hashes unchanged; test durations are diagnostic, not game-performance measurements. |

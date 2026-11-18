@@ -4,6 +4,8 @@ A compiler stopped twice for memory, or the build closed or killed mid-compile, 
 a small PC compiled for up to an hour again. Objects are cached only once their compiler succeeded, so only a failed link (a
 cached runtime object from another version, issue 1197) needs them gone. The lift is forgotten too, unless every file that failed
 is a source of the repository: a typo in a host file is not a translation gone wrong, and translating again cost ~5 minutes.
+A failure after the game itself linked (the renderer's link, or its unresolved symbols) keeps the lift and the game's objects
+and forgets only the renderer's (issue 1076): an extern in an anonymous namespace in gpu/vk cost a whole lift and compile.
 
 python -I -B tests/test_failed_compile_keeps_objects.py
 """
@@ -52,6 +54,43 @@ class FailedCompileTests(unittest.TestCase):
             self.assertFalse((work / "objcache").exists())
             self.assertFalse((work / "sa" / "build" / "obj").exists())
             self.assertIn("nothing of this one is reused", out.getvalue())
+
+    def test_after_the_game_linked_only_the_renderer_is_forgotten(self):
+        with tempfile.TemporaryDirectory() as d:
+            work = work_folder(d)
+            obj = work / "sa" / "build" / "obj"
+            (obj / "code_000.o.sha1").write_text("a" * 40 + "\n")
+            (work / "objcache" / ("a" * 40 + ".o")).write_bytes(b"object")
+            (obj / "vk_menu.o").write_bytes(b"object")
+            (obj / "vk_menu.o.sha1").write_text("b" * 40 + "\n")
+            (obj / "vk_menu.d").write_text("")
+            (work / "objcache" / ("b" * 40 + ".o")).write_bytes(b"object")
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                make_game.forget_failed_build(str(work), linked=True, game_linked=True)
+            self.assertTrue((work / "sa" / "gen" / make_game.LIFT_KEY).exists())
+            self.assertTrue((obj / "code_000.o").exists())
+            self.assertTrue((work / "objcache" / ("a" * 40 + ".o")).exists())
+            self.assertTrue((work / "objcache" / ("0" * 40 + ".o")).exists())
+            self.assertFalse((obj / "vk_menu.o").exists())
+            self.assertFalse((obj / "vk_menu.o.sha1").exists())
+            self.assertFalse((work / "objcache" / ("b" * 40 + ".o")).exists())
+            self.assertIn("keeps the translation", out.getvalue())
+
+    def test_the_game_linked_is_told_by_build_pys_line(self):
+        """make_game counts the game as linked on build.py's "linked <exe>: N MB", printed before the renderer's link"""
+        src = (ROOT / "nx2" / "make_game.py").read_text(encoding="utf-8")
+        build = (ROOT / "nx2" / "build.py").read_text(encoding="utf-8")
+        exe_line = 'print("linked %s: %d MB (%.0fs)" % (exe, os.path.getsize(exe) >> 20, time.time() - t))'
+        vk_line = 'print("linked %s: %d MB (%.0fs)" % (vdll, os.path.getsize(vdll) >> 20, time.time() - t))'
+        self.assertIn(exe_line, build)
+        self.assertLess(build.rindex(exe_line), build.index("if vk_jobs:   # (hookshot_vk.dll beside the exe"))
+        pattern = re.search(r're\.match\(r"(linked [^"]+)", line\)', src).group(1)
+        self.assertTrue(re.match(pattern, "linked /home/a b/.cache/hookshot-builder/sa/build/hookshot: 509 MB (2s)"))
+        self.assertTrue(re.match(pattern, "linked C:\\Users\\A B\\Hookshot\\work\\sa\\build\\hookshot.exe: 460 MB (31s)"))
+        self.assertFalse(re.match(pattern, "linked /home/a/work/sa/build/hookshot_vk.so: 40 MB (3s)"))
+        self.assertFalse(re.match(pattern, "linked C:\\work\\sa\\build\\hookshot_vk.dll: 40 MB (3s)"))
+        self.assertIn(vk_line, build)
+        self.assertIn("forget_failed_build(work, bool(linking), failed, bool(game_linked))", src)
 
     def test_a_source_that_failed_keeps_the_translation(self):
         with tempfile.TemporaryDirectory() as d:

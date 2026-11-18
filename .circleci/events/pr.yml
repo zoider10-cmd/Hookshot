@@ -1,0 +1,55 @@
+# Same-repo pull request (mb/setup path-filter). Docs: docs/ci.md.
+workflows:
+  ci:
+    jobs:
+      - lint
+      - third-party
+      - guide-screenshots
+      - test-linux:
+          requires: [lint]
+          filters: >-
+            pipeline.parameters.tests or pipeline.parameters.full
+      - builder-cli:
+          requires: [lint]
+          filters: pipeline.parameters.windows or pipeline.parameters.full
+      - spirv-fixtures:
+          requires: [lint]
+          filters: pipeline.parameters.gpu or pipeline.parameters.full
+      - linux-appimage:
+          requires: [lint, test-linux, spirv-fixtures]
+          filters: pipeline.parameters.linux or pipeline.parameters.full
+      - windows-builder:
+          requires: [lint, builder-cli]
+          filters: pipeline.parameters.windows or pipeline.parameters.full
+      - windows-vulkan:
+          requires: [lint, spirv-fixtures]
+          filters: >-
+            pipeline.parameters.gpu or pipeline.parameters.windows
+            or pipeline.parameters.full
+      - website:
+          filters: pipeline.parameters.website
+      - website-preview-build:
+          requires: [website]
+          filters: pipeline.parameters.website
+      - website-preview-artifact:
+          requires: [website-preview-build]
+          filters: pipeline.parameters.website
+      - website-preview-comment:
+          context: forgejo-comment
+          requires: [website-preview-artifact]
+          filters: pipeline.parameters.website
+      - mb/gate:
+          name: gate
+          requires:
+            - lint
+            - third-party
+            - guide-screenshots
+            - test-linux
+            - builder-cli
+            - spirv-fixtures
+            - linux-appimage
+            - windows-builder
+            - windows-vulkan
+            - website
+            - website-preview-build
+            - website-preview-artifact

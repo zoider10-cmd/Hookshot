@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include <vector>
 #include <algorithm>
+#include "../gpu/vk/import_reach.h"
 
 struct FakeBuf {
     const char* name;
@@ -64,6 +65,7 @@ std::atomic<bool> par_active{false};
 void memory_table_begin() {}
 bool memory_table_flush() { return false; }
 void memory_protect_gpu(uint64_t, uint64_t) {}
+void memory_gpu_writes_note(uint64_t, uint64_t) {}   // (the uniform snapshot's guard: tests/test_ub_snapshot_gpu_writes.py)
 bool slow_desc_timing() { return false; }
 uint64_t texture_segment();
 void memory_rb_recording_begun();
@@ -74,8 +76,12 @@ bool memory_rb_refresh(VkCommandBuffer up);
 std::mutex pools_mu;
 #include "rb_pool.inc"
 std::map<uint64_t, Pool> imported;
+#include "rb_table.inc"
 uint64_t mirror_epoch = 0;
 bool mirror_upload = false;
+uint64_t mem_rec_value = 0;
+void early_in_place_write(uint64_t, uint64_t, uint64_t) {}  // early readback tracking is exercised separately
+thread_local int ec_kind = 0;   // (RX_VK_LOG_EARLY_CHECK's kind: tests/test_readback_early.py)
 #include "rb_writeback.inc"
 std::vector<WriteBack> writebacks;
 void mirror_sync(Pool& p) {   // (model: no CPU page is dirty here)
@@ -160,7 +166,7 @@ void run_gpu() {
 void setup() {
     Pool p;
     p.lo = LO, p.hi = LO + SZ, p.buffer = &G, p.mirror = &M, p.mstate = Pool::MIRROR_ON;
-    imported.emplace(LO, p);
+    imported_add(p);
 }
 // (memory_begin_submission / memory_end_submission, modelled: the epoch, and the write-back of what was marked written)
 void begin_submission() {

@@ -92,6 +92,8 @@ int64_t draw_slotgen_saves();
 /// RX_VK_FLASH_RECORD=<key>,...: the last frames' draws of those programs, written to the log for frames around a flash
 void draw_records_log(uint64_t frame_lo, uint64_t frame_hi);
 void pass_traces_log(uint64_t frame_lo, uint64_t frame_hi);   // (RX_VK_PASS_TRACE=1)
+/// (hookshot) The latest Linux memory-pressure shortfall (bytes) and sample number from texture_frame() without holding pools_mu
+uint64_t linux_pressure_shortfall(uint64_t* seq = nullptr);
 /// Changes with every uniform update the stream makes (vk_replay.cpp): descriptors bound before may be stale
 uint64_t ub_generation();
 /// A background thread (shader translation, pipeline builds) reads guest memory from the captures only, never the stream's
@@ -99,6 +101,8 @@ uint64_t ub_generation();
 void ub_thread_off();
 /// The pipeline cache to disk (force: whatever was built since the last save; else only after a few new ones)
 void pipeline_cache_save(bool force);
+/// (hookshot) the serial builds' thread between two builds: a save put off for builds under way, run there (vk_jobs.cpp)
+void pipeline_cache_between_builds();
 /// (hookshot) the Debug tab's Descriptor reuse and Sampler cache rows as the menu has them: they apply in play
 void menu_debug_rows(int descriptor_reuse, int sampler_cache);
 void pipeline_cache_save_play();   // what play made since the last save, into a play file now

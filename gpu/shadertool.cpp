@@ -44,16 +44,25 @@ public:
         }
         std::vector<Instruction> native;
         Shader::Ampere::ProgramCaptureState capture;
+        // (a word that would branch outside every program ends the capture before it, as gpu/vk/vk_shader.cpp parse_code;
+        // the program is refused for that word only if the code before it does not lower)
+        u32 outside = ~0u;
         for (u32 i = 0; native_header + (i + 1) * sizeof(Instruction) <= bytes.size(); i++) {
             auto& insn = native.emplace_back();
             std::memcpy(&insn, bytes.data() + native_header + i * sizeof(Instruction), sizeof insn);
             const auto st = capture.Observe(insn, i);
-            if (st == Shader::Ampere::ProgramCaptureState::Result::InvalidTarget)
-                throw Shader::RuntimeError("branch outside capture bounds at +{:#x}", i * 16);
+            if (st == Shader::Ampere::ProgramCaptureState::Result::InvalidTarget) {
+                native.pop_back();
+                outside = i;
+                break;
+            }
             if (st == Shader::Ampere::ProgramCaptureState::Result::Complete) break;
         }
         captured = native.size();
         auto lowered = Shader::Ampere::LowerToMaxwell(native);
+        if (!lowered && outside != ~0u)
+            throw Shader::RuntimeError("branch outside capture bounds at +{:#x}, and lowering failed at +{:#x}: {}",
+                                       outside * 16, lowered.error_offset, lowered.error);
         if (!lowered)
             throw Shader::RuntimeError("lowering failed at +{:#x}: {}", lowered.error_offset, lowered.error);
         if (lowered.required_texture_buffer != ~0U) texture_bound = lowered.required_texture_buffer;

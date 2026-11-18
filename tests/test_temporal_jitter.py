@@ -4,20 +4,13 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: python -I leaves this folder off the path)
+from srccut import block   # noqa: E402
 
 RUN_ALL_ARGS = ["--cxx", "{cxx}"]
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def block(text, signature):
-    start = text.index(signature)
-    end = text.index("{", start) + 1
-    depth = 1
-    while depth:
-        depth += (text[end] == "{") - (text[end] == "}")
-        end += 1
-    return text[start:end]
 
 
 def main():
@@ -34,6 +27,8 @@ def main():
                               str(int("AcquireSRWLockExclusive" in block(host, "int hos_dlss_jitter_clip("))))
     if "MkwVkJitter temporal_jitter_sample()" in dlss:
         reader = block(dlss, "MkwVkJitter temporal_jitter_sample()") + "\n" + block(dlss, "uint32_t temporal_jitter_size(int axis)")
+        if "int slot_of(int mode)" in dlss:   # (the engine's slot, which the reader's failure gate is read from)
+            reader = block(dlss, "int slot_of(int mode)") + "\n" + reader
         producer = re.search(r"s\.jitter\.publish\([^;]+;", dlss).group()
         fr = block(fsr, "MkwVkJitter jitter_sample()") + "\n" + block(fsr, "uint32_t jitter_size(int axis)")
         callback = block(replay, "void jitter_sample(MkwVkJitter* out)")

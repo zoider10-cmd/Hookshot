@@ -12,18 +12,23 @@ struct Choice {
     bool create;
     const char* why;
 };
-/// env: RX_VK_LOAD's value or null. native_mesh: the GPU draws mesh programs itself (without, a start keeps every mesh fallback
-/// program ready, and on the one such GPU measured first uses waited seconds for loads at create). marker: an earlier session
-/// of this install met the safety net below. compressed: the compressed program cache is in use
+/// env: RX_VK_LOAD's value or null. native_mesh: the GPU draws mesh programs itself; only the reason logged depends on it now.
+/// Through the compute fallback a start kept every listed program, pipeline and mesh fallback program ready before the title:
+/// 27,262 programs and 32,645 graphics pipelines once the tour's list came (#563). The RX 6600 has been on the fallback on
+/// Windows since #219, so in rc.4 it started that way: 19 GB of private memory at the title on a 16 GB PC, 279 MB of commit
+/// left and the textures' budget at 0 (the commit rule's), and 25-29 GB in play (issues 869, 933). Create there held 4-5 GB
+/// less and the same fps or better (RX 5600 XT, GTX 1060: issue 805). The one fallback GPU measured where loads at create
+/// waited seconds (an RX 580, 16 GB) is what the marker is for. marker: an earlier session of this install met the safety
+/// net below. compressed: the compressed program cache is in use
 inline Choice choose(const char* env, bool native_mesh, bool marker, bool compressed = false) {
     // (the compressed program cache, RX_VK_PROGRAM_CACHE_ZSTD: a record is only read whole, unpacked. The loads at a create call
     // read records by their parts' places and have not been run on it: start, whatever RX_VK_LOAD says)
     if (compressed) return {false, "the program cache is compressed (RX_VK_PROGRAM_CACHE_ZSTD), whose records are only read whole"};
     if (env && !std::strcmp(env, "create")) return {true, "RX_VK_LOAD=create"};
     if (env && !std::strcmp(env, "start")) return {false, "RX_VK_LOAD=start"};
-    if (!native_mesh) return {false, "this GPU draws mesh programs through the compute fallback"};
     if (marker) return {false, "in an earlier session first uses waited too long for loads (hookshot_load_start.txt)"};
-    return {true, "the default where the GPU has mesh shaders"};
+    return {true, native_mesh ? "the default where the GPU has mesh shaders"
+                              : "the default, on the compute fallback too (RX_VK_LOAD=start: every listed program before the title)"};
 }
 
 /// The safety net: the replay thread's time running or waiting for loads at first uses, in one session. Measured where loads

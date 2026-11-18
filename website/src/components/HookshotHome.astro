@@ -1,4 +1,5 @@
 ---
+import BrandIcon from './BrandIcon.astro';
 import { repository, sourceUrl } from '../site.ts';
 import { buildFeed } from '../lib/progress-feed.ts';
 
@@ -6,19 +7,21 @@ import { buildFeed } from '../lib/progress-feed.ts';
 const feed = await buildFeed();
 const stable = feed?.stableRelease;
 const date = (value: string) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+// The game's newest version for the release section: the stable one, else the newest published v-tag (an rc).
+// Kept apart from the launcher's, which has version numbers of its own (MagicBeanDev/HookshotLauncher#135).
+const tagOf = (url: string) => decodeURIComponent(url.split('/').at(-1) || '');
+const preview = (feed?.items || []).filter(i => i.kind === 'release' && /^v\d/.test(tagOf(i.url)))
+  .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))[0];
+const game = stable ? { ...stable, stable: true } : preview ? { tag: tagOf(preview.url), url: preview.url, publishedAt: preview.publishedAt, stable: false } : null;
 const activity = (feed?.items || []).filter(i => i.kind === 'pull' && i.status === 'merged' && i.mergedAt)
   .sort((a, b) => Date.parse(b.mergedAt) - Date.parse(a.mergedAt)).slice(0, 4);
 
 // What Hookshot does, from the README (Project status, In-game menu, Mods).
 const features = [
-  { title: 'Native, no emulator', text: 'The game’s code is recompiled to C and built into a Windows or Linux program. The console’s system software is reimplemented, and the graphics are rebuilt on Vulkan.' },
-  { title: 'Any screen', text: 'Resolutions up to 4K and 5K, ultrawide 21:9 and 32:9 or 4:3 with the HUD and movies kept in the middle, and HDR.' },
-  { title: 'Upscaling', text: 'NVIDIA DLSS and DLAA, AMD FSR 3.1 and FSR 4, or the game’s own dynamic resolution, with sharpening.' },
-  { title: 'Smooth and responsive', text: 'Frame generation from 2x to 8x (DLSS Frame Generation on RTX 40 and newer), a frame cap from 60 to 240 FPS or none, NVIDIA Reflex and AMD Anti-Lag 2.' },
-  { title: 'Play your way', text: 'Controller, keyboard or mouse camera, Xbox, PlayStation and Steam Deck prompts, motion controls, field of view, and text up to instant.' },
-  { title: 'A menu in the game’s style', text: 'Every option in one in-game menu, with quality presets for your graphics card’s memory and an Auto preset that picks one for this PC.' },
-  { title: 'Mods', text: 'RomFS mods load from a mods folder, in the layout emulators use, in the order you name them.' },
-  { title: 'The launcher does the rest', text: 'The Hookshot Launcher builds the game from your copy, starts it, and keeps it and itself up to date, checked against signed checksums.' },
+  { title: 'Native on your PC', text: 'Your own copy, built for Windows or Linux. The launcher handles building, starting and updating it.' },
+  { title: 'Your screen, your settings', text: 'High resolutions, ultrawide layouts, HDR and upscaling, with quality presets for your graphics card.' },
+  { title: 'Play your way', text: 'Controller, keyboard or mouse camera, motion controls, adjustable field of view and faster text.' },
+  { title: 'Make it yours', text: 'In-game graphics and control settings, plus support for RomFS mods in the familiar mods-folder layout.' },
 ];
 const steps = [
   ['Lift', 'The game’s ARM64 code is translated to C.'],
@@ -26,6 +29,12 @@ const steps = [
   ['Replay', 'The game’s graphics calls are recorded and replayed on Vulkan, its shaders translated to SPIR-V.'],
 ];
 ---
+<aside class="launcher-start not-content" aria-label="Download and requirements">
+    <div><p><strong>Bring your own copy of the game.</strong> Hookshot never includes the game, its keys or an executable.</p>
+      <p>Windows and Linux · <a href="/requirements/">Check your PC’s compatibility</a></p>
+      <p data-launcher-status><a href="https://git.magicbean.dev/MagicBeanDev/HookshotLauncher/releases">Latest launcher releases</a></p></div>
+    <a class="button primary" href="/download">Download launcher <span aria-hidden="true">↓</span></a>
+</aside>
 <div class="home not-content">
   <section class="section" id="features" aria-labelledby="features-title">
     <p class="eyebrow">WHAT YOU GET</p>
@@ -36,12 +45,16 @@ const steps = [
   </section>
 
   <section class="release" aria-labelledby="release-title">
-    <img src="/branding/hookshot.png" alt="" width="512" height="512" loading="lazy" />
+    <span class="brand-icon"><BrandIcon size={88} loading="lazy" /></span>
     <div>
       <p class="eyebrow">DOWNLOAD</p>
       <h2 id="release-title">Get the Hookshot Launcher.</h2>
-      <p>It builds the game from your copy, starts it, and keeps it up to date. <strong>No game files are included:</strong> we don't host or distribute game files, assets or keys.{stable && ` The latest Hookshot is ${stable.tag}, released ${date(stable.publishedAt)}.`}</p>
-      <p class="release-files"><a href="/download/launcher/windows">Windows</a><a href="/download/launcher/windows-portable">Windows, portable</a><a href="/download/launcher/linux">Linux</a><a href={stable?.url || `${repository}/releases`}>Release notes ↗</a></p>
+      <p>It builds the game from your copy, starts it, and keeps it up to date. <strong>No game files are included:</strong> we don't host or distribute game files, assets or keys.</p>
+      <dl class="versions" aria-label="Version numbers">
+        <div><dt>Launcher</dt><dd><span data-launcher-status><a href="https://git.magicbean.dev/MagicBeanDev/HookshotLauncher/releases">Hookshot Launcher</a></span>: the app you download. It has its own version numbers.</dd></div>
+        <div><dt>Game</dt><dd>{game ? <a href={game.url}>Hookshot {game.tag}</a> : 'Hookshot'}{game && `, ${game.stable ? 'released' : 'a preview released'} ${date(game.publishedAt)}`}: what the launcher builds from your copy. It downloads that version's builder for you.</dd></div>
+      </dl>
+      <p class="release-files"><a href="/download/launcher/windows">Windows</a><a href="/download/launcher/windows-portable">Windows, portable</a><a href="/download/launcher/linux">Linux</a><a href="https://git.magicbean.dev/MagicBeanDev/HookshotLauncher/releases">Launcher release notes ↗</a><a href={stable?.url || `${repository}/releases`}>Game &amp; build release notes ↗</a></p>
     </div>
     <div class="release-actions">
       <a class="button primary" href="/download">Download <span aria-hidden="true">↓</span></a>
@@ -93,6 +106,8 @@ const steps = [
 </div>
 
 <script>
+  import { installLauncherStatus } from '../lib/launcher-channel.ts';
+  void installLauncherStatus(document);
   import { problemSearchHash } from '../lib/problem-search.ts';
   const form = document.querySelector<HTMLFormElement>('[data-frontpage-search]');
   form?.addEventListener('submit', event => {
@@ -104,6 +119,12 @@ const steps = [
 </script>
 
 <style>
+  .launcher-start { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 2rem; padding: 1.5rem; margin-top: 2rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--panel); }
+  .launcher-start p { margin: .25rem 0; }
+  .launcher-start a:not(.button) { color: var(--sl-color-text-accent); }
+
+  .brand-icon { display: block; flex-shrink: 0; }
+  .brand-icon :global(img) { display: block; width: 100%; height: auto; }
   .home { font-size: var(--text-base); line-height: 1.65; }
   .home * { box-sizing: border-box; }
   h2 { font-size: var(--text-heading); color: var(--sl-color-white); letter-spacing: -.025em; line-height: 1.15; margin: .6rem 0 0; }
@@ -125,10 +146,15 @@ const steps = [
     display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; gap: 1.8rem; align-items: center; margin-top: 4rem; padding: 2rem;
     border: 1px solid var(--sl-color-gray-4); border-left: 4px solid var(--sl-color-text-accent); border-radius: 12px; background: var(--panel);
   }
-  .release img, .team img { display: block; width: 88px; height: auto; }
+  .release .brand-icon, .team img { display: block; width: 88px; height: auto; }
   .release h2, .team h2 { font-size: var(--text-heading); margin: .4rem 0 .5rem; }
   .release p, .team p { margin: 0; }
   .release-actions { display: flex; flex-direction: column; gap: .4rem; align-items: stretch; }
+  .versions { display: grid; gap: .3rem; margin: .7rem 0 0; font-size: var(--text-sm); }
+  .versions div { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: .75rem; }
+  .versions dt { font-weight: 700; color: var(--sl-color-white); }
+  .versions dd { margin: 0; color: var(--sl-color-gray-2); }
+  .versions a { color: var(--sl-color-text-accent); }
   .release-files { display: flex; flex-wrap: wrap; gap: .25rem 1.2rem; margin-top: .6rem !important; }
   .release-files a { display: inline-flex; align-items: center; min-height: 44px; color: var(--sl-color-text-accent); }
   .release-actions .text-link { justify-content: center; }
@@ -175,7 +201,7 @@ const steps = [
   }
   @media (max-width: 62rem) {
     .release, .team { grid-template-columns: 64px minmax(0, 1fr); }
-    .release img, .team img { width: 64px; }
+    .release .brand-icon, .team img { width: 64px; }
     .release-actions, .team .button { grid-column: 2; justify-self: start; }
   }
   @media (max-width: 49.99rem) {
@@ -186,11 +212,12 @@ const steps = [
   @media (max-width: 38rem) {
     .features { grid-template-columns: 1fr; }
     .release, .team { grid-template-columns: minmax(0, 1fr); gap: 1rem; padding: 1.5rem; }
-    .release img, .team img { width: 56px; }
+    .release .brand-icon, .team img { width: 56px; }
     .release-actions, .team .button { grid-column: 1; justify-self: stretch; }
   }
   @media (max-width: 25rem) {
     .search-row { flex-direction: column; }
+    .search-row input { flex: none; min-height: 48px; width: 100%; }
     .feed, .help { padding: 1.2rem; }
   }
 </style>

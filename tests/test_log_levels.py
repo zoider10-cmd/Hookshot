@@ -148,10 +148,11 @@ def main():
         sys.stdout.write(r.stdout)
         if r.returncode:
             raise SystemExit("FAIL: the log's levels")
-    # (the shader's catch: the network left out is told apart from a failure, at trace, on a count of its own)
-    catch = shader[shader.index("static std::atomic<int> logged, left_out;"):]
+    # (the shader's catch: the network left out is told apart from a failure, at trace, on a count of its own: st_left_out, which
+    # also counts the ones past its 30 lines, tests/test_not_translated_counts.py)
+    catch = shader[shader.index("// (a network left out on purpose is a trace line, counted apart"):]
     catch = catch[:catch.index("st_translate_ns")]
-    if "strcmp(e.what(), network_left_out)" not in catch or "!trial && left_out++ < 30) logf_at(log_trace" not in catch:
+    if "strcmp(e.what(), network_left_out)" not in catch or "!trial && st_left_out++ < kFailNamed) logf_at(log_trace" not in catch:
         raise SystemExit("FAIL: a network left out is not a trace line counted apart")
     if 'throw std::runtime_error(network_left_out);' not in shader:
         raise SystemExit("FAIL: the network left out is not thrown with the text the catch compares")

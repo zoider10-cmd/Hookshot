@@ -40,7 +40,7 @@ python -I scripts/release.py next          # the number the commits call for, th
 python -I scripts/release.py channels      # what stable, rc and nightly offer now, as the launcher reads them
 ```
 
-The remote is called `forge` here (Hookshot's `scripts/forge.py login` sets it up; in the launcher's checkout, add
+The remote is called `forge` here (`forge.py login` from MagicBeanDev/Tooling sets it up; in the launcher's checkout, add
 `https://git.magicbean.dev/MagicBeanDev/HookshotLauncher.git` under that name). Only maintainers can push tags.
 
 ## A nightly
@@ -60,6 +60,10 @@ Players on the nightly channel keep the last good nightly until then.
 
 ## A release candidate
 
+0. **(Hookshot) The renderer's play profile.** Before the first candidate of a minor, when the renderer changed much since
+   `assets/profiles/README.md`'s recording: record it again (docs/development.md, "The renderer's play profile") and merge
+   the new `assets/profiles/hookshot_vk.profdata.xz` and its note in a pull request first. An old one still builds: what
+   changed since is built as if there were no profile.
 1. **Preview.** Run `python -I scripts/release.py next` on an up-to-date `main` (`jj git fetch --remote forge` and
    `jj new main@forge`, or `git fetch forge` and `git switch --detach forge/main`). It prints:
    - the number the commits since the last stable call for (feat: minor, fix and perf: patch, `!` or `BREAKING CHANGE:`:
@@ -199,18 +203,16 @@ for Linux. A bump is a pull request that changes its line:
      folder, `sha256`, size, URL), which CI builds the Windows files with (`tests/test_windows_on_linux.py` checks that
      the two versions match).
   4. `python -I scripts/tools.py check --require`, and open the pull request (`build(windows): llvm-mingw 20261201`).
-- **An archive Hookshot makes** (Python with new pins, the CPM cache with a new package, the `third_party` prebuilt files,
-  the profile):
+- **An archive Hookshot makes** (Python with new pins, the CPM cache with a new package, the `third_party` prebuilt files):
   ```sh
   python -I scripts/tools.py assemble python --requirements nx2/prompt_requirements.txt --out python.zip
   python -I scripts/tools.py assemble cpm --add <cpm folder> --out cpm.zip   # (its dav1d/<version>: scripts/windows/dav1d.sh <cpm folder>)
   python -I scripts/tools.py assemble third-party --from <an archive with tools/third_party> --out third-party.zip
-  python -I scripts/tools.py assemble profile --work work --out profile.zip
   RELEASE_TOKEN=<your token> python -I scripts/tools.py add python 3.14.2-1 python.zip --dest HookshotBuilder/tools/python --prefix python
   ```
   `add` publishes the archive as a new package version (`<name>-<system>/<version>/<sha256>-<name>.zip`, under the
   organization's *Packages*) and writes the line. A version's files never change: new bytes are a new version. Check that nothing made
-  from the game is in it (CONTRIBUTING.md): the profile is addresses and counts, never game code.
+  from the game is in it (CONTRIBUTING.md). A play profile is not a tool: play profiles are committed in `assets/profiles/`.
 - **A Linux tool** (LLVM, FFmpeg or dav1d, SDL2, the Vulkan headers, the sysroot): they are all ours, made from
   `scripts/linux/deps.sh`'s pinned downloads, on the system the AppImage is for (Ubuntu 22.04: the sysroot is its C library).
   1. Change the version and its `sha256` pin in `scripts/linux/deps.sh` (a tag archive's pin is what it unpacks to: the
@@ -274,10 +276,10 @@ None of this is done yet. In order (the org secret is shared by both repositorie
    [docs/forgejo-runners.md](https://git.magicbean.dev/MagicBeanDev/Hookshot/src/branch/main/docs/forgejo-runners.md)
    (Linux only, for both: Hookshot's Windows files are cross-built on Linux).
 6. **The tools' packages and `tools.lock`.** Done (2026-11-13): `cpm` with dav1d and `third-party` assembled and added,
-   llvm-mingw, python, emsdk and wgpu-native mirrored, the Linux tools added, each a generic package of the organization
-   (docs/releases.md, "tools.lock"). The play profile is optional and there is none yet (`tools.py assemble profile`,
-   then `add`, when there is). `python -I scripts/tools.py check --require` must pass: `release.yml` stops in its first
-   job, before any build, until it does.
+   llvm-mingw, python, emsdk and wgpu-native mirrored (wgpu-native dropped since, 2026-11-14: no WebGPU renderer), the Linux tools added, each a generic package of the organization
+   (docs/releases.md, "tools.lock"). No play profile is a tool: play profiles are committed in `assets/profiles/`.
+   `python -I scripts/tools.py check --require` must pass: `release.yml` stops in its first job, before any build, until
+   it does.
 7. **Try it** on a fork, or with a throwaway key first: `HOOKSHOT_LAUNCHER_TRUST=<test .pub.pem>` makes a launcher accept a
    release signed with it.
 8. **The first releases.** The launcher `v1.0.0-rc.1` and Hookshot `v3.0.0-rc.1`, then their stables.
@@ -289,6 +291,7 @@ None of this is done yet. In order (the org secret is shared by both repositorie
 | `release.yml` fails at *SHA256SUMS, signed*: "no RELEASE_SIGNING_KEY" | the secret is not set or not visible to the repository | One-time setup, step 2 |
 | ... "not signed by a trusted key" at `verify` | the secret's key is not the one in `ReleaseTrust.cs` / `release_keys.json` | put the matching key in the secret, or rotate (above) |
 | *Publish* fails with HTTP 413 or a cut connection | an upload over Cloudflare's 100 MB limit | set `RELEASE_UPLOAD_API` (One-time setup, step 3) |
+| *Publish* warns "upload N of 4 failed" with HTTP 5xx, or fails after four | the server's own trouble taking the file (its storage, or the proxy in front of it): `release.py` makes the upload again by itself, four times in all | if all four fail, look at Forgejo's log at that time, then run the job again: the draft it left is reused |
 | *Publish* fails with HTTP 400/422 on an upload | the attachment size or type limits | One-time setup, step 4 |
 | *Publish* fails with HTTP 401/403 | the job's token is read-only: the run is not a push to this repository (a pull request from a fork, or another repository's workflow) | release from a push or a tag here only |
 | "is already published" | a run for a version that is out (a re-run of an old run) | nothing: a version's files never change |

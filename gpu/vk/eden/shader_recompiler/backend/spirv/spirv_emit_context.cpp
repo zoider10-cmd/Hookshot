@@ -490,6 +490,10 @@ std::string NameOf(Stage stage, const Desc& desc, std::string_view prefix) {
     }
 }
 
+// (hookshot) Textures, texture buffers, image buffers and images alike: a descriptor of count above 1 is an array of count,
+// the descriptors the renderer writes to its binding (vk_draw.cpp, ensure_layout), indexed with an OpAccessChain to an element
+// (pointer_type). Texture buffers were refused ("Array of texture buffers") and image buffers and images declared one image,
+// which that OpAccessChain cannot index (invalid SPIR-V). With a count of 1 the declaration is what it was.
 Id DescType(EmitContext& ctx, Id sampled_type, Id pointer_type, u32 count) {
     if (count > 1) {
         const Id array_type{ctx.TypeArray(sampled_type, ctx.Const(count))};
@@ -1991,15 +1995,14 @@ void EmitContext::DefineTextureBuffers(const Info& info, u32& binding) {
     const Id type{TypePointer(spv::StorageClass::UniformConstant, image_buffer_type)};
     texture_buffers.reserve(info.texture_buffer_descriptors.size());
     for (const TextureBufferDescriptor& desc : info.texture_buffer_descriptors) {
-        if (desc.count != 1) {
-            throw NotImplementedException("Array of texture buffers");
-        }
-        const Id id{AddGlobalVariable(type, spv::StorageClass::UniformConstant)};
+        const Id desc_type{DescType(*this, image_buffer_type, type, desc.count)};
+        const Id id{AddGlobalVariable(desc_type, spv::StorageClass::UniformConstant)};
         Decorate(id, spv::Decoration::Binding, binding);
         Decorate(id, spv::Decoration::DescriptorSet, 0U);
         Name(id, NameOf(stage, desc, "texbuf"));
         texture_buffers.push_back({
             .id = id,
+            .pointer_type = type,
             .count = desc.count,
         });
         if (profile.supported_spirv >= 0x00010400) {
@@ -2017,7 +2020,8 @@ void EmitContext::DefineImageBuffers(const Info& info, u32& binding) {
         const Id image_type{
             TypeImage(sampled_type, spv::Dim::Buffer, false, false, false, 2, format)};
         const Id pointer_type{TypePointer(spv::StorageClass::UniformConstant, image_type)};
-        const Id id{AddGlobalVariable(pointer_type, spv::StorageClass::UniformConstant)};
+        const Id desc_type{DescType(*this, image_type, pointer_type, desc.count)};
+        const Id id{AddGlobalVariable(desc_type, spv::StorageClass::UniformConstant)};
         Decorate(id, spv::Decoration::Binding, binding);
         Decorate(id, spv::Decoration::DescriptorSet, 0U);
         Name(id, NameOf(stage, desc, "imgbuf"));
@@ -2072,7 +2076,8 @@ void EmitContext::DefineImages(const Info& info, u32& binding, u32& scaling_inde
         const Id sampled_type{desc.is_integer ? U32[1] : F32[1]};
         const Id image_type{ImageType(*this, desc, sampled_type)};
         const Id pointer_type{TypePointer(spv::StorageClass::UniformConstant, image_type)};
-        const Id id{AddGlobalVariable(pointer_type, spv::StorageClass::UniformConstant)};
+        const Id desc_type{DescType(*this, image_type, pointer_type, desc.count)};
+        const Id id{AddGlobalVariable(desc_type, spv::StorageClass::UniformConstant)};
         Decorate(id, spv::Decoration::Binding, binding);
         Decorate(id, spv::Decoration::DescriptorSet, 0U);
         Name(id, NameOf(stage, desc, "img"));

@@ -65,7 +65,7 @@ def main():
     args = parser.parse_args()
 
     audio = (ROOT / "host/nn_audio.c").read_text(encoding="utf-8")
-    helper = between(audio, "/* (longshot) The channels of a mix format", "static int au_device_channels(void) {")
+    helper = between(audio, "/* (hookshot) The channels of a mix format", "static int au_device_channels(void) {")
     assert "static int au_layout_channels(" in helper, "host/nn_audio.c has no au_layout_channels"
     # (the device's channels go through it: a mix format's count alone is what issue 2182 was)
     device = between(audio, "static int au_device_channels(void) {", "#else")

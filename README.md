@@ -132,6 +132,10 @@ The **Mako** shortcut opens the launcher:
 - The first time a new effect appears, the game can pause for a moment while it is prepared; it does not happen again.
 - Report problems with your `hookshot_log.txt` (in the game folder) on the [issues page](https://github.com/Shakoquo/Mako/issues).
 
+Players: the [mods guide](docs/using-mods.md) covers installing, turning off and checking mods. For authors: the
+[existing file contract and game-free example](docs/mods.md) cover discovery, conflicting files,
+disabling and what this loader does not provide. The example contains only invented text, not a seed or game data.
+
 ## Build from source
 
 Mako builds like Hookshot: see the original guide in [docs/hookshot-readme.md](docs/hookshot-readme.md#build-from-source). The

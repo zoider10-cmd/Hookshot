@@ -1,6 +1,6 @@
-"""Compile and run the VRAM mirrors' budget rules (gpu/vk/mirror_budget.h; no game/GPU required), and check that vk_memory.cpp's
-mirror_budget still uses them: Auto's by the card, and a Quality preset's capped at Auto's, so Low's 1536 MB (every 6 GB card's from
-its first start) does not reach a 4 GB card that preset_caps_memory lets Low's budgets through on.
+"""Compile and run the VRAM mirrors' budget rule (gpu/vk/mirror_budget.h; no game/GPU required), and check that vk_memory.cpp's
+mirror_budget still uses it alone: one rule by the card, with no Quality preset or menu row over it (an 8 GB card's Balanced
+preset held 1024 MB, where the pools went over PCIe).
 
 python -I -B tests/test_mirror_budget.py [--cxx g++]
 """
@@ -31,17 +31,14 @@ def check_source():
     if '#include "mirror_budget.h"' not in mem:
         raise SystemExit("vk_memory.cpp no longer includes mirror_budget.h")
     budget = block(mem, "uint64_t mirror_budget() {")
-    for needle in ['getenv("RX_VK_MIRROR_MB")',
-                   "mirror_rule::auto_bytes(device_vram_bytes())",
-                   "mirror_rule::budget_bytes((uint64_t)opts.mirror_mb << 20, opts.budget > 0, device_vram_bytes())"]:
+    for needle in ['getenv("RX_VK_MIRROR_MB")', "mirror_rule::auto_bytes(device_vram_bytes())"]:
         if needle not in budget:
             raise SystemExit("vk_memory.cpp: mirror_budget() no longer has: " + needle)
     if "vram / 8" in budget or "vram / 4" in budget:
-        raise SystemExit("vk_memory.cpp: mirror_budget() works Auto's size out itself again, apart from mirror_budget.h")
-    # (the preset's mirrors still reach mirror_budget only on a card the preset is for)
-    if "preset_caps_memory()" not in budget:
-        raise SystemExit("vk_memory.cpp: mirror_budget() no longer asks preset_caps_memory")
-
+        raise SystemExit("vk_memory.cpp: mirror_budget() works the size out itself again, apart from mirror_budget.h")
+    # (no preset or row: the options do not reach it)
+    if "opts." in budget or "preset_caps_memory" in mem:
+        raise SystemExit("vk_memory.cpp: mirror_budget() reads the options again (a preset's or a row's mirrors)")
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

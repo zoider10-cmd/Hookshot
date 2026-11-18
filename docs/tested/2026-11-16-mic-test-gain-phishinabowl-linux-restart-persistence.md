@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-16 | f2709248 plus six source/helper edits, subsequently committed as 4cdf7354 | Ubuntu 26.04.1 LTS; kernel 7.0.0-43-generic; GNOME desktop | RTX 5090 Laptop GPU; NVIDIA 595.99.02 | Core Ultra 9 275HX; about 61.2 GiB kernel-visible RAM | Reusable independent dev saves/settings; changed microphone gain/device; normal close/reopen | owner-reported-persistence; manual verification before controlled comparisons | Owner confirmed changed gain/device persistence across restart on this PC, then closed the game. No every-slot or cross-PC synchronization claim. |

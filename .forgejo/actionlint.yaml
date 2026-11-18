@@ -1,7 +1,7 @@
 # actionlint's settings for the workflows here (ci.yml, "Workflow lint"): it knows GitHub, not Forgejo.
 self-hosted-runner:
-  # (docs/forgejo-runners.md: quick is the label of the short jobs' runner)
-  labels: [quick]
+  # (docs/forgejo-runners.md: quick is the label of the short jobs' runner, release of the releases' builds)
+  labels: [quick, release]
 paths:
   .forgejo/workflows/*.yml:
     ignore:

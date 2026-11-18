@@ -26,12 +26,24 @@
    HOS_NATIVE_ZSTD=1 also gives the thread's virtual core up while libzstd runs (as a sleep does: hos_vcore_away/back), so
    the game's other threads can have it; HOS_NATIVE_ZSTD=2 decodes on the host and keeps the core.
 
+   The game's other zstd path, the resource loaders' whole-buffer decode (the ARes_Loading threads: about a fifth of a core
+   while an area loads, more than the stream decode there), is zstd's decompressMultiFrame inlined in f_8010b380 (x0 the
+   game's context, x1 and x2 the output and its room, x3 and x4 the frames, x5 and x6 a raw dictionary, x7 the DDict or 0).
+   Its three callers set the context up in place, pass no raw dictionary, and read only the result. With
+   HOS_NATIVE_ZSTD_FRAMES=1 (its own switch, off by default) nx2/oot_patches.py's hos_zstd_frames(c) first in f_8010b380
+   does the call with libzstd's own (ZSTD_decompress_usingDDict, the same multi-frame decode: skippable frames skipped,
+   frames one after the other) and answers 1, x0 the result: the content size, or zstd's error code as the game's gives it
+   (callers test only that it is one). The game's DDict is taken as above; the game's context is not written; the thread
+   keeps its core. A raw dictionary, or a context the game set to another format, runs lifted.
+
    What differs from the game's decoder:
      - the up to 32 bytes of output room just past what is decoded: both decoders' fast copies may over-write there (the
        next block overwrites them), by different amounts, so they can hold other leftover bytes than the game's leaves;
      - frames the format forbids: libzstd 1.5.7 refuses a block larger than the frame's window (the game's older copy
        decodes it), and a raw block with a NULL output fails as dstBuffer_null (-1) where the game's says dstSize_tooSmall
-       (-2). A zstd compressor makes neither. */
+       (-2). A zstd compressor makes neither;
+     - the whole-buffer decode's output room past the content (callers give exactly the content's size): what is left
+       there, and on an error how much of the output was written. */
 #include "hos.h"
 #ifndef HOOKSHOT_ENV_H   /* (env_on: the switches' one rule) */
 #include "../gpu/vk/compat/hookshot_env.h"
@@ -72,28 +84,35 @@ static void zs_lock(void) {
 }
 static void zs_unlock(void) { __atomic_store_n(&zs_lock_word, 0, __ATOMIC_RELEASE); }
 
-static int zs_mode(void) {
-    static int mode = -1;
-    if (mode < 0) {
-        const int m = env_on("HOS_NATIVE_ZSTD") ? (env_int("HOS_NATIVE_ZSTD", 1) == 2 ? 2 : 1) : 0;
-        if (m)
-            hos_log("zstd: the game's stream decode on the host's libzstd %s (HOS_NATIVE_ZSTD=%d%s)", ZSTD_versionString(), m,
-                    m == 1 ? ": the core given up while it decodes" : "");
-        mode = m;
-    }
-    return mode;
+/* a switch read once: several decode threads may make their first call at once, and the one that publishes it logs it */
+static int zs_publish(int *mode, int m) {
+    int unset = -1;
+    return __atomic_compare_exchange_n(mode, &unset, m, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED);
 }
 
-static void zs_note(const char *why) {   /* (each kind of fallback logged once) */
-    static const char *seen[8];
-    for (int i = 0; i < 8; i++) {
-        if (seen[i] == why) return;
-        if (!seen[i]) {
-            seen[i] = why;
-            hos_log("zstd: a stream decodes lifted: %s", why);
-            return;
-        }
+static int zs_mode(void) {
+    static int mode = -1;
+    int m = __atomic_load_n(&mode, __ATOMIC_RELAXED);
+    if (m < 0) {
+        m = env_on("HOS_NATIVE_ZSTD") ? (env_int("HOS_NATIVE_ZSTD", 1) == 2 ? 2 : 1) : 0;
+        if (zs_publish(&mode, m) && m)
+            hos_log("zstd: the game's stream decode on the host's libzstd %s (HOS_NATIVE_ZSTD=%d%s)", ZSTD_versionString(), m,
+                    m == 1 ? ": the core given up while it decodes" : "");
     }
+    return m;
+}
+
+static void zs_note(const char *why) {   /* (each kind of fallback logged once; called without zs_lock) */
+    static const char *seen[8];
+    int first = 0;
+    zs_lock();
+    for (int i = 0; i < 8 && seen[i] != why; i++)
+        if (!seen[i]) {
+            seen[i] = why, first = 1;
+            break;
+        }
+    zs_unlock();
+    if (first) hos_log("zstd: a decode runs lifted: %s", why);
 }
 
 /* (holding zs_lock) */
@@ -332,5 +351,54 @@ int hos_zstd_stream(Ctx *c) {
     HOS_WRITTEN(GP(g), 56);   /* (after its last write: a mark taken by the GPU mirror's scan in between would miss them) */
     zs_give(s, S_STATE(g) == 3 || S_STATE(g) == 4);
     c->x[0] = (uint32_t)ret;
+    return 1;
+}
+
+/* ---------------------------------------------------------------- f_8010b380, the whole-buffer decode */
+#define D_FORMAT 0x7110   /* the game's context: its frame format (0 zstd1, 1 magicless) */
+
+static int zf_mode(void) {
+    static int mode = -1;
+    int m = __atomic_load_n(&mode, __ATOMIC_RELAXED);
+    if (m < 0) {
+        m = env_on("HOS_NATIVE_ZSTD_FRAMES");
+        if (zs_publish(&mode, m) && m) hos_log("zstd: the game's whole-buffer decode on the host's libzstd %s (HOS_NATIVE_ZSTD_FRAMES)", ZSTD_versionString());
+    }
+    return m;
+}
+
+/* (nx2/oot_patches.py: first in f_8010b380) 1 when the call was done here, x0 its result */
+int hos_zstd_frames(Ctx *c) {
+    if (!zf_mode()) return 0;
+    const uint64_t dctx = c->x[0], dst = c->x[1], src = c->x[3], ddict = c->x[7];
+    const size_t room = (size_t)c->x[2], n = (size_t)c->x[4];
+    if (c->x[5] || c->x[6] || G32(dctx + D_FORMAT)) {
+        zs_note(c->x[5] || c->x[6] ? "whole-buffer decode with a raw dictionary" : "whole-buffer decode of another format");
+        return 0;
+    }
+    ZsDict *d = NULL;
+    zs_lock();
+    ZSTD_DCtx *z = zs_nspare ? zs_spare[--zs_nspare] : NULL;
+    const int ok = !ddict || (d = zs_dict_get(ddict)) != NULL;
+    zs_unlock();
+    if (!z) z = ZSTD_createDCtx();
+    if (!ok || !z) {
+        zs_lock();
+        zs_dict_put(d);
+        if (z && zs_nspare < ZS_STREAMS) zs_spare[zs_nspare++] = z, z = NULL;   /* (streams may have filled the spares) */
+        zs_unlock();
+        ZSTD_freeDCtx(z);
+        zs_note(!ok ? "a dictionary libzstd does not take as the game's" : "no libzstd context");
+        return 0;
+    }
+    const size_t r = d ? ZSTD_decompress_usingDDict(z, GP(dst), room, GP(src), n, d->dd)
+                       : ZSTD_decompress_usingDict(z, GP(dst), room, GP(src), n, NULL, 0);
+    HOS_WRITTEN(GP(dst), room);   /* (the whole room: libzstd may keep literals in its far end while it decodes) */
+    zs_lock();
+    zs_dict_put(d);
+    if (zs_nspare < ZS_STREAMS) zs_spare[zs_nspare++] = z, z = NULL;
+    zs_unlock();
+    ZSTD_freeDCtx(z);
+    c->x[0] = r;
     return 1;
 }

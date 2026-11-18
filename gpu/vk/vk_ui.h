@@ -12,7 +12,7 @@
 #include <cstring>
 
 #include "imgui.h"
-#include "vk_imgui.h"
+#include "vk_ui_fonts.h"
 #include "vk_menu_i18n.h"   // (every text below is looked up in the menu's language first: i18n::tr)
 
 namespace mkwvk::ui {
@@ -81,21 +81,25 @@ inline float text(Ctx& c, ImFont* font, float px, ImVec2 p, ImU32 col, const cha
     return font->CalcTextSizeA(px, FLT_MAX, wrap, t).x;
 }
 /// Text wrapped at wrap pixels, its lines 1.3 em apart (ImGui's own wrap sets them 1 em apart: too tight for reading); its
-/// height. draw false: measured only
+/// height. Explicit newlines and blank lines are kept. draw false: measured only
 inline float para(Ctx& c, ImFont* font, float px, ImVec2 p, ImU32 col, const char* t, float wrap, bool draw = true) {
     t = i18n::tr(t);
     const char* end = t + strlen(t);
     float y = 0;
     while (t < end) {
-        const char* cut = font->CalcWordWrapPosition(px, t, end, wrap);
+        if (*t == '\n') { y += px * 1.3f; t++; continue; } // an explicit blank line
+        const char* line_end = strchr(t, '\n');
+        if (!line_end) line_end = end;
+        const char* cut = font->CalcWordWrapPosition(px, t, line_end, wrap);
         if (cut == t) {   // (a word wider than the line: a letter at least, a whole UTF-8 one)
             cut = t + 1;
-            while (cut < end && ((unsigned char)*cut & 0xC0) == 0x80) cut++;
+            while (cut < line_end && ((unsigned char)*cut & 0xC0) == 0x80) cut++;
         }
         if (draw) c.d->AddText(font, px, ImVec2(p.x, p.y + y), col, t, cut);
         y += px * 1.3f;
         t = cut;
-        while (t < end && (*t == ' ' || *t == '\n')) t++;
+        while (t < line_end && *t == ' ') t++;
+        if (t == line_end && t < end) t++; // the rendered line already accounts for this newline
     }
     return y > 0 ? y - px * 0.3f : 0;
 }

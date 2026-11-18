@@ -1,4 +1,4 @@
-// (longshot) The commit Windows still has room for, apart from Windows so that tests/test_commit_room.py can run it.
+// (hookshot) The commit Windows still has room for, apart from Windows so that tests/test_commit_room.py can run it.
 //
 // The textures' budget gives commit back below a reserve under Windows' commit limit (vk_texture.cpp's commit rule). That limit
 // is RAM plus the page files as they are now, and a page file Windows manages grows when the commit nears it: the limit read

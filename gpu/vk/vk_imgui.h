@@ -5,16 +5,11 @@
 
 #include "vk_internal.h"
 
-struct ImFont;
+#include "vk_ui_fonts.h"
+
 struct ImTextureData;
 
 namespace mkwvk::ui {
-
-struct Fonts {
-    ImFont* body = nullptr;      // (rows, help, prompts)
-    ImFont* strong = nullptr;    // (the selected row, values, buttons)
-    ImFont* heading = nullptr;   // (tabs, titles, the wordmark)
-};
 
 /// A new ImGui frame for a w x h window image (the context made and the fonts loaded on the first call); false when ImGui
 /// cannot draw here (no views of the window's images: the surface does not allow drawing into them)

@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <condition_variable>
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -19,7 +21,7 @@
 #include <vector>
 
 namespace fixture {
-enum Cache { None = -1, Owner, Seen, Mine, Failure };
+enum Cache { None = -1, Owner, Seen, Mine, Failure, Alias, Retire };
 std::atomic<int> fail_cache{None};
 std::atomic<unsigned> allocation_faults{0};
 template<class T, int Tag> struct FaultAllocator : std::allocator<T> {
@@ -33,21 +35,23 @@ template<class T, int Tag> struct FaultAllocator : std::allocator<T> {
         return std::allocator<T>{}.allocate(n);
     }
 };
-template<class K, class V, int Tag> using FaultMap = std::unordered_map<K, V, std::hash<K>, std::equal_to<K>, FaultAllocator<std::pair<const K, V>, Tag>>;
+template<class K, class V, int Tag, class H = std::hash<K>> using FaultMap = std::unordered_map<K, V, H, std::equal_to<K>, FaultAllocator<std::pair<const K, V>, Tag>>;
 template<class K, int Tag> using FaultSet = std::unordered_set<K, std::hash<K>, std::equal_to<K>, FaultAllocator<K, Tag>>;
+template<class T, int Tag> using FaultVector = std::vector<T, FaultAllocator<T, Tag>>;
 /* PARAMS */
 /* ENUMS */
 struct {
     VkDevice device{}; VkPhysicalDeviceProperties props{}; VkPhysicalDeviceFeatures features{};
     bool custom_border_color = false;
 } dev;
-FaultMap<uint64_t, VkSampler, Owner> samplers;
 std::mutex replay_mu;
 struct ParLock { std::lock_guard<std::mutex> lock; ParLock() : lock(replay_mu) {} };
-uint64_t generation = 1, frame_no = 1;
+std::atomic<uint64_t> generation{1};   // (sampler_registrations_generation: a registration, the rows, or a retirement moved it)
+uint64_t frame_no = 1;
 unsigned creates = 0, destroyed = 0;
 VkResult create_result = VK_SUCCESS;
 bool garbage = false, arm_owner_commit = false, arm_failure_commit = false, cache_off = false;
+bool lod_per_id = false;   // (the limit cases: each id its own sampler, by its base level)
 std::string policy;
 std::string descriptor_policy;
 float registration_lod_max = 8;
@@ -83,6 +87,15 @@ bool sampler_of(int id, nvn_samp_par* p) {
     if (policy == "wrap") p->ws = NVN_WRAP_MODE_REPEAT, p->wt = NVN_WRAP_MODE_MIRRORED_REPEAT, p->wr = NVN_WRAP_MODE_CLAMP_TO_BORDER;
     if (policy == "lod-clamp") p->lod_bias = 100, p->lod_min = -3, p->lod_max = -1;
     if (policy == "upscale-bias" || policy == "upscale-bias-change") p->lod_bias = -0.5f;   // (the game's upscaled materials)
+    if (policy == "limit-reuse") {   // (keys apart only in what no sample reaches share a sampler; 3, 5 and 6 sample otherwise)
+        p->minf = NVN_MIN_FILTER_NEAREST, p->magf = NVN_MAG_FILTER_NEAREST, p->lod_bias = 0;
+        if (id == 1) p->border[0] = 0.5f, p->border[3] = 1;   // (a custom border colour no address mode clamps to)
+        if (id == 2) p->aniso = 4;      // (anisotropy on a device without anisotropic filtering: Vulkan ignores it)
+        if (id == 3) p->cmp_func = 3;   // (a comparison the sampler is not enabled for: kept, a driver may compare anyway)
+        if (id == 4) p->lod_max = 2;    // (no mip filter: the base level only, whatever the range)
+        if (id >= 5) p->ws = NVN_WRAP_MODE_CLAMP_TO_BORDER, p->border[0] = id == 5 ? 0.5f : 0.25f, p->border[3] = 1;
+    }
+    if (lod_per_id) p->lod_bias = 0, p->lod_min = id / 64.0f;
     return true;
 }
 const char* getenv(const char* name) {
@@ -97,9 +110,19 @@ const char* getenv(const char* name) {
 }
 bool env_on(const char* name) { const char* v = getenv(name); return v && !env_value_off(v); }   // (the switches through the stand-in)
 void logf(const char*, ...) {}
+// (sampler reuse) The recordings' timeline: the value the GPU reached, and the one the recording being made will signal, which
+// vk_replay.cpp's vk_retirement_value gives (a signal after every recording made so far)
+uint64_t gpu_done = 0, next_signal = 1;
+uint64_t vk_timeline_completed() { return gpu_done; }
+uint64_t vk_retirement_value() { return next_signal; }
+void samplers_changed() { generation++; }   // (vk_bank.cpp: moves sampler_registrations_generation)
+unsigned limit_failures = 0;   // (creations the driver refused for its maxSamplerAllocationCount, as NVIDIA's does)
+std::unordered_map<VkSampler, uint64_t> last_use;   // (the recording that last took each sampler, by use() below)
 VkResult vkCreateSampler(VkDevice, const VkSamplerCreateInfo* ci, const VkAllocationCallbacks*, VkSampler* out) {
     creates++;
     *out = garbage ? reinterpret_cast<VkSampler>(uintptr_t(0xdead)) : VK_NULL_HANDLE;
+    const uint32_t most = dev.props.limits.maxSamplerAllocationCount;   // (0: the existing cases' device, no limit modelled)
+    if (most && live.size() >= most) { limit_failures++; return VK_ERROR_OUT_OF_DEVICE_MEMORY; }
     if (create_result != VK_SUCCESS) {
         if (arm_failure_commit) { arm_failure_commit = false; fail_cache = Failure; }
         return create_result;
@@ -122,6 +145,9 @@ VkResult vkCreateSampler(VkDevice, const VkSamplerCreateInfo* ci, const VkAlloca
 }
 void vkDestroySampler(VkDevice, VkSampler sampler, const VkAllocationCallbacks*) {
     if (!sampler) return;   // (Vulkan permits null destruction; a non-null error output is still undefined)
+    if (auto u = last_use.find(sampler); u != last_use.end()) {   // (destroyed only once the GPU is past every recording that took it)
+        assert(u->second <= gpu_done); last_use.erase(u);
+    }
     assert(live.erase(sampler) == 1); destroyed++;   // (not undefined error output or an already-owned sampler)
 }
 /* ACTUAL */
@@ -144,6 +170,7 @@ struct Pushed;
 std::array<Pushed, 2>& pushed();
 struct Recording { VkDescriptorPool pool{}; std::vector<VkDescriptorPool> extra; } recording;
 Recording* cur = &recording;
+std::atomic<uint64_t> pools_extra{0};
 bool g_fine = false;
 enum { FC_PUSH_FULL, FC_PUSH_WRITES, FC_PUSH_DESCS, FC_PUSH_DELTA, FC_POOL_SETS, FC_POOL_DESCS, FC_PUSH_TEMPLATE, FC_PUSH_NONE };
 int64_t fine_n[8]{};
@@ -183,6 +210,8 @@ void vkUpdateDescriptorSets(VkDevice, uint32_t n, const VkWriteDescriptorSet* wr
 void vkCmdBindDescriptorSets(VkCommandBuffer, VkPipelineBindPoint, VkPipelineLayout, uint32_t, uint32_t, const VkDescriptorSet*, uint32_t, const uint32_t*) {
     descriptor_binds++;
 }
+bool ub_snapshot_wanted() { return false; }   // (no uniform snapshot: bind_descriptors pushes only the writes that changed)
+int ub_snap_dedup_mode() { return 1; }
 /* DESCRIPTORS */
 std::array<Pushed, 2>& pushed() { static std::array<Pushed, 2> state; return state; }
 
@@ -204,10 +233,101 @@ void retry(const std::string& test) {
     else next = get();
     valid(next); assert(creates == 2 && get() == next);
 }
+// (sampler reuse) A recording thread that lives through a whole case, as a parallel replay's segment workers do: its own tables
+// (sampler_for's by id, sampler_make's mine) stay from one recording to the next
+struct Worker {
+    std::mutex m;
+    std::condition_variable cv;
+    std::function<void()> job;
+    bool busy = false, quit = false;
+    std::thread t{[this] {
+        std::unique_lock l(m);
+        for (;;) {
+            cv.wait(l, [this] { return busy || quit; });
+            if (quit) return;
+            l.unlock(); job(); l.lock();
+            busy = false; cv.notify_all();
+        }
+    }};
+    void start(std::function<void()> f) { { std::lock_guard l(m); job = std::move(f); busy = true; } cv.notify_all(); }
+    void join() { std::unique_lock l(m); cv.wait(l, [this] { return !busy; }); }
+    ~Worker() { { std::lock_guard l(m); quit = true; } cv.notify_all(); t.join(); }
+};
+// A draw's sampler for id in the recording that will signal next_signal: checked under the replay's lock (the fake driver's tables
+// change under it), its own key's (lod_per_id), and noted as used by that recording
+VkSampler use(int id) {
+    const VkSampler s = get(id);
+    std::lock_guard g(replay_mu);
+    valid(s); assert(live.at(s).ci.minLod == id / 64.0f);
+    last_use[s] = next_signal;
+    return s;
+}
+// The limit cases: a driver that makes at most 80 samplers, as NVIDIA's makes about 4000 (vkCreateSampler fails past it). The
+// renderer's room is 60 of them (80 less a quarter for its other samplers), retiring from 45. vkDestroySampler above checks no
+// sampler goes before the GPU is past the last recording that took it
+bool limit_case(const std::string& test) {
+    if (test == "limit") {   // (300 recordings on two threads, each drawing with 10 samplers every recording uses and 20 of a window
+        // that moves 5 a recording: 1525 in all. The GPU 2 recordings behind)
+        lod_per_id = true; dev.props.limits.maxSamplerAllocationCount = 80;
+        Worker worker;
+        for (uint64_t r = 0; r < 300; r++) {
+            next_signal = r + 1, gpu_done = r ? r - 1 : 0;
+            const auto draws = [r] {
+                for (int id = 0; id < 10; id++) use(id);
+                for (int id = 100 + 5 * (int)r; id < 120 + 5 * (int)r; id++) use(id);
+            };
+            worker.start(draws); draws(); worker.join();
+            frame_no++;   // (a present)
+        }
+        // (each made once: none retired while recordings still drew with it, the 10 of every recording kept throughout)
+        assert(!limit_failures && creates == 1525 && live.size() <= 60 && destroyed == creates - live.size());
+        return true;
+    }
+    if (test == "limit-full") {   // (the GPU stopped: every sampler the room holds may still be its own)
+        lod_per_id = true; dev.props.limits.maxSamplerAllocationCount = 80;
+        std::vector<VkSampler> first;
+        for (int id = 0; id < 60; id++) first.push_back(use(id));   // (45 made, then 15 more, each retiring the least recently used)
+        assert(creates == 60 && destroyed == 0 && !limit_failures);
+        assert(!get(60) && !get(60) && creates == 60 && !limit_failures);   // (none made past the room: the draw waits, as for a failure)
+        gpu_done = 1, next_signal = 2; frame_no++;   // (the GPU past that recording, and a present)
+        use(60);
+        assert(destroyed == 15 && creates == 61 && use(59) == first[59]);   // (those retired were 0-14, the least recently used)
+        assert(use(0) != first[0] && creates == 62);   // (a retired one's key made anew)
+        return true;
+    }
+    if (test == "limit-reuse") {   // (keys apart only in what no sample reaches share one sampler; the others do not)
+        policy = test; dev.features.samplerAnisotropy = VK_FALSE;
+        const VkSampler s0 = get(0); valid(s0);
+        assert(get(1) == s0 && get(2) == s0 && get(4) == s0 && creates == 1);
+        const VkSampler s3 = get(3), s5 = get(5), s6 = get(6);
+        valid(s3); valid(s5); valid(s6);
+        assert(s3 != s0 && s5 != s0 && s6 != s0 && s5 != s6 && creates == 4 && live.size() == 4);
+        assert(!live.at(s3).ci.compareEnable && live.at(s3).ci.compareOp == VK_COMPARE_OP_EQUAL);
+        assert(live.at(s5).custom && live.at(s5).border[0] == 0.5f && live.at(s6).border[0] == 0.25f);
+        return true;
+    }
+    if (test == "limit-alias-commit") {   // (the keys' table could not take a key: its sampler is found again by what it samples)
+        fail_cache = Alias; const VkSampler s = get(); valid(s);
+        assert(allocation_faults == 1 && get() == s && creates == 1 && destroyed == 0);
+        return true;
+    }
+    if (test == "limit-retire-commit") {   // (no room to note a retirement: that sampler stays made, none lost or destroyed early)
+        lod_per_id = true; dev.props.limits.maxSamplerAllocationCount = 80;
+        for (int id = 0; id < 45; id++) use(id);
+        fail_cache = Retire; use(45);
+        assert(allocation_faults == 1 && creates == 46 && destroyed == 0 && live.size() == 46);
+        use(46); assert(creates == 47 && destroyed == 0);   // (back to 45 made: 0 and 1 retired)
+        gpu_done = 1, next_signal = 2; frame_no++;
+        use(47); assert(destroyed == 2 && creates == 48);
+        return true;
+    }
+    return false;
+}
 void run(const std::string& test) {
     cache_off = route == "cache-off";
     dev.props.limits.maxSamplerLodBias = 16; dev.props.limits.maxSamplerAnisotropy = 8;
     dev.features.samplerAnisotropy = VK_TRUE; dev.custom_border_color = true;
+    if (limit_case(test)) return;
     if (test.find("descriptor-") == 0) {
         descriptor_policy = test;
         recording.pool = make_pool();   // A live recording already owns its initial pool before binding.

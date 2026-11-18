@@ -58,12 +58,19 @@ const char *hos_sdl_error(void) { return "no device"; }
 /* SDL's microphones: "Test microphone", two "Twin" and a long name, as ids id_base.. ; the default (id 0) opens unless
    no_default */
 static int listed = 1, no_default, opens, opened, closed, mic_bytes, next_sample, last_format, last_rate, last_channels;
+static int expanded_list;
 static uint32_t id_base = 7, last_id = 99;
 #define LONG_NAME "Microphone Array (Intel\xc2\xae Smart Sound Technology for Digital Microphones)"
 int hos_sdl_mic_list(uint32_t *ids, char (*names)[128], int max) {
     static const char *const all[4] = {"Test microphone", "Twin", "Twin", LONG_NAME};
     int n = 0;
-    for (; n < listed && n < max && n < 4; n++) ids[n] = id_base + (uint32_t)n, strcpy(names[n], all[n]);
+    for (; n < listed && n < max && (expanded_list || n < 4); n++) {
+        ids[n] = id_base + (uint32_t)n;
+        if (expanded_list) {
+            if (n == 23) strcpy(names[n], "Discord VAIO Output");
+            else snprintf(names[n], 128, "Expanded microphone %d", n);
+        } else strcpy(names[n], all[n]);
+    }
     return n;
 }
 void *hos_sdl_mic_open(uint32_t id, int freq, int channels, uint16_t format) {
@@ -290,6 +297,33 @@ int main(void) {
     for (int k = 0; k < 12; k++) MS(1000), (void)FILLED(big);   /* (silence comes a second at most a poll) */
     if (FILLED(big) != 480000) FAIL(42, "a huge frame count: %d frames held, not 10 s", FILLED(big));
     cases += 2;
+    /* More than sixteen recording endpoints: the real device at slot 24 must be found, including after its id changes. */
+    expanded_list = 1, listed = 70;
+    if (hos_mic_count() != 64 || strcmp(hos_mic_name(23), "Discord VAIO Output") ||
+        strcmp(hos_mic_name(63), "Expanded microphone 63") || hos_mic_name(64)[0])
+        FAIL(43, "the expanded list and its boundary");
+    hos_mic_select(2, "Discord VAIO Output", 23);
+    (void)FILLED(big);
+    if (last_id != id_base + 23) FAIL(44, "the named microphone beyond sixteen: id %u", last_id);
+    hos_mic_select(2, "Expanded microphone 63", 63);
+    (void)FILLED(big);
+    if (last_id != id_base + 63) FAIL(45, "the last microphone in the expanded list: id %u", last_id);
+    hos_mic_select(2, "Expanded microphone 64", 64);
+    (void)FILLED(big);
+    if (last_id != 0) FAIL(46, "a name past the list boundary uses the default: id %u", last_id);
+    hos_mic_select(2, "Discord VAIO Output", 23);
+    (void)FILLED(big);
+    listed = 0, MS(5100);
+    (void)FILLED(big);
+    if (last_id != 0) FAIL(47, "the unplugged high-index microphone uses the default: id %u", last_id);
+    listed = 70, id_base += 100, MS(3100);
+    (void)FILLED(big);
+    if (last_id != id_base + 23) FAIL(48, "the high-index microphone reconnects under its new id: %u", last_id);
+    hos_mic_select(1, "", -1);
+    (void)FILLED(big);
+    if (last_id != 0) FAIL(49, "Default stays independent of the expanded list: id %u", last_id);
+    CALL(imp__ZN2nn5audio16CloseInputStreamEPNS0_15InputStreamTypeE, U(big));
+    cases += 7;
     printf("PASS: %d input stream cases (device list, open, start, silence, a shared microphone, capacity, a lost one and its"
            " retries, a quiet one, named ones, a stand-in, stop, close)\n", cases);
     return 0;
@@ -353,7 +387,25 @@ int main() {
         refresh_mics();
         CHECK(mic_want == "USB Mic" && !mic_missing && opts.mic == 2 && !std::strcmp(tx_mic(2), "USB Mic") && told.index == 0);
     }
-    std::puts("PASS: the Microphone row keeps its choice by name, and tells the host");
+    names.clear();
+    for (int i = 0; i < 70; i++) names.push_back(i == 23 ? "Discord VAIO Output" : "Expanded microphone " + std::to_string(i));
+    opts.mic = 1, mic_chosen(), refresh_mics();
+    CHECK(mic_listed == 64 && rows[0].hi == 65 && opts.mic == 1 && told.mode == 1);
+    opts.mic = 25, mic_chosen();
+    CHECK(mic_want == "Discord VAIO Output" && told.index == 23);
+    refresh_mics();
+    CHECK(opts.mic == 25 && !mic_missing);
+    opts.mic = 65, mic_chosen();
+    CHECK(mic_want == "Expanded microphone 63" && told.index == 63);
+    names.resize(63);
+    refresh_mics();
+    CHECK(mic_missing && opts.mic == 65 && rows[0].hi == 65 && told.index == -1);
+    names.push_back("Expanded microphone 63");
+    refresh_mics();
+    CHECK(!mic_missing && opts.mic == 65 && told.index == 63);
+    opts.mic = 1, mic_chosen(), refresh_mics();
+    CHECK(opts.mic == 1 && mic_want.empty() && told.mode == 1);
+    std::puts("PASS: the Microphone row keeps its choice by name, and tells the host (including more than sixteen devices)");
     return 0;
 }
 """

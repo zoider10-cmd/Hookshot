@@ -54,6 +54,7 @@ static uint64_t code_key(const uint8_t* c, const uint8_t* code, uint32_t n) { (v
 static void disk_init() {}
 static bool disk_listing = false;
 static std::unordered_set<uint64_t> seed_keys;
+static bool env_on(const char* n) { const char* v = std::getenv(n); return v && *v && *v != '0'; }   // (RX_VK_SEED_CHECK: seed_keys is filled only then)
 static std::string the_path;
 static std::string seed_path() { return the_path; }
 struct SeedStage {

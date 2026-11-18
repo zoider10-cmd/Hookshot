@@ -22,6 +22,10 @@ Each is a runtime switch where it can be, so the game's own path stays reachable
 - The OptimizeChangeBank thread's allocations tried again when their heap is full (host/oot_heap_retry.c): f_804566e0's two
   calls of f_80522050, its GPU memory (GPU_ALLOC_SITES), and its two tryAllocs of CPU buffers (HEAP_ALLOC_SITES). They went on
   with a null pointer and crashed writing through it (issue 1697). The supported build only.
+- The Voice Language option kept after a restart (host/oot_voice.c): the voice resource's update (f_80a9ca30) asks
+  GameDataMgr whether the option was written (f_80a9d1c0) and applies it only then; option.sav's value replaces the
+  option without a write, so a saved choice was never applied (issue 430). The call goes through hos_oot_voice_option,
+  which also says yes when the option's value is not the one of the update before. The supported build only.
 - Ocarina note controls: the note-wait action's start (f_828a9190) and tick (f_828a9280) report the wait to the host (hos_oc_wait, hos_oc_beat), which swaps the five notes for its own controls (host/nn_hid.c); a tick whose gates refuse reports no wait, so a dialogue keeps its buttons.
 """
 import collections
@@ -547,6 +551,25 @@ def patch_zstd_stream(source):
     return (source[:at] + ZSTD_CALL + source[at:]).replace('#include "a64.h"\n', '#include "a64.h"\nint hos_zstd_stream(Ctx *c);\n', 1)
 
 
+ZSTD_FRAMES_HEAD = "void f_8010b380(Ctx *__restrict A64_NOESC c) {\n"
+ZSTD_FRAMES_CALL = ("    if (hos_zstd_frames(c)) return;   /* (nx2/oot_patches.py: HOS_NATIVE_ZSTD_FRAMES, the host's libzstd) */\n")
+
+
+def patch_zstd_frames(source):
+    """f_8010b380, zstd's decompressMultiFrame in the game (x0 the context, x1 and x2 the output and its room, x3 and x4 the
+    frames, x5 and x6 a raw dictionary, x7 the DDict or 0; the resource loaders' whole-buffer decode), returns at once when
+    hos_zstd_frames did the call: with HOS_NATIVE_ZSTD_FRAMES on, the host's libzstd decodes the frames (host/hos_zstd.c);
+    off, the function runs as lifted"""
+    start = source.find(ZSTD_FRAMES_HEAD)
+    if start < 0:
+        return None
+    if ZSTD_FRAMES_CALL in source:   # (made before: a lift patched again)
+        return source
+    at = start + len(ZSTD_FRAMES_HEAD)
+    return (source[:at] + ZSTD_FRAMES_CALL + source[at:]).replace('#include "a64.h"\n',
+                                                                  '#include "a64.h"\nextern int hos_zstd_frames(Ctx *c);\n', 1)
+
+
 TEXT_HEAD = "void f_80b1e140(Ctx *__restrict A64_NOESC c) {"
 # (the letters' block: past the early returns, the auto-advance timer and the hidden / no-text checks; reached once a call)
 TEXT_OLD = ("L_80b1e1b4:;\n"
@@ -738,12 +761,17 @@ def patch_whole_frames(s):
     return s, done
 
 
-# Above a Frame rate cap of 60, two places that need whole 60 fps frames (host/oot_high_fps.h has why and the logic; at a cap of
+# Above a Frame rate cap of 60, three places that need whole 60 fps frames (host/oot_high_fps.h has why and the logic; at a cap of
 # 60 the host hands back what the game computed):
 # - the sound manager's job, f_80435300 (phase in w2; phase 0 loads the game step, [[slot]]+0x10, and hands it to the sound
 #   engine): its head asks hos_oot_sound_gate whether to run now (60 Hz above 60 fps, the other phases following phase 0), and
 #   the step it loads goes through hos_oot_sound_step (a whole one while the gate holds the job). After zortos293/Lichii PR #1289
 #   (auz466), which does the same as a code patch for the emulator.
+# - the music manager's update, f_83373400 (game::Bgm, run by that job, so at 60 Hz too): its own loads of the time object's step
+#   (+16) and seconds (+24) go through hos_oot_sound_step and hos_oot_sound_seconds, so while the gate holds the job it counts a
+#   whole step, not the frame's part of one (handed the part, its clock ran at 60 / fps of the real one). Its head takes the
+#   change flags the gate held back (hos_oot_bgm_begin) and its four reads of the battle manager's change flags ([x26]+2200)
+#   get them with the byte (hos_oot_bgm_flags): flags set for one frame the gate held are not lost (the battle music after a fight).
 # - the physics solver's step count, set each update from the frame step in f_838ceb80 and f_838cfc10 (the same code in both):
 #   hos_oot_solver_steps rounds it up instead of down, at least 1, so Link stays on moving platforms (issue 1798).
 SOUND_HEAD = "void f_80435300(Ctx *__restrict A64_NOESC c) {\n"
@@ -758,6 +786,19 @@ SOUND_NEW = SOUND_OLD.replace("uint64_t _v=recomp_load32(c,(c->x[8]+16ULL));",
 SOUND_GATE = ("    if (!hos_oot_sound_gate(c, (uint32_t)c->x[2], " + SOUND_SLOT + " + 2192)) return;"
               "   /* (nx2/oot_patches.py: the sound job at 60 Hz above 60 fps) */\n")
 SOUND_DECL = "extern int hos_oot_sound_gate(Ctx *c, uint32_t phase, uint64_t slot);\nextern uint32_t hos_oot_sound_step(uint32_t step_bits);\n"
+BGM_HEAD = "void f_83373400(Ctx *__restrict A64_NOESC c) {\n"
+BGM_OLD = ("    { { uint64_t _v=recomp_load32(c,(c->x[8]+16ULL)); a64_vset64(c->vreg[8],_v); } }\n"
+           "    { { uint64_t _v=recomp_load32(c,(c->x[8]+24ULL)); a64_vset64(c->vreg[9],_v); } }\n")
+BGM_NEW = ("    { { uint64_t _v=hos_oot_sound_step((uint32_t)recomp_load32(c,(c->x[8]+16ULL))); a64_vset64(c->vreg[8],_v); } }"
+           "   /* (nx2/oot_patches.py: the music manager's whole step above 60 fps) */\n"
+           "    { { uint64_t _v=hos_oot_sound_seconds((uint32_t)recomp_load32(c,(c->x[8]+24ULL)), "
+           "(uint32_t)recomp_load32(c,(c->x[8]+16ULL))); a64_vset64(c->vreg[9],_v); } }\n")
+BGM_DECL = "extern uint32_t hos_oot_sound_step(uint32_t step_bits);\nextern uint32_t hos_oot_sound_seconds(uint32_t seconds_bits, uint32_t step_bits);\n"
+BGM_FLAGS_OLD = "    c->x[8]=recomp_load8(c,c->x[26] + 2200);\n"   # (the update's four reads of the change flags)
+BGM_FLAGS_NEW = ("    c->x[8]=hos_oot_bgm_flags(c->x[26] + 2200, recomp_load8(c,c->x[26] + 2200));"
+                 "   /* (nx2/oot_patches.py: with the flags of frames the gate held) */\n")
+BGM_FLAGS_HEAD = "    hos_oot_bgm_begin();   /* (nx2/oot_patches.py: the change flags held back since the last run) */\n"
+BGM_FLAGS_DECL = "extern void hos_oot_bgm_begin(void);\nextern uint64_t hos_oot_bgm_flags(uint64_t at, uint64_t flags);\n"
 SOLVER_HEADS = ("void f_838ceb80(Ctx *__restrict A64_NOESC c) {\n", "void f_838cfc10(Ctx *__restrict A64_NOESC c) {\n")
 # (the cut of frame step * steps a frame + 0.001, then its store into the solver: vreg 0 the float cut, vreg 1 the steps a frame)
 SOLVER_OLD = ("    c->x[1]=recomp_fp_to_int(c->vreg[0][0]&UINT64_C(0xffffffff),32,32,1,3,c->fpcr,&c->fpsr);\n"
@@ -797,6 +838,43 @@ def patch_sound_job(s):
     return s, 1
 
 
+def patch_bgm_time(s):
+    """The music manager's step and seconds through the host: (s, 1) when its update is in s with them (made now or before),
+    (s, 0) when it is not here or its code differs (another game version: left as it is)"""
+    at = _function(s, BGM_HEAD)
+    if at is None:
+        return s, 0
+    head, end = at
+    body = s[head:end]
+    if body.count(BGM_NEW) == 1:
+        return s, 1
+    if body.count(BGM_OLD) != 1:
+        return s, 0
+    s = s[:head] + body.replace(BGM_OLD, BGM_NEW, 1) + s[end:]
+    if BGM_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + BGM_DECL, 1)
+    return s, 1
+
+
+def patch_bgm_flags(s):
+    """The music manager's change flags with the ones the gate held back: (s, 1) when its update is in s with them (made now
+    or before), (s, 0) when it is not here or its code differs (another game version: left as it is)"""
+    at = _function(s, BGM_HEAD)
+    if at is None:
+        return s, 0
+    head, end = at
+    body = s[head:end]
+    if body.count(BGM_FLAGS_NEW) == 4 and body.count(BGM_FLAGS_HEAD) == 1:
+        return s, 1
+    if body.count(BGM_FLAGS_OLD) != 4 or BGM_FLAGS_HEAD in body:
+        return s, 0
+    body = BGM_HEAD + BGM_FLAGS_HEAD + body[len(BGM_HEAD):].replace(BGM_FLAGS_OLD, BGM_FLAGS_NEW)
+    s = s[:head] + body + s[end:]
+    if BGM_FLAGS_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + BGM_FLAGS_DECL, 1)
+    return s, 1
+
+
 def patch_solver_steps(s):
     """The solver step count's two places: (s, how many of them are in s with the hook, made now or before)"""
     done = 0
@@ -814,6 +892,41 @@ def patch_solver_steps(s):
     if done and SOLVER_DECL not in s:
         s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + SOLVER_DECL, 1)
     return s, done
+
+
+# f_8263e8e0, the steering update: after applying a turn it clamps the saved rate (+36) to the turn's magnitude times
+# the step. The turn was already scaled by the step, so a rate-limited update keeps rate * step squared: above 60 fps
+# Gohma can keep circling the ceiling without reaching her next point (issue 312). Convert the turn back to a rate for
+# both bounds when 0 < step < 1. At a step of 1 or more, and for invalid steps, keep the game's arithmetic unchanged.
+TURN_RATE_HEAD = "void f_8263e8e0(Ctx *__restrict A64_NOESC c) {\n"
+TURN_RATE_OLD = """    {uint64_t _a=0,_b=0,_z,_v;memcpy(&_a,c->vreg[0],4);memcpy(&_b,c->vreg[1],4);_z=(_a^_b)&0x80000000ULL;
+    _v=a64_fpx_mul32_fma32(c,_a,_b,_z);
+    a64_vset64(c->vreg[1],_v);}
+    {uint64_t _a=0,_b=0,_z,_v;memcpy(&_a,c->vreg[0],4);memcpy(&_b,c->vreg[8],4);_z=(_a^_b)&0x80000000ULL;
+    _v=a64_fpx_mul32_fma32(c,_a,_b,_z);
+    a64_vset64(c->vreg[0],_v);}
+"""
+# v8 holds the positive step throughout both instructions. Its binary32 bits test the interval without a host FP
+# comparison (or changing the guest's flags); division still uses the guest FP helper, as the original multiply does.
+TURN_RATE_NEW = TURN_RATE_OLD.replace(
+    "    _v=a64_fpx_mul32_fma32(c,_a,_b,_z);",
+    "    if ((uint32_t)c->vreg[8][0] > 0 && (uint32_t)c->vreg[8][0] < 0x3f800000u)\n"
+    "        _v=a64_fpx_div32_div32(c,_a,_b);\n"
+    "    else _v=a64_fpx_mul32_fma32(c,_a,_b,_z);")
+
+
+def patch_turn_rate(s):
+    """The saved steering rate's two bounds: (s, 1) when both are patched, now or before; a changed anchor is left alone."""
+    at = _function(s, TURN_RATE_HEAD)
+    if at is None:
+        return s, 0
+    head, end = at
+    body = s[head:end]
+    if body.count(TURN_RATE_NEW) == 1:
+        return s, 1
+    if body.count(TURN_RATE_OLD) != 1:
+        return s, 0
+    return s[:head] + body.replace(TURN_RATE_OLD, TURN_RATE_NEW, 1) + s[end:], 1
 
 
 def patch_text_speed(s):
@@ -943,10 +1056,29 @@ def patch_heap_retry(s):
     return s, found
 
 
+# The voice resource's update (f_80a9ca30) asks GameDataMgr whether OptionData.VoiceLanguage was written (f_80a9d1c0, its one
+# call there, by its return address) and reads and applies the option only then. Made through host/oot_voice.c
+# hos_oot_voice_option, which calls the game's own and also answers yes when the option's value changed without a write
+# (option.sav read after the start: issue 430). f_80a9d1c0's other callers stay as they are.
+VOICE_OPTION_OLD = "c->x[30] = 0x80a9ca9cULL; f_80a9d1c0(c);"
+VOICE_OPTION_NEW = "c->x[30] = 0x80a9ca9cULL; hos_oot_voice_option(c, f_80a9d1c0);   /* (nx2/oot_patches.py: host/oot_voice.c) */"
+VOICE_OPTION_DECL = "void hos_oot_voice_option(Ctx *A64_NOESC c, A64Fn game);\n"
+
+
+def patch_voice_option(s):
+    """The voice resource's question in one file's text: (text, 1 when made now or found made, else 0)"""
+    if VOICE_OPTION_NEW in s:
+        return s, 1
+    if s.count(VOICE_OPTION_OLD) != 1 or s.count('#include "a64.h"\n') != 1:
+        return s, 0
+    s = s.replace(VOICE_OPTION_OLD, VOICE_OPTION_NEW, 1)
+    return s.replace('#include "a64.h"\n', '#include "a64.h"\n' + VOICE_OPTION_DECL, 1), 1
+
+
 # (the wait action's start and tick, code_033.c; the anchors carry call-return PC literals, so each is once in its function)
 OC_DECL = ("extern volatile int hos_oc_wait;\nextern volatile int hos_oc_last_kind;\n"
            "extern volatile unsigned hos_oc_beat;\n"
-           "#define HOS_OC_BUTTONS(k) ((k) == 1 || (k) == 2 || (k) == 3 || (k) == 10 || (k) == 11)\n")
+           "#define HOS_OC_BUTTONS(k) ((k) == 1 || (k) == 2 || (k) == 3 || (k) == 7 || (k) == 10 || (k) == 11)\n")
 OC_ENTRY_HEAD = "void f_828a9190(Ctx *__restrict A64_NOESC c) {"
 OC_ENTRY_OLD = ("    c->x[1]=recomp_load32(c,c->x[19] + 32);\n"
                 "    { uint64_t _r = ((uint64_t)0 | ((c->x[0]) << 0)); c->x[20] = _r; }\n"
@@ -954,7 +1086,8 @@ OC_ENTRY_OLD = ("    c->x[1]=recomp_load32(c,c->x[19] + 32);\n"
 OC_ENTRY_NEW = ("    c->x[1]=recomp_load32(c,c->x[19] + 32);\n"
                 "    hos_oc_last_kind = (int)c->x[1], hos_oc_wait = HOS_OC_BUTTONS(c->x[1]) ? 1 : 2, hos_oc_beat++;"
                 "   /* (nx2/oot_patches.py: the note wait began; 1 and 3 are the field ocarina, 2 a song lesson, "
-                "10 the scarecrow's recording, 11 the scarecrow's recall of it, 13 a dialogue's, which stays the game's) */\n"
+                "7 the Lost Woods skull kids' songs, 10 the scarecrow's recording, 11 the scarecrow's recall of it, "
+                "13 a dialogue's, which stays the game's) */\n"
                 "    { uint64_t _r = ((uint64_t)0 | ((c->x[0]) << 0)); c->x[20] = _r; }\n"
                 "c->x[30] = 0x828a91e4ULL; f_832b35d0(c);")
 OC_TICK_HEAD = "void f_828a9280(Ctx *__restrict A64_NOESC c) {"
@@ -1063,6 +1196,12 @@ def patch_file(s, name, protect_hearts=False):
             lines.append("oot_patches: the zstd stream decode's host hook in " + name)
         out = zs
         counts["zstd stream hook"] += 1
+    zf = patch_zstd_frames(out) if protect_hearts else None
+    if zf is not None:
+        if zf != out:
+            lines.append("oot_patches: the zstd whole-buffer decode's host hook in " + name)
+        out = zf
+        counts["zstd frames hook"] += 1
     layout = patch_text_layout(out) if protect_hearts else None
     if layout is not None:
         out = layout
@@ -1149,6 +1288,12 @@ def patch_file(s, name, protect_hearts=False):
             lines.append("oot_patches: model swaps' guards in " + name)
         out = swap
         counts["model swap guards"] += 1
+    if protect_hearts and "if (hos_oot_trace_save(c)) return;" not in out:
+        signature = "void f_80bc72d0(Ctx *__restrict A64_NOESC c) {\n"
+        if signature in out:
+            out = out.replace(signature, signature + "    if (hos_oot_trace_save(c)) return;\n", 1)
+            out = out.replace('#include "a64.h"\n', '#include "a64.h"\nextern int hos_oot_trace_save(Ctx *c);\n', 1)
+            lines.append("oot_patches: save request trace in " + name)
     opening = patch_opening(out) if protect_hearts else None
     if opening is not None:
         n = opening.count(OPENING_REQUEST) + opening.count(OPENING_TIMELINE) + opening.count(OPENING_QUERY)
@@ -1189,6 +1334,11 @@ def patch_file(s, name, protect_hearts=False):
     if heap != out:
         lines.append("oot_patches: heap-full retries of the OptimizeChangeBank allocations in " + name)
     out = heap
+    voice, found = patch_voice_option(out) if protect_hearts else (out, 0)
+    counts["voice option check"] += found
+    if voice != out:
+        lines.append("oot_patches: the Voice Language option followed after option.sav is read in " + name)
+    out = voice
     out, whole = patch_whole_frames(out)
     counts["whole sites"] += out.count(WHOLE_MARK)   # (made now, or by an earlier run over this file)
     if whole:
@@ -1198,11 +1348,37 @@ def patch_file(s, name, protect_hearts=False):
     if sound != out:
         lines.append("oot_patches: the sound job at 60 Hz above 60 fps in " + name)
     out = sound
+    bgm, found = patch_bgm_time(out)
+    counts["music manager time"] += found
+    if bgm != out:
+        lines.append("oot_patches: the music manager's whole step above 60 fps in " + name)
+    out = bgm
+    flags, found = patch_bgm_flags(out)
+    counts["music manager flags"] += found
+    if flags != out:
+        lines.append("oot_patches: the music manager's change flags kept above 60 fps in " + name)
+    out = flags
     solver, found = patch_solver_steps(out)
     counts["solver sites"] += found
     if solver != out:
         lines.append("oot_patches: the solver steps rounded up above 60 fps in " + name)
     out = solver
+    turn, found = patch_turn_rate(out)
+    counts["saved turn rate"] += found
+    if turn != out:
+        lines.append("oot_patches: the saved steering rate above 60 fps in " + name)
+    out = turn
+    # (Mako 4.2, from Project ReLink bec02c5 and ceb5246) the zstd sequence loop and the name searches, natively
+    zstd = patch_zstd(out) if protect_hearts else None
+    if zstd is not None:
+        out = zstd
+        counts["zstd sequence loop"] += 1
+        lines.append("oot_patches: native zstd sequence loop in " + name)
+    names = patch_names(out) if protect_hearts else None
+    if names is not None:
+        out = names
+        counts["name searches"] += 1
+        lines.append("oot_patches: native name searches in " + name)
     return out, counts, lines
 
 
@@ -1210,7 +1386,7 @@ def report(paths, counts, protect_hearts=False):
     """The warnings from the files' counts (each file's patch_file counts, in the order of paths), and the step divides' rule:
     both or neither, so a file of paths that has the hook is put back"""
     done = {"dynamic resolution branch": 0, "text speed block": 0, "fixed path's scale": 0, "movie's frame count": 0,
-            "ocarina note wait": 0}
+            "ocarina note wait": 0, "saved turn rate": 0}
     if protect_hearts:   # (the supported build's: these places are its functions)
         done["menu focus hook"] = 0
         done["menu tick hook"] = 0
@@ -1232,6 +1408,8 @@ def report(paths, counts, protect_hearts=False):
         done["bone fallback"] = 0
         done["scene format"] = 0
         done["zstd stream hook"] = 0
+        done["zstd frames hook"] = 0
+        done["voice option check"] = 0
     total = collections.Counter()
     for c in counts:
         total.update(c)
@@ -1248,6 +1426,10 @@ def report(paths, counts, protect_hearts=False):
     whole_sites = total["whole sites"]   # (the counters of WHOLE_SITES with the whole frames: patch_whole_frames)
     if total["sound jobs"] != 1:   # (without it, above 60 fps sounds and then the music can stop after a few loading zones)
         print("oot_patches: WARNING: the sound job was found %d times, not once" % total["sound jobs"])
+    if total["music manager time"] != 1:   # (without it, above 60 fps the music manager's timers run at 60 / fps of real time)
+        print("oot_patches: WARNING: the music manager's time was found %d times, not once" % total["music manager time"])
+    if total["music manager flags"] != 1:   # (without it, above 60 fps the battle music can play on after a fight)
+        print("oot_patches: WARNING: the music manager's change flags were found %d times, not once" % total["music manager flags"])
     if total["solver sites"] != len(SOLVER_HEADS):   # (without them, above 60 fps moving platforms can drop Link)
         print("oot_patches: WARNING: the solver step count was found at %d of %d places" % (total["solver sites"], len(SOLVER_HEADS)))
     for what, n in done.items():
@@ -1272,6 +1454,59 @@ def report(paths, counts, protect_hearts=False):
     elif whole_sites != len(WHOLE_SITES):   # (the frames' own time without them: the pick-up indicator stays above 60 fps)
         print("oot_patches: WARNING: %d of %d frame counters found for the step's whole frames (above 60 fps a counter can stop: "
               "the pick-up indicator, the water ripples, the time of day, Scarecrow's Song, the floor web)" % (whole_sites, len(WHOLE_SITES)))
+
+
+# (hookshot, 15/11) The game's zstd sequence loop (f_801102e0, ZSTD_decompressSequences_body of its zstd 1.4) natively: most of
+# the loading threads' time arriving in Hyrule Castle (host/zstd_native.c says what was measured). At the head of the lifted
+# function, inside it (split_hot cuts the file at function heads: the call has to travel with the function): the host runs the
+# loop and the function returns, or (HOS_ZSTD_NATIVE=0) the lifted body runs as before
+ZSTD_HEAD = "void f_801102e0(Ctx *__restrict A64_NOESC c) {\n"
+ZSTD_CALL = ("    { extern int hos_zstd_seq(Ctx *, void (*)(Ctx *));   /* (nx2/oot_patches.py: host/zstd_native.c) */\n"
+             "      if (hos_zstd_seq(c, f_801102e0)) return; }\n")
+
+
+def patch_zstd(s):
+    """The native zstd sequence loop's call at the head of f_801102e0 (the supported build's: its address is that build's)"""
+    if ZSTD_HEAD not in s or ZSTD_CALL in s:
+        return None
+    return s.replace(ZSTD_HEAD, ZSTD_HEAD + ZSTD_CALL, 1)
+
+
+# (hookshot, 15/11) The two name searches of f_805aeea0 (the lookup in the game's sorted containers) natively: host/names_native.c
+# says what was measured. At each loop's head the host runs the iterations it can and the loop goes on or out; at each exit,
+# the check of HOS_NAMES_NATIVE=2. Inside the function only (split_hot cuts the file at function heads, and a label of the
+# same address could be another function's)
+NAMES_HEAD = "void f_805aeea0(Ctx *__restrict A64_NOESC c) {\n"
+NAMES_EDITS = [
+    ("L_805afbd4:;\n", "    { extern int hos_names_lower(Ctx *); if (hos_names_lower(c)) goto L_805afe30; }   /* (nx2/oot_patches.py: "
+                       "host/names_native.c) */\n"),
+    ("L_805afe30:;\n", "    { extern volatile int hos_names_checking; extern void hos_names_exit(Ctx *, int); "
+                       "if (hos_names_checking) hos_names_exit(c, 0); }\n"),
+    ("L_805b1d8c:;\n", "    { extern int hos_names_upper(Ctx *, int); if (hos_names_upper(c, 1)) goto L_805b0200; }\n"),
+    ("L_805b1d98:;\n", "    { extern int hos_names_upper(Ctx *, int); if (hos_names_upper(c, 0)) goto L_805b0200; }\n"),
+    ("L_805b0200:;\n", "    { extern volatile int hos_names_checking; extern void hos_names_exit(Ctx *, int); "
+                       "if (hos_names_checking) hos_names_exit(c, 1); }\n"),
+]
+
+
+def patch_names(s):
+    """The native name searches' calls in f_805aeea0 (the supported build's: these addresses are that build's). None when the
+    function is not in this file or is patched already; a SystemExit when one of its places is not there once"""
+    at = s.find(NAMES_HEAD)
+    if at < 0:
+        return None
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # (python -I leaves the script folder off)
+    import lifted_c
+    m = lifted_c.HEAD.search(s, at + len(NAMES_HEAD))
+    end = m.start() if m else len(s)
+    body = s[at:end]
+    if NAMES_EDITS[0][1] in body:
+        return None
+    for anchor, call in NAMES_EDITS:
+        if body.count(anchor) != 1:
+            raise SystemExit("oot_patches: f_805aeea0's %r found %d times" % (anchor.strip(), body.count(anchor)))
+        body = body.replace(anchor, anchor + call, 1)
+    return s[:at] + body + s[end:]
 
 
 def apply(gen, *, protect_hearts=False, required=False):

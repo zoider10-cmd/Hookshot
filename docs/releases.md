@@ -26,13 +26,20 @@ Each version is one Forgejo release, made by `.forgejo/workflows/release.yml`:
 
 | Hookshot (MagicBeanDev/Hookshot) | The launcher (MagicBeanDev/HookshotLauncher) |
 |---|---|
-| `HookshotBuilder-<v>-windows-x64.zip`: the Windows builder (its setup as `HookshotBuilder.exe`, the builder and Hookshot's sources in `HookshotBuilder\`, `tools.lock`, `VERSION`, and `recomplauncher.json` at the top) | `HookshotLauncher-<v>-windows-x64-setup.exe`: one self-contained program that installs itself (below); `HookshotLauncher-<v>-windows-x64-portable.zip`: the same program as `HookshotLauncher.exe` with its `portable` file |
-| `Hookshot-<v>-x86_64.AppImage`: the Linux builder (the builder, its Python, Hookshot's sources, the Vulkan back end, its `tools.lock` and `recomplauncher.json`); its build tools are not inside | `HookshotLauncher-<v>-x86_64.AppImage` |
+| `HookshotBuilder-<v>-windows-x64.zip`: the Windows builder (its setup as `HookshotBuilder.exe`, the builder and Hookshot's sources in `HookshotBuilder\`, the third-party code's objects in `HookshotBuilder\tools\third_party_objects`, `tools.lock`, `VERSION`, and `recomplauncher.json` at the top) | `HookshotLauncher-<v>-windows-x64-setup.exe`: one self-contained program that installs itself (below); `HookshotLauncher-<v>-windows-x64-portable.zip`: the same program as `HookshotLauncher.exe` with its `portable` file |
+| `Hookshot-<v>-x86_64.AppImage`: the Linux builder (the builder, its Python, Hookshot's sources, the third-party code's objects in `usr/share/hookshot/third_party_objects`, its `tools.lock` and `recomplauncher.json`; the player's build compiles the Vulkan back end); its build tools are not inside | `HookshotLauncher-<v>-x86_64.AppImage` |
 | `tools.lock`: the tools the builders download | |
 | `SHA256SUMS`, `SHA256SUMS.sig` | `SHA256SUMS`, `SHA256SUMS.sig` |
 
 `SHA256SUMS` is `sha256sum`'s format, one `<64 hex>  <name>` line per file. `SHA256SUMS.sig` is the base64 of the DER ECDSA
 P-256 signature of `SHA256SUMS`'s exact bytes, by the release key. A release's files never change: a fix is the next version.
+
+The third-party code's objects (`nx2/third_party_objects.py`: Eden's shader recompiler, sirit, Dear ImGui, zstd, libopus;
+on Windows suyu's code under the WebGPU renderer too) are compiled by the release with the tools a player's build uses
+(`tools.lock`'s compiler, sysroot and CPM headers; on Windows the same llvm-mingw release's Linux build), so a player's
+first build links them instead of compiling them. Only the sources beside them go into them: nothing of the game's, and
+none of the renderer's own files (DLSS, FSR 4 and the play profile are the player's). A build takes one only by its object
+key, which names the compiler and what the headers preprocess to: one that does not fit is compiled as before.
 
 Release files are Forgejo attachments: `[attachment] MAX_SIZE` (2048 MB on git.magicbean.dev now) caps each file, and
 `[repository.release] ALLOWED_TYPES` must stay empty (every type) for `.AppImage`, `.exe`, `.lock` and `SHA256SUMS`. The
@@ -63,6 +70,8 @@ launcher (`Core/ReleaseManifest.cs`, `Newest`) and in `scripts/release.py` (`new
 - **Pulling** a bad version is deleting its release, or setting it back to a draft: its channel then offers the one before
   by itself.
 - The **nightlies** past the newest 5 are deleted, with their tags, by the run that makes a new one. Nothing else is pruned.
+- A push to `main` whose commits since the newest nightly put nothing in its notes (only `ci:` or `chore:`, which
+  cliff.toml skips) makes **no nightly**: `release.py nightly-news` says no. The next one comes with what follows.
 - Anything else in the list is on no channel: a 2.x tag, a git describe name. (The builders' tools are not releases:
   they are packages, below.)
 - A nightly's count is the number of commits: for Hookshot since the fork (e2a4d45, "Rename the project to Hookshot"), for
@@ -102,9 +111,9 @@ Rotating the key: RELEASING.md, "Rotate the key".
 ## tools.lock (Hookshot)
 
 The builders need build tools that are not Hookshot's own code. Windows (`windows-x64` lines): llvm-mingw, Python with the
-prompt packages, emsdk, the CPM cache (FFmpeg, Vulkan and SPIR-V headers, VMA, dav1d), wgpu-native, the prebuilt files of
-`third_party` (a64emit.dll, lld-link.exe, SDL2/SDL3, zbic.dll), and the play profile when there is one (optional: without
-it the game is built all the same, a little slower in play). Linux (`linux-x64` lines): LLVM's clang
+prompt packages, emsdk, the CPM cache (FFmpeg, Vulkan and SPIR-V headers, VMA, dav1d), the prebuilt files of
+`third_party` (a64emit.dll, lld-link.exe, SDL2/SDL3, zbic.dll). No play profile is among them: play profiles are
+committed in `assets/profiles/`. Linux (`linux-x64` lines): LLVM's clang
 and lld (`emsdk`), the glibc 2.35 `sysroot`, `ffmpeg` with dav1d, `sdl2` and the Vulkan, SPIR-V and VMA headers (`cpm`).
 They are not in the release: `tools.lock` names them.
 
@@ -131,20 +140,20 @@ tool llvm-mingw 20261104 windows-x64 5521…40f 191037046 HookshotBuilder/tools/
   name), and nothing prunes them, so an older version's tools stay downloadable. Where an archive came from (upstream for
   llvm-mingw, NotRexed/Hookshot's `builder-parts` release for those taken from Hookshot) is its fallback URL, so no install
   depends on a repository we do not control alone. An archive Hookshot makes itself (the CPM cache with dav1d, the
-  prebuilt `third_party` files, the Linux tools, a play profile) is only in Packages, put there by `scripts/tools.py`.
+  prebuilt `third_party` files, the Linux tools) is only in Packages, put there by `scripts/tools.py`.
 - **Bumping a tool** is a pull request that edits `tools.lock`, with the archive uploaded by `scripts/tools.py mirror`,
   `add` or `assemble`: a new package version, then the line (RELEASING.md, "Bump a tool"). The release workflow refuses a
   `tools.lock` whose package files are not there with their size and SHA-256, or that lacks a tool the
   builder needs (`tools.py check --require`), in its first job, before anything is built.
-- **Today's lock.** Windows: Python, emsdk and wgpu-native are taken as they are from Hookshot v2.1.0's Windows builder
+- **Today's lock.** Windows: Python and emsdk are taken as they are from Hookshot v2.1.0's Windows builder
   (NotRexed/Hookshot's `builder-parts` release), with their SHA-256; llvm-mingw is upstream's; the CPM cache is Hookshot
   v2.1.0's with dav1d added (`scripts/windows/dav1d.sh`), and `third-party` the prebuilt files of Hookshot v2.1.0's
-  `third_party` part (`assemble third-party`). Linux: `scripts/linux/deps.sh tools`'s. There is no play profile yet: the
-  lock has no `profile` line, and `check --require` does not ask for one.
+  `third_party` part (`assemble third-party`). Linux: `scripts/linux/deps.sh tools`'s. The lock has no play profile:
+  play profiles are committed in `assets/profiles/`.
 - **Linux.** The AppImage carries only the builder: its Python (the tools' download and `make_game.py` run on it,
-  and its packages follow `requirements.txt`, which changes with the version), Hookshot's sources and the prebuilt Vulkan
-  back end. Each `linux-x64` tool's `dest` is where the AppImage had it (`usr/lib/hookshot/emsdk`, `usr/share/hookshot/cpm`,
-  ...). The launcher unpacks them beside the unpacked AppImage, as on Windows. An AppImage started by itself
+  and its packages follow `requirements.txt`, which changes with the version), and Hookshot's sources (the player's build
+  compiles the Vulkan back end from them). Each `linux-x64` tool's `dest` is where the AppImage had it
+  (`usr/lib/hookshot/emsdk`, `usr/share/hookshot/cpm`, ...). The launcher unpacks them beside the unpacked AppImage, as on Windows. An AppImage started by itself
   (`builder/linux/AppRun`) finds them there, or in the launcher's copy of the same version, or in
   `$XDG_DATA_HOME/hookshot/builder/toolchains/<v>/`; what is missing its first `--cli` downloads there, its progress on
   stderr, linking a tool another version there has. Once there, no connection is needed.
@@ -237,7 +246,10 @@ The first release of each product only needs its first number (Hookshot `v3.0.0`
 ## Release notes
 
 git-cliff writes them at release time from the commit titles since the previous tag, with the repository's `cliff.toml`.
-For a stable, that is since the previous stable, so its notes cover its release candidates. The headings are Features,
+For a stable, that is since the previous stable, so its notes cover its release candidates. A release candidate after the
+first has two lists: its own, headed `## <tag> (<date>), new since rc.N`, the commits since the rc before; then
+`## Earlier release candidates: rc.1, rc.2 (since <stable>)`, what those brought since the last stable in one list
+(`release.py notes`, git-cliff's `--ignore-tags`). The headings are Features,
 Fixes, Performance, Reverted, Documentation, Code, Build and Tests; `ci` and `chore` are left out. The notes go on the
 release page only: nothing is committed back to `main`, and there is no changelog file to keep up (Hookshot's is in
 NotRexed/Hookshot).

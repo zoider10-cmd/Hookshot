@@ -7,18 +7,11 @@ a floor, and the spare ones are counted out as well as in.
 python -I -B tests/test_mem_trim.py
 """
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: python -I leaves this folder off the path)
+from srccut import block   # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def block(text, marker):
-    start = text.index(marker)
-    end = text.index("{", start) + 1
-    depth = 1
-    while depth:
-        depth += (text[end] == "{") - (text[end] == "}")
-        end += 1
-    return text[start:end]
 
 
 def need(cond, why):
@@ -30,7 +23,7 @@ def main():
     draw = (ROOT / "gpu/vk/vk_draw.cpp").read_text(encoding="utf-8")
     uniform = block(draw, "VkDescriptorBufferInfo uniform_range(")
     need("cur->c1_at[key] = {cur->stream, at};" in uniform, "a c1 upload forgets which stream it is in")
-    need("return {it->first, it->second, n};" in uniform, "a c1 upload is served from the current stream")
+    need("return {it->second.first, it->second.second, n};" in uniform, "a c1 upload is served from the current stream")
     need("c.buf = cur->stream" in uniform and uniform.count("return {c.buf, c.at, n};") == 2,
          "a bank-cache hit names the stream it was kept in")
     overlay = uniform.index("ub_overlay(u.addr")

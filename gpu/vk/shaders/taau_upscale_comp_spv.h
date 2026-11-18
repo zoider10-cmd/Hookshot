@@ -1,3 +1,4 @@
+// Generated from taau_upscale.comp; SHA-256: 55587f0e9a67246b44fff6dbb32357ffe525fd4a3072b29db0a1c90cf8986231
 	// 1116.6.0
 	 #pragma once
 const uint32_t TAAU_UPSCALE_COMP_SPV[] = {

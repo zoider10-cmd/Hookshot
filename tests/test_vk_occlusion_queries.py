@@ -7,12 +7,14 @@ The real code is cut out of the sources and compiled against a fake query pool, 
 - vk_replay.cpp's ring (from kOccPool to occ_take): the numbering (one counter for every queue's state, a run split by
   another queue's queries left visible, a queue's state copied mid-run), the reset and report cases' helpers, the ring's
   room, the harvest (occ_collect), the report's submission value, the slot's report sequence (two reports into one slot
-  within one timestamp tick), and a slot made visible ahead of a stopped queue;
+  within one timestamp tick), a slot made visible ahead of a stopped queue, and the counts read from the GPU's copies in
+  host memory (RX_VK_OCC_COPY: the pool read only for what a copy did not have, once its submission is done);
 - vk_draw.cpp's OccGuard and the mesh fallback's task-batch block, inside a fake draw(): a draw that returns after its
   pass began, or whose vertex input was not all bound, or that is split into task batches, begins no query, and its
   report stays visible; every query is begun at most once;
 - occ_queries_on() in its own process per environment: RX_VK_OCC_FIXED wins over RX_VK_OCC_QUERIES=1, and the queries
-  are off with RX_VK_ASYNC=1.
+  stay on with RX_VK_ASYNC=1 (the render thread); occ_copy_wanted() likewise: the copies on by default with Intel's
+  Windows driver on a discrete GPU only, RX_VK_OCC_COPY either way, off with the parallel replay.
 
 The rest is checked in the source: where the helpers are called, every draw command in draw() preceded by its query's
 issue with no way out between, the guard made after StatsQuery, the stopped queues' reports made visible.
@@ -84,17 +86,21 @@ typedef struct VkQueryPool_T* VkQueryPool;
 typedef struct VkCommandBuffer_T* VkCommandBuffer;
 typedef int VkResult;
 typedef struct VkDevice_T* VkDevice;
+typedef struct VkBuffer_T* VkBuffer;
+typedef struct VmaAllocation_T* VmaAllocation;
 #define VK_NULL_HANDLE nullptr
 #define VK_SUCCESS 0
 #define VK_NOT_READY 1
 #define VK_QUERY_RESULT_64_BIT 1
 #define VK_QUERY_RESULT_WITH_AVAILABILITY_BIT 4
 #define VK_QUERY_CONTROL_PRECISE_BIT 1
+#define VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS 5
+#define VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU 2
 void logf(const char*, ...) {}
 '''
 
 FIXTURE = COMMON + r'''
-struct { VkDevice device = nullptr; bool occlusion_precise = true; } dev;
+struct { VkDevice device = nullptr; bool occlusion_precise = true; int driver_id = 5; struct { int deviceType = 2; } props; } dev;
 struct NvnState {
     bool render_enabled = true, raster_discard = false;
     uint64_t occ_next = 0, occ_first = 0, occ_limit = 0;
@@ -161,6 +167,49 @@ void vkCmdBeginQuery(VkCommandBuffer, VkQueryPool, uint32_t q, int) {
     begun_q.insert(q), open_q.insert(q), drawn[q] = 0;
 }
 void vkCmdEndQuery(VkCommandBuffer, VkQueryPool, uint32_t q) { ends++; open_q.erase(q); }
+// RX_VK_OCC_COPY: the copies a recording's end records, and the host memory the GPU writes them to (gpu_copies runs them)
+int par_threads() { return 0; }
+#define VK_STRUCTURE_TYPE_MEMORY_BARRIER_2 1000314000
+#define VK_STRUCTURE_TYPE_DEPENDENCY_INFO 1000314003
+#define VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT 0x1000ull
+#define VK_PIPELINE_STAGE_2_HOST_BIT 0x4000ull
+#define VK_ACCESS_2_TRANSFER_WRITE_BIT 0x1000ull
+#define VK_ACCESS_2_HOST_READ_BIT 0x2000ull
+struct VkMemoryBarrier2 {
+    int sType;
+    const void* pNext = nullptr;
+    uint64_t srcStageMask = 0, srcAccessMask = 0, dstStageMask = 0, dstAccessMask = 0;
+};
+struct VkDependencyInfo {
+    int sType;
+    const void* pNext = nullptr;
+    int dependencyFlags = 0;
+    uint32_t memoryBarrierCount = 0;
+    const VkMemoryBarrier2* pMemoryBarriers = nullptr;
+};
+struct Copy { uint32_t first, n; };
+std::vector<Copy> copies_recorded;
+int copies = 0, host_barriers = 0;
+void vkCmdCopyQueryPoolResults(VkCommandBuffer, VkQueryPool, uint32_t first, uint32_t n, VkBuffer, uint64_t offset, uint64_t stride,
+                               int flags) {
+    CHECK(stride == 16 && offset == (uint64_t)first * 16 && first + n <= (1u << 16));
+    CHECK(flags == (VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT));   // (no WAIT: a query never begun would hang it)
+    copies++, copies_recorded.push_back({first, n});
+}
+void vkCmdPipelineBarrier2(VkCommandBuffer, const VkDependencyInfo* d) {
+    CHECK(d->memoryBarrierCount == 1 && d->pMemoryBarriers[0].dstStageMask == VK_PIPELINE_STAGE_2_HOST_BIT);
+    host_barriers++;
+}
+std::vector<uint64_t> host_mem(2u << 16);
+// the GPU runs the recorded copies: the availability of each query, its count only when it is done (no PARTIAL)
+void gpu_copies() {
+    for (const Copy& c : copies_recorded)
+        for (uint32_t i = 0; i < c.n; i++) {
+            if (gpu[c.first + i].avail) host_mem[2 * (c.first + i)] = gpu[c.first + i].count;
+            host_mem[2 * (c.first + i) + 1] = gpu[c.first + i].avail;
+        }
+    copies_recorded.clear();
+}
 ''' + "%RING%" + "%GUARD%" + r'''
 // a draw() with the real task-batch block and guard: path picks how it ends
 struct Program { bool fallback_task = false; } prog;
@@ -552,10 +601,115 @@ int main() {
     occ_next_all = 1000 + kOccPool - kOccBuffer;
     CHECK(occ_room(UINT64_MAX));
     occ_pending.clear();
+
+    // ---- RX_VK_OCC_COPY: the counts read from the GPU's copies in host memory; the pool only for what a copy did not have ----
+    {
+        for (auto& q : gpu) q = {};
+        for (auto& v : sent_in) v = 0;
+        occ_freeing.clear();
+        S = NvnState{};
+        occ_next_all = 0;
+        occ_host = host_mem.data();
+        occ_host_clear(0, kOccPool);
+        begin(S, none);
+        // the recording's queries, copied at its end: read from the copy, not the pool
+        value = 70;
+        reset();
+        auto a = draws(3);
+        report(0xA00, 80);
+        CHECK(occ_part_lo == a[0] && occ_part_hi == a[2] + 1u);   // (the queries the recording being made took)
+        ran(a, {0, 2, 0});
+        reads = 0;
+        occ_collect();
+        CHECK(guest[0xA00] == 4096 && occ_pending.size() == 1 && reads == 0);   // (done, not copied yet: waits, no pool read)
+        occ_copy_part(cmd);
+        CHECK(copies == 1 && host_barriers == 1 && occ_part_hi == 0 && occ_part_lo == UINT64_MAX);
+        gpu_copies();
+        occ_collect();
+        CHECK(guest[0xA00] == 2 && occ_pending.empty() && reads == 0);
+        done_value = 70;
+        occ_collect();   // (reset once the submission is done: their words read "not copied" again)
+        CHECK(!gpu[a[0]].avail && host_mem[2 * a[0]] == kOccUnread && host_mem[2 * a[0] + 1] == 0);
+        // a query not done when the copy ran: it waits, then is read from the pool once its submission is done
+        value = 71;
+        reset();
+        auto b = draws(2);
+        report(0xA10, 81);
+        ran({b[0]}, {0});
+        occ_copy_part(cmd);
+        gpu_copies();
+        ran({b[1]}, {0});
+        occ_collect();
+        CHECK(guest[0xA10] == 4096 && occ_pending.size() == 1 && reads == 0);
+        done_value = 71;
+        occ_collect();
+        CHECK(guest[0xA10] == 0 && occ_pending.empty() && reads == 1);
+        // a recording that ended without the copy (submit_recording forgets its queries): from the pool once done
+        value = 72;
+        reset();
+        auto c = draws(1);
+        report(0xA20, 82);
+        occ_part_lo = UINT64_MAX, occ_part_hi = 0;
+        ran(c, {7});
+        reads = 0;
+        occ_collect();
+        CHECK(guest[0xA20] == 4096 && occ_pending.size() == 1 && reads == 0);
+        done_value = 72;
+        occ_collect();
+        CHECK(guest[0xA20] == 7 && occ_pending.empty() && reads == 1);
+        // a draw that never drew: copied as not done, not done in the pool either: "visible" stands
+        value = 73;
+        reset();
+        draws(1);
+        report(0xA30, 83);
+        occ_copy_part(cmd);
+        gpu_copies();
+        done_value = 73;
+        occ_collect();
+        CHECK(guest[0xA30] == 4096 && occ_pending.empty());
+        // the availability word seen before the count's: not a count yet (a count of 0 there would hide the object)
+        value = 74;
+        reset();
+        auto e = draws(1);
+        report(0xA40, 84);
+        ran(e, {0});
+        host_mem[2 * e[0] + 1] = 1;
+        reads = 0;
+        occ_collect();
+        CHECK(guest[0xA40] == 4096 && occ_pending.size() == 1 && reads == 0);
+        occ_copy_part(cmd);
+        gpu_copies();
+        occ_collect();
+        CHECK(guest[0xA40] == 0 && occ_pending.empty() && reads == 0);
+        done_value = 74;
+        occ_collect();
+        // across the ring's end: two copies, read from the copy
+        occ_end_buffer(S);
+        occ_next_all = kOccPool - 1;
+        begin(S, none);
+        value = 75;
+        reset();
+        auto w2 = draws(2);
+        CHECK(w2.size() == 2 && w2[0] == kOccPool - 1 && w2[1] == 0);
+        report(0xA50, 85);
+        copies = 0;
+        occ_copy_part(cmd);
+        CHECK(copies == 2);
+        ran(w2, {0, 3});
+        gpu_copies();
+        occ_collect();
+        CHECK(guest[0xA50] == 3 && occ_pending.empty() && reads == 0);
+        done_value = 75;
+        occ_collect();
+        CHECK(host_mem[2 * (kOccPool - 1)] == kOccUnread && host_mem[1] == 0);
+        occ_host = nullptr;
+        occ_end_buffer(S);
+    }
     std::puts("PASS: occlusion counts: summed once their draws are done; visible when unknown, overflowed, with a colour draw, "
               "reported again (also within a tick), ahead of a stopped queue, split by another queue's queries, or from a draw "
               "that did not draw (an early return, vertex input not bound, task batches); one numbering for all queues; the "
-              "report's own submission value; in order, read and reset in one batch (two across the ring's end)");
+              "report's own submission value; in order, read and reset in one batch (two across the ring's end); read from "
+              "the GPU's copies (RX_VK_OCC_COPY), from the pool only for what a copy did not have once its submission is done");
 }
 '''
 
@@ -567,9 +721,17 @@ struct { VkDevice device = nullptr; bool host_query_reset = true, occlusion_prec
 struct VkQueryPoolCreateInfo { int sType; const void* pNext = nullptr; int flags = 0; int queryType = 0; uint32_t queryCount = 0; int stats = 0; };
 VkResult vkCreateQueryPool(VkDevice, const VkQueryPoolCreateInfo*, const void*, VkQueryPool* p) { *p = (VkQueryPool)1; return VK_SUCCESS; }
 void vkResetQueryPool(VkDevice, VkQueryPool, uint32_t, uint32_t) {}
-bool async_on() { return getenv("RX_VK_ASYNC") && atoi(getenv("RX_VK_ASYNC")) != 0; }
 constexpr uint64_t kOccPool = 1 << 16;
 VkQueryPool occ_pool = VK_NULL_HANDLE;
+#define VK_BUFFER_USAGE_TRANSFER_DST_BIT 2
+bool occ_copy_wanted() { return false; }   // (RX_VK_OCC_COPY: the ring's test has the copies)
+VkBuffer occ_host_buf = VK_NULL_HANDLE;
+VmaAllocation occ_host_alloc = nullptr;
+volatile uint64_t* occ_host = nullptr;
+void occ_host_clear(uint64_t, uint64_t) {}
+bool create_buffer_cached(uint64_t, uint32_t, VkBuffer&, VmaAllocation&, void**, bool) { return false; }
+bool host_coherent(VmaAllocation) { return false; }
+void destroy_buffer(VkBuffer, VmaAllocation) {}
 ''' + "%SWITCH%" + r'''
 int main() { std::printf("%d\n", occ_queries_on() ? 1 : 0); }
 '''
@@ -581,7 +743,33 @@ SWITCH_CASES = [
     ({"RX_VK_OCC_FIXED": "4096"}, 0),
     ({"RX_VK_OCC_QUERIES": "1", "RX_VK_OCC_FIXED": "4096"}, 0),   # (the fixed value wins, as documented)
     ({"RX_VK_OCC_QUERIES": "2", "RX_VK_OCC_FIXED": "-1"}, 0),
-    ({"RX_VK_ASYNC": "1"}, 0),
+    ({"RX_VK_ASYNC": "1"}, 1),   # (the render thread keeps them; no async_on() here: occ_queries_on must not ask it)
+]
+
+# occ_copy_wanted() alone (RX_VK_OCC_COPY): on by default with Intel's Windows driver on a discrete GPU only, where it was
+# measured; the switch either way; off with the parallel replay. FAKE_GPU: the driver's VkDriverId and the deviceType
+COPY_SWITCH = COMMON + r'''
+struct { int driver_id = 0; struct { int deviceType = 0; } props; } dev;
+int par_threads() { const char* e = getenv("RX_VK_PARALLEL"); return e ? atoi(e) : 0; }
+''' + "%COPY%" + r'''
+int main() {
+    if (std::sscanf(getenv("FAKE_GPU"), "%d,%d", &dev.driver_id, &dev.props.deviceType) != 2) return 2;
+    std::printf("%d\n", occ_copy_wanted() ? 1 : 0);
+}
+'''
+
+INTEL_WINDOWS, INTEL_MESA, AMD, NVIDIA = 5, 6, 1, 4   # (VkDriverId)
+INTEGRATED, DISCRETE = 1, 2   # (VkPhysicalDeviceType)
+COPY_CASES = [
+    ({"FAKE_GPU": "%d,%d" % (INTEL_WINDOWS, DISCRETE)}, 1),   # (an Arc card on Windows: measured on a B580)
+    ({"FAKE_GPU": "%d,%d" % (INTEL_WINDOWS, INTEGRATED)}, 0),
+    ({"FAKE_GPU": "%d,%d" % (INTEL_MESA, DISCRETE)}, 0),
+    ({"FAKE_GPU": "%d,%d" % (AMD, DISCRETE)}, 0),
+    ({"FAKE_GPU": "%d,%d" % (NVIDIA, DISCRETE)}, 0),
+    ({"FAKE_GPU": "%d,%d" % (INTEL_WINDOWS, DISCRETE), "RX_VK_OCC_COPY": "0"}, 0),
+    ({"FAKE_GPU": "%d,%d" % (AMD, DISCRETE), "RX_VK_OCC_COPY": "1"}, 1),
+    ({"FAKE_GPU": "%d,%d" % (INTEL_WINDOWS, INTEGRATED), "RX_VK_OCC_COPY": "1"}, 1),
+    ({"FAKE_GPU": "%d,%d" % (INTEL_WINDOWS, DISCRETE), "RX_VK_PARALLEL": "3"}, 0),   # (its workers record the queries)
 ]
 
 
@@ -614,6 +802,13 @@ def check_wiring(replay, draw):
     assert job.index("occ_visible_ahead(") < job.index("later.push_back(")
     # the harvest runs as each recording begins
     assert "occ_collect();" in block(replay, "Recording& begin_recording(uint64_t value)")
+    # RX_VK_OCC_COPY: a recording's queries copied after its end barrier (its draws done), before it is submitted; every
+    # recording's end forgets them, so none is copied by a later recording than its own
+    for marker, c in (("void maybe_split(VkCommandBuffer& cmd) {", "cmd"), ("void finish_recording(uint64_t value) {", "r.cmd")):
+        body = block(replay, marker)
+        end = body.index('full_barrier(%s, "barrier (recording end)");' % c)
+        assert end < body.index("occ_copy_part(%s);" % c) < body.index("submit_recording("), marker
+    assert "occ_part_lo = UINT64_MAX, occ_part_hi = 0;" in block(replay, "void submit_recording(")
     # draw(): the guard made after StatsQuery (it ends first, inside the pass: StatsQuery's end copies outside it); every
     # draw command after it preceded by its query's issue, with no way out between; nothing else begins it
     fn = block(draw, "void draw(VkCommandBuffer cmd, NvnState& s, const DrawArgs& d) {")
@@ -668,7 +863,16 @@ def main():
             got = int(subprocess.run([str(exe)], check=True, capture_output=True, text=True, env=env).stdout.strip())
             if got != want:
                 sys.exit("occ_queries_on() with %s: %d, want %d" % (extra, got, want))
-        print("PASS: occ_queries_on(): RX_VK_OCC_FIXED wins over RX_VK_OCC_QUERIES; off with RX_VK_ASYNC=1")
+        print("PASS: occ_queries_on(): RX_VK_OCC_FIXED wins over RX_VK_OCC_QUERIES; on with RX_VK_ASYNC=1 (the render thread)")
+        exe = compile_and_run(args.cxx, tmp, "copy", COPY_SWITCH.replace("%COPY%", block(replay, "bool occ_copy_wanted()")))
+        for extra, want in COPY_CASES:
+            env = {k: v for k, v in os.environ.items() if not k.startswith(("RX_VK_OCC", "RX_VK_PARALLEL", "FAKE_GPU"))}
+            env.update(extra)
+            got = int(subprocess.run([str(exe)], check=True, capture_output=True, text=True, env=env).stdout.strip())
+            if got != want:
+                sys.exit("occ_copy_wanted() with %s: %d, want %d" % (extra, got, want))
+        print("PASS: occ_copy_wanted(): on by default with Intel's Windows driver on a discrete GPU only; RX_VK_OCC_COPY "
+              "either way; off with the parallel replay")
     check_wiring(replay, draw)
     print("PASS: the wiring in vk_replay.cpp and draw()")
 

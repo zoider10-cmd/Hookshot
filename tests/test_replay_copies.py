@@ -4,7 +4,6 @@ payload<T> is cut from the source and run: a payload at least as long as T is co
 and the rest of T stays zero, as before. And it is compiled at -O2 to assembly, with payload_short only declared: the copy at T's size
 must be inline, no call of memcpy or memmove (main's variable size is one; so was a copy of either size in one function, which clang 23
 merges into one call with a chosen size). The recording's c1 map is the flat table (flat_map.h): a c1 upload kept no longer allocates a map node.
-From Hookshot eda64e895 / HeyListen 3aa51bf5 (tests/test_replay_copies.py); our FlatMap is keyed by uint64_t.
 python -I -B tests/test_replay_copies.py [--cxx clang++]
 """
 import argparse
@@ -13,7 +12,6 @@ import tempfile
 from pathlib import Path
 
 RUN_ALL_ARGS = ["--cxx", "{cxx}"]
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -79,7 +77,7 @@ def main():
     short = block(replay, "[[gnu::noinline, gnu::cold]] void payload_short(void* v, const uint8_t* a, uint32_t bytes) {")
     draw = (ROOT / "gpu" / "vk" / "vk_draw.cpp").read_text(encoding="utf-8")
     res = block(draw, "struct RecordingRes {")
-    if "FlatMap<std::pair<VkBuffer, uint64_t>> c1_at;" not in res:
+    if "FlatMap<uintptr_t, std::pair<VkBuffer, uint64_t>> c1_at;" not in res:
         raise SystemExit("FAIL: RecordingRes: the c1 map is flat")
     with tempfile.TemporaryDirectory(prefix="replay-copies-") as temp:
         src, exe = Path(temp) / "copies.cpp", Path(temp) / "copies.exe"

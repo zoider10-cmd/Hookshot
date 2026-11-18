@@ -1,4 +1,4 @@
-// GPU profile (diagnostics): RX_VK_PASS_TIMING=1 (RX_VK_GPU_PROFILE=1 is the same) times the GPU's work with timestamps: every render
+// GPU profile (diagnostics): RX_VK_PASS_TIMING=1 times the GPU's work with timestamps: every render
 // pass, compute dispatch, barrier, texture/buffer copy, mirror sync, write-back and uniform write of the recordings' command buffers,
 // and of their upload command buffers, each a pair of timestamps labelled by what it was. Every 600 presents it logs, per frame: the
 // kinds of span with their totals, and the labels that took the most GPU time.

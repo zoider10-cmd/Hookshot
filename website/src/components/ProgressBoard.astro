@@ -23,6 +23,8 @@ const endpoint = '/progress-feed.json';
     <label class="progress-search">Search problems, features and updates
       <input id="problem-search" type="search" name="query" aria-describedby="problem-search-help" placeholder="Try “black screen”, “controller” or an issue number" autocomplete="off" />
     </label>
+    <details class="progress-filter-disclosure" data-filters open>
+    <summary>Filters <span data-filter-summary>Everything · no filters</span></summary>
     <fieldset class="progress-views"><legend>Show</legend>
       {[
         ['all', 'Everything'], ['reports', 'Reported problems'], ['features', 'Feature requests'],
@@ -35,6 +37,7 @@ const endpoint = '/progress-feed.json';
       <label>Area<select name="area"><option value="">Any area</option>{[...AREAS, 'Unspecified'].map(a => <option>{a}</option>)}</select></label>
       <label>Reported version<select name="version"><option value="">Any version</option></select></label>
     </div>
+    </details>
     <button type="reset" class="progress-reset">Clear search and filters</button>
   </form>
   <p data-count role="status" aria-live="polite"></p>
@@ -78,6 +81,9 @@ const endpoint = '/progress-feed.json';
   .progress-views span { display: block; border: 1px solid var(--sl-color-gray-3); border-radius: .3rem; padding: .5rem .7rem; min-height: 44px; }
   .progress-views input:checked + span { background: var(--sl-color-accent-low); border-color: var(--sl-color-text-accent); color: var(--sl-color-accent-high); font-weight: 700; }
   .progress-views input:focus-visible + span { outline: 2px solid var(--sl-color-text-accent); outline-offset: 3px; }
+  .progress-filter-disclosure { margin-top: 1rem; border: 1px solid var(--border); border-radius: .5rem; padding: .6rem .8rem; }
+  .progress-filter-disclosure > summary { cursor: pointer; min-height: 44px; padding-block: .5rem; font-weight: 700; }
+  [data-filter-summary] { font-size: var(--text-xs); font-weight: 400; color: var(--sl-color-gray-2); margin-inline-start: .5rem; overflow-wrap: anywhere; }
   .progress-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
   .progress-filters label { display: grid; gap: .3rem; }
   .progress-reset { margin-top: 1rem; }

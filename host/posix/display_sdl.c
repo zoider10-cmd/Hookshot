@@ -19,8 +19,10 @@ void hos_input_clear_toggles(void);
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
+#include "../hos_paths.h"   /* (the game folder: its title and icon) */
 #include "../../gpu/vk/vk_api.h"
 #include "../display_pointer.h"
+#include "../fullscreen_monitor.h"
 #include <math.h>
 #include <limits.h>
 #ifndef HOOKSHOT_ENV_H   /* (env_on: the switches' one rule) */
@@ -141,6 +143,15 @@ static void text_key(const HosSdlEvent *e) {
 static volatile int renderer;   /* the renderer presents into the window */
 static HANDLE renderer_up;   /* (set once rx_start has returned, ready or not: hos_renderer_wait) */
 static int fullscreen;
+static MkwVkMonitor window_monitors[HOS_MONITOR_MAX];
+static uint32_t window_monitor_tokens[HOS_MONITOR_MAX];
+static int window_monitor_count;
+static void refresh_monitors(void) {
+    window_monitor_count=hos_sdl_monitor_list(window,window_monitors,window_monitor_tokens,HOS_MONITOR_MAX);
+    hos_monitor_publish(window_monitors,window_monitor_count,window!=NULL);
+}
+/* On Linux the SDL/main thread publishes the snapshot before starting the game's thread. */
+void hos_monitor_prepare(void) { hos_monitor_load(); }
 
 static int create_surface(void *w, void *instance, void *surface) { return hos_sdl_vulkan_surface(w, instance, surface); }
 static void drawable_size(void *w, int *width, int *height) {
@@ -172,11 +183,20 @@ static void mouse_capture(int on) {
     hos_sdl_relative_mouse(window, on);
 }
 static void set_fullscreen(int on) {
-    if (on == fullscreen) return;
-    fullscreen = on;
-    hos_posix_window[3] = on;
-    hos_sdl_fullscreen(window, on);
-    hos_log("display: %s", on ? "fullscreen (F11 for a window)" : "windowed");
+    static int failed_logged;
+    char wanted[512]; hos_monitor_wanted(wanted);
+    int pick=hos_monitor_find(window_monitors,window_monitor_count,wanted);
+    uint32_t token=pick>=0?window_monitor_tokens[pick]:UINT32_MAX;
+    if (on==fullscreen && (!on || token==UINT32_MAX || token==hos_sdl_window_display(window))) return;
+    if (!hos_sdl_fullscreen_target(window,on,token)) {
+        if (!failed_logged) hos_log("display: fullscreen monitor request failed: %s",hos_sdl_error());
+        failed_logged=1;
+        return;
+    }
+    failed_logged=0;
+    fullscreen=hos_sdl_is_fullscreen(window); hos_posix_window[3]=fullscreen;
+    refresh_monitors();
+    hos_log("display: %s", fullscreen ? "fullscreen (F11 for a window)" : "windowed");
 }
 
 static DWORD WINAPI renderer_main(void *p) {
@@ -277,6 +297,9 @@ int hos_display_init(void) {
     }
     int w, h;
     if (hos_sdl_desktop_size(&w, &h)) hos_posix_window[1] = w, hos_posix_window[2] = h;
+    hos_monitor_load();
+    refresh_monitors();
+    if (hos_monitor_screen_size(&w,&h)) hos_posix_window[1]=w,hos_posix_window[2]=h;
     sdl_ready = 1;
     return 1;
 }
@@ -305,7 +328,7 @@ void hos_display_loop(void) {
         int w = 0, h = 0;
         if (sscanf(getenv("HOS_WINDOW_SIZE"), "%dx%d", &w, &h) == 2 && w >= 64 && h >= 64) win_w = w, win_h = h;
     }
-    window = hos_sdl_window(window_title(HOS_GAME_TITLE), win_w, win_h);
+    window = hos_sdl_window(window_title(hos_game_title(HOS_GAME_TITLE)), win_w, win_h);   /* (the game's own name: host/hos_paths.h) */
     if (!window) {
         hos_log("display: SDL_CreateWindow: %s: no window", hos_sdl_error());
         fprintf(stderr, "display: SDL_CreateWindow: %s: no window\n", hos_sdl_error());
@@ -316,19 +339,21 @@ void hos_display_loop(void) {
     }
     vk_window.window = window;
     hos_posix_window[0] = 1;
-    {   /* the window's icon: hookshot.png beside the game (make_game.py puts it there), for X11 and the compositors that
-           take one from the window; the others find it through the menu entry */
+    {   /* the window's icon: hookshot.png in the game folder (make_game.py puts it there: the game's own icon, else Hookshot's),
+           for X11 and the compositors that take one from the window; the others find it through the menu entry. (The folder, not
+           the exe's: the game is bin/hookshot in a packaged builder's folder, and the icon was looked for in bin/) */
         char png[MAX_PATH];
-        DWORD n = GetModuleFileNameA(NULL, png, MAX_PATH);
+        DWORD n = hos_game_path_a(png, MAX_PATH);
         while (n && png[n - 1] != '/') n--;
         snprintf(png + n, sizeof png - n, "hookshot.png");
         hos_sdl_icon(window, png);
     }
-    if (getenv("HOS_FULLSCREEN") && atoi(getenv("HOS_FULLSCREEN"))) set_fullscreen(1);
+    refresh_monitors();
+    if (hos_monitor_start_fullscreen()) set_fullscreen(1);
     __atomic_store_n(&refresh_now, hos_sdl_refresh_mhz(window), __ATOMIC_RELAXED);
     {   /* (the desktop's size, before the renderer starts: the Quality preset Auto (this PC) reads it once, desktop_size) */
         int dw, dh;
-        if (hos_sdl_desktop_size(&dw, &dh))
+        if (hos_monitor_screen_size(&dw, &dh))
             __atomic_store_n(&desktop_w, dw, __ATOMIC_RELAXED), __atomic_store_n(&desktop_h, dh, __ATOMIC_RELAXED);
     }
     pointer_update(0, 0);
@@ -340,7 +365,24 @@ void hos_display_loop(void) {
         hos_sdl_pads_pump();
         if (GetTickCount() - refresh_asked >= 1000) {   /* (the window may have moved to another display) */
             refresh_asked = GetTickCount();
+            fullscreen=hos_sdl_is_fullscreen(window); hos_posix_window[3]=fullscreen;
+            refresh_monitors();
+            if (fullscreen) set_fullscreen(1);
+            int dw,dh;
+            if (hos_monitor_screen_size(&dw,&dh)) {
+                __atomic_store_n(&desktop_w,dw,__ATOMIC_RELAXED);
+                __atomic_store_n(&desktop_h,dh,__ATOMIC_RELAXED);
+                hos_posix_window[1]=dw; hos_posix_window[2]=dh;
+            }
             __atomic_store_n(&refresh_now, hos_sdl_refresh_mhz(window), __ATOMIC_RELAXED);
+        }
+        { /* Renderer requests are resolved/applied here, never on the renderer's thread. */
+            static char last_wanted[512];
+            char wanted[512]; hos_monitor_wanted(wanted);
+            if (strcmp(wanted,last_wanted)) {
+                strcpy(last_wanted,wanted); refresh_monitors();
+                if (fullscreen) set_fullscreen(1);
+            }
         }
         if (hos_sdl_wait_event(&e, 4)) {
             do {

@@ -144,6 +144,7 @@ void hos_hostcall_stats(void) {}
 /* HOS_LOG */
 /* HOS_FATAL */
 void rx_close_asked(void) {}
+/* CLOSE_FINISH */
 /* CONTROL_QUIT */
 static int relaunch_asked = 1;
 static void relaunch(void) { assert(marker == NO_FILE && !ready); }
@@ -250,6 +251,11 @@ int main(int argc, char **argv) {
     if (!strcmp(mode, "return")) return 0;
     if (!strcmp(mode, "control")) { game_quit(); return 90; }
     if (!strcmp(mode, "restart")) { hos_window_closed_exit(); return 90; }
+    if (!strcmp(mode, "windowless-finish")) {
+        hos_close_finish();
+        assert(marker == NO_FILE && !ready); /* removed before a worker can terminate without atexit */
+        return 0;
+    }
     if (!strcmp(mode, "game-return")) { game_thread(NULL); return 90; }
     if (!strcmp(mode, "fatal")) { hos_fatal(NULL, "private-user /home/private-user secret"); return 90; }
     if (!strcmp(mode, "device-lost-tagged") || !strcmp(mode, "device-early-tagged")) {

@@ -367,7 +367,7 @@ static void write_small(const wchar_t *path, const char *text) {
 }
 
 /* The folder a tool of tools.lock unpacks into (the tools the builder ships: Python, emsdk, the CPM packages, third_party,
-   wgpu-native, llvm-mingw), relative to a version's folder, in rel: its dest */
+   llvm-mingw), relative to a version's folder, in rel: its dest */
 static int part_folder(const Part *p, wchar_t *rel, int n) {
     swprintf(rel, n, L"%hs", p->dest);
     for (wchar_t *q = rel; *q; q++) if (*q == L'/') *q = L'\\';
@@ -413,12 +413,24 @@ static int copy_part_tree(const wchar_t *from, const wchar_t *to) {
     return ok;
 }
 
+/* A folder tar.exe has just written can stay open a few seconds in an antivirus scan or the search indexer: MoveFileW then fails
+   with access denied or a sharing violation. Those are tried again for up to 20 s, any other error is returned at once.
+   On failure GetLastError is the last try's. */
+static BOOL move_retry(const wchar_t *from, const wchar_t *to) {
+    for (int tries = 1;; tries++) {
+        if (MoveFileW(from, to)) return TRUE;
+        const DWORD error = GetLastError();
+        if ((error != ERROR_ACCESS_DENIED && error != ERROR_SHARING_VIOLATION) || tries == 80) return FALSE;
+        Sleep(250);
+    }
+}
+
 static int publish_install(const wchar_t *staged, const wchar_t *final, int portable) {
-    if (!portable || GetFileAttributesW(final) == INVALID_FILE_ATTRIBUTES) return MoveFileW(staged, final) != 0;
+    if (!portable || GetFileAttributesW(final) == INVALID_FILE_ATTRIBUTES) return move_retry(staged, final) != 0;
     wchar_t backup[MAX_PATH];
     const int n = home_path(backup, L"%ls.rollback-%lu-%llu", final, GetCurrentProcessId(), GetTickCount64());
     if (n < 0 || n >= MAX_PATH || !MoveFileW(final, backup)) return 0;
-    if (!MoveFileW(staged, final)) {
+    if (!move_retry(staged, final)) {
         const DWORD error = GetLastError();
         /* If restoration is prevented externally, the complete old installation remains in .rollback-* for recovery. */
         MoveFileW(backup, final);
@@ -438,7 +450,7 @@ static int publish_install(const wchar_t *staged, const wchar_t *final, int port
 static int place_tool(const wchar_t *from, const wchar_t *to) {
     const DWORD attributes = GetFileAttributesW(from), there = GetFileAttributesW(to);
     if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) return 0;
-    if (there == INVALID_FILE_ATTRIBUTES) return MoveFileW(from, to) != 0;   /* (nothing there: moved whole, as before) */
+    if (there == INVALID_FILE_ATTRIBUTES) return move_retry(from, to) != 0;   /* (nothing there: moved whole, as before) */
     if (!(attributes & FILE_ATTRIBUTE_DIRECTORY) || !(there & FILE_ATTRIBUTE_DIRECTORY) || (there & FILE_ATTRIBUTE_REPARSE_POINT))
         return 0;   /* (a file where the other side has one, or a file and a folder: the tool would replace the builder's) */
     wchar_t pattern[MAX_PATH];
@@ -779,9 +791,15 @@ static DWORD WINAPI work(LPVOID unused) {
                 wcscpy(parent, final_tool);
                 wchar_t *cut = wcsrchr(parent, L'\\');
                 if (cut) *cut = 0, mkdirs(parent);
-                if (!place_tool(from, final_tool))
+                if (!place_tool(from, final_tool)) {
+                    const DWORD e = GetLastError();
+                    if (e == ERROR_ACCESS_DENIED || e == ERROR_SHARING_VIOLATION)
+                        fail(L"Could not set up tool %d of %d (moving %ls, Windows error %lu). Another program is holding the files just unpacked, "
+                             L"often an antivirus scan: run the setup again, and if it happens again allow the folder %ls in it.",
+                             i + 1, nparts, wf, e, g_home.root);
                     fail(L"Could not set up tool %d of %d (%ls: no %ls in its archive, or a file the builder has already?).", i + 1, nparts,
                          wdest, wf);
+                }
                 rmtree(dest);
             }
         }
@@ -791,7 +809,7 @@ static DWORD WINAPI work(LPVOID unused) {
         if (!builder_ready(staged_exe))
             fail(L"The Builder or its self-contained .NET runtime is incomplete after unpacking (%ls). Your antivirus may have quarantined files from %ls. Check its quarantine/history, then run the setup again. No complete installation was published.", staged_exe, install);
         if (!publish_install(install, final_dir, g_home.portable))
-            fail(L"Could not finish installing into %ls. A preserved repair backup, if restoration was blocked, is beside it as .rollback-*.", final_dir);
+            fail(L"Could not finish installing into %ls (Windows error %lu). A preserved repair backup, if restoration was blocked, is beside it as .rollback-*.", final_dir, GetLastError());
         wcscpy(install, final_dir);
         write_small(marker, tag);
         write_parts(install, parts, nparts);

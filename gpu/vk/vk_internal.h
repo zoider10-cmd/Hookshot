@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <array>
 #include <atomic>
 #include <mutex>
@@ -14,6 +15,7 @@
 #include "compat/hookshot_env.h"
 #endif
 #include "vk_vendor.h"
+#include "gpu_choice.h"
 
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
 #include <intrin.h>
@@ -30,11 +32,14 @@ typedef struct VmaAllocation_T* VmaAllocation;   // (vk_mem_alloc.h's handle)
 namespace mkwvk {
 
 extern std::vector<std::string> gpu_device_names;
+extern std::vector<gpu_choice::Card> gpu_device_cards;   // (the same GPUs' models, for the row's saved card: gpu_choice.h)
 extern const MkwVkHost* host;
 void logf(const char* fmt, ...);
 // (hookshot) A line at another level than info, as host/hos.h's hos_log_at: "[trace] " leads its text, after the host's thread tag
 enum LogLevel : int { log_error, log_warn, log_info, log_debug, log_trace };
 void logf_at(LogLevel level, const char* fmt, ...);
+void new_refused();                       // (vk_main.cpp, issue 1280: the renderer's new_handler)
+void new_refuse_test(int64_t presents);   // (vk_main.cpp: HOS_TEST_ALLOC_REFUSE's allocation, at the replay's present)
 void queue_flush_locked();   // (vk_replay.cpp, RX_VK_BATCH: held submits out; dev.present_mu held)
 void queue_flush();          // (the same, taking dev.present_mu)
 // (hookshot) held submits out, then vkDeviceWaitIdle with the present queue's lock taken too (dev.present_mu held): the device's
@@ -123,15 +128,22 @@ extern Device dev;
 /// A750 froze the PC on four compute pipelines (issue 496). An Intel UHD on Windows read address 0x170 inside igvk64
 /// during the first scene's compiles (two frames in hookshot_vk.dll, and no "driver faulted compiling" line, so the
 /// call was not inside guarded_graphics). One thread enters vkCreateShaderModule and vkCreate*Pipelines.
-/// Other vendors, and Intel on other systems, are not held. The Intel shader compiles row's Side by side, or
-/// RX_VK_NO_INTEL_SERIAL=1 over it: side by side, as before.
+/// Other vendors, and Intel on other systems, are not held. The Intel shader compiles row's Side by side, its Auto on
+/// the Arc B-series (intel_compiles.h: where side by side was measured), or RX_VK_NO_INTEL_SERIAL=1 over it: side by
+/// side, as before.
 /// ask: a create that compiles nothing (VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT), on the replay thread so a
 /// draw or dispatch never waits for a compile. It never waits here either: while a worker holds the gate, busy is set and
 /// the caller answers VK_PIPELINE_COMPILE_REQUIRED (cold) without asking the driver.
 bool intel_compiles_side_by_side();   // (vk_menu.cpp: the row as this run started with it)
+bool intel_quick_compute();   // (vk_menu.cpp: the Intel quick compute builds row, as it is now: vk_draw.cpp compute_optimize)
 inline bool intel_gate_on() {
 #ifdef _WIN32
-    static const bool on = !intel_compiles_side_by_side() && dev.props.vendorID == 0x8086;
+    static const bool on = [] {
+        if (dev.props.vendorID == 0x8086 && intel_compiles_side_by_side())   // (said once: which it is shows in every log)
+            logf("vk: Intel's compiler is entered side by side (Intel shader compiles row: Side by side, its Auto on the Arc "
+                 "B-series, or RX_VK_NO_INTEL_SERIAL=1)");
+        return !intel_compiles_side_by_side() && dev.props.vendorID == 0x8086;
+    }();
     return on;
 #else
     return false;
@@ -185,6 +197,7 @@ void guest_cpu_wrote(uint64_t gpu, uint64_t n);
 void memory_table_begin();                         // (hookshot: a recording's page table changes held back for its upload commands)
 bool memory_table_flush();
 uint64_t memory_guest_pages();                        // (hookshot: the device address of guest memory's page table, 0: none)
+void page_table_census_log(const char* when);         // (hookshot: the guest pools outside the page table's windows, page_table_census.h)
 void memory_sync();                                   // (at each submit: pools the game made or let go)
 extern std::atomic<int64_t> memsync_lock_wait_ns;     // (hookshot, diagnostics: time memory_sync waited for its two locks; the slow-submit line)
 extern std::atomic<int64_t> memsync_part_ns[3];       // (hookshot, diagnostics: submit_memory_work's memory_sync, memory_take_capture, memory_collect_written)
@@ -289,6 +302,7 @@ void memory_capture_submit();
 bool memory_take_capture(uint64_t value, uint64_t completed);
 int64_t memory_late_wait_ns();   // (hookshot: RX_VK_FRAME_TRACE's late_wait_ms)
 bool memory_capture_now(uint64_t value, uint64_t completed);   // (hookshot: made and taken at once)
+uint64_t memory_captures_begun();   // (hookshot: how many captures have been begun so far; any thread)
 /// The submission the replay records next (bindings note it: a pool's mirror is in use until it is done)
 void memory_recording_value(uint64_t value, uint64_t completed);
 // (hookshot) The recording being made, as vk_replay.cpp numbers them (Recording::part), and the newest of them in which
@@ -304,16 +318,20 @@ bool memory_has_shadow(uint64_t guest, uint64_t n);
 /// A read of guest memory by the replay as the submission being recorded had it: the pages a kept capture holds from
 /// there (the game writes several submits ahead of the replay), the rest from guest memory. False when unreadable
 bool memory_read_as_submitted(uint64_t gpu, void* dst, uint64_t n);
+struct SubmittedRead { uint64_t gpu; void* dst; uint64_t n; };
+void memory_read_as_submitted_many(const SubmittedRead* reads, size_t count);   // (pools_mu once for all of them)
 bool pools_mirrored();   // (vk_memory.cpp mirror_on: the buffer pools have VRAM mirrors)
 bool memory_sparse_wait(VkSemaphoreSubmitInfo* w);   // (vk_memory.cpp, RX_VK_MIRROR_SPARSE: a submission's wait for the sparse binds; dev.present_mu held)
 uint64_t memory_capture_view();          // (bumped when a capture is published or any page is stamped)
 uint32_t memory_page_stamp(uint64_t gpu); // (that address's page only)
 uint64_t gpu_pool_end(uint64_t gpu);   // (hookshot) where the memory pool holding that address ends, 0: in none (vk_memory.cpp)
 uint64_t gpu_pool_start(uint64_t gpu); // (EvilOOT) and where it begins
+uint64_t gpu_pool_piece(uint64_t gpu, uint64_t n, bool& in_pool);   // (hookshot) how much of a range from gpu one import can hold (vk_memory.cpp)
 bool create_buffer_cached(uint64_t size, VkBufferUsageFlags usage, VkBuffer& buffer, VmaAllocation& allocation,
                           void** mapped, bool dedicated = false);   // (vk_vma.cpp: cached host memory, mapped)
 void flush_mapped(VmaAllocation allocation, uint64_t size);
 bool host_cached(VmaAllocation allocation);   // (its memory type has VK_MEMORY_PROPERTY_HOST_CACHED_BIT)
+bool host_coherent(VmaAllocation allocation);   // (its memory type has VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
 void flush_mapped_range(VmaAllocation allocation, uint64_t offset, uint64_t size);
 void invalidate_mapped(VmaAllocation allocation, uint64_t size);   // (the CPU is to read what the GPU wrote: a no-op in coherent memory)
 bool flush_mapped_checked(VmaAllocation allocation, uint64_t size);
@@ -329,6 +347,41 @@ void memory_drop_shadow(uint64_t guest, uint64_t size);   // (a write the captur
 /// when any write-back ever did
 uint64_t memory_writeback_value(uint64_t guest, uint64_t size, bool* ever, uint64_t* part = nullptr, uint64_t* whole = nullptr);
 void memory_note_readback(uint64_t guest, uint64_t size);   // (PR 430) a CPU read of GPU results: see memory_rb_refresh
+bool texture_storage_any(uint64_t gpu, uint64_t size);   // (vk_replay.cpp) a texture the game made has its storage there
+bool replay_render_thread_on();   // (vk_replay.cpp) the replay runs on the render thread (RX_VK_ASYNC, Threaded rendering)
+// (hookshot, diagnostics) RX_VK_LOG_RB_WRITERS=1: what wrote the pages a readback waits for. The replay says what it is recording
+// (memory_writer_note: the op, kRbWriterUb for the uniform updates written at a recording's end, a program's key for a storage
+// buffer it writes) and counts its draws and dispatches (memory_count_work); every page a write-back is noted for keeps the
+// first and the last such writer of its newest submission. memory_rb_writers: those of a range (false: none known)
+constexpr uint32_t kRbWriterUb = 0x10000, kRbWriterWb = 0x10001;
+struct RbWriter {
+    uint64_t value = 0, part = 0, work = 0, key = 0;
+    uint32_t what = 0;
+};
+bool rb_writers_on();
+void memory_writer_note(uint32_t what, uint64_t key);
+void memory_writer_key(uint64_t key);   // (the program of the draw or dispatch noted: its key)
+void memory_count_work();
+uint64_t memory_work_count();
+bool memory_rb_writers(uint64_t guest, uint64_t size, RbWriter& first, RbWriter& last, int* pages);
+// (hookshot) RX_VK_READBACK_EARLY=1 (opt-in): a CPU read of pages the GPU wrote in place (no mirror: the Steam Deck) waits for the
+// part their last writer was recorded in, not for the whole submission. The ranges whose reads waited are noted
+// (memory_rb_waited); a GPU write in place to them keeps its part (early_in_place_write, note_direct_write's) and asks for that
+// part to end right after it (memory_split_wanted; memory_rb_waited_range for a uniform update the stream makes).
+// memory_in_place_writer_part: that part, when the newest write in place it knows is the range's newest (whole), else 0
+bool readback_early_on();
+/// (RX_VK_LOG_EARLY_CHECK, vk_replay.cpp: log only) a GPU write in place the replay records now (kind 0 a binding, a copy or clear;
+/// 1 over 1 MiB; 2 a bare or wide storage range); the pages the soft write watch reported (full: memory_collect_written's, begun as
+/// collection gen, from early_check_collect_begin: 0 when the check is off)
+void early_check_gpu_write(uint64_t lo, uint64_t hi, uint64_t value, uint64_t part, int kind);
+void early_check_cpu_pages(const uint32_t* pages, int64_t n, bool full, uint32_t gen);
+uint32_t early_check_collect_begin();
+void early_in_place_write(uint64_t lo, uint64_t hi, uint64_t value);
+uint64_t memory_in_place_writer_part(uint64_t guest, uint64_t size, uint64_t whole);
+void memory_rb_waited(uint64_t guest, uint64_t size);
+bool memory_rb_waited_range(uint64_t guest, uint64_t size);
+bool memory_split_wanted();
+bool memory_readback_early_active();   // (a read of pages written in place has waited: the tracking is in use)
 void memory_note_cpu_read(uint64_t guest, uint64_t size);   // (invalidate) a CPU read: a large binding over it keeps its write-back
 void memory_note_cpu_access(uint64_t guest, uint64_t size, bool write);   // (and a CPU write a mirror sync copies: wb_learn.h)
 bool memory_wb_followed(uint64_t lo, uint64_t hi);   // (whether a large binding wb_learn.h follows overlaps [lo, hi))
@@ -337,11 +390,25 @@ void memory_rb_recording_begun();   // (hookshot) at a recording's start, on its
 void memory_rb_segments_begin(uint64_t base, uint64_t n);   // (and a parallel replay's segments: their order, base on)
 /// (hookshot) a range a program may write in the mirror that is not bound as written (not copied back): memory_rb_refresh
 void memory_note_gpu_write(uint64_t gpu, uint64_t size);
+/// (hookshot, RX_VK_UB_SNAPSHOT's guard, vk_memory.cpp) the GPU writes this thread's recordings have noted that guest memory
+/// may not have yet: the submission being recorded's, in all its parts, and earlier submissions' until the GPU has done them.
+/// Begun at a submission's start (not at a part's); asked by uniform_range for a uniform range (0 none, 1 in the submission
+/// being recorded, 2 in an earlier one the GPU has not done)
+void memory_gpu_writes_begin();
+int memory_gpu_written(uint64_t guest, uint64_t size);
+bool memory_gpu_writes_any();
+/// (vk_draw.cpp) whether uniform buffers are copied into the stream as submitted (RX_VK_UB_SNAPSHOT; every Intel GPU)
+bool uniform_snapshot_on();
 /// (vk_replay.cpp) The GPU's progress on the recordings' timeline, and a wait for it to reach v
 uint64_t vk_timeline_completed();
+bool vk_timeline_wait_for(uint64_t v, uint32_t ms);   // (vk_replay.cpp, Mako 4.2: vk_timeline_wait for ms at most; whether v is done)
 /// A future submission completion covering images retired during replay; zero: no safe value.
 uint64_t vk_retirement_value();
 void vk_timeline_wait(uint64_t v);
+/// (vk_replay.cpp) Waits (at most timeout_ns) for one part of a submission recorded so far (Recording::part, as memory_recording_part
+/// gives it) to be done on the GPU: 1 when it is, 0 when the wait ran out, -1 when that part cannot be waited for (the recordings
+/// have no timeline of their own, RX_VK_PER_QUEUE_FENCES=0, no part number, or the part is not known)
+int vk_part_wait(uint64_t part, uint64_t timeout_ns);
 uint32_t memory_generation();
 /// 1: a page of [guest, guest + size) was written after generation gen; 0: none was
 bool memory_written_since(uint64_t guest, uint64_t size, uint32_t gen);
@@ -387,6 +454,8 @@ void image_compact_ignore(size_t i);
 /// the last one; then *freed_bytes and *freed_blocks say what went back to the driver in all
 bool image_compact_pass_end(uint64_t* freed_bytes, uint32_t* freed_blocks);
 void destroy_image(VkImage image, VmaAllocation allocation);
+/// (Mako 4.2) fn on the thread that destroys images, in order (vk_vma.cpp): a driver call the render thread need not wait for
+void reap(std::function<void()> fn);
 /// What an allocation really takes (VkMemoryRequirements.size: padding, alignment, the driver's metadata), 0 for none
 uint64_t allocation_size(VmaAllocation allocation);
 /// (dedicated: its own memory object, not a share of a 64 MB block: for the 16 to 32 MB ones that fit two to a block and leave
@@ -405,6 +474,12 @@ void destroy_sparse_buffer(VkBuffer buffer);
 /// device-local heaps; false when unknown
 bool vram_usage(uint64_t* used, uint64_t* budget, uint64_t* block_free = nullptr);
 extern uint64_t ballast_held;   // (Mako tests, RX_VK_BALLAST_MB: the card's memory held to play a smaller card; 0 otherwise)
+/// (vk_memory.cpp) the largest device-local heap's size: the card's video memory (0: none)
+uint64_t device_vram_bytes();
+/// (a test: RX_VK_TEST_VRAM_MB=<n> takes the card's VRAM as at most n MB wherever the renderer sizes something by it: the
+/// texture pool's blocks at the start, the mirrors' budget, the texture budget's rule, the auto settings. With RX_VK_TEST_ALLOWED_MB a
+/// large card plays a small one's whole policy. Unset: the card's own)
+uint64_t test_vram_bytes(uint64_t heap);
 /// vram_usage asked of the driver now (VMA asks again for a new frame index), for the status line; false when the driver
 /// gives no budget (VK_EXT_memory_budget): used is then the game's own allocations
 bool vram_usage_now(uint64_t* used, uint64_t* budget);
@@ -465,7 +540,13 @@ void prepare_guess(size_t out[3]);   // (the three parts' counts from the files,
 /// what is done kept (the program cache, the driver's) and not counted as a start that ended inside them
 void prepare_stop();
 bool prepare_stopped();
+/// (hookshot, vk_draw.cpp) The pipeline cache is being written out before the game (precompile_warm, a GB and more): every
+/// pipeline is counted by then, and the start-up screen says what it waits on
+bool prepare_saving();
 int driver_faults();   // (hookshot, vk_draw.cpp) the driver faults the pipeline compiles caught so far (guarded_graphics, guarded_compute)
+/// (hookshot, vk_draw.cpp) the pipelines the driver refused for want of memory so far (VK_ERROR_OUT_OF_DEVICE_MEMORY or
+/// _HOST_MEMORY): texture_frame gives textures up when it grows
+extern std::atomic<int64_t> st_driver_out_of_memory;
 void prepare_left_workers_note();   // (hookshot, vk_draw.cpp) predict_run or precompile_run left workers inside the driver
 bool prepare_left_workers();
 void fill_replay_table(MkwVkRenderer& t);     // vk_replay.cpp

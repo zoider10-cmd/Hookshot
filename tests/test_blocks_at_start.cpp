@@ -24,16 +24,22 @@ uint64_t held(uint64_t allowed, uint64_t other, uint64_t textures, uint64_t at_s
 
 int main() {
     using namespace vram_compact;
-    // 15% of the card's memory in 128 MB blocks, 2 to 24: the same rule for every vendor (the stall it removes was measured on an
-    // AMD card; nothing here asks which card it is)
-    const struct { uint64_t gb, blocks; } cards[] = {{2, 2}, {4, 4}, {6, 7}, {8, 9}, {12, 14}, {16, 19}, {24, 24}, {32, 24}};
+    // 8% (2 to 12 blocks) below 8 GB to limit pinned preallocs, 15% (2 to 24 blocks) at >= 8 GB
+    const struct { uint64_t gb, blocks; } cards[] = {{2, 2}, {4, 2}, {6, 3}, {8, 9}, {12, 14}, {16, 19}, {24, 24}, {32, 24}};
     for (const auto& c : cards) {
-        CHECK(blocks_at_start(c.gb * GB, kBlock, true) == c.blocks);
+        CHECK(blocks_at_start(c.gb * GB, kBlock, true, false) == c.blocks);
         // and none in a pool the sampled textures are not made in: nothing would fill them
-        CHECK(blocks_at_start(c.gb * GB, kBlock, false) == 0);
+        CHECK(blocks_at_start(c.gb * GB, kBlock, false, false) == 0);
+        // nor on an integrated GPU, whose heap is the PC's RAM: VMA would keep them for the whole run
+        CHECK(blocks_at_start(c.gb * GB, kBlock, true, true) == 0);
     }
-    CHECK(blocks_at_start(8 * GB, 32 * MB, true) == 24);    // (RX_VK_IMAGE_BLOCK_MB=32: #2690's first table)
-    CHECK(blocks_at_start(8 * GB, 0, true) == 0);
+    CHECK(blocks_at_start(8 * GB, 32 * MB, true, false) == 24);    // (RX_VK_IMAGE_BLOCK_MB=32: #2690's first table)
+    CHECK(blocks_at_start(8 * GB, 0, true, false) == 0);
+    // a UHD Graphics with 16 GB of RAM: its driver reports about 8 GB, five blocks (640 MB) on a dedicated card's < 8 GB rule,
+    // and zero on an integrated GPU
+    CHECK(blocks_at_start(8061 * MB, kBlock, true, false) == 5);
+    CHECK(blocks_at_start(8061 * MB, kBlock, true, true) == 0);
+    CHECK(kept_only(1152 * MB, 9 * kBlock) && !kept_only(1152 * MB, 0));
     // what a run can give back: not what the blocks made at the start hold free
     CHECK(returnable(1152 * MB, 900 * MB, 1152 * MB) == 0);              // (nine blocks, 252 MB of textures: all nine are kept)
     CHECK(returnable(2560 * MB, 700 * MB, 1152 * MB) == 700 * MB);       // (twenty blocks: eleven can go, 700 MB is free)
@@ -44,6 +50,14 @@ int main() {
     CHECK(kept_only(1152 * MB, 1152 * MB));
     CHECK(!kept_only(1280 * MB, 1152 * MB));    // (a tenth block: a run can give it back)
     CHECK(!kept_only(0, 0) && !kept_only(256 * MB, 0));   // (none made at the start: the rule as before)
+    // the line the driver's count is held under: a dedicated card's driver pages the excess out, an integrated GPU's has nowhere to
+    CHECK(count_line_pct(false) == 97 && count_line_pct(true) == 90);
+    {   // the UHD Graphics at Hyrule Castle: 6717 MB used of 7191 allowed, ten minutes before 7.5 GB and the fault in igvk64.dll
+        const uint64_t allowed = 7191 * MB, used = 6717 * MB;
+        CHECK(used <= allowed / 100 * count_line_pct(false));   // (a dedicated card's line: nothing given up)
+        CHECK(used > allowed / 100 * count_line_pct(true));     // (an integrated GPU's: the textures give up the excess)
+        CHECK((used - allowed / 100 * count_line_pct(true)) / MB == 245);
+    }
     // #2690, an 8 GB card in Castle Town Market: about 7000 MB allowed, 3700 MB of render targets, mirrors and buffers, and
     // 2300 MB of textures wanted. With the nine blocks in a pool no texture is made in, the hold leaves the textures 1098 MB;
     // in the textures' pool, what it leaves without any block made at the start
@@ -56,11 +70,12 @@ int main() {
             // (in a pool no texture is made in, the hold cuts by the blocks' size wherever it cuts at all)
             const uint64_t wrong = held(allowed, other, textures, c.blocks, false);
             CHECK(wrong <= none);
-            if (none < 6144 * MB) CHECK(none - wrong == std::min(none, c.blocks * kBlock));
+            if (none < 6144 * MB && allowed >= GLOBAL_MIN_GRAPHICS_REQ && wrong > texture_min_floor(allowed))
+                CHECK(none - wrong == std::min(none, c.blocks * kBlock));
         }
     }
-    CHECK(held(7000 * MB, 3700 * MB, 2300 * MB, 0, true) == 2250 * MB);
-    CHECK(held(7000 * MB, 3700 * MB, 2300 * MB, 9, true) == 2250 * MB);
-    CHECK(held(7000 * MB, 3700 * MB, 2300 * MB, 9, false) == 1098 * MB);
+    CHECK(held(7000 * MB, 3700 * MB, 2300 * MB, 0, true) == 2300 * MB - 50 * MB / 4);
+    CHECK(held(7000 * MB, 3700 * MB, 2300 * MB, 9, true) == 2300 * MB - 50 * MB / 4);
+    CHECK(held(7000 * MB, 3700 * MB, 2300 * MB, 9, false) == 2300 * MB - 1202 * MB / 4);
     std::printf("PASS\n");
 }

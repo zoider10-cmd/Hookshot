@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-13 | game v3.0.0-rc.3-26-g3fb77017 (fix/input-script-background 3fb77017) | Windows 11 Pro 26300, a window that never takes focus (`-Window`) | RTX 3080 10 GB, 621.14 | i9-12900K, 64 GB | Default; `HOS_INPUT_SCRIPT_BACKGROUND=1`, `HOS_INPUT_LIVE`, `HOS_SKIP_OPENING=1`, no `HOS_INPUT_EXCLUSIVE` | The test save, in play, the window behind others; the user pressed Enter in other windows and typed in a chat | 0 pauses in the log, Link didn't move: the player's keyboard stays out behind another window (run pr) |

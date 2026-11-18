@@ -64,6 +64,7 @@ static LONG64 InterlockedCompareExchange64(volatile LONG64 *p, LONG64 x, LONG64 
 static int video_log(void) { return 0; }
 static void hos_log(const char *f, ...) { (void)f; }
 static int64_t clock_ns = 0;
+static int64_t movie_totals[5];   /* (nn_video.c's: the performance summary's counts) */
 static int64_t hos_now_ns(void) { return clock_ns; }
 static void *hos_guest_range(uint64_t a, uint64_t n) { (void)a, (void)n; return NULL; }
 static int hos_vcore_away(void) { return 0; }

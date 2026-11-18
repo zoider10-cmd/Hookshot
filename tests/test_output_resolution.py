@@ -33,6 +33,7 @@ def main():
 using DWORD = unsigned long;
 constexpr int MAX_PATH = 260;
 DWORD hos_game_path_a(char *path, int size) { return snprintf(path, size, "./hookshot.exe"); }
+const char *hos_options_file() { return "./hookshot_options.ini"; }   // (host/options_path.c: the user folder's)
 void hos_log(const char *, ...) {}
 // (the main screen at boot, for an options file with no output_res=: none known here, so the game's 2560x1440)
 constexpr int SM_CXSCREEN = 0, SM_CYSCREEN = 1;

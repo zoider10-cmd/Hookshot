@@ -124,7 +124,8 @@ int main() {
         using ur::OFF;
         const unsigned menu_min = ur::bit(GAME) | ur::bit(OFF);   // (the menu's mask on a PC with nothing else)
         const unsigned every = menu_min | ur::dlss_bits(true) | ur::bit(ur::FSR3) | ur::fsr4_bits(true);
-        CHECK("Off is the last value", OFF == 6 && ur::kUpscalers == 7);
+        CHECK("Off keeps its saved value, Intel XeSS after it", OFF == 6 && ur::XESS == 7 && ur::XESS_AA == 8 &&
+                                                                   ur::kUpscalers == 9);
         CHECK("Off steps after FSR 4's native AA and wraps to the game's own",
               ur::step_upscaler(ur::FSR4_AA, 1, every) == OFF && ur::step_upscaler(OFF, 1, every) == GAME &&
               ur::step_upscaler(GAME, -1, every) == OFF && ur::step_upscaler(OFF, -1, every) == ur::FSR4_AA);
@@ -156,6 +157,44 @@ int main() {
         CHECK("Off's Render resolution steps its own way", up == OFF && res == 3 && ur::snap_render(OFF, 6) == 6 &&
                                                               ur::snap_render(OFF, 8) == 2);
     }
+    // Intel XeSS and its Native AA (7, 8: after Off, so saved values keep their meaning), where Intel's library loaded
+    {
+        using ur::OFF;
+        using ur::XESS;
+        using ur::XESS_AA;
+        const unsigned menu_min = ur::bit(GAME) | ur::bit(OFF);
+        const unsigned every = menu_min | ur::dlss_bits(true) | ur::bit(ur::FSR3) | ur::fsr4_bits(true) | ur::xess_bits(true);
+        CHECK("xess bits", ur::xess_bits(true) == (ur::bit(XESS) | ur::bit(XESS_AA)) && ur::xess_bits(false) == 0);
+        CHECK("xess steps after Off and wraps", ur::step_upscaler(OFF, 1, every) == XESS &&
+                                                    ur::step_upscaler(XESS, 1, every) == XESS_AA &&
+                                                    ur::step_upscaler(XESS_AA, 1, every) == GAME &&
+                                                    ur::step_upscaler(GAME, -1, every) == XESS_AA);
+        CHECK("a saved XeSS where it cannot run steps as the game's own", ur::step_upscaler(XESS, 1, menu_min) == OFF);
+        CHECK("is_xess", ur::is_xess(XESS) && ur::is_xess(XESS_AA) && !ur::is_xess(OFF) && !ur::is_xess(ur::FSR4) &&
+                             !ur::is_fsr4(XESS) && !ur::is_dlss(XESS_AA));
+        CHECK("xess scales", ur::full_scale(XESS_AA) && !ur::full_scale(XESS) && ur::scales_by_mode(XESS) &&
+                                 !ur::scales_by_mode(XESS_AA) && ur::takes_psychov35(XESS) && ur::takes_psychov35(XESS_AA));
+        CHECK("xess engine", ur::engine(XESS_AA) == XESS && ur::engine(XESS) == XESS && ur::native_of(XESS) == XESS_AA &&
+                                 !ur::render_fixed(XESS_AA) && ur::resolution_fixed(XESS_AA));
+        CHECK("xess by engine", ur::step_engine(ur::FSR4, 1, every) == XESS && ur::step_engine(XESS, 1, every) == OFF &&
+                                    ur::step_engine(OFF, -1, every) == XESS && ur::step_engine(XESS_AA, -1, every) == ur::FSR4_AA &&
+                                    ur::step_engine(ur::FSR4, 1, menu_min | ur::fsr4_bits(true)) == OFF);
+        for (int v = 0; v < 10; v++)
+            CHECK("xess steps as FSR 4", ur::step(XESS, v, 1) == ur::step(ur::FSR4, v, 1) &&
+                                             ur::step(XESS, v, -1) == ur::step(ur::FSR4, v, -1) &&
+                                             ur::snap_render(XESS, v) == ur::snap_render(ur::FSR4, v));
+        int up = 0, res = 0;
+        ur::step_render(XESS, 0, 1, &up, &res);
+        CHECK("xess render: Auto, then Native", up == XESS_AA && res == 0);
+        ur::step_render(XESS_AA, 0, 1, &up, &res);
+        CHECK("xess render: Native, then 92%", up == XESS && res == 9);
+        CHECK("xess mode names", !ur::xess_mode_name(0) && !ur::xess_mode_name(1) &&
+                                     !std::strcmp(ur::xess_mode_name(9), "Ultra Quality Plus") &&
+                                     !std::strcmp(ur::xess_mode_name(3), "Ultra Quality") &&
+                                     !std::strcmp(ur::xess_mode_name(5), "Balanced") &&
+                                     !std::strcmp(ur::xess_mode_name(4), "Balanced") &&
+                                     !std::strcmp(ur::xess_mode_name(6), "Ultra Performance"));
+    }
     CHECK("upscaler fixed where DLSS cannot run", ur::upscaler_fixed(false) && !ur::upscaler_fixed(true));
     CHECK("render resolution fixed at full scale only", ur::resolution_fixed(DLAA) && ur::resolution_fixed(ur::FSR4_AA) &&
                                                              !ur::resolution_fixed(DLSS) && !ur::resolution_fixed(ur::FSR4) &&
@@ -175,6 +214,26 @@ int main() {
                                                 !ur::preset_env("05") && ur::dlss_preset(ur::MODEL_M, "7") == 13 &&
                                                 ur::dlss_preset(ur::MODEL_L, "") == 12);
     CHECK("preset letters", ur::preset_letter(11) == 'K' && ur::preset_letter(13) == 'M' && ur::preset_letter(0) == '0');
+    // (the K row on a card with less than 7 GB of video memory: NVIDIA's CNN, preset E; the row's text and DLSS both ask
+    // cnn_for_vram. 0: the card's memory not known, K)
+    {
+        const uint64_t gb6 = 6ull << 30, gb7 = 7ull << 30, gb8 = 8ull << 30;
+        CHECK("preset E is 5", ur::kPresetE == 5 && ur::preset_letter(ur::kPresetE) == 'E');
+        CHECK("6 GB: the K row draws E", ur::dlss_preset(ur::MODEL_K, nullptr, gb6) == 5 && ur::model_preset(ur::MODEL_K, gb6) == 5 &&
+                                             ur::cnn_for_vram(ur::MODEL_K, gb6) && ur::cnn_for_vram(ur::MODEL_K, gb7 - 1));
+        CHECK("7 GB and more, or not known: K", ur::dlss_preset(ur::MODEL_K, nullptr, gb8) == 11 &&
+                                                    ur::dlss_preset(ur::MODEL_K, nullptr, gb7) == 11 &&
+                                                    ur::dlss_preset(ur::MODEL_K, nullptr, 0) == 11 && !ur::cnn_for_vram(ur::MODEL_K, 0));
+        CHECK("6 GB: M, L and NVIDIA's default as chosen", ur::dlss_preset(ur::MODEL_M, nullptr, gb6) == 13 &&
+                                                               ur::dlss_preset(ur::MODEL_L, nullptr, gb6) == 12 &&
+                                                               ur::dlss_preset(ur::MODEL_DEFAULT, nullptr, gb6) == 0 &&
+                                                               !ur::cnn_for_vram(ur::MODEL_M, gb6) && !ur::cnn_for_vram(ur::MODEL_DEFAULT, gb6));
+        CHECK("6 GB: RX_VK_DLSS_PRESET wins", ur::dlss_preset(ur::MODEL_K, "K", gb6) == 11 && ur::dlss_preset(ur::MODEL_K, "m", gb6) == 13 &&
+                                                  ur::dlss_preset(ur::MODEL_K, "0", gb6) == 0);
+        CHECK("6 GB: a switch that is no preset leaves E", ur::dlss_preset(ur::MODEL_K, "1", gb6) == 5 &&
+                                                               ur::dlss_preset(ur::MODEL_K, "", gb6) == 5 &&
+                                                               ur::dlss_preset(ur::MODEL_K, "05", gb6) == 5);
+    }
     CHECK("model row shown only where DLSS runs", ur::model_shown(true) && !ur::model_shown(false));
     CHECK("model row fixed with the game's own or the switch", ur::model_fixed(GAME, false) && !ur::model_fixed(DLSS, false) &&
                                                                !ur::model_fixed(DLAA, false) && ur::model_fixed(DLSS, true));

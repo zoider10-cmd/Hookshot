@@ -9,8 +9,9 @@
    a file already there (one that cannot move stays, and the log says so). The Vulkan pipeline cache is renamed on the way, from
    mkw-recomp's mkw_vk_pipelines*.bin to hookshot_vk_pipelines*.bin, and what a write of it cut short left (a .tmp) is deleted;
    the button prompts an older build made in prompts/ are deleted, as they are made again in cache/prompts. The build's own files
-   stay where the build put them (image.bin, romfs, hookshot_shaders.bin, the shipped pipeline list, prompts/<face>/, language.txt),
-   and so do the settings (hookshot_options.ini, hookshot_env.txt) and the saves (user/). */
+   stay where the build put them (image.bin, romfs, hookshot_shaders.bin, the shipped pipeline list, prompts/<face>/, texts/, language.txt),
+   and so do the settings (hookshot_options.ini; in the user folder when --user names one: host/options_path.c),
+   hookshot_env.txt and the saves (user/). */
 #include "hos_paths.h"   /* (first: windows.h, host/posix's on Linux) */
 #include <stdio.h>
 #include <string.h>

@@ -4,10 +4,12 @@
 static void hos_input_clear_toggles(void) {}
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef void *HWND;
 typedef void *HRAWINPUT;
 typedef unsigned UINT;
+typedef uint32_t DWORD;
 typedef int BOOL;
 typedef int32_t LONG;
 typedef uintptr_t WPARAM;
@@ -23,7 +25,7 @@ enum {
     WM_KEYDOWN = 0x100, WM_SYSKEYDOWN = 0x104, WM_SYSCHAR = 0x106, WM_APP = 0x8000,
     WM_DPICHANGED = 0x2e0, WM_SETFOCUS = 7, WM_KILLFOCUS = 8, WM_CANCELMODE = 0x1f, WM_SETCURSOR = 0x20,
     WM_MOVE = 3, WM_SIZE = 5, WM_PAINT = 0xf, WM_ERASEBKGND = 0x14, WM_CLOSE = 0x10,
-    VK_ESCAPE = 0x1b, VK_F11 = 0x7a, VK_RETURN = 0xd, HTCLIENT = 1,
+    VK_ESCAPE = 0x1b, VK_F10 = 0x79, VK_F11 = 0x7a, VK_RETURN = 0xd, HTCLIENT = 1,
     VK_SHIFT = 0x10, VK_CONTROL = 0x11, VK_MENU = 0x12,
     SC_SCREENSAVE = 0xf140, SCF_ISSECURE = 1, SPI_GETSCREENSAVESECURE = 0x76,
     SC_CLOSE = 0xf060, SC_MONITORPOWER = 0xf170, SC_MAXIMIZE = 0xf030,
@@ -61,6 +63,10 @@ static ULONGLONG tick = 100000;
 static int awake_calls;
 static EXECUTION_STATE awake_flags;
 ULONGLONG GetTickCount64(void) { return tick; }
+/* The complete window procedure also polls monitor metadata. No display or preference is accessed here. */
+static DWORD __attribute__((unused)) GetTickCount(void) { return (DWORD)tick; }
+static void __attribute__((unused)) hos_monitor_wanted(char out[512]) { out[0] = 0; }
+static void __attribute__((unused)) refresh_monitors(void) {}
 EXECUTION_STATE SetThreadExecutionState(EXECUTION_STATE s) { awake_calls++, awake_flags = s; return 0; }
 BOOL SystemParametersInfoA(UINT action, UINT parameter, void *value, UINT flags) {
     CHECK("only read the secure screen saver policy", action == SPI_GETSCREENSAVESECURE);

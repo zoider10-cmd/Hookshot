@@ -28,26 +28,26 @@ function downloadButtons(body) {
     const links = [...list.matchAll(/- \[([^\]]+)\]\(([^)\s]+)\)/g)];
     const buttons = `<div class="download-buttons">\n${links.map(([, text, url], i) =>
       `<a class="button${i < 2 ? ' primary' : ''}" href="${url}">${text}</a>`).join('\n')}\n</div>\n`;
-    return (links.some(([, , url]) => url.startsWith('/download/launcher/')) ? channelPicker() : '') + buttons;
+    return (links.some(([, , url]) => url.startsWith('/download/launcher/')) ? channelPicker() +
+      '<p class="launcher-version"><span data-launcher-version role="status">Enable JavaScript to see the current launcher version.</span><br>\n' +
+      'This is the launcher\'s own version. The game it builds is numbered as a Hookshot version, separately: the launcher downloads it for you.</p>\n' : '') + buttons;
   });
 }
 
 // The launcher's channels (website/worker/index.ts): the buttons' links name one once a script picks it
 // (lib/launcher-channel.ts). Hidden until then, so without scripts the buttons keep the best channel there is.
-// While there is no stable launcher (v1.0.0 is still a candidate), Stable shows as coming soon and the release
-// candidate is picked: once it is out, drop `soon` and move `picked` to Stable.
+// No channel starts selected: the best-channel download route stays current even if metadata fails.
 export const launcherChannels = [
-  { value: '', name: 'Stable', note: 'For playing.', soon: true },
-  { value: 'rc', name: 'Release candidate', note: 'The next version, to try before it is stable.', picked: true },
+  { value: 'stable', name: 'Stable', note: 'For playing.' },
+  { value: 'rc', name: 'Release candidate', note: 'The next version, to try before it is stable.' },
   { value: 'nightly', name: 'Nightly', note: 'Every change, untested: it may break your saves or settings, so copy them first.' },
 ];
 
 function channelPicker() {
-  const picked = launcherChannels.find(c => c.picked) || launcherChannels.find(c => !c.soon);
   // (a radiogroup, not a fieldset: a legend can't line up in the row of pills)
   return `<div class="launcher-channel" role="radiogroup" aria-labelledby="launcher-channel-label" data-launcher-channel hidden>\n` +
     `<span id="launcher-channel-label">Channel</span>\n${launcherChannels.map(c =>
     `<label><input type="radio" name="launcher-channel" value="${c.value}" data-note="${c.note}"` +
-    `${c === picked ? ' checked' : ''}${c.soon ? ' disabled' : ''}> ${c.name}${c.soon ? ' <small>coming soon</small>' : ''}</label>`).join('\n')}\n` +
-    `<p data-launcher-channel-note>${picked.note}</p>\n</div>\n`;
+    `> ${c.name} <small></small></label>`).join('\n')}\n` +
+    `<p data-launcher-channel-note>The recommended channel is chosen when you download.</p>\n</div>\n`;
 }

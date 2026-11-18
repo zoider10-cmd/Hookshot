@@ -1,7 +1,8 @@
 """The control bridge (host/control.c) against a fake game, over its real transport: tests/control_test.c is built with
 host/control.c (HOS_CONTROL_NO_GAME: no game behind it) and drives it as a client. Valid commands, malformed JSON, unknown
 commands, oversized lines, clients that disconnect mid-command or never read, too many clients, the socket's mode, a file
-in the way (Linux) or the pipe's name and DACL (Windows), quit, and guest memory at each HOS_CONTROL_MEM level. Linux
+in the way (Linux) or the pipe's name and DACL (Windows), quit, relaunch (refused by a game that cannot, and the
+socket let go of before the game's relaunch runs), and guest memory at each HOS_CONTROL_MEM level. Linux
 drives the Unix socket, Windows the named pipe.
 
 python -I -B tests/test_control.py [--cc gcc] [--source-root OTHER_CHECKOUT]
@@ -35,13 +36,16 @@ def main():
                         "-D_GNU_SOURCE", "-D_CRT_SECURE_NO_WARNINGS", "-DHOS_CONTROL_NO_GAME", "-I", str(a.source_root / "host"),
                         str(ROOT / "tests" / "control_test.c"), str(a.source_root / "host" / "control.c"), "-o", exe]
                        + warnings + libs, check=True)
-        # (the general cases, quit, the level unit, and the memory cases at each HOS_CONTROL_MEM level)
-        runs = [([], None), (["quit"], None), (["level"], None),
+        # (the general cases, quit, relaunch, the level unit, and the memory cases at each HOS_CONTROL_MEM level)
+        runs = [([], None), (["quit"], None), (["relaunch"], None), (["level"], None),
                 (["mem"], None), (["mem"], "ro"), (["mem"], "rw"), (["mem"], "bogus")]
+        if windows:
+            runs.append((["peersid"], None))   # (HOS_CONTROL_PEER_SID's check)
         for case, mem in runs:
             folder = tempfile.mkdtemp(dir=tmp)
             env = dict(os.environ)
             env.pop("HOS_CONTROL_MEM", None)
+            env.pop("HOS_CONTROL_PEER_SID", None)
             if mem is not None:
                 env["HOS_CONTROL_MEM"] = mem
             r = subprocess.run([exe, folder] + case, capture_output=True, text=True, timeout=180, env=env)

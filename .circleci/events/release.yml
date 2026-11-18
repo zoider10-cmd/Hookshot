@@ -1,0 +1,55 @@
+# Release tag v* workflow: the core checks and the Windows checks (Wine/PE files, Vulkan back end) pass before anything is built, signed or published. Docs: docs/ci.md.
+workflows:
+  release:
+    jobs:
+      - lint:
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - third-party:
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - test-linux:
+          requires: [lint]
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - builder-cli:
+          requires: [lint]
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - spirv-fixtures:
+          requires: [lint]
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - windows-builder:
+          requires: [lint, builder-cli]
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - windows-vulkan:
+          requires: [lint, spirv-fixtures]
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - release-version:
+          requires: [lint, third-party, test-linux, builder-cli, spirv-fixtures, windows-builder, windows-vulkan]
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - release-linux:
+          requires: [release-version]
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - release-windows:
+          requires: [release-version]
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - release-stage:
+          requires: [release-linux, release-windows]
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - mb/release-sign:
+          name: release-sign
+          context: release-signing
+          workspace: .
+          dry-run: << pipeline.parameters.release_dry_run >>
+          requires: [release-stage]
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - mb/release-publish:
+          name: release-publish
+          context: forgejo-bot
+          serial-group: << pipeline.project.slug >>/release
+          tag: << pipeline.git.tag >>
+          workspace: .
+          dry-run: << pipeline.parameters.release_dry_run >>
+          requires: [release-sign]
+          filters: (pipeline.git.tag or "") starts-with "v"
+      - mb/gate:
+          name: gate
+          requires: [release-publish]
+          filters: (pipeline.git.tag or "") starts-with "v"

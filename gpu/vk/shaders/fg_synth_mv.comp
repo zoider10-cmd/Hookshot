@@ -1,0 +1,34 @@
+#version 450
+// (Mako 4.2) an in-between frame at time t from the game's own motion (the temporal chain's: the camera from the scene depth and
+// the skinned draws' own, in render pixels toward the frame before, vk_fsr3_inputs.h), not a block search on the picture. The
+// search saw 32 pixels at most and blended where it lost the motion: a roll or a fast camera turn came out as a motion blur.
+// Where the two frames agree the pixel stands still (the HUD, a wall): their plain blend. Elsewhere each pixel takes the last
+// frame back along t of its motion and the new frame forward along 1 - t; where those two disagree (the HUD over a moving
+// scene, what the motion does not hold: particles, transparent water) the nearer frame as it is, sharp, never a blend.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D fa;
+layout(binding = 1) uniform sampler2D fb;
+layout(binding = 2) uniform sampler2D motion;
+layout(binding = 3, rgba8) uniform writeonly image2D dst;
+layout(push_constant) uniform P { float t; } pc;
+float gap(vec3 x, vec3 y) { const vec3 d = abs(x - y); return max(d.r, max(d.g, d.b)); }
+void main() {
+    const ivec2 g = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 d = imageSize(dst);
+    if (any(greaterThanEqual(g, d))) return;
+    const float t = pc.t;
+    const vec3 a0 = texelFetch(fa, g, 0).rgb, b0 = texelFetch(fb, g, 0).rgb;
+    // (Mako 4.2: never a blend of the two frames, seen as a motion blur from the title screen on: the nearer one, sharp)
+    const vec3 near = t <= 0.5 ? a0 : b0;
+    const vec3 still = near;
+    const float moved = smoothstep(0.03, 0.09, gap(a0, b0));
+    if (moved <= 0.0) { imageStore(dst, g, vec4(still, 1.0)); return; }
+    const vec2 size = vec2(d);
+    const vec2 p = vec2(g) + 0.5;
+    // (the motion of what is here: render pixels toward the frame before, as display pixels from the frame before to this one)
+    const vec2 v = -textureLod(motion, p / size, 0.0).xy / vec2(textureSize(motion, 0)) * size;
+    const vec3 a = texelFetch(fa, clamp(ivec2(floor(p - t * v)), ivec2(0), d - 1), 0).rgb;
+    const vec3 b = texelFetch(fb, clamp(ivec2(floor(p + (1.0 - t) * v)), ivec2(0), d - 1), 0).rgb;
+    const float agree = 1.0 - smoothstep(0.06, 0.18, gap(a, b));
+    imageStore(dst, g, vec4(mix(near, t <= 0.5 ? a : b, step(0.5, moved * agree)), 1.0));
+}

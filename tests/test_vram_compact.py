@@ -8,20 +8,13 @@ import argparse
 import subprocess
 import tempfile
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: python -I leaves this folder off the path)
+from srccut import block   # noqa: E402
 
 RUN_ALL_ARGS = ["--cxx", "g++"]
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def block(text, marker):
-    start = text.index(marker)
-    end = text.index("{", start) + 1
-    depth = 1
-    while depth:
-        depth += (text[end] == "{") - (text[end] == "}")
-        end += 1
-    return text[start:end]
 
 
 def need(where, text, needles):
@@ -50,7 +43,7 @@ def check_source():
         raise SystemExit("vk_texture.cpp: the dead list is no longer held while a compaction pass is open")
     need("vk_texture.cpp: texture_frame()", frame,
          ["vram_compact::reclaimable(block_free, pool_free)", "vram_compact::pressed(used, allowed)",
-          "vram_compact::held_budget(budget, total_bytes, used, reclaim, allowed, pct)", 'getenv("RX_VK_COMPACT_PCT")',
+          "vram_compact::held_budget(budget, total_bytes, used, reclaim, allowed, pct, active_floor)", 'getenv("RX_VK_COMPACT_PCT")',
           # (the hold lets go of the excess alone, not of an eighth of the cache; the driver's limit still asks for 7/8)
           "if (held < budget) budget = evict_to = held;",
           # (the hold's pass: every dead render target, and live textures only for the excess left and only long unused ones;
@@ -73,7 +66,7 @@ def check_source():
           "if (to == UINT64_MAX || vram_compact::hold_met(total_bytes, hold_live, hold_dead, to)) continue;",
           # (the reserve: a lower line that sets the budget too, the hold's own line kept for the textures not long unused;
           # the driver's limit, when it asks for more, clears both)
-          "hold_to = evict_to;", "vram_compact::reserve_pct(pct));", "if (reserve < budget) budget = evict_to = reserve;",
+          "hold_to = evict_to;", "vram_compact::reserve_pct(pct), active_floor);", "if (reserve < budget) budget = evict_to = reserve;",
           "if (budget < evict_to) evict_to = hold_to = 0;",
           "if (by_hold && !overwritten) hold_live += tex->bytes + tex->pad;"])
     # (and a live texture is judged by the hold only once it is known whether a render target drew over it)

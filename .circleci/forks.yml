@@ -1,0 +1,30 @@
+# Fork doorbell and stale approval sweep (magicbeandev/ci). Docs: docs/ci.md.
+version: 2.1
+setup: true
+parameters:
+  stale_sweep: {type: boolean, default: false}
+orbs:
+  # ORB_INLINE_START
+  mb: magicbeandev/ci@0.1.2
+  # ORB_INLINE_END
+workflows:
+  fork-doorbell:
+    when:
+      and:
+        - equal: [custom_webhook, << pipeline.event.name >>]
+        - equal: [false, << pipeline.parameters.stale_sweep >>]
+    jobs:
+      - mb/fork-doorbell:
+          repo: "<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>"
+          webhook-body: << pipeline.trigger_parameters.webhook.body >>
+          context: forgejo-bot
+  fork-stale:
+    when:
+      and:
+        - equal: [schedule, << pipeline.event.name >>]
+        - equal: [true, << pipeline.parameters.stale_sweep >>]
+    jobs:
+      - mb/fork-stale:
+          repo: "<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>"
+          days: 14
+          context: forgejo-bot

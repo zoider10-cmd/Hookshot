@@ -1,7 +1,7 @@
-/* Which renderer the rx_* calls go to (gpu/vk/vk_api.h): the WebGPU one in the executable (gpu/render, its
-   functions renamed wgr_* by rx_wgpu_names.h) or, unset or RX_BACKEND=vulkan, the Vulkan one in hookshot_vk.dll
-   (hookshot_vk.so) beside the executable. Decided at rx_start, before any other rx_* call; a DLL that is missing or finds no usable Vulkan
-   device leaves the WebGPU renderer in place (logged). */
+/* Where the rx_* calls go (gpu/vk/vk_api.h): the Vulkan back end in hookshot_vk.dll (hookshot_vk.so) beside the
+   executable, the only renderer. Loaded at rx_start, before any other rx_* call; a DLL that is missing or finds no usable
+   Vulkan device leaves the wgr_* stand-ins in place (host/rx_nowgpu.c, host/posix/linux_stubs.c: once the WebGPU
+   renderer's functions, gpu/render, which is built no more), and nothing is drawn (logged). */
 #include "hos.h"
 #include <stdlib.h>
 #include <string.h>
@@ -11,8 +11,12 @@
 #include "../gpu/vk/vk_api.h"
 #include "../gpu/vk/dlss_math.h"
 #include "control.h"
+#include "audio_output_devices.h"
+int hos_monitor_count(void);
+int hos_monitor_info(int index, MkwVkMonitor *out);
+void hos_monitor_select(const char *id);
 
-/* the WebGPU renderer (gpu/render, renamed) */
+/* the stand-ins when there is no Vulkan back end (host/rx_nowgpu.c, host/posix/linux_stubs.c) */
 int wgr_start(void *hwnd);
 void wgr_resize(int width, int height);
 const char *wgr_describe(void);
@@ -58,9 +62,11 @@ int hos_binding(int set, int button, int slot);
 int hos_mic_count(void);            /* nn_audio_in.c: the microphones, for the Insert menu */
 const char *hos_mic_name(int index);
 void hos_mic_select(int mode, const char *name, int index);
+int hos_mic_test(int enabled, int gain, int *levels);
 void hos_bind(int set, int button, int slot, int code);
 int hos_prompts_face(void);         /* prompts.c */
 int hos_prompts_live_parts(void);   /* prompts.c */
+const char *hos_perf_info(char *map, int cap, int64_t movie[5]);   /* hos_main.c: the performance summary's map and movies */
 #if defined(A64_WRITE_TRACK) && !defined(__EMSCRIPTEN__)
 void hos_mark_written(const void *p, size_t n);
 #endif
@@ -174,6 +180,8 @@ int hos_sdl_desktop_size(int *width, int *height);   /* hos_sdl.c */
 #endif
 /* (hookshot) the main screen's size, as host/hos_main.c takes its shape (MkwVkHost.screen_size) */
 static int host_screen_size(int *width, int *height) {
+    int hos_monitor_screen_size(int *, int *);
+    if (hos_monitor_screen_size(width, height)) return 1;
 #ifdef _WIN32
     const int w = GetSystemMetrics(SM_CXSCREEN), h = GetSystemMetrics(SM_CYSCREEN);
     if (w <= 0 || h <= 0) return 0;
@@ -190,12 +198,18 @@ static float host_wide_menus(uint32_t keep_mask) {   /* (MkwVkHost.wide_menus) *
     static int looked;
     if (!looked) looked = 1, forced = getenv("HOS_WIDE_KEEP");
     hos_wide_keep_mask = forced ? (uint32_t)strtoul(forced, NULL, 16) : keep_mask;
+    extern volatile float hos_wide_ratio;   /* (narrower than 16:9: the menus fit its width whatever the Ultrawide menus row says,
+                                               never stretched up and down; the row is about wider screens) */
+    if (!forced && hos_wide_ratio > 0.0f && hos_wide_ratio < 16.0f / 9.0f * 0.999f) hos_wide_keep_mask &= ~2u;
+    void hos_wide_ui_tick(void);   /* (hos_wide_ui.c: the HUD's layout for the picture's shape, each present) */
+    hos_wide_ui_tick();
     return hos_wide_margin;
 }
 int hos_mouse_pointer(MkwVkPointer *out);   /* display.c, posix/display_sdl.c */
 int hos_sdl_gyro_status(void);   /* pad_sdl.c */
 extern const char *hos_romfs_dir;   /* nn_fs.c, set by hos_main.c */
 static const char *host_romfs_dir(void) { return hos_romfs_dir; }
+const char *hos_options_file(void);   /* options_path.c */
 
 #ifdef _WIN32
 static unsigned char menu_key_press[256];
@@ -217,6 +231,9 @@ extern volatile int64_t hos_poll_slept_ns, hos_acquire_slept_ns;
 extern volatile int hos_fps_timing;
 static void host_fps_timing(int on) { __atomic_store_n(&hos_fps_timing, on != 0, __ATOMIC_RELAXED); }
 int hos_thread_times_of(const char *name, int64_t out[3]);   /* (hos_thread.c) */
+static int host_main_thread_times(int64_t out[3]) { return hos_thread_times_of("sead::MainThread", out); }
+/* (version 28, issue 1280) the renderer's C++ allocations that its new_handler gave up on: the size is not known there */
+static void host_out_of_memory(const char *what) { hos_alloc_gave_up(0, what); }
 static void host_slept_ns(int64_t out[2]) {
     out[0] = __atomic_load_n(&hos_poll_slept_ns, __ATOMIC_RELAXED);
     out[1] = hos_slept_ns[1] + __atomic_load_n(&hos_acquire_slept_ns, __ATOMIC_RELAXED);
@@ -275,7 +292,10 @@ static const MkwVkHost vk_host = {
     host_watch_guest_writes, hos_pad_raw, hos_binding, hos_bind, host_aspect_ratio, host_take_key_press,
     hos_mouse_pointer, hos_mic_count, hos_mic_name, hos_mic_select, hos_sdl_gyro_status, hos_log_flush, hos_prompts_face,
     host_romfs_dir, host_wide_menus, host_slept_ns, host_fps_timing, hos_prompts_live_parts, host_screen_size,
-    host_take_text,
+    host_take_text, hos_options_file,
+    hos_audio_output_count, hos_audio_output_info, hos_audio_output_select, hos_audio_output_state,
+    hos_mic_test, hos_perf_info, host_main_thread_times, host_out_of_memory,
+    hos_monitor_count, hos_monitor_info, hos_monitor_select,
 };
 
 static const MkwVkRenderer *vk;   /* the Vulkan back end, when it was chosen and started */
@@ -285,7 +305,7 @@ static HMODULE vk_module;   /* (the last back end loaded: rx_close_asked) */
    first): those calls are kept here and given to the renderer rx_start chose, in order. Without that the Vulkan back
    end never knew the first ~0x60 texture slots, and lit geometry sampled them as its black dummy.
    The texels the game writes then (WriteTexels) are kept too, with a copy of their data: without a renderer they went
-   nowhere (Linux has no WebGPU renderer to take them), and a texture filled so at boot kept zeros in its storage. OoT's
+   nowhere (no WebGPU renderer to take them), and a texture filled so at boot kept zeros in its storage. OoT's
    4x4 white placeholder is one: bound in place of the ground fog's depth, it read 0 and hid the ground fog at some camera
    angles. That happened when the window's thread started the renderer after the game had begun (windowed, not headless). */
 typedef struct {
@@ -351,55 +371,55 @@ static const MkwVkRenderer *load_vulkan(const char *dll) {
     HMODULE m = LoadLibraryA(path);
     if (!m) {
 #ifdef _WIN32
-        hos_log("rx: RX_BACKEND=vulkan, but %s did not load (%lu): WebGPU", path, GetLastError());
+        hos_log("rx: %s did not load (%lu): nothing is drawn", path, GetLastError());
 #else   /* (why, as dlerror() said: a missing file, a glibc too old, a wrong ELF class. The line names the file
            LoadLibraryA opened, hookshot_vk.so, and drops dlerror()'s leading "<that file>: ", so the path, home folder
-           included, is in it once. Linux has no WebGPU: wgr_start draws nothing) */
+           included, is in it once. wgr_start draws nothing) */
         char *ext = strrchr(path, '.');
         if (ext && !strcmp(ext, ".dll")) strcpy(ext, ".so");
         const char *why = hos_load_error();
         const size_t n_path = strlen(path);
         if (!strncmp(why, path, n_path) && !strncmp(why + n_path, ": ", 2)) why += n_path + 2;
-        hos_log("rx: RX_BACKEND=vulkan, but %s did not load (%s): nothing is drawn", path, why);
+        hos_log("rx: %s did not load (%s): nothing is drawn", path, why);
 #endif
         return NULL;
     }
     vk_module = m;
     mkwvk_init_fn init = (mkwvk_init_fn)(void *)GetProcAddress(m, "mkwvk_init");
     if (!init) {
-        hos_log("rx: %s has no mkwvk_init: WebGPU", path);
+        hos_log("rx: %s has no mkwvk_init: nothing is drawn", path);
         return NULL;
     }
     const MkwVkRenderer *r = init(&vk_host);
     if (!r) {
-        hos_log("rx: mkwvk_init returned NULL: WebGPU");
+        hos_log("rx: mkwvk_init returned NULL: nothing is drawn");
         return NULL;
     }
     if (r->version != MKWVK_API_VERSION) {
-        hos_log("rx: mkwvk_init version mismatch (%u vs %u): WebGPU", r->version, MKWVK_API_VERSION);
+        hos_log("rx: mkwvk_init version mismatch (%u vs %u): nothing is drawn", r->version, MKWVK_API_VERSION);
         return NULL;
     }
     return r;
 }
 
 int rx_start(void *hwnd) {
-    const char *b = getenv("RX_BACKEND");
-    if (!b || !_stricmp(b, "vulkan")) {   /* (hookshot: Vulkan unless told otherwise; a started game has no RX_BACKEND) */
-        const char *dll = "hookshot_vk.dll";
-        const MkwVkRenderer *r = load_vulkan(dll);
-        if (!r) {   /* (amd-fix) a graphics patch that does not start: the one it replaced (host/hos_update.c) */
-            r = load_vulkan("hookshot_vk.prev.dll");
-            if (r) hos_log("rx: hookshot_vk.dll did not start: the previous one (hookshot_vk.prev.dll) is used");
-        }
-        if (r && r->start(hwnd)) {
-            vk = r;
-            hos_log("rx: renderer: Vulkan (%s)", dll);
-            flush_early();
-            return 1;
-        }
-        if (r) hos_log("rx: the Vulkan back end could not start on the window: WebGPU");
+    /* (hookshot: Vulkan, the only renderer; RX_BACKEND, which once picked the WebGPU one, is not read) */
+    const char *dll = "hookshot_vk.dll";
+    const MkwVkRenderer *r = load_vulkan(dll);
+    if (!r) {   /* (amd-fix) a graphics patch that does not start: the one it replaced (host/hos_update.c) */
+        r = load_vulkan("hookshot_vk.prev.dll");
+        if (r) hos_log("rx: hookshot_vk.dll did not start: the previous one (hookshot_vk.prev.dll) is used");
     }
+    if (r && r->start(hwnd)) {
+        vk = r;
+        hos_log("rx: renderer: Vulkan (%s)", dll);
+        hos_log("report: renderer Vulkan");   /* (the crash report's renderer: host/hos_crash_dialog.h) */
+        flush_early();
+        return 1;
+    }
+    if (r) hos_log("rx: the Vulkan back end could not start on the window: nothing is drawn");
     const int ok = wgr_start(hwnd);
+    if (ok) hos_log("report: renderer WebGPU (no usable Vulkan device)");
     flush_early();
     return ok;
 }
@@ -412,6 +432,10 @@ int rx_prepare_shaders(void) {
 /* (hookshot) the window is being closed: a back end still preparing its shaders stops and keeps what it made first (a few
    seconds at most). One without the export (an older one) has nothing to keep */
 void rx_close_asked(void) {
+    /* (first, before anything that takes time: the player asked to quit, so however the process ends from here (a second
+       close of a window that stopped answering) the crash window says nothing; a crash still counts: host/hos_crash_dialog.h) */
+    void hos_crash_quit_asked(void);
+    hos_crash_quit_asked();
     if (!vk_module) return;
     void (*close_asked)(void) = (void (*)(void))(void *)GetProcAddress(vk_module, "mkwvk_close_asked");
     if (close_asked) close_asked();
@@ -577,7 +601,7 @@ int rx_guest_imported(uint64_t lo, uint64_t hi) {
 /* (nvn_native.c: the CPU set an event's value) in order with the submits, for the GPU's waits on it */
 int rx_option(int id, int otherwise) { return vk && vk->option ? vk->option(id) : otherwise; }
 void rx_option_set(int id, int value) { if (vk && vk->option_set) vk->option_set(id, value); }
-/* (hookshot) the control bridge (host/control.c): the Vulkan back end's, none with WebGPU (0) */
+/* (hookshot) the control bridge (host/control.c): the Vulkan back end's, none without it (0) */
 int rx_control_frame_info(int64_t *presents, int64_t *draws, int *width, int *height) {
     if (!vk || !vk->frame_info) return 0;
     vk->frame_info(presents, draws, width, height);

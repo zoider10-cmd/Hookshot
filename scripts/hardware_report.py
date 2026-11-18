@@ -2,8 +2,8 @@
 
     python -I scripts/hardware_report.py [--limit 1000] [--state all|open|closed]
 
-Reads MagicBeanDev/Hookshot's issues on git.magicbean.dev through the Forgejo API, signed in as scripts/forge.py is (run
-`python -I scripts/forge.py login` once), and counts the "Graphics card and driver version" and "CPU, RAM and operating
+Reads MagicBeanDev/Hookshot's issues on git.magicbean.dev through the Forgejo API, signed in as forge.py is (MagicBeanDev/Tooling,
+beside this checkout: run `python -I ../Tooling/scripts/forge.py login` once), and counts the "Graphics card and driver version" and "CPU, RAM and operating
 system" answers. It counts reports, not players: hardware where things break shows up more. Standard library only.
 """
 import argparse
@@ -14,7 +14,12 @@ import sys
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import forge  # noqa: E402  (same folder: its signed-in API client and REPO, MagicBeanDev/Hookshot)
+import tooling  # noqa: E402  (same folder; python -I does not add it to the path)
+
+tooling.scripts()
+import forge  # noqa: E402  (Tooling's: its signed-in API client)
+
+forge.REPO = "MagicBeanDev/Hookshot"
 
 
 def issues(state, limit):
@@ -42,8 +47,10 @@ def classify(gpu: str):
                "RTX 30" if re.search(r"rtx ?30\d0", g) else "RTX 20" if re.search(r"rtx ?20\d0", g) else
                "GTX 10/16 (no mesh shaders)" if re.search(r"gtx ?1[06]\d0", g) else "NVIDIA other")
         return "NVIDIA", cls
-    if re.search(r"amd|radeon|\brx ?\d|rdna|780m|680m|890m|860m|8060s|z1|steam deck|legion|ally", g):
-        cls = ("AMD APU / handheld" if re.search(r"780m|680m|890m|860m|8060s|z1|steam deck|legion|ally|apu|vega", g) else
+    # (whole words: "steamdeck" holds "amd", "finally" "ally"; a Deck's Vulkan name is "AMD Custom GPU 0932 (RADV VANGOGH)")
+    handheld = r"\b(780m|680m|890m|860m|8060s|z1|legion|ally)\b|steam ?deck|vangogh|custom gpu 0(405|932)"
+    if re.search(r"\bamd\b|radeon|\brx ?\d|rdna|" + handheld, g):
+        cls = ("AMD APU / handheld" if re.search(handheld + r"|\bapu\b|vega", g) else
                "RX 9000" if re.search(r"9070|9060", g) else "RX 7000" if re.search(r"7900|7800|7700|7600", g) else
                "RX 6000" if re.search(r"6[5-9]\d0|6600|6650|6700|6800|6900", g) else
                "RX 5000 or older (no mesh shaders)" if re.search(r"5[5-7]00|rx ?5[78]0|rx ?4[78]0", g) else "AMD other")
@@ -55,7 +62,7 @@ def classify(gpu: str):
 
 def os_of(text: str) -> str:
     t = text.lower()
-    if re.search(r"linux|ubuntu|arch|fedora|steamos|bazzite|cachy|nixos|mint|pop!?_os|steam deck", t):
+    if re.search(r"linux|ubuntu|arch|fedora|steamos|bazzite|cachy|nixos|mint|pop!?_os|steam ?deck|vangogh", t):
         return "Linux / SteamOS"
     if re.search(r"windows|win ?1[01]", t):
         return "Windows"

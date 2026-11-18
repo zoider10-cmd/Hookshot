@@ -20,6 +20,8 @@ Changes made here after the copy (against Hookshot's first import of it, commit 
   history is Hookshot's: `git log 04407384.. -- third_party/a64-kit`.
 - Hookshot: `tools/toolchain.py` reads `HOOKSHOT_MINGW`, as the rest of Hookshot's build sets it, where Hookshot read
   `HOOKSHOT_MINGW` (marked `(hookshot)`). The `(hookshot)` markers and comments stay as Hookshot wrote them.
+- Hookshot: `lift/a64_lift.py`'s header helpers are all `always_inline` (marked `(hookshot)`): without the module inliner
+  (nx2/build.py `HOOKSHOT_LIGHT_PASSES`) VFPX_HEADER's 7 `a64_v_*` fell out of line, as real calls.
 
 So the copy can no longer be refreshed by copying the files again: a refresh keeps these changes, and the tree-sha256
 below is this folder's, not upstream's (python -I scripts/check_third_party.py).
@@ -27,4 +29,4 @@ below is this folder's, not upstream's (python -I scripts/check_third_party.py).
 Licensing: `lift/suyu/arm64_to_c.h` is suyu's (GPL-2.0-or-later, texts in `lift/suyu/`), so `a64emit.dll`, the
 generated runtime and all lifted C are GPL. See `NOTICE.TOTKPort.md`.
 
-tree-sha256: 9e8b8a6500f0b41bd18a55c36d49ab7cc9f5dfd05beff952287acd18a01dacbd
+tree-sha256: 6164061ea8dc7896da53490df9ebc5e43b50faa50c1da61cdf9fc5e207773f7d

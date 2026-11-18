@@ -5,6 +5,7 @@ import path from 'node:path';
 import { editUrl, siteUrl } from '../src/site.ts';
 import { readProblemSearchHash } from '../src/lib/problem-search.ts';
 import { validateFeed } from '../src/lib/progress.ts';
+import { GAME_BRANDING as gameBranding } from '../src/lib/public-copy.ts';
 
 const dist = path.resolve('dist');
 const editBase = editUrl('');
@@ -14,7 +15,6 @@ const html = new Map(await Promise.all(pages.map(async (file) => [file, await re
 const ids = new Map([...html].map(([file, text]) => [file, new Set([...text.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]))]));
 
 const errors: string[] = [];
-const gameBranding = /\b(?:Nintendo|Zelda|Ocarina|OoT|Hyrule|Kokiri|Kakariko|Deku|Goron|Zora|Ganon|Ganondorf|Epona|Triforce|Navi)\b|\bSwitch 2\b|\bJoy-Cons?\b/i;
 let links = 0;
 for (const [file, text] of html) {
   const route = '/' + path.relative(dist, file).replaceAll(path.sep, '/').replace(/index\.html$/, '');

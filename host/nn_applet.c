@@ -4,11 +4,13 @@
 #include "hos.h"
 #include "hos_paths.h"
 #include "hos_wide_size.h"
+#include "options_path.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <windows.h>   /* (the exe's folder; the browser build: the Microsoft C runtime's time functions) */
+#include "hos_atomic_file.h"   /* (language.txt's first write is whole or not at all) */
 
 static int64_t boot_ns;
 
@@ -64,10 +66,12 @@ static const char *desired_language(void) {
                 break;
             }
             fclose(f);
-        } else if ((f = fopen(path, "w")) != NULL) {
-            fputs("# The game's language. Change the line below to one of the codes listed here, save, and start the game again.\n\nen-US\n\n", f);
-            for (size_t i = 0; i < sizeof languages / sizeof *languages; i++) fprintf(f, "# %-8s %s\n", languages[i].code, languages[i].name);
-            fclose(f);
+        } else {   /* (written whole or not at all: half a template has no language line) */
+            char text[2048];
+            size_t n = (size_t)snprintf(text, sizeof text, "# The game's language. Change the line below to one of the codes listed here, save, and start the game again.\n\nen-US\n\n");
+            for (size_t i = 0; i < sizeof languages / sizeof *languages && n < sizeof text; i++)
+                n += (size_t)snprintf(text + n, sizeof text - n, "# %-8s %s\n", languages[i].code, languages[i].name);
+            if (n < sizeof text) hos_atomic_write(path, text, n);
         }
     }
     want[strcspn(want, " \t\r\n")] = 0;
@@ -88,15 +92,11 @@ HLE(_ZN2nn2oe18GetDesiredLanguageEv) {
    (MKW docked composes 3840 x 2160) */
 int hos_ini_option(const char *key, int otherwise);
 #define ini_option hos_ini_option
-/* (hookshot) An option's text in hookshot_options.ini, the game folder's (the Insert menu's choices, gpu/vk/vk_menu.cpp), the last
-   line that sets it, its line end cut: whether there was one */
+/* (hookshot) An option's text in hookshot_options.ini (the Insert menu's choices, gpu/vk/vk_menu.cpp; where it is:
+   host/options_path.c), the last line that sets it, its line end cut: whether there was one */
 static int ini_text(const char *key, char *out, size_t size) {
-    char path[MAX_PATH];
-    const DWORD n = hos_game_path_a(path, MAX_PATH);
-    char *slash = n ? (strrchr(path, 92) ? strrchr(path, 92) : strrchr(path, 47)) : NULL;   /* (linux: '/'; the game folder's, not bin\\'s) */
-    if (!slash || !size) return 0;
-    snprintf(slash + 1, (size_t)(path + MAX_PATH - slash - 1), "hookshot_options.ini");
-    FILE *f = fopen(path, "r");
+    if (!size) return 0;
+    FILE *f = fopen(hos_options_file(), "r");
     if (!f) return 0;
     char line[80];
     const size_t len = strlen(key);

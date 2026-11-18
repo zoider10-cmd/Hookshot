@@ -1,0 +1,73 @@
+#version 450
+
+/*
+    zfast_crt_standard - A simple, fast CRT shader.
+
+    Copyright (C) 2017 Greg Hogan (SoltanGris42)
+
+    This program is free software; you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by the Free
+    Software Foundation; either version 2 of the License, or (at your option)
+    any later version.
+
+
+Notes:  This shader does scaling with a weighted linear filter for adjustable
+	sharpness on the x and y axes based on the algorithm by Inigo Quilez here:
+	http://http://www.iquilezles.org/www/articles/texture/texture.htm
+	but modified to be somewhat sharper.  Then a scanline effect that varies
+	based on pixel brighness is applied along with a monochrome aperture mask.
+	This shader runs at 60fps on the Raspberry Pi 3 hardware at 2mpix/s
+	resolutions (1920x1080 or 1600x1200).
+*/
+
+// Hookshot compute adapter of the pinned libretro source; see third_party/crt_shaders/PROVENANCE.md.
+// Source is the SDR virtual raster, sampled linearly with an opaque-black border.
+// FINEMASK is the imported entry point; vertex maskFade/invDims are carried into main.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D Source;
+layout(binding = 1, rgba8) uniform writeonly image2D dst;
+layout(push_constant) uniform P { vec4 SourceSize; vec4 OutputSize; uint style; } pc;
+
+const float BLURSCALEX = 0.30;
+const float LOWLUMSCAN = 6.0;
+const float HILUMSCAN = 8.0;
+const float BRIGHTBOOST = 1.25;
+const float MASK_DARK = 0.25;
+const float MASK_FADE = 0.8;
+
+// This can't be an option without slowing the shader down.
+// Note that only the fine mask works on SNES Classic Edition
+// due to Mali 400 gpu precision.
+#define FINEMASK
+
+void main()
+{
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, imageSize(dst)))) return;
+    vec2 vTexCoord = (vec2(pixel) + vec2(0.5)) * pc.OutputSize.zw;
+	float maskFade = 0.3333*MASK_FADE;
+	vec2 invDims = 1.0/pc.SourceSize.xy;
+	//This is just like "Quilez Scaling" but sharper
+	vec2 p = vTexCoord * pc.SourceSize.xy;
+	vec2 i = floor(p) + 0.50;
+	vec2 f = p - i;
+	p = (i + 4.0*f*f*f)*invDims;
+	p.x = mix( p.x , vTexCoord.x, BLURSCALEX);
+	float Y = f.y*f.y;
+	float YY = Y*Y;
+	
+#if defined(FINEMASK) 
+	float whichmask = fract(floor(vTexCoord.x*pc.OutputSize.x)*-0.4999);
+	float mask = 1.0 + float(whichmask < 0.5) * -MASK_DARK;
+#else
+	float whichmask = fract(floor(vTexCoord.x*pc.OutputSize.x)*-0.3333);
+	float mask = 1.0 + float(whichmask <= 0.33333) * -MASK_DARK;
+#endif
+	vec3 colour = textureLod(Source, p, 0.0).rgb;
+	
+	float scanLineWeight = (BRIGHTBOOST - LOWLUMSCAN*(Y - 2.05*YY));
+	float scanLineWeightB = 1.0 - HILUMSCAN*(YY-2.8*YY*Y);	
+	
+	vec3 outColor = colour.rgb*mix(scanLineWeight*mask, scanLineWeightB, dot(colour.rgb,vec3(maskFade)));
+	imageStore(dst, pixel, vec4(outColor, 1.0));
+}

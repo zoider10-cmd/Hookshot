@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   # (a squash-merged pull request's title is its commit on main, a line of the next release's notes, and what decides the next
-  # version: a Conventional Commit, by scripts/forge.py's TITLE, which `forge.py pr create` checks too. Only the title is
+  # version: a Conventional Commit, by scripts/check_pr_description.py's TITLE, which `forge.py pr create` checks too. Only the title is
   # read, from the event: the pull request's code is not run for it)
   title:
     name: Conventional Commit title
@@ -43,15 +43,14 @@ jobs:
         run: |
           python3 -I - <<'PY'
           import importlib.util, os, sys
-          spec = importlib.util.spec_from_file_location("forge", "scripts/forge.py")
-          forge = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(forge)
-          # (without Forgejo's work-in-progress prefixes, as forge.py and the description check take them off: forge.desc is
-          # scripts/check_pr_description.py, in the sparse checkout with forge.py)
-          title = forge.desc.strip_wip(os.environ["TITLE"])
-          if not forge.TITLE.match(title):
+          spec = importlib.util.spec_from_file_location("check", "scripts/check_pr_description.py")
+          check = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(check)
+          # (without Forgejo's work-in-progress prefixes, as forge.py and the description check take them off)
+          title = check.strip_wip(os.environ["TITLE"])
+          if not check.TITLE.match(title):
               print("::error::the title must be a Conventional Commit, type(scope): description, with the type one of %s "
-                    "(CONTRIBUTING.md, Pull request titles): %r" % (", ".join(forge.TITLE_TYPES), title))
+                    "(CONTRIBUTING.md, Pull request titles): %r" % (", ".join(check.TYPES), title))
               sys.exit(1)
           print("ok: %s" % title)
           PY

@@ -58,7 +58,7 @@ std::deque<RecordingRes> res;
 thread_local RecordingRes* cur=nullptr;
 const uint64_t kStream=1024;
 constexpr VkBufferUsageFlags kStreamUse=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-std::atomic<uint64_t> stream_extra{0},stream_grown{0},stream_peak{0};
+std::atomic<uint64_t> stream_extra{0},stream_grown{0},stream_peak{0},pools_extra{0};
 bool grow_off=false; bool stream_grow_off() { return grow_off; }
 /* BUFFER_TYPES */
 

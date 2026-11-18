@@ -104,4 +104,48 @@ with tempfile.TemporaryDirectory() as top:
             os.utime(p, (now - age, now - age))
         object_store.prune(str(store_root), now=now)
         assert sorted(os.listdir(d)) == [B + ".o"], os.listdir(d)
-print("ok: one object store for every work folder, and its clean-up")
+
+    with mock.patch.dict(os.environ, {"HOOKSHOT_OBJ_STORE": str(store_root), "HOOKSHOT_OBJ_STORE_GB": "100",
+                                      "HOOKSHOT_OBJ_STORE_DAYS": "14"}):
+        # (a namespace the clean-up cannot list, removed meanwhile or without permission: skipped, the others cleaned, nothing
+        # raised; the build has already compiled and installed by then)
+        now = time.time()
+        readable, gone = store_root / "0000000000000002", store_root / "0000000000000003"
+        for d in (readable, gone):
+            d.mkdir(parents=True)
+            p = d / (A + ".o")
+            p.write_bytes(b"x")
+            os.utime(p, (now - 20 * 86400, now - 20 * 86400))
+        listdir = os.listdir
+
+        def vanished(path):
+            if Path(path) == gone:
+                raise FileNotFoundError(2, "No such file or directory", str(path))
+            return listdir(path)
+
+        with mock.patch.object(object_store.os, "listdir", vanished):
+            removed, _ = object_store.prune(str(store_root), now=now)
+        assert removed == 1 and not (readable / (A + ".o")).exists() and (gone / (A + ".o")).exists(), removed
+        if os.name != "nt" and os.geteuid() != 0:   # (mode 000 stops neither Windows nor root)
+            p = readable / (B + ".o")
+            p.write_bytes(b"x")
+            os.utime(p, (now - 20 * 86400, now - 20 * 86400))
+            os.chmod(gone, 0)
+            try:
+                removed, _ = object_store.prune(str(store_root), now=now)
+            finally:
+                os.chmod(gone, 0o755)
+            assert removed == 1 and not p.exists(), removed
+            # (a store the clean-up cannot read at all: nothing removed)
+            os.chmod(store_root, 0)
+            try:
+                assert object_store.prune(str(store_root), now=now) == (0, 0)
+            finally:
+                os.chmod(store_root, 0o755)
+        with mock.patch.object(object_store.os, "listdir", side_effect=PermissionError(13, "Permission denied")):
+            assert object_store.prune(str(store_root), now=now) == (0, 0)
+    # (a store root that is a file: nothing to clean)
+    not_dir = Path(top, "store-file")
+    not_dir.write_bytes(b"")
+    assert object_store.prune(str(not_dir)) == (0, 0)
+print("ok: one object store for every work folder, and its clean-up, also past a folder it cannot read")

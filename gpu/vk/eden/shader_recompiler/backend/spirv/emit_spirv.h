@@ -63,6 +63,17 @@ constexpr u32 MESH_FALLBACK_DISPATCH_WORD = 5;
 constexpr u32 MESH_FALLBACK_HEADER_WORDS = 8;
 constexpr u32 MESH_FALLBACK_RECORD_WORDS = 16u << 20;   // (64 MB: ~47k grass primitives of 31 words are 17 MB)
 
+// (hookshot) how the records lie in their area (RuntimeInfo::mesh_fallback_layout, RX_VK_MESH_FB_LAYOUT):
+// - Aos: record after record, a record's words together (word H + record * W + line). Neighbouring threads write words a
+//   record apart, so each store of a mesh workgroup touches as many cache lines as it has threads.
+// - Soa: line after line, the area cut into W lines of `fit` words (word H + line * fit + record), and the threads take the
+//   records in turn, so neighbouring threads write neighbouring words. The same records, the same count, the same draw.
+enum class MeshFallbackLayout : u32 { Aos = 0, Soa = 1 };
+/// A line's words: the records of `record_words` words the area holds
+[[nodiscard]] constexpr u32 MeshFallbackFit(u32 record_words) {
+    return MESH_FALLBACK_RECORD_WORDS / (record_words ? record_words : 1);
+}
+
 [[nodiscard]] std::vector<u32> EmitSPIRV(const Profile& profile, const RuntimeInfo& runtime_info, IR::Program& program, Bindings& bindings);
 [[nodiscard]] inline std::vector<u32> EmitSPIRV(const Profile& profile, IR::Program& program) {
     Bindings binding;

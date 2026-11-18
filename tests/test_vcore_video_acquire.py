@@ -22,6 +22,9 @@ import re
 import shutil
 import subprocess
 import tempfile
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: python -I leaves this folder off the path)
+from srccut import block   # noqa: E402
 
 # (env_on, the switches' rule, before the code cut out of the sources: gpu/vk/compat/hookshot_env.h)
 ENV_ON_H = str(Path(__file__).resolve().parents[1] / "gpu" / "vk" / "compat" / "hookshot_env.h")
@@ -29,16 +32,6 @@ ENV_ON_H = str(Path(__file__).resolve().parents[1] / "gpu" / "vk" / "compat" / "
 RUN_ALL_ARGS = ["--cxx", "{cxx}"]
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def block(source, marker):
-    start = source.index(marker)
-    end = source.index("{", start) + 1
-    depth = 1
-    while depth:
-        depth += (source[end] == "{") - (source[end] == "}")
-        end += 1
-    return source[start:end]
 
 
 def through(source, marker, last):
@@ -68,6 +61,7 @@ typedef struct { uint64_t x[32]; } Ctx;
 #define HOS_WRITTEN(p, n) ((void)0)
 static LONG64 InterlockedCompareExchange64(volatile LONG64 *p, LONG64 x, LONG64 cmp) { (void)x, (void)cmp; return *p; }
 static int video_log(void) { return 0; }
+static int64_t movie_totals[5];   /* (nn_video.c's: the performance summary's counts) */
 static void hos_log(const char *f, ...) { (void)f; }
 static int64_t clock_ns = 1000000000;
 static int64_t hos_now_ns(void) { return clock_ns; }

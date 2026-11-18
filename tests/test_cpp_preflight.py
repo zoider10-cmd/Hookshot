@@ -55,6 +55,7 @@ class CppPreflightTests(unittest.TestCase):
             self.fail("Run this check as a script with --cxx (and, on Windows, a configured developer environment)")
         self.temporary = tempfile.TemporaryDirectory(prefix="hookshot-cpp-preflight-")
         self.addCleanup(self.temporary.cleanup)
+        self.addCleanup(getattr(make_game, "release_work", lambda: None))   # (Windows deletes no work folder with its lock open)
         self.root = Path(self.temporary.name).resolve()
         self.addCleanup(self.assert_owned_fixture)
         self.toolchain = Toolchain(COMPILER, COMPILER_FLAGS)

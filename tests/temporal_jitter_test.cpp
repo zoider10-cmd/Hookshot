@@ -45,14 +45,20 @@ const char* env_off_name = nullptr;   // (one switch set to 0 alone: "fsr-jitter
 uint64_t texture_frame_no() { return clock_frame.load(); }
 int env_switch(const char* name) { return env_off || (env_off_name && std::strcmp(name, env_off_name) == 0) ? 0 : -1; }
 std::atomic<bool> dlss_on{true}, fsr_on{false};
-std::atomic<bool> fsr4_on{false}, fsr3_chain_on{false};
-namespace ur { enum { GAME=0, DLSS=1, FSR3=3, FSR4=4 }; bool is_fsr4(int mode) { return mode==FSR4; } }
-int temporal_mode() { return fsr3_chain_on ? ur::FSR3 : fsr4_on ? ur::FSR4 : dlss_on ? ur::DLSS : ur::GAME; }
+std::atomic<bool> fsr4_on{false}, fsr3_chain_on{false}, xess_on{false};
+namespace ur {
+enum { GAME=0, DLSS=1, FSR3=3, FSR4=4, XESS=7 };
+bool is_fsr4(int mode) { return mode==FSR4; }
+bool is_xess(int mode) { return mode==XESS; }
+}
+int temporal_mode() {
+    return fsr3_chain_on ? ur::FSR3 : fsr4_on ? ur::FSR4 : xess_on ? ur::XESS : dlss_on ? ur::DLSS : ur::GAME;
+}
 bool fsr3_wanted() { return fsr_on.load(); }
 
 namespace gpu {
 struct State {
-    struct Engine { std::atomic<bool> failed{false}; } engines[3];   // (DLSS, FSR 4, FSR 3.1 on the chain)
+    struct Engine { std::atomic<bool> failed{false}; } engines[4];   // (DLSS, FSR 4, FSR 3.1 on the chain, Intel XeSS)
     std::atomic<uint64_t> last_frame{100};
     TemporalJitter jitter;
     // Baseline adapters use the old fields, allowing the unchanged baseline to compile and fail causally.
@@ -221,6 +227,16 @@ int main(int argc, char** args) {
     CHECK(equal(gpu::temporal_jitter_sample(), {}));
     gpu::state.engines[1].failed = false;
     fsr4_on = false;
+    // Intel XeSS takes it too, behind its own failure gate (slot 3), not FSR 4's
+    xess_on = true;
+    CHECK(equal(gpu::temporal_jitter_sample(), {1720, 720, 32}));
+    gpu::state.engines[3].failed = true;
+    CHECK(equal(gpu::temporal_jitter_sample(), {}));
+    gpu::state.engines[3].failed = false;
+    gpu::state.engines[1].failed = true;
+    CHECK(equal(gpu::temporal_jitter_sample(), {1720, 720, 32}));
+    gpu::state.engines[1].failed = false;
+    xess_on = false;
     // FSR 3.1 on the chain (vk_fsr3.h fsr3_on_chain) takes the same producer too, behind its own failure gate (slot 2)
     fsr3_chain_on = true;
     CHECK(equal(gpu::temporal_jitter_sample(), {1720, 720, 32}));

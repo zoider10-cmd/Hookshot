@@ -7,17 +7,21 @@ description: What you need to play Hookshot.
 **Your game copy:** program `0400486024DEC000` · update **v131072** · build `e0f3ccfa`.
 Use a `.nup` file, or the `romfs` and `exefs` folders. Other game versions are not supported.
 
+**Check your copy before building:** choose your own game file or folders in the launcher. Its game-file check
+reports whether the build is supported; if it reports another build, compare that message with `e0f3ccfa` above.
+The launcher version (such as `v1.0.0-rc.4`) is separate from the game update and build identifiers.
+
 These are estimates from the [tested configurations catalogue](/tested-configurations/), not a promise of a particular
 frame rate: the game runs on more than this, and performance depends on the resolution and settings you choose.
 
 | Component | Minimum | Recommended |
 |---|---|---|
 | **Operating system** | **64-bit Windows 10 / 11**, or **64-bit Linux** with glibc 2.35 or newer. | Same. |
-| **Processor** | A 6-core x86-64 CPU, such as an AMD Ryzen 5 2600 or Intel Core i5-8400. **AVX2 is required for the Linux AppImage**; Windows and source builds also run without it, more slowly. | AMD Ryzen 5 5600 or Intel Core i5-12400 or newer. For a steady 60 fps in demanding outdoor areas, a Ryzen 7 5700X3D or Core i5-13600K. |
-| **Graphics card** | **Vulkan 1.3.** NVIDIA GeForce GTX 1060 6 GB or GTX 1650, AMD Radeon RX 5500 XT, or Intel Arc A380. | **Vulkan 1.3 with mesh shaders.** NVIDIA GeForce RTX 3060 or RTX 4060, AMD Radeon RX 6600 XT or RX 6700 XT, or Intel Arc A750. Check the [project status](https://git.magicbean.dev/MagicBeanDev/Hookshot/src/branch/main/README.md#project-status) for each maker's known issues. |
-| **Mesh shaders** | Not required: without them, Hookshot draws through a slower compute fallback. | **Strongly recommended:** NVIDIA RTX 20 series and newer, AMD RX 6000 series and newer, Intel Arc. |
-| **Video memory (VRAM)** | **4 GB**, with the in-game Minimum (4GB) or Low (6GB) quality preset. | **8 GB or more.** |
-| **System memory (RAM)** | **16 GB.** See the memory guidance below. | **16 GB or more.** |
+| **Processor** | A 6-core x86-64 CPU, such as an AMD Ryzen 5 2600 or Intel Core i5-8400. AVX2 is not required with current builds (v3.0.0-rc.4 or newer). | AMD Ryzen 7 7800X3D or Intel Core i5-13600K. |
+| **Graphics card** | **Vulkan 1.3.** NVIDIA GeForce GTX 1060 6 GB or GTX 1650, or AMD Radeon RX 5500 XT. | **Vulkan 1.3 with mesh shaders.** NVIDIA GeForce RTX 4070 or AMD Radeon RX 7800 XT. Check the [project status](https://git.magicbean.dev/MagicBeanDev/Hookshot/src/branch/main/README.md#project-status) for each maker's known issues. |
+| **Mesh shaders** | Not required: without them, Hookshot draws through a slower compute fallback. | **Strongly recommended:** NVIDIA RTX 20 series and newer, or AMD RX 6000 series and newer. |
+| **Video memory (VRAM)** | **4 GB**, with the in-game Minimum (4GB) quality preset. | **12 GB or more.** |
+| **System memory (RAM)** | **16 GB.** See the memory guidance below. | **32 GB or more.** |
 | **Storage** | **About 60 GB free while building.** A hard drive works, but builds are much slower. | **An SSD with about 60 GB free.** |
 
 **Below the minimum:** a laptop with Intel UHD graphics and a 4-thread CPU is below both minimums. The game has been

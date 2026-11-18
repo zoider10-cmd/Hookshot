@@ -13,6 +13,7 @@
 #include <string_view>
 #include <vector>
 #include "common/common_types.h"
+#include "shader_recompiler/frontend/ampere/program_address_map.h"
 #ifndef HOOKSHOT_ENV_H   // (env_on: the switches' one rule)
 #include "hookshot_env.h"
 #endif
@@ -169,13 +170,23 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
             if (relocation.target > index) return fail(index, "native branch or call leaves captured program");
             const u32 target = result.source_instruction_offsets[static_cast<size_t>(relocation.target)];
             const s64 relative = s64{address_of(target)} - address_of(relocation.output_index) - 8;
-            if (relative < -0x800000 || relative > 0x7fffff) return fail(index, "lowered branch distance");
-            result.instructions[relocation.output_index] |= (static_cast<u64>(relative) & 0xffffff) << 20;
+            u64& word = result.instructions[relocation.output_index];
+            if (relative < -0x800000 || relative > 0x7fffff) {
+                // (hookshot) past the reach of BRA and CAL (a 24-bit offset, 8 MiB either way: about 786,000 lowered
+                // instructions): their absolute forms, JMP and JCAL, which hold the target's address in 32 bits (20-51;
+                // the frontend reads them so, IsAbsoluteJump). The predicate and the flow test stay as they are
+                const u64 op = word >> 52;
+                if (op != 0xe24 && op != 0xe26) return fail(index, "lowered branch distance");
+                word = (word & ~(u64{0xfff} << 52)) | (u64{op == 0xe24 ? 0xe21U : 0xe22U} << 52) |
+                       (u64{address_of(target)} << 20);
+                continue;
+            }
+            word |= (static_cast<u64>(relative) & 0xffffff) << 20;
         }
         result.source_size = (index + 1) * sizeof(Instruction);
         return result;
     };
-    if (code.empty() || code.size() > 65536) return fail(0, "invalid native program size");
+    if (code.empty() || code.size() > MaximumNativeInstructions) return fail(0, "invalid native program size");
     // (hookshot) A shared memory store (STS) not yet followed by a barrier: an LDS after it may read what another lane of the
     // warp stored (see LDS below)
     bool shared_store_pending = false;
@@ -3324,11 +3335,14 @@ inline LoweredProgram LowerToMaxwellWith(std::span<const Instruction> code, u32 
             const s64 relative = static_cast<s64>(raw << 14) >> 14;
             if (s64{index} * 16 + 16 + relative != 0)
                 return fail(index, "native computed branch relative base");
-            const s64 offset = -s64{address_of(static_cast<u32>(result.instructions.size()))} - 8;
-            if (offset < -0x800000) return fail(index, "native computed branch range");
+            // (hookshot) BRX goes to the table's value plus its own address plus its offset, which reaches back only 8 MiB
+            // (24 bits). Past that, JMX: the value plus the offset alone, -8 (the frontend's AnalyzeBRX adds the 8 back)
+            const s64 back = -s64{address_of(static_cast<u32>(result.instructions.size()))} - 8;
+            const bool absolute = back < -0x800000;
+            const s64 offset = absolute ? -8 : back;
             const u32 source = opcode == 0x958 ? uniform_register(insn.Bits(24, 8)) : insn.Bits(24, 8);
             if (source == ~0U) return fail(index, "native uniform computed branch source");
-            emit(0xe25000000000000fULL | predicate | (u64{source} << 8) |
+            emit((absolute ? 0xe20000000000000fULL : 0xe25000000000000fULL) | predicate | (u64{source} << 8) |
                  ((static_cast<u64>(offset) & 0xffffff) << 20));
             computed_branch = true;
             break;

@@ -1,4 +1,5 @@
 ---
+import BrandIcon from './BrandIcon.astro';
 import ManualNavigation from './ManualNavigation.astro';
 import { issueUrl, repository } from '../site.ts';
 import DefaultFooter from '@astrojs/starlight/components/Footer.astro';
@@ -8,7 +9,7 @@ import DefaultFooter from '@astrojs/starlight/components/Footer.astro';
 <footer class="footer">
   <div class="row">
     <p class="credit">
-      <img src="/branding/hookshot.png" alt="" width="512" height="512" loading="lazy" />
+      <span class="brand-icon"><BrandIcon size={24} loading="lazy" /></span>
       <span><strong>Hookshot</strong> by <a href="https://magicbean.dev/">Team MagicBean</a></span>
     </p>
     <nav aria-label="Footer">
@@ -25,7 +26,14 @@ import DefaultFooter from '@astrojs/starlight/components/Footer.astro';
   </p>
 </footer>
 
+<script>
+  import { installKeyboardScroll } from '../repo-docs/keyboard-scroll.ts';
+  installKeyboardScroll(document);
+</script>
+
 <style>
+  .brand-icon { width: 24px; display: block; flex-shrink: 0; }
+  .brand-icon :global(img) { display: block; width: 100%; height: auto; }
   .footer { border-top: 1px solid var(--border); padding: 1.25rem 0 .5rem; margin-top: 1rem; font-size: var(--text-xs); color: var(--sl-color-gray-2); }
   .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1.5rem; }
   .credit { display: flex; align-items: center; gap: .5rem; margin: 0; }

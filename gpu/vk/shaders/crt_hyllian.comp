@@ -1,0 +1,119 @@
+#version 450
+
+/*
+   Hyllian's CRT Shader
+   with cgwg's magenta/green dotmask
+   ported to GLSL/SLANG by DariusG & hunterk
+  
+   Copyright (C) 2011-2015 Hyllian - sergiogdb@gmail.com
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+   THE SOFTWARE.
+*/
+
+// Hookshot compute adapter of the pinned libretro source; see third_party/crt_shaders/PROVENANCE.md.
+// Source is the SDR virtual raster, sampled nearest with an opaque-black border.
+// The original vertex offset is applied below; the mask remains measured in output pixels.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(binding = 0) uniform sampler2D Source;
+layout(binding = 1, rgba8) uniform writeonly image2D dst;
+layout(push_constant) uniform P { vec4 SourceSize; vec4 OutputSize; uint style; } pc;
+
+const float MASK_INTENSITY = 0.5;
+const float InputGamma = 2.4;
+const float OutputGamma = 2.2;
+const float BRIGHTBOOST = 1.5;
+const float SCANLINES = 0.72;
+const float SHARPER = 0.0;
+
+#define SourceSize pc.SourceSize
+#define TextureSize SourceSize.xy
+#define COMPAT_TEXTURE(tex, coord) textureLod(tex, coord, 0.0)
+#define GAMMA_IN(color)     pow(color, vec3(InputGamma, InputGamma, InputGamma))
+#define GAMMA_OUT(color)    pow(color, vec3(1.0 / OutputGamma, 1.0 / OutputGamma, 1.0 / OutputGamma))
+
+void main()
+{
+    const ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, imageSize(dst)))) return;
+    vec2 tex_size = vec2(TextureSize.x, TextureSize.y);
+    vec2 ps = 1.0/tex_size;
+    vec2 vTexCoord = (vec2(pixel) + vec2(0.5)) * pc.OutputSize.zw;
+    vTexCoord.xy += ps * vec2(-0.49999, 0.0);
+   vec2 dx = vec2(ps.x, 0.0);
+   
+   vec2 tc = (floor(vTexCoord.xy * SourceSize.xy) + vec2(0.49999, 0.49999)) / SourceSize.xy;
+   
+   vec2 fp = fract(vTexCoord.xy * SourceSize.xy);
+   
+   vec3 c10 = COMPAT_TEXTURE(Source, tc -       dx).xyz;
+   vec3 c11 = COMPAT_TEXTURE(Source, tc           ).xyz;
+   vec3 c12 = COMPAT_TEXTURE(Source, tc +       dx).xyz;
+   vec3 c13 = COMPAT_TEXTURE(Source, tc + 2.0 * dx).xyz;
+	
+   vec4 lobes = vec4(fp.x*fp.x*fp.x, fp.x*fp.x, fp.x, 1.0);
+
+   vec4 InvX = vec4(0.0);
+
+
+   if (SHARPER == 0.0) {
+// Horizontal cubic filter - "Catrom"
+    InvX.x = dot(vec4( -0.5, 1.0, -0.5, 0.0), lobes);
+    InvX.y = dot(vec4(  1.5,-2.5,  0.0, 1.0), lobes);
+    InvX.z = dot(vec4( -1.5, 2.0,  0.5, 0.0), lobes);
+    InvX.w = dot(vec4(  0.5,-0.5,  0.0, 0.0), lobes);
+}
+
+    else if (SHARPER == 1.0) {
+// Swith to "Hermite" - Sharper, smoothed bilinear     
+    InvX.x = dot(vec4(  0.0, 0.0,  0.0, 0.0), lobes);
+    InvX.y = dot(vec4(  2.0,-3.0,  0.0, 1.0), lobes);
+    InvX.z = dot(vec4( -2.0, 3.0,  0.0, 0.0), lobes);
+    InvX.w = dot(vec4(  0.0, 0.0,  0.0, 0.0), lobes);
+}
+
+
+	
+    vec3 color = InvX.x*c10.xyz;
+		 color+= InvX.y*c11.xyz;
+		 color+= InvX.z*c12.xyz;
+		 color+= InvX.w*c13.xyz;
+	
+	
+    // Catmull-Rom's negative lobes must not enter fractional pow (undefined for negative RGB).
+    color = max(color, vec3(0.0));
+	color = GAMMA_IN(color);
+	
+    float pos1 = 1.5-SCANLINES - abs(fp.y - 0.5);
+    float d1 = max(0.0, min(1.0, pos1));
+    float d = d1*d1*(3.0+BRIGHTBOOST - (2.0*d1));
+	
+    color = color*d;
+    
+// dotmask
+    float mod_factor = vTexCoord.x * pc.OutputSize.x;
+    vec4 dotMaskWeights = mix(
+                                 vec4(1.0, 1.0-MASK_INTENSITY, 1.0, 1.),
+                                 vec4(1.0-MASK_INTENSITY, 1.0, 1.0-MASK_INTENSITY, 1.),
+                                 floor(mod(mod_factor, 2.0))
+                                  );
+    color *=vec3(dotMaskWeights.x,dotMaskWeights.y,dotMaskWeights.z);
+
+    color  = GAMMA_OUT(color);
+    imageStore(dst, pixel, vec4(color.r, color.g, color.b, 1.0));
+} 

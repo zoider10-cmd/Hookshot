@@ -1,10 +1,9 @@
 /* The Vulkan back end (hookshot_vk.dll, hookshot_vk.so on Linux) and the game executable: what each gives the other.
 
    The executable records the game's NVN command buffers (host/nvn_native.c) and calls a renderer through the rx_*
-   functions (gpu/render/rx_nvn.h). Unless RX_BACKEND names another, host/rx_backend.c loads it, hands it the host
-   functions below and routes the rx_* calls to the table it returns; otherwise they go to the WebGPU renderer in
-   the executable. The DLL carries Eden's shader recompiler (gpu/vk/eden, SPIR-V back end) and sirit: their C++
-   namespaces are the same as those of the WebGPU renderer's suyu copy, so the two live in different binaries. */
+   functions (gpu/render/rx_nvn.h). host/rx_backend.c loads it, the only renderer, hands it the host functions below
+   and routes the rx_* calls to the table it returns (without it they go to stand-ins that draw nothing). The DLL
+   carries Eden's shader recompiler (gpu/vk/eden, SPIR-V back end) and sirit. */
 #pragma once
 
 #include <stdint.h>
@@ -15,7 +14,14 @@
 extern "C" {
 #endif
 
-#define MKWVK_API_VERSION 23   /* (Mako 4.1.1: Longshot's 22 + Mako's program_set) */
+#define MKWVK_API_VERSION 30   /* (Mako 4.2: Longshot's 29 + Mako's program_set) */
+enum { HOS_MONITOR_CURRENT = 1, HOS_MONITOR_PRIMARY = 2 };
+typedef struct MkwVkMonitor {
+    char id[512];             /* opaque persistent preference; never a runtime handle or list index */
+    char name[256];           /* UTF-8 label, may collide: the UI also shows dimensions */
+    int width, height;        /* desktop pixels, not DPI-scaled window coordinates */
+    int flags;                /* HOS_MONITOR_* */
+} MkwVkMonitor;
 enum { HOS_OPT_CHEAT_HEARTS = 32, HOS_OPT_CHEAT_FLIGHT, HOS_OPT_CHEAT_ACTION, HOS_OPT_CHEAT_CAMERA, HOS_OPT_CHEAT_SPEED };
 /* (hookshot) the Gameplay tab's Text size (host/oot_text_size.c): 0 the game's, 1 110%, 2 125%, 3 150%, 4 175% */
 enum { HOS_OPT_TEXT_SIZE = 10 };
@@ -39,8 +45,9 @@ enum { HOS_OPT_WALK_MODE = 49, HOS_OPT_WALK_SPEED };
 enum { HOS_OPT_HDR_NATIVE = 40, HOS_OPT_HDR_PEAK, HOS_OPT_HDR_WHITE, HOS_OPT_DISCORD, HOS_OPT_SKIP_TITLE };
 /* (HOS_OPT_DISABLE_CAMERA_CENTERING, 45: Controls' movement-follow yaw, host/mouse_native.c: 0 stock, 1 disabled) */
 /* (the randomizer's fork) the Insert menu's Fast forward: 0 off, 1 while held, 2 a press turns it on and the next one off
-   (host/nn_vi.c). 58: it was 48 until Mako 4.1.1 gave that to the Camera speed */
-enum { HOS_OPT_FAST_FORWARD = 58 };
+   (host/nn_vi.c). 101: it was 48 until Mako 4.1.1 gave that to the Camera speed, then 58 until Mako 4.2 gave that to
+   HOS_OPT_RENDER_THREAD (60 to 71, 80, 88 and 90 are Mako's or its open pull requests') */
+enum { HOS_OPT_FAST_FORWARD = 101 };
 enum { HOS_OPT_DISABLE_CAMERA_CENTERING = 45 };
 /* (hookshot) the Insert menu's Camera speed: the right stick's camera turn in percent of the game's, 50 to 400 (host/nn_vi.c
    hos_camera_scale, nx2/oot_patches.py). 48: after the HDR and Discord rows' 40 to 43, Skip title's 44 and camera centering's 45 */
@@ -67,6 +74,25 @@ enum { HOS_OPT_HOLD_TOGGLE = 54 };
 enum { HOS_OPT_AUDIO_OUTPUT = 57 };
 /* Damage taken: 0 Half, 1 Normal (unchanged), 2 Double, 3 Quadruple. */
 enum { HOS_OPT_DAMAGE_TAKEN = 55 };
+/* (HOS_OPT_SHADOW_RES, 56: Graphics' Shadow resolution, host/oot_shadow.c: the sun's cascades as drawn, its Auto resolved
+   (gpu/vk/vk_menu.cpp menu_shadow_res), 0 the game's 1600, 1 2200, 2 3072, read each frame. The existing option callback:
+   no new member.) */
+enum { HOS_OPT_SHADOW_RES = 56 };
+/* (HOS_OPT_RENDER_THREAD, 58: whether the render thread runs on this run, 1 or 0, as the renderer resolved it once at the
+   start (gpu/vk/vk_replay.cpp async_on: RX_VK_ASYNC=1, or unset and the Insert menu's Threaded rendering On, or its Auto's
+   choice). host/nvn_native.c answers the game's present poll at once with it. The existing option callback: no new member.) */
+enum { HOS_OPT_RENDER_THREAD = 58 };
+enum { HOS_OPT_TRANSITION_AUTOSAVE = 59 };
+/* (HOS_OPT_MOUSE_INVERT_X, 61: Controls' Invert mouse horizontal, 1 on: the mouse's left and right swapped, as option
+   8, Invert mouse vertical, swaps its up and down. host/mouse_native.c (the camera's yaw) and host/nn_hid.c (the mouse
+   as the right stick) read it by its number, as they read 8. The existing option callback: no new member. 59 is the
+   transition autosave's and 60 stays the item wheel's.) */
+enum { HOS_OPT_MOUSE_INVERT_X = 61 };
+/* (HOS_OPT_HUD_LAYOUT, 71: Graphics' HUD layout, host/hos_wide_ui.c reads it at each present by its number: on a screen
+   that is not 16:9, 0 the HUD's corners at the screen's edges, 1 the HUD in the middle 16:9 as before #95 (on a narrower
+   screen fitted to its width, as the menus). HOS_WIDE_UI, when set, stands over it. The existing option callback: no new
+   member. 62 to 70, 80, 88 and 90 are taken by open pull requests.) */
+enum { HOS_OPT_HUD_LAYOUT = 71 };
 
 /* (hookshot) the controls' names (host/nn_hid.c, host/pad_sdl.c, the pad_ and key_ lines of hookshot_options.ini):
    the Switch's buttons in nn::hid's bit order, and a gamepad's inputs by position (the bottom face button first:
@@ -225,6 +251,41 @@ typedef struct MkwVkHost {
        max, in order (characters and HOS_TEXT_KEY editing keys, repeats included; Ctrl+V and Shift+Insert paste): the count.
        host/display.c (WM_CHAR, WM_KEYDOWN) and host/posix/display_sdl.c (SDL's text input and key events) put them in */
     int (*take_text)(int focus, uint32_t *out, int max);
+    /* (version 23, hookshot) the player's settings file, hookshot_options.ini in the user folder (host/options_path.c): the
+       Insert menu's (gpu/vk/vk_menu.cpp ini_path) and the switches its rows read before it loads. "" when none could be chosen:
+       every row at its default, and nothing saved */
+    const char *(*options_path)(void);
+    /* Version 24: playback metadata and requests, appended after version 23's settings path.
+       Only the audio thread changes playback handles.
+       info copies an opaque ID and UTF-8 name. State: 1 default fallback, 2 environment override, 4 no output. */
+    int (*audio_output_count)(void);
+    int (*audio_output_info)(int index, char *id, int id_capacity, char *name, int name_capacity);
+    void (*audio_output_select)(const char *id);
+    int (*audio_output_state)(void);
+    /* Version 25: explicit microphone test; gain 0..400 percent, levels[2] pre/post gain peak permille.
+       Call every menu tick (enabled=0 releases only the test reference). Does not play or save capture.
+       Result: 1 testing, 2 capture open, 4 default fallback, 8 fresh samples, 16 clipping, 32 mic Off. */
+    int (*mic_test)(int enabled, int gain, int *levels);
+    /* (version 26, hookshot) the performance summary (gpu/vk/perf_report.cpp), asked about once a second while the launcher's
+       Send performance statistics is ticked: the map Link is in and his age ("Kokiri Forest (child)", as the log's map: line;
+       "" before a save is loaded) into map, and the movies' totals so far (host/nn_video.c): [0] pictures shown, [1] skipped to
+       keep up with the sound, [2] shown late (over 50 ms after the one before), [3] decoding time in ns, [4] decoders that did
+       not start (another one took over). Returns the build's version (HOOKSHOT_VERSION) */
+    const char *(*perf_info)(char *map, int cap, int64_t movie[5]);
+    /* Version 27 (hookshot): the frame trace's main-thread columns (RX_VK_FRAME_TRACE, gpu/vk/vk_replay.cpp): the game's main
+       thread's (sead::MainThread) time so far, in ns: [0] waiting for a virtual core, [1] blocked in a wait or sleep, both
+       counted while fps_timing is on, [2] its CPU time. 0 before the game names that thread */
+    int (*main_thread_times)(int64_t out[3]);
+    /* Version 28 (hookshot, issue 1280): a C++ allocation of the renderer's refused for 5 s (its new_handler, gpu/vk/vk_main.cpp
+       new_refused, tried again meanwhile): the host's out-of-memory line and notice, waited for, then the game stops, as for the
+       host's own allocations (host/mkw_glue.c hos_alloc_gave_up). what names it in the log. Does not return */
+    void (*out_of_memory)(const char *what);
+    /* Version 29: named fullscreen output selection. Snapshot metadata is copied; empty ID means the
+       current window's screen. select queues work to the window thread, never moves it here.
+       The saved preference may be unavailable; flags describe the actual current/primary screen. */
+    int (*monitor_count)(void);
+    int (*monitor_info)(int index, struct MkwVkMonitor *out);
+    void (*monitor_select)(const char *id);
 } MkwVkHost;
 
 /* One completed temporal-upscale sample; all zero while inactive. */
@@ -305,7 +366,7 @@ typedef struct MkwVkRenderer {
     void (*nvn_program_created)(const nvn_prog *p);
 } MkwVkRenderer;
 
-/* the DLL's one export: null when Vulkan is not usable (the executable then falls back to WebGPU) */
+/* the DLL's one export: null when Vulkan is not usable (the executable then draws nothing) */
 typedef const MkwVkRenderer *(*mkwvk_init_fn)(const MkwVkHost *host);
 #ifdef MKWVK_BUILDING
 #ifdef _WIN32

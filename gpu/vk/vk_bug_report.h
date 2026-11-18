@@ -38,9 +38,15 @@ struct Inputs {
 
 /// The process's part of a report: system, env, current_log, home, user, windows, now
 void fill_here(Inputs& in);
+/// The processor's own name (cpuid's brand string: "AMD Ryzen 5 5600X 6-Core Processor"), "" when it has none (not x86)
+std::string cpu_name();
 /// CPU (and its threads), RAM and system, as the form asks: "13th Gen Intel(R) Core(TM) i9-13900K (32 threads), 94 GB,
 /// Arch Linux (Linux 7.2.15)"
 std::string system_text();
+/// Its two halves, for the crash report's report: lines (docs/crash-report-window.md): the CPU, its threads and the RAM
+/// ("13th Gen Intel(R) Core(TM) i9-13900K (32 threads), 94 GB"), and the system ("Arch Linux (Linux 7.2.15)")
+std::string cpu_text();
+std::string os_text();
 /// A log's line with the home folder written ~ (%USERPROFILE% on Windows) and the user's name as a folder <user>
 std::string redact(const std::string& line, const std::string& home, const std::string& user, bool windows);
 

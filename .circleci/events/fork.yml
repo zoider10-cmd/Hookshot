@@ -1,0 +1,68 @@
+# Fork PR pipeline (fork_pr / fork_sha from mb/fork-doorbell). Docs: docs/ci.md.
+workflows:
+  fork-pr:
+    when: pipeline.parameters.fork_pr > 0
+    jobs:
+      - lint:
+          name: fork-lint
+      - third-party:
+          name: fork-third-party
+          requires: [fork-lint]
+      - guide-screenshots:
+          name: fork-guide-screenshots
+          requires: [fork-lint]
+      - fork-test-linux:
+          requires: [fork-lint]
+          filters: pipeline.parameters.tests or pipeline.parameters.full
+      - builder-cli:
+          name: fork-builder-cli
+          requires: [fork-lint]
+          filters: pipeline.parameters.windows or pipeline.parameters.full
+      - spirv-fixtures:
+          name: fork-spirv-fixtures
+          requires: [fork-lint]
+          filters: pipeline.parameters.gpu or pipeline.parameters.full
+      - linux-appimage:
+          name: fork-linux-appimage
+          requires: [fork-lint, fork-test-linux, fork-spirv-fixtures]
+          filters: pipeline.parameters.linux or pipeline.parameters.full
+      - windows-builder:
+          name: fork-windows-builder
+          requires: [fork-builder-cli]
+          filters: pipeline.parameters.windows or pipeline.parameters.full
+      - windows-vulkan:
+          name: fork-windows-vulkan
+          requires: [fork-lint, fork-spirv-fixtures]
+          filters: >-
+            pipeline.parameters.gpu or pipeline.parameters.windows
+            or pipeline.parameters.full
+      - mb/gate:
+          name: fork-gate
+          requires:
+            - fork-lint
+            - fork-third-party
+            - fork-guide-screenshots
+            - fork-test-linux
+            - fork-builder-cli
+            - fork-spirv-fixtures
+            - fork-linux-appimage
+            - fork-windows-builder
+            - fork-windows-vulkan
+      - mb/fork-report:
+          repo: "<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>"
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          name: fork-report-ok
+          state: success
+          context: forgejo-bot
+          requires: [fork-gate]
+      - mb/fork-report:
+          repo: "<< pipeline.git.repo_owner >>/<< pipeline.git.repo_name >>"
+          fork-sha: "<< pipeline.parameters.fork_sha >>"
+          name: fork-report-fail
+          state: failure
+          context: forgejo-bot
+          requires:
+            - fork-gate:
+                - not_run
+                - failed
+                - canceled

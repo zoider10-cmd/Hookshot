@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-15 | API22 base82886e89 plus scheduling, cache-input, progress/readiness fixes, d41dfcc5 | Windows 11 Home N26300; native preparation | RX 9070 XT16GB; AMD26.11.1 | Ryzen 7 5700X3D;64GiB | Default hookshot.exe --prepare-shaders --compile-shaders all; normal watchdog and memory guards; matching renderer PGO | Preparation only after driver change; no scene drawn | Exit0; shader stage complete;24626 noted graphics and9687 compute pipelines,0/0 not made and0 missing program variants. Actual GPU cache saved. Combined integration sanity, not an isolated Most-to-All timing or gameplay result |

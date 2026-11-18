@@ -1,0 +1,6 @@
+---
+import { Image } from 'astro:assets';
+import icon from '../../../assets/branding/hookshot.png';
+const { size = 40, loading = 'lazy' } = Astro.props;
+---
+<Image src={icon} alt="" width={size} height={size} widths={[size, size * 2]} sizes={`${size}px`} format="webp" quality={90} loading={loading} decoding="async" />

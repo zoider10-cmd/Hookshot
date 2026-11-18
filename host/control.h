@@ -92,6 +92,9 @@ typedef struct HosControlGame {
     void (*oot_watch)(int slot, const HosControlOotWatch *watch);
     /* Consume the latest pending sample for that connection, 0 when none. No guest reads or socket I/O. */
     int (*oot_poll)(int slot, char *out, size_t cap);
+    /* the game started again as the Insert menu's Restart now does it (host/hos_relaunch.c: the same command and the
+       environment it started with, so the bridge comes back on the same socket); does not return. NULL: no restart here */
+    void (*relaunch)(void);
 } HosControlGame;
 
 /* Listens on path and serves on a thread of its own. 0 when it could not (logged) */

@@ -71,6 +71,150 @@ FI_OPTIONS = [
 ]
 OF_OPTIONS = ["-DFFX_GPU=1", "-DFFX_GLSL=1"]
 
+# (hookshot) Frame interpolation's GPU headers with two changes of ours, made on a copy at compile time: third_party/
+# stays AMD's, byte for byte (scripts/check_third_party.py), and what changes is written here, line by line, each one
+# found exactly as many times as it says or the script stops. gpu/vk/vk_fsr3fi.cpp fills what the changes read.
+#
+#  1. A made frame anywhere between the two game frames, not only the midpoint. AMD's passes fix t at 0.5: the vector
+#     fields keep half the motion, put each vector at the pixel's place half way, and look half a motion back into the
+#     frame before and half forward into this one. cbFI's padding word (_pad1) carries t instead (0: the frame before, 1:
+#     this one), and the fields keep half the motion as before, scaled where it is used: 2t of it back to the frame before,
+#     2(1 - t) forward to this one, the vector put at the pixel's place 2(1 - t) of it from this frame's, and the blend's
+#     weights t and 1 - t. At t = 0.5 every scale is 1 and the passes are AMD's.
+#  2. The HUD kept where it is (dispatchFlags bit 16, set unless RX_VK_FSR_FG_HUD=0). This game draws its HUD into the
+#     same picture as the scene and has no HUD-less colour, so AMD's passes moved it with the scene behind it: smeared
+#     icons and text, a copy of the HUD trailing the camera. A pixel the same in both frames while the scene there moves
+#     is the HUD (or a flat colour, where the frame's own pixel is right too): it is this frame's pixel. A sample of the
+#     frame before or this one that lands on such a pixel is the HUD, not the scene behind it, which neither frame shows:
+#     where only one of the two samples does, the other is taken.
+FI_T = "InterpolationT()"
+FI_PATCHES = {
+    "ffx_frameinterpolation_callbacks_glsl.h": [
+        ("        FfxInt32        _pad1;\n",
+         "        FfxFloat32      fInterpolationT;   // (hookshot) the made frame's place: 0 the frame before, 1 this one\n", 1),
+        ("    FfxFloat32 TanHalfFoV()\n    {\n        return cbFI.fTanHalfFOV;\n    }\n",
+         "    FfxFloat32 TanHalfFoV()\n    {\n        return cbFI.fTanHalfFOV;\n    }\n"
+         "\n"
+         "    // (hookshot) the made frame's place between the frame before (0) and this one (1): AMD's passes fix it at 0.5\n"
+         "    FfxFloat32 InterpolationT()\n    {\n        return cbFI.fInterpolationT;\n    }\n"
+         "    // (the vector fields keep half the motion: the frame before is 2t of it away, this one 2(1 - t))\n"
+         "    FfxFloat32 PrevScale()\n    {\n        return 2.0f * cbFI.fInterpolationT;\n    }\n"
+         "    FfxFloat32 CurrScale()\n    {\n        return 2.0f * (1.0f - cbFI.fInterpolationT);\n    }\n"
+         "    // (hookshot) the HUD kept where it is (vk_fsr3fi.cpp kKeepStatic)\n"
+         "    FfxBoolean KeepStaticPixels()\n    {\n        return (cbFI.dispatchFlags & (1u << 16)) != 0u;\n    }\n", 1),
+    ],
+    "ffx_frameinterpolation_game_motion_vector_field.h": [
+        ("    const FfxFloat32x2 fInterpolatedLocationUv = fUvInScreenSpace + fMotionVectorHalf;\n",
+         "    const FfxFloat32x2 fInterpolatedLocationUv = fUvInScreenSpace + fMotionVectorHalf * CurrScale();\n", 1),
+        ("        const FfxFloat32 fBreakDist = ffxMin(length(fMotionVectorHalf), length(FfxFloat32x2(0.5f, 0.5f)));\n",
+         "        const FfxFloat32 fBreakDist = ffxMin(length(fMotionVectorHalf * CurrScale()), length(FfxFloat32x2(0.5f, 0.5f)));\n", 1),
+    ],
+    "ffx_frameinterpolation_optical_flow_vector_field.h": [
+        ("GetBilinearSamplingData(fUv + fMotionVectorHalf, GetOpticalFlowSize2());\n",
+         "GetBilinearSamplingData(fUv + fMotionVectorHalf * CurrScale(), GetOpticalFlowSize2());\n", 1),
+    ],
+    "ffx_frameinterpolation_reconstruct_previous_depth.h": [
+        ("    ReconstructPrevDepth(iPxPos, 1, fDilatedDepth, fMotionVector * 0.5f, RenderSize());\n",
+         "    ReconstructPrevDepth(iPxPos, 1, fDilatedDepth, fMotionVector * 0.5f * CurrScale(), RenderSize());\n", 1),
+    ],
+    "ffx_frameinterpolation_disocclusion_mask.h": [
+        ("ComputeDepthClip(0, fDepthUv + gameMv.fMotionVector, fDilatedDepth);\n",
+         "ComputeDepthClip(0, fDepthUv + gameMv.fMotionVector * PrevScale(), fDilatedDepth);\n", 1),
+        ("ComputeDepthClip(1, fDepthUv - gameMv.fMotionVector, fDilatedDepth);\n",
+         "ComputeDepthClip(1, fDepthUv - gameMv.fMotionVector * CurrScale(), fDilatedDepth);\n", 1),
+    ],
+    "ffx_frameinterpolation_common.h": [
+        # (LoadInpaintedGameFieldMv's and SampleOpticalFlowMotionVectorField's: whether each end is inside the frame)
+        ("    vfElement.bNegOutside = !IsUvInside(fUv - vfElement.fMotionVector);\n",
+         "    vfElement.bNegOutside = !IsUvInside(fUv - vfElement.fMotionVector * CurrScale());\n", 2),
+        ("    vfElement.bPosOutside = !IsUvInside(fUv + vfElement.fMotionVector);\n",
+         "    vfElement.bPosOutside = !IsUvInside(fUv + vfElement.fMotionVector * PrevScale());\n", 2),
+    ],
+    "ffx_frameinterpolation.h": [
+        ("+gameMv.fMotionVector * fUvLetterBoxScale, DisplaySize());",
+         "+gameMv.fMotionVector * PrevScale() * fUvLetterBoxScale, DisplaySize());", 1),
+        ("-gameMv.fMotionVector * fUvLetterBoxScale, DisplaySize());",
+         "-gameMv.fMotionVector * CurrScale() * fUvLetterBoxScale, DisplaySize());", 1),
+        ("+ofMv.fMotionVector * fUvLetterBoxScale, DisplaySize());",
+         "+ofMv.fMotionVector * PrevScale() * fUvLetterBoxScale, DisplaySize());", 1),
+        ("-ofMv.fMotionVector * fUvLetterBoxScale, DisplaySize());",
+         "-ofMv.fMotionVector * CurrScale() * fUvLetterBoxScale, DisplaySize());", 1),
+        ("        FfxFloat32 t = 0.5f;\n"
+         "        t += 0.5f * (1 - (fDisocclusionFactor.x));\n"
+         "        t -= 0.5f * (1 - (fDisocclusionFactor.y));\n",
+         f"        FfxFloat32 t = {FI_T};\n"
+         f"        t += (1.0f - {FI_T}) * (1 - (fDisocclusionFactor.x));\n"
+         f"        t -= {FI_T} * (1 - (fDisocclusionFactor.y));\n", 1),
+        ("        fInterpolatedColor = ffxLerp(fPrevColorGame.fRaw, fCurrColorGame.fRaw, ffxSaturate(t));\n",
+         "        fInterpolatedColor = ffxLerp(fPrevColorGame.fRaw, fCurrColorGame.fRaw, ffxSaturate(t));\n"
+         "        HookshotStaticSamples(fUvInScreenSpace, gameMv.fMotionVector * fUvLetterBoxScale, t, fPrevColorGame.fRaw,\n"
+         "                              fCurrColorGame.fRaw, fInterpolatedColor);\n", 1),
+        ("        FfxFloat32 ofT = 0.5f;\n", f"        FfxFloat32 ofT = {FI_T};\n", 1),
+        ("            ofT = 0.5f;\n", f"            ofT = {FI_T};\n", 1),
+        ("        const FfxFloat32x3 ofColor = ffxLerp(fPrevColorOF.fRaw, fCurrColorOF.fRaw, ofT);\n",
+         "        FfxFloat32x3 ofColor = ffxLerp(fPrevColorOF.fRaw, fCurrColorOF.fRaw, ofT);\n"
+         "        HookshotStaticSamples(fUvInScreenSpace, ofMv.fMotionVector * fUvLetterBoxScale, ofT, fPrevColorOF.fRaw,\n"
+         "                              fCurrColorOF.fRaw, ofColor);\n", 1),
+        ("        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));\n    }\n}\n",
+         "        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));\n    }\n"
+         "    HookshotStaticPixel(FfxInt32x2(iPxPos), max(gameMv.fVelocity, ofMv.fVelocity), fInterpolatedColor,\n"
+         "                        fInPaintingWeight);\n}\n", 1),
+        # (the two helpers, ahead of computeInterpolatedColor, which calls them)
+        ("void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)\n",
+         "// (hookshot) The HUD kept where it is: a pixel the same in both frames (to within half an 8-bit step), inside the\n"
+         "// frame. KeepStaticPixels says whether to look at all\n"
+         "FfxBoolean HookshotSame(FfxInt32x2 iPx)\n"
+         "{\n"
+         "    if (!IsInRect(iPx, InterpolationRectBase(), InterpolationRectSize())) return false;\n"
+         "    const FfxFloat32x3 fDiff = abs(LoadPreviousBackbuffer(iPx) - LoadCurrentBackbuffer(iPx));\n"
+         "    return max(fDiff.r, max(fDiff.g, fDiff.b)) <= (0.5f / 255.0f);\n"
+         "}\n"
+         "\n"
+         "// A blend of the two frames' samples (0 < t < 1: both ends seen) where one sample lands on a pixel the same in both\n"
+         "// frames and the other does not: that one is the HUD, the scene behind it in neither frame, so the other is taken.\n"
+         "// fMv: the vector the samples were taken with, in UV (half the motion, as the fields keep it)\n"
+         "void HookshotStaticSamples(FfxFloat32x2 fUv, FfxFloat32x2 fMv, FfxFloat32 t, FfxFloat32x3 fPrev, FfxFloat32x3 fCurr,\n"
+         "                           inout FfxFloat32x3 fColor)\n"
+         "{\n"
+         "    if (!KeepStaticPixels() || t <= 0.0f || t >= 1.0f || length(fMv * DisplaySize()) < 0.5f) return;\n"
+         "    const FfxBoolean bPrev = HookshotSame(FfxInt32x2((fUv + fMv * PrevScale()) * DisplaySize()));\n"
+         "    const FfxBoolean bCurr = HookshotSame(FfxInt32x2((fUv - fMv * CurrScale()) * DisplaySize()));\n"
+         "    if (bPrev && !bCurr) fColor = fCurr;\n"
+         "    else if (bCurr && !bPrev) fColor = fPrev;\n"
+         "}\n"
+         "\n"
+         "// The made pixel itself: the same in both frames while the scene there moves (fVelocity: the larger of the two\n"
+         "// fields' vectors, in UV) is the HUD, or a flat colour where this frame's pixel is right too: this frame's pixel\n"
+         "void HookshotStaticPixel(FfxInt32x2 iPx, FfxFloat32 fVelocity, inout FfxFloat32x3 fColor, inout FfxFloat32 fInPaintingWeight)\n"
+         "{\n"
+         "    if (!KeepStaticPixels() || fVelocity * length(FfxFloat32x2(DisplaySize())) < 0.5f || !HookshotSame(iPx)) return;\n"
+         "    fColor = LoadCurrentBackbuffer(iPx);\n"
+         "    fInPaintingWeight = 0.0f;\n"
+         "}\n"
+         "\n"
+         "void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)\n", 1),
+    ],
+}
+
+
+def patched_fi_headers(tmp):
+    """Frame interpolation's GPU headers with FI_PATCHES applied, in tmp/frameinterpolation: the directory that goes
+    first on the include path, so "frameinterpolation/..." and the headers' own includes of each other find these."""
+    src = GPU / "frameinterpolation"
+    dst = Path(tmp) / "patched-gpu" / "frameinterpolation"
+    shutil.copytree(src, dst)
+    for name, edits in FI_PATCHES.items():
+        path = dst / name
+        text = path.read_text(encoding="utf-8")
+        for old, new, count in edits:
+            found = text.count(old)
+            if found != count:
+                raise SystemExit(f"fsr3_shaders.py: {name}: expected {count} of {old.strip()[:70]!r}, found {found} "
+                                 "(the SDK changed: write the patch again)")
+            text = text.replace(old, new)
+        path.write_text(text, encoding="utf-8")
+    return dst
+
 # (name, the pass file, extra defines). The file is named outright rather than composed: AMD's
 # optical-flow v5 passes end "_pass_v5.glsl" and the interpolation pass itself is just
 # "ffx_frameinterpolation_pass.glsl", so a composed name is wrong for four of the eighteen.
@@ -159,8 +303,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix="fsr3-shaders-") as tmp:
         # the upscaler's eleven, then frame interpolation's ten and optical flow's seven
         families = [(name, None, pass_name, extra, None, None) for name, pass_name, extra in VARIANTS]
+        # (frame interpolation's headers patched first: FI_PATCHES. Their directory goes ahead of the SDK's)
+        fi_headers = patched_fi_headers(tmp)
         families += [(name, FI_PASSES / f, None, extra, FI_OPTIONS,
-                      [GPU, GPU / "frameinterpolation", GPU / "opticalflow"])
+                      [fi_headers.parent, GPU, fi_headers, GPU / "opticalflow"])
                      for name, f, extra in FI_VARIANTS]
         families += [(name, OF_PASSES / f, None, extra, OF_OPTIONS, [GPU, GPU / "opticalflow"])
                      for name, f, extra in OF_VARIANTS]

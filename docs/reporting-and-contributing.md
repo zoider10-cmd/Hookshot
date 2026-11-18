@@ -18,12 +18,15 @@ Open a [new report](https://git.magicbean.dev/MagicBeanDev/Hookshot/issues/new) 
 **Gameplay → Bug report** in the in-game menu gathers the log and your PC's details into one folder in one press, with
 your user name taken out. Never attach game files, keys or saves.
 
+If the problem is that the game runs slowly or stutters, [report slow performance](performance-report.md) shows how to
+have the game measure itself first.
+
 ## Help with testing
 
-Fixes often need checking on hardware the developer doesn't have: another graphics card, Linux, a Steam Deck. The team
-posts test requests on [Discord](https://discord.gg/magicbean); pick one up, play the change, and say what you saw,
-including what didn't work. The [testing guide](https://git.magicbean.dev/MagicBeanDev/Hookshot/src/branch/main/docs/test-requests.md)
-explains how.
+Fixes often need checking on hardware the developer doesn't have: another graphics card, Linux, a Steam Deck. Lend your
+PC to the Test Farm, Beanstalk: a small app builds approved pull requests next to `main` from your own copy of the game,
+plays the same scenes on both, and posts the numbers on the pull request, while you do something else.
+[How it works, and the download](https://beanstalk.magicbean.dev/how).
 
 ## Improve the documentation or the code
 

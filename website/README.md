@@ -1,8 +1,8 @@
 # Hookshot website preview
 
 Astro/Starlight front page and player documentation for Hookshot by Team MagicBean.
-The game build is independent of this directory. This branch adds source only: there
-is no automatic deployment or publishing workflow.
+The game build is independent of this directory. Production deploys from main through
+`.forgejo/workflows/website.yml`; pull-request previews require that workflow's review gate.
 
 ## Local preview
 
@@ -10,19 +10,15 @@ Use Node 22.23.4 or newer with the pinned lockfile. From `website/`:
 
 ```sh
 npm ci
-npm run build:preview
-npm run preview -- --host 127.0.0.1 --port 4321
+npm run build
+npm run check
+npx wrangler dev --local --ip 127.0.0.1 --port 4327
 ```
 
-Open http://127.0.0.1:4321/. `npm run dev` provides live editing.
-The project base is `/`, for its own domain (hookshot.magicbean.dev).
-`DOCS_SITE_URL` sets the canonical HTTPS origin; its default is `https://magicbean.dev`,
-which is metadata, not an enabled deployment or a claim that this site is hosted there.
-
-`npm run build:preview` builds and checks with edit links to this fork's
-`docs/hookshot-website` branch. Normal `npm run build` and `npm run check` also accept
-`DOCS_SOURCE_REPOSITORY` and `DOCS_SOURCE_BRANCH` for another Forgejo fork/branch.
-Project and issue links use https://git.magicbean.dev/MagicBeanDev/Hookshot.
+Open http://127.0.0.1:4327/. This serves both the static site and live download Worker.
+`npm run dev` provides live editing; `npm run preview` serves static output only, so
+neither supplies the Worker's download metadata. Project URLs and the canonical
+`https://hookshot.magicbean.dev` origin are defined in `src/site.ts`.
 
 ## Design and interaction
 
@@ -39,15 +35,20 @@ Session storage prevents an immediate repeat across reloads in the same tab when
 available. Blocked storage still allows a random line; no JavaScript keeps the
 original “Slightly emotional beans.” There is no timed rotation or animation.
 
-At narrower widths the main links use an Explore Hookshot disclosure, including a
-no-JavaScript fallback. With JavaScript, Escape, an outside click or choosing a link
+At narrower widths splash pages use a Menu disclosure, including a no-JavaScript
+fallback. Documentation pages use one Starlight navigation drawer, with Home and
+Download launcher links alongside the guide links. With JavaScript, Escape, an outside click or choosing a link
 closes it. Shared-memory GPUs have a separate checker choice; their memory remains
 a caution rather than being compared to dedicated VRAM. GPU changes update the
 automatic choice until the user chooses a memory type themselves; Reset restores it.
 
 The team logo, Hookshot icon and supplied bean illustrations are copied unchanged
 from `../assets/branding/`; their provenance is recorded there. The upstream README's
-own `../assets/hookshot.png` is preserved separately.
+own `../assets/hookshot.png` is preserved separately. Astro generates responsive WebP
+variants for the Hookshot icons without changing their original files.
+A panel below the hero offers a direct download link, compatibility guidance, the own-copy reminder and live launcher status;
+four feature cards keep the next steps close. The progress board collapses secondary
+filters on mobile and keeps the active filter summary visible when closed.
 
 Body text and controls use self-hosted Atkinson Hyperlegible Next, weights 200–800,
 upright and italic. Libertinus Serif Semibold remains for large headings; code stays
@@ -72,7 +73,7 @@ copies only the explicitly selected pages and artwork. Other relative references
 link to the team's Forgejo source tree; website instructions link to this fork branch. New internal documents are not automatically
 published.
 
-The System requirements page (`src/content/docs/compatibility.mdx`) is a copy of the root README's "What you need":
+The System requirements page (`src/content/docs/requirements.mdx`) is a copy of the root README's "What you need":
 when one changes, change the other to match.
 
 The progress board and the front page's release and activity panels are collected from Forgejo when the site is
@@ -122,17 +123,19 @@ disclosures work without JavaScript, and the shared print handling expands every
 
 Public pages use neutral game and console wording. Imported menu descriptions and activity text pass through
 `src/lib/public-copy.ts` before publication; source records and links remain intact. `npm run check` rejects the
-listed game-brand terms in generated page prose and the public progress feed. Literal commands, required save
+game-brand terms listed there (`GAME_BRANDING`) in generated page prose and the public progress feed. Players' issue
+titles reach the feed as they are typed, so any listed term the wording rules don't cover becomes "in-game" rather
+than blocking the deployment. Literal commands, required save
 paths, technical product names and third-party attribution are preserved. Update public wording and its tests if
 an upstream description introduces a new term; never rename a real file path or runtime setting to hide it.
 
 `npm run check` verifies generated routes, links, anchors, edit destinations, artwork
-bytes, search output, source guards and the website's test suite. `build:preview`
-runs both the build and checks. These do not build or launch the game.
+bytes, search output, source guards and the website's test suite. These do not build
+or launch the game.
 
-Browser access was unavailable during implementation. Rendered desktop/mobile,
-keyboard, and light/dark visual checks remain outstanding. Generated HTML and the
-compiled Easter-egg script were checked separately; those are not browser checks.
+Review rendered desktop/mobile layouts, keyboard access, both themes and live download
+responses through the Worker preview. Record the tested browsers and screenshots in the
+pull request; the build and unit tests do not establish visual or cross-browser correctness.
 
 ## Download links
 
@@ -146,6 +149,7 @@ notes and chat. Forgejo's `/releases/latest` covers stable only; these cover eac
 | `/download/launcher/<os>` | that file of the best channel there is: stable, else rc, else nightly |
 | `/download/launcher/<channel>` | the newest release page of `stable`, `rc` or `nightly` |
 | `/download/launcher/<channel>/<os>` | that file of the channel's newest release, such as `/download/launcher/stable/windows` |
+| `/download/launcher/versions.json` | the available launcher versions and their exact file links, using the same channel rules and cached release list |
 
 `<os>` is `windows` (`…-windows-x64-setup.exe`), `windows-portable` (`…-windows-x64-portable.zip`) or `linux`
 (`…-x86_64.AppImage`). A link is a `302` to the file on git.magicbean.dev; a channel or file that isn't there is a `404`
@@ -153,3 +157,20 @@ page that says so and names the newest launcher there is. The channels follow th
 (`Core/ReleaseManifest.cs`, `scripts/release.py newest`), and the release list is kept 60 seconds.
 `npx wrangler dev` (after `npm run build`) serves the site with the Worker; `tests/download.test.ts` checks the channel
 rules.
+
+The install page reads `versions.json` when opened and shows the selected channel's launcher version above its
+download buttons. Once loaded, the buttons link to that exact release's files, so a later publication cannot change
+the version being offered by an already-open page. Switching channels updates both the version and the links;
+missing files are marked unavailable. Refresh the page to check for newer releases. If the lookup fails, the original
+download routes and channel choices remain usable and the page suggests refreshing; without JavaScript it keeps the
+original links and explains how to enable the version display. For this live behavior locally, build then run `npx wrangler dev`;
+Astro's static preview alone does not serve the Worker endpoint.
+
+The Worker fills the `/download/` Astro shell with release information, preserving the
+shared header, navigation, search, themes and footer. If the shell cannot be loaded,
+the standalone response remains available. Version metadata also supplies file formats
+and sizes on the install page; desktop platform detection highlights a suggested button
+without changing keyboard order. Unsupported/mobile user agents retain both platforms.
+Launcher release notes and game/build release notes have separate labels.
+
+Scrollable tables and code examples have named keyboard stops. With JavaScript, a ResizeObserver removes those stops when the content fits; table semantics and headers are preserved.

@@ -8,7 +8,8 @@ namespace Shader::Ampere {
 class ProgramCaptureState {
 public:
     enum class Result { Continue, Complete, InvalidTarget };
-    static constexpr u32 MaximumInstructions = 65536;
+    // (hookshot: a target past the largest program, program_address_map.h, was 65,536 instructions, 1 MiB)
+    static constexpr u32 MaximumInstructions = MaximumNativeInstructions;
 
     Result Observe(const Instruction& instruction, u32 index) {
         const u32 opcode = instruction.Bits(0, 12);

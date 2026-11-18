@@ -78,6 +78,28 @@ export function best(releases) {
   return [null, null];
 }
 
+/** The versions shown before downloading, with the exact files of each displayed release. */
+export function launcherVersions(releases) {
+  return {
+    bestChannel: best(releases)[0],
+    channels: Object.fromEntries(CHANNELS.map((channel) => {
+      const release = newest(releases, channel);
+      return [channel, release ? {
+        tag: release.tag_name,
+        url: release.html_url,
+        sizes: Object.fromEntries(Object.keys(FILES).flatMap(kind => {
+          const asset = assetOf(release, kind);
+          return asset && Number.isSafeInteger(asset.size) && asset.size > 0 ? [[kind, asset.size]] : [];
+        })),
+        downloads: Object.fromEntries(Object.keys(FILES).flatMap((kind) => {
+          const asset = assetOf(release, kind);
+          return asset ? [[kind, viaCdn(asset.browser_download_url)]] : [];
+        })),
+      } : null];
+    })),
+  };
+}
+
 // ---- the release list, cached ----
 
 async function fetchReleases(ctx) {
@@ -231,15 +253,16 @@ function channelTable(releases) {
     const head = `<h3>${CHANNEL_NAME[c]} <small>${esc(CHANNEL_NOTE[c])}</small></h3>`;
     if (!r) return `<div class="channel">${head}<p>None yet.</p></div>`;
     const links = Object.keys(FILES).filter((k) => assetOf(r, k))
-      .map((k) => `<a class="pill" href="/download/launcher/${c}/${k}">${esc(FILES[k].label)}</a>`).join("");
+      .map((k) => `<a class="pill button" href="${esc(viaCdn(assetOf(r, k).browser_download_url))}">${esc(FILES[k].label)}</a>`).join("");
     return `<div class="channel">${head}<div class="others">${links}</div>` +
-      `<p><a href="/download/launcher/${c}">${esc(r.tag_name)}</a>, its release page</p></div>`;
+      `<p><a href="${esc(r.html_url)}">${esc(r.tag_name)}</a>, its release page</p></div>`;
   });
   return `<div class="channels">${rows.join("")}</div>`;
 }
 
 const NOT_THE_BUILDER = `<p class="lead">The launcher installs the builder and builds the game on your PC, from your own copy.</p>
-    <p>The <em>HookshotBuilder</em> files on Hookshot's releases are for the launcher, not for you to run.</p>`;
+    <p>The <em>HookshotBuilder</em> files on Hookshot's releases are for the launcher, not for you to run.</p>
+    <p>The versions on this page are the launcher's. The game it builds has Hookshot's own version numbers, separate from them.</p>`;
 
 const NEXT_STEPS = `<h2>Then</h2>
     <ol class="steps">
@@ -259,11 +282,11 @@ function downloadPage(request, releases) {
   const primary = os && assetOf(r, os) ? os : null;
   const bigs = (primary ? [primary] : ["windows", "linux"]).filter((k) => assetOf(r, k)).map((k) => {
     const a = assetOf(r, k);
-    return `<a class="big" href="/download/launcher/${k}">Download for ${k === "windows" ? "Windows" : "Linux"}` +
-      `<small>${esc(FILES[k].note)} · ${esc(mb(a.size))} · ${esc(r.tag_name)}</small></a>`;
+    return `<a class="big button primary" href="${esc(viaCdn(assetOf(r, k).browser_download_url))}">Download for ${k === "windows" ? "Windows" : "Linux"}` +
+      `<small>${esc(FILES[k].note)} · ${esc(mb(a.size))} · Launcher ${esc(r.tag_name)}</small></a>`;
   }).join(" ");
   const others = Object.keys(FILES).filter((k) => k !== primary && assetOf(r, k))
-    .map((k) => `<a class="pill" href="/download/launcher/${k}">${esc(FILES[k].label)} (${esc(FILES[k].note)})</a>`).join("");
+    .map((k) => `<a class="pill button" href="${esc(viaCdn(assetOf(r, k).browser_download_url))}">${esc(FILES[k].label)} (${esc(FILES[k].note)})</a>`).join("");
   const warn = channel === "stable" ? "" :
     `<div class="warn">There is no stable launcher yet: this is the newest <strong>${channel}</strong> (${esc(CHANNEL_NOTE[channel])}).</div>`;
   return page("Download the Hookshot Launcher", `    <h1>Download the Hookshot Launcher</h1>
@@ -280,13 +303,13 @@ function notFound(releases, what, kind) {
   const [channel, r] = best(releases);
   let offer = r ? `<p>The newest launcher there is: <strong>${esc(r.tag_name)}</strong> (${channel}).</p>` : "";
   if (r && kind && FILES[kind] && assetOf(r, kind)) {
-    offer += `<a class="big" href="/download/launcher/${channel}/${kind}">Get ${esc(r.tag_name)} instead` +
+    offer += `<a class="big button primary" href="/download/launcher/${channel}/${kind}">Get ${esc(r.tag_name)} instead` +
       `<small>${esc(FILES[kind].label)} · ${esc(FILES[kind].note)} · ${esc(CHANNEL_NOTE[channel])}</small></a>`;
   }
   return page("Not found: Hookshot Launcher", `    <h1>${esc(what)}</h1>
     ${offer}
     ${channelTable(releases)}
-    <p><a class="pill" href="/download">Back to the download page</a></p>`, 404);
+    <p><a class="pill button" href="/download">Back to the download page</a></p>`, 404);
 }
 
 // Release files are served by git-cdn.magicbean.dev, from Cloudflare's edge: the same path on its own host.
@@ -299,13 +322,17 @@ function redirect(url) {
 }
 
 async function download(request, ctx, parts) {
+  const versions = parts.length === 2 && parts[0] === "launcher" && parts[1] === "versions.json";
   let releases;
   try {
     releases = await fetchReleases(ctx);
   } catch (e) {
+    if (versions) return Response.json({ error: "Launcher versions unavailable" }, { status: 502, headers: { "Cache-Control": "no-store" } });
     return page("Hookshot Launcher", `    <h1>Can't reach git.magicbean.dev</h1>
     <p>${esc(e.message)}. Try again in a minute, or download from <a href="${FORGE}/${REPO}/releases">the release page</a>.</p>`, 502);
   }
+  // Uses the same cached release list and channel selection as the download redirects.
+  if (versions) return Response.json(launcherVersions(releases), { headers: { "Cache-Control": "no-store" } });
   // /download
   if (parts.length === 0) return downloadPage(request, releases);
   if (parts[0] !== "launcher") return notFound(releases, "No such download");
@@ -328,6 +355,33 @@ async function download(request, ctx, parts) {
   return redirect(a.browser_download_url);
 }
 
+/** Use the same built header, search, theme, fonts and footer as the docs. No fetch to the public origin. */
+export async function withSiteShell(response, request, env) {
+  if (!env.ASSETS) return response;
+  const fallback = response.clone();
+  try {
+    const shell = await env.ASSETS.fetch(new Request(new URL('/download/', request.url)));
+    if (!shell.ok) return fallback;
+    let html = await shell.text();
+    if (!html.includes('<launcher-download-content>')) return fallback;
+    const standalone = await response.text();
+    const title = standalone.match(/<h1>([\s\S]*?)<\/h1>/)?.[1];
+    const content = standalone.match(/<main>([\s\S]*?)<\/main>/)?.[1];
+    if (!title || !content) return fallback;
+    html = html.replace(/<launcher-download-content>[\s\S]*?<\/launcher-download-content>/,
+      () => `<launcher-download-content>${content.replace(/<h1>[\s\S]*?<\/h1>/, '')}</launcher-download-content>`)
+      .replace(/(<h1\b[^>]*>)[\s\S]*?(<\/h1>)/, (_, start, end) => start + title + end)
+      .replace(/<title>[\s\S]*?<\/title>/, () => `<title>${title} | Hookshot</title>`);
+    // Error responses must not advertise the successful download page in search/link previews.
+    if (response.status >= 400) {
+      html = html.replace(/<link\b[^>]*\brel=["']canonical["'][^>]*>/gi, '')
+        .replace(/<meta\b[^>]*(?:property|name)=["'](?:og:|twitter:|description|robots)[^"']*["'][^>]*>/gi, '')
+        .replace('</head>', () => `<meta name="robots" content="noindex"><meta property="og:title" content="${title.replaceAll('"', '&quot;')}"></head>`);
+    }
+    return new Response(html, { status: response.status, headers: response.headers });
+  } catch { return fallback; }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -335,7 +389,9 @@ export default {
     if (path === "/download" || path.startsWith("/download/")) {
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
       const parts = path.split("/").slice(2).filter(Boolean).map((p) => p.toLowerCase());
-      return download(request, ctx, parts);
+      const response = await download(request, ctx, parts);
+      if (!response.headers.get('Content-Type')?.startsWith('text/html')) return response;
+      return withSiteShell(response, request, env);
     }
     return env.ASSETS.fetch(request);
   },

@@ -9,7 +9,7 @@ layouts of gpu/render/rx_nvn.h. Checks:
   out of range, gets the object a new slot and never another object's buffer;
 - Finalize gives the slot back, and Initialize again without Finalize reuses nothing of another object;
 - a recording handle is live only while it is in the set (added, found, removed with others still found after the
-  removal moved them);
+  removal moved them), and the lock-free read check_handle tries first (live_handle_seen) agrees, through a growth too;
 - ReadTexels / WriteTexels' buffer extent covers every row and image the renderer walks, and huge strides that would
   wrap around give 0 (refused).
 
@@ -56,6 +56,7 @@ def main():
         live_decls,
         block(nvn, "static void live_handle_add("),
         block(nvn, "static int live_handle_has("),
+        block(nvn, "static int live_handle_seen("),
         block(nvn, "static void live_handle_remove("),
         block(nvn, "static uint64_t texels_extent("),
     ]
@@ -91,6 +92,10 @@ static int pool_off(void) { return 0; }
 static unsigned pool_class(size_t n) { (void)n; return 0; }
 static int puts_count;
 static void pool_put(void *b, unsigned c) { (void)c; free(b); puts_count++; }
+/* (host/mkw_glue.c's: never NULL; tests/test_host_alloc_wait.py checks their wait and notice) */
+static void *hos_xmalloc(size_t s, const char *what) { void *p = malloc(s); if (!p) { fprintf(stderr, "%s\n", what); exit(3); } return p; }
+static void *hos_xcalloc(size_t n, size_t s, const char *what) { void *p = calloc(n, s); if (!p) { fprintf(stderr, "%s\n", what); exit(3); } return p; }
+static void *hos_xrealloc(void *o, size_t s, const char *what) { void *p = realloc(o, s); if (!p) { fprintf(stderr, "%s\n", what); exit(3); } return p; }
 ''' + "\n".join(pieces) + r'''
 static void require(int ok, const char *m) { if (!ok) { fprintf(stderr, "FAIL: %s\n", m); exit(1); } }
 static int dies(void *(*f)(uint64_t, uint64_t), uint64_t a, uint64_t n) {
@@ -147,6 +152,15 @@ int main(void) {
     for (int i = 0; i < 5000; i += 3) live_handle_remove(h[i]);
     for (int i = 0; i < 5000; i++) require(live_handle_has(h[i]) == (i % 3 != 0), "removing handles lost others");
     require(nlive == 5000 - 1667, "the live count");
+    /* the same set read without the lock (check_handle's first look): what the locked read says, through a growth too */
+    for (int i = 0; i < 5000; i++) require(live_handle_seen(h[i]) == (i % 3 != 0), "the lock-free read disagrees with the set");
+    require(!live_handle_seen(0x7f0000000008ull) && !live_handle_seen(0), "the lock-free read found a handle never made");
+    const live_table *before = live_pub;
+    static uint64_t g[40000];
+    for (int i = 0; i < 40000; i++) { g[i] = 0x7e0000000000ull + (uint64_t)i * 0x40; live_handle_add(g[i]); }
+    require(live_pub != before && live_pub->slots == live_handles && live_pub->cap == live_cap, "a growth not published");
+    for (int i = 0; i < 40000; i++) require(live_handle_seen(g[i]) && live_handle_has(g[i]), "a handle lost in the growth");
+    for (int i = 0; i < 5000; i++) require(live_handle_seen(h[i]) == (i % 3 != 0), "the growth changed the older handles");
     /* ReadTexels / WriteTexels: the buffer span the strides reach */
     require(texels_extent(64, 4, 1, 64, 256) == 256, "a packed 64x4 region");
     require(texels_extent(64, 4, 2, 128, 1024) == 1024 + 3 * 128 + 64, "strided rows and images");

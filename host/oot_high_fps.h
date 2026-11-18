@@ -1,4 +1,4 @@
-/* (hookshot) Two places in the game that need whole 60 fps frames, under a Frame rate cap above 60, where the frame step is the
+/* (hookshot) Places in the game that need whole 60 fps frames, under a Frame rate cap above 60, where the frame step is the
    frame's own time (host/nn_vi.c, hos_frame_seconds_bits: 0.5 at 120 fps). nx2/oot_patches.py hooks them; host/oot_high_fps.c
    holds the state. At a cap of 60 (no frame time given: timed 0) both return what the game computed, so nothing changes.
 
@@ -12,6 +12,18 @@
    (dropped, the sound clock ran at half the real one). A step of 0 or less (or NaN), and every phase at a cap of 60, run as the
    game has them, and clear the remainder.
    (After zortos293/Lichii PR #1289 by auz466, GPL-3.0: the same gate as a code patch for the emulator.)
+
+   The music manager (game::Bgm, its update f_83373400) runs inside that job, so at 60 Hz too, but it reads the frame step and
+   the frame's seconds from the game's time object itself (+16 and +24), not from phase 0: held to 60 Hz and handed the
+   frame's own time, its clock ran at 60 / fps of the real one (0.56 measured at 120 fps; its timers, fades and stop delays, its
+   rest counter and the time-of-day property at half speed at 120, a quarter at 240). Its loads go through sound_step and
+   sound_seconds: while the gate holds the job, a whole step and that step's seconds (the frame's seconds over its step).
+   It also reads a byte of change flags the battle manager sets for one game frame ([[0x84c9dda0]]+0x4898: bit 5 the battle
+   music's name changed, bit 1 its distance volume, bits 2 and 6 two more, 6 running a count down) and syncs a property for each
+   bit set. Held to 60 Hz it saw only the frames it ran: at 120 fps the end of a fight was lost half the time, and the battle
+   music played on until the next fight or a reload (or stayed at a lower volume). On a frame the gate holds the job, it ORs
+   the byte, as the update would have read it then, into a latch (host/oot_high_fps.c); the update's next run reads its flags
+   with them. Two settings of one bit within one held stretch are handled once.
 
    The physics world's solver steps: the game sets them each update to (int)(frame step * the steps of a 60 fps frame + 0.001)
    (f_838ceb80 and f_838cfc10, into the solver's +712; 8 a 60 fps frame in the places seen). A step under 1 cuts that short,
@@ -73,6 +85,13 @@ static inline int oot_sound_gate(OotSoundGate *g, uint32_t phase, float step, in
 /* The step phase 0 hands to the sound engine: a whole one while the gate holds the job to whole steps */
 static inline uint32_t oot_sound_step(uint32_t step_bits, int timed) {
     return oot_sound_partial(oot_bits_float(step_bits), timed) ? 0x3f800000u : step_bits;
+}
+
+/* The frame's seconds the music manager reads beside the step: a whole step's while the gate holds the job (with the step: the
+   game's own base, 60 or the half-rate mode's 30, stays in it) */
+static inline uint32_t oot_sound_seconds(uint32_t seconds_bits, uint32_t step_bits, int timed) {
+    const float step = oot_bits_float(step_bits);
+    return oot_sound_partial(step, timed) ? oot_float_bits(oot_bits_float(seconds_bits) / step) : seconds_bits;
 }
 
 /* The solver's steps: game (the game's own count), scaled_bits (frame step * steps a 60 fps frame + 0.001, the float it cut),

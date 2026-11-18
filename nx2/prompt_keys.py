@@ -59,7 +59,9 @@ LABEL_FONT = "Font2/Scalable/ClarimoUDPE-DemiBold.Nin_Ounce_NVN2.bfotf.zs"   # (
 # ---- the sticks: the game's stick icons (L or R, with the ways they mean) as the keys that move (WASD: hookshot's defaults,
 # host/nn_hid.c key_default) and the mouse that turns the camera. In a text after a change while the game runs, each one's code
 # is rewritten to the face's: STICK_KEYS + its place on the keyboard face, STICK_GAME + its place (the game's own icon) on the
-# rest (host/prompts.c stick_code[]; U+F8E0..U+F8FF, in none of the game's fonts)
+# rest (host/prompts.c stick_code[]; U+F8E0..U+F8FF, in none of the game's fonts). With the movement keys bound anew
+# (host/prompts.c stick_shows) L's one way shows its key's icon, through a SLOT_BASE code in such a text, and L's several ways
+# the game's own icon: the pictures drawn here say W A S D
 STICKS = [   # (code point, stick, the ways shown: up down left right), in host/prompts.c stick_code order
     (0xE050, "move", "d"), (0xE052, "move", "u"), (0xE054, "move", "lr"), (0xE058, "move", "r"), (0xE05A, "move", "l"),
     (0xE05C, "move", "ud"), (0xE05E, "move", "uldr"),

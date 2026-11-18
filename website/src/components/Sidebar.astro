@@ -1,0 +1,14 @@
+---
+import DefaultSidebar from '@astrojs/starlight/components/Sidebar.astro';
+---
+<div class="site-destinations">
+  <a href="/">Home</a><a href="/download">Download launcher</a>
+</div>
+<DefaultSidebar />
+<style>
+  .site-destinations { display: none; }
+  @media (max-width: 49.99rem) {
+    .site-destinations { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+    .site-destinations a { display: inline-flex; align-items: center; min-height: 44px; padding: .4rem .6rem; color: var(--sl-color-text-accent); }
+  }
+</style>
