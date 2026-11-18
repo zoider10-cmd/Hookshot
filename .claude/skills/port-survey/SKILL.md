@@ -59,6 +59,11 @@ bash .claude/skills/port-survey/scripts/bench.sh <name> base <variant> [reps=3] 
   installed build. A renderer-only change: `F:/Games/perf-ab/buildmain.sh <label>` builds the DLL alone. A host or
   lift change needs the whole build (`rebuild.sh` of the rando-test skill, then copy the exe from the game folder,
   and put the installed one back if it is not kept).
+- A change to a file the shader stamp hashes (nx2/translator_files.py: vk_shader.cpp, vk_bank.cpp, vk_state.h, eden,
+  sirit, compat) makes every run of the other build re-prepare shaders: build the B renderer with
+  `HOOKSHOT_SHADER_STAMP=<A's stamp>` (only when the change doesn't alter what translation makes); install with the
+  honest stamp.
+- Keep the PC quiet during a bench (no browser, Discord, games): they spoil runs.
 - The test copy of the game (`F:/Games/perf-ab/game`) loads its newest save, teleports to the Market's fountain by
   day and walks, uncapped, headless; A and B interleave.
 - `gate.py` prints each run (mean fps, 1% low, worst frame) and the verdict: **FAIL** when the mean or the 1% low
