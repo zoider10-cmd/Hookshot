@@ -63,6 +63,9 @@ bash .claude/skills/port-survey/scripts/bench.sh <name> base <variant> [reps=3] 
   sirit, compat) makes every run of the other build re-prepare shaders: build the B renderer with
   `HOOKSHOT_SHADER_STAMP=<A's stamp>` (only when the change doesn't alter what translation makes); install with the
   honest stamp.
+- **Kakariko is the steadiest scene** (child, by day: same-build runs within ~1.5%, the Market's spread ~7%):
+  `STEPS="72:GO -41.7 79.7 11.4 KakarikoVillage CA;30:0:LUP/3000;10:0:LLEFT/2000;10:0:LUP/3000"`. The Market stays the
+  scene for the renderer's replay (it is replay-bound there; elsewhere the replay is about half the frame).
 - Keep the PC quiet during a bench (no browser, Discord, games): they spoil runs.
 - The test copy of the game (`F:/Games/perf-ab/game`) loads its newest save, teleports to the Market's fountain by
   day and walks, uncapped, headless; A and B interleave.
