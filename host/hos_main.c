@@ -1694,7 +1694,7 @@ static void oot_tracker_load(const char *stamp) {
         char area[48], ages[4], needs[192] = "", hash[32] = "", item[64] = "";   /* (needs: a rule's ways apart by "/", two of a whole rule each) */
         char *kind = kinds[oot_check_count];
         if (line[0] == '#') continue;   /* (the lines the menu takes, in its order: gpu/vk/vk_menu.cpp tracker_load) */
-        const int got = sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%191[A-Z,/-]|%31[0-9a-fA-F-]|%63[A-Za-z0-9_]", area, kind,
+        const int got = sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%191[A-Z0-9,/-]|%31[0-9a-fA-F-]|%63[A-Za-z0-9_]", area, kind,
                                oot_checks[oot_check_count].folder, ages, &oot_checks[oot_check_count].place[0],
                                &oot_checks[oot_check_count].place[1], &oot_checks[oot_check_count].place[2], needs, hash, item);
         if (got < 7) continue;

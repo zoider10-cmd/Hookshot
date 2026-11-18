@@ -242,7 +242,7 @@ def main():
     check("(frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs == 1 else None," in script and "now, found = gift_items(was, words, kinds=(0, 1, 4))" in script and
           "now = song_stone(open(os.path.join(romfs, *rel.split(\"/\")), \"rb\").read(), asked)" in script and "shop_parts | song_parts" in script,
           "the songs are not bound to the lessons with Song spots, their flows are not gone through, or the royal tomb's stones are left")
-    check("only=lesson_only, apart=frozenset(lessons) if a.songs == 2 else ())" in script and script.count("keep=frozenset(lesson_only))") == 2 and
+    check("only=lesson_only, apart=frozenset(lessons) if a.songs == 2 else (),\n                                      holds=holds or None," in script and script.count("keep=frozenset(lesson_only))") == 2 and
           "now, found = gift_items(was, {own[flow]: now_gives[own[flow]]}, kinds=(4,))" in script and
           "then, found = gift_items(now if now is not None else was, words, kinds=(0, 1))" in script and
           "asked = {old: new for old, new in now_gives.items() if new in SONG_ITEMS or new in lesson_safe}" in script,
@@ -266,7 +266,7 @@ def main():
           "the menu does not know a gating song's letters, or names a row the Inventory page has not")
     longest = len(",".join(S.CHECK_CODES.values()))
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    check(2 * longest + 1 <= S.CHECK_NEED == 191 and "char needs[192];" in menu and "|%191[A-Z,/-]|" in menu and 'needs[192] = ""' in host and "|%191[A-Z,/-]|" in host,
+    check(2 * longest + 1 <= S.CHECK_NEED == 191 and "char needs[192];" in menu and "|%191[A-Z0-9,/-]|" in menu and 'needs[192] = ""' in host and "|%191[A-Z0-9,/-]|" in host,
           "a rule that names every item (%d letters and commas) does not fit the menu's or the game's line" % longest)
     # (a song looks like Sheik's harp: its ModelInfo in its pack, and its row in the list of actors)
     info = lambda model: seed.byml_build(("dict", collections.OrderedDict((("FmdbName", ("string", model)), ("ModelProjectName", ("string", model))))), 7)

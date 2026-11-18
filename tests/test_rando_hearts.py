@@ -77,7 +77,7 @@ def main():
     check('named("Piece of Heart", h, pieces[h][0], pieces[h][1]), h,' in script and "heart_drops.get(h, HEART)) for h in pieces]," in script,
           "the pieces are not written with the checks")
     header = (ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
-    check('X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \\' in header and "With Major items: the 14 Pieces of Heart lying in the world take part. A piece can be a key item: it still looks like a Piece of Heart" in header,
+    check('X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \\' in header and "The 14 Pieces of Heart lying in the world take part as chests do: a piece can give any item of the shuffle but keys and songs. It still looks like a Piece of Heart" in header,
           "the setting's row does not say what it does")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     check('oot_checks[oot_check_count].piece = got >= 9 && !strncmp(kind, "Piece of Heart", 14) ? strtoull(hash, NULL, 16) : 0;' in host and

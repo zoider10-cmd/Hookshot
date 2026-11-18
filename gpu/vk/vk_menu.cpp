@@ -2329,6 +2329,9 @@ constexpr LogicItem kLogicItems[] = {
     {"GT", "Goron Tunic", {"Goron Tunic"}},
     {"ZT", "Zora Tunic", {"Zora Tunic"}},
 };
+// (a rule's "T<N>": N Gold Skulltula tokens, by the Inventory page's count of them. tools/rando/rando_seed.py token_codes,
+// placement 12: the Skulltula house's rewards)
+constexpr const char* kTokenRow = "Gold Skulltula Tokens";
 int tracker_in_logic(const TrackerCheck& k, std::string* missing) {
     if (k.needs[0] == '?' || item_counts[0].load(std::memory_order_relaxed) < 0) return -1;
     // (a rule's ways, apart by "/": in logic when one of them is held; missing is said of the way with the fewest)
@@ -2353,6 +2356,15 @@ int tracker_way_held(const char* way, size_t len, std::string* missing) {
         const size_t n = std::min((size_t)(end - p), strcspn(p, ",/"));
         bool known = false, has = false;
         const char* name = "an item this menu does not know";
+        if (n >= 2 && p[0] == 'T' && strspn(p + 1, "0123456789") >= n - 1) {   // ("T<N>": N Gold Skulltula tokens, the Skulltula house's rewards)
+            const int want = atoi(p + 1);
+            for (int i = 0; i < kItems; i++)
+                if (!strcmp(item_names[i], kTokenRow) && item_counts[i].load(std::memory_order_relaxed) >= want) has = true;
+            if (has) continue;
+            in = 0;
+            if (missing) *missing += (missing->empty() ? "" : ", ") + std::to_string(want) + " Gold Skulltula tokens";
+            continue;
+        }
         for (const LogicItem& item : kLogicItems) {
             if (strlen(item.code) != n || strncmp(item.code, p, n)) continue;
             known = true, name = item.name;
@@ -2661,7 +2673,7 @@ void tracker_load() {
             TrackerCheck& k = tracker_checks[checks];
             k.needs[0] = '?', k.needs[1] = 0;   // (a file written before the rules were in it)
             char hash[32], gives[64];   // (the game side's: host/hos_main.c oot_tracker_load)
-            const int got = line[0] == '#' ? 0 : sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%191[A-Z,/-]|%31[^|]|%63[^|]|%f %f %f", k.area, k.kind,
+            const int got = line[0] == '#' ? 0 : sscanf(line, "%47[^|]|%79[^|]|%39[^|]|%3[^|]|%f %f %f|%191[A-Z0-9,/-]|%31[^|]|%63[^|]|%f %f %f", k.area, k.kind,
                                                         k.folder, k.ages, &k.pos[0], &k.pos[1], &k.pos[2], k.needs, hash, gives, &k.stand[0], &k.stand[1],
                                                         &k.stand[2]);
             if (got >= 7) {

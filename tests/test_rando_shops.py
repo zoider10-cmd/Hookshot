@@ -539,7 +539,7 @@ def main():
     check("if placement >= 5:   # (Zora's Domain by the river or by the lake, zora_ways)" in script and
           "needs = {h: n if h in story else forest(n, spots[h][0]) for h, n in needs.items()}" in script and "met(needs[h], have)" in script and
           seed.forest_open(seed.CHILD, "DodongoCavern") == frozenset({seed.BB}) and seed.forest_open(seed.CHILD | {seed.BB}, "DodongoCavern") == frozenset({seed.BB}) and
-          '"/".join(",".join(code for item, code in CHECK_CODES.items() if item in way)' in script,
+          '"/".join(",".join([code for item, code in CHECK_CODES.items() if item in way] + token_codes(way))' in script,
           "the rules' ways are not made, read by the placement, or written for the tracker")
     check(seed.PLACEMENT >= 6 and set(seed.DEKU_STORY) == {"song_zelda", "song_saria"} and
           "story = ({h for h, g in gifts.items() if g.key in DEKU_STORY} if placement >= 6 else set()) | slingshot_room" in script and
@@ -550,7 +550,7 @@ def main():
           "| slingshot_room" in script,
           "the Deku Tree's Slingshot room's chests do not ask for the Slingshot, with Open forest exit too (SLINGSHOT_ROOM)")
     check(seed.PLACEMENT >= 8 and "skull_door = skull_door if placement >= 8 else door" in script and
-          "skull_asks = lambda h: skull_door(step(" in script,
+          "skull_asks = lambda h, at=None: (lambda area: skull_door(step(" in script,
           "Open forest exit still lightens the Gold Skulltulas' rules in new seeds (a Deku Tree Skulltula could hold the sword)")
     menu = (ROOT / "gpu" / "vk" / "vk_menu.cpp").read_text(encoding="utf-8")
     check("const int held = tracker_way_held(way, strcspn(way, \"/\"), &left);" in menu and "if (held) return 1;" in menu,

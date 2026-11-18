@@ -45,7 +45,7 @@
       "Which treasure chests hold a shuffled item. All is every chest in the game.", \
       "Off", "Overworld", "Dungeons", "All") \
     X(SKULLTULAS, "Gold Skulltulas", "rando_skulltulas", \
-      "Which Gold Skulltulas take part: their tokens change places with the chests' supplies (all but rupees). Needs Chests.", \
+      "Which Gold Skulltulas take part as chests do: one can drop any item of the shuffle a pick-up can be (not rupees, Pieces of Heart, keys, songs or bottles), and its token can be anywhere. The Skulltula house's rewards ask for their tokens. Needs Chests.", \
       "Off", "Dungeons", "Overworld", "All") \
     X(QUESTS, "Quest rewards", "rando_quests", \
       "What some characters give takes part with the chests: Darunia, mini-games (the frogs of Zora's River among them), side quests and the Gold Skulltula family. Needs Chests.", \
@@ -54,7 +54,7 @@
       "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere: the songs are items like any other, in chests, shops and gifts (a song looks like a green rupee), and a lesson gives whatever the seed put there. Some lessons can only hold a song or a few one-of-a-kind items, so some songs stay in lessons.", \
       "Off", "Song spots", "Anywhere") \
     X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \
-      "With Major items: the 14 Pieces of Heart lying in the world take part. A piece can be a key item: it still looks like a Piece of Heart and its scene says so, but the key item is what Link gets, and the chest it left holds the piece. Pieces given by a character or held by a chest are not these.", \
+      "The 14 Pieces of Heart lying in the world take part as chests do: a piece can give any item of the shuffle but keys and songs. It still looks like a Piece of Heart and its scene says so, but the item is what Link gets, and the piece is somewhere else. Pieces given by a character or held by a chest are not these.", \
       "Off", "On") \
     X(SHOPS, "Shops", "rando_shops", \
       "Four shelves of each shop sell a shuffled item, once each, at a rolled price of 1 to 750 rupees. The wallets are shuffled too: a price asks for one that holds it. Needs Chests.", \

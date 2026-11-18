@@ -95,7 +95,7 @@ restore is refused while the game runs (`SaveCopies`, launcher/Launcher.cs; `tes
 | Setting | What `rando_seed.py` does with it |
 |---|---|
 | Chests | Overworld / Dungeons / All: which chests take part. Their items are shuffled among them, across areas. |
-| Gold Skulltulas | Dungeons / Overworld / All: which Gold Skulltulas take part. Their tokens change places with the chests' Deku Scrub seeds and bomb, Bombchu, nut and stick bundles (`SKULLTULA_ITEMS`): a chest gives a token, a Skulltula drops the chest's item, made a pick-up. No gating item, key or Heart Piece goes to a Skulltula: the rules do not know their places yet. Needs Chests. |
+| Gold Skulltulas | Dungeons / Overworld / All: which Gold Skulltulas take part. Their tokens change places with the chests' Deku Scrub seeds and bomb, Bombchu, nut and stick bundles (`SKULLTULA_ITEMS`): a chest gives a token, a Skulltula drops the chest's item, made a pick-up. No gating item, key or Heart Piece goes to a Skulltula: the rules do not know their places yet. From placement 12 they take part as chests do (below). Needs Chests. |
 | Dungeon keys | Off: a dungeon's small keys, Boss Key, map and compass stay in their chests. Own dungeon: shuffled among that dungeon's chests. Anywhere: as Own dungeon for now. |
 | Major items | On: the chests that start an event take part too (most of the big items), placed by the logic. The same as `--event-chests`. |
 | Open Deku Tree | On: in a new game Mido lets Link by to the Great Deku Tree without a sword and a shield. |
@@ -137,7 +137,8 @@ chests that start an event when opened (most of the big items).
 **Heart Pieces** (`rando_heart_pieces`, `--heart-pieces`, `HEART`): the 14 Pieces of Heart lying in the world take
 part (the map files' `Obj_Heart_Piece` actors, and Gerudo Valley's `Obj_GerudoValley_Heart_Piece`). With the logic on,
 some gating items are moved to the pieces where the rules still let the game be finished; the chest such an item
-leaves gives the Piece of Heart. A piece holds its own piece or a gating item, nothing else.
+leaves gives the Piece of Heart. A piece holds its own piece or a gating item, nothing else. From placement 12 they
+take part as chests do (below).
 - The map is left as it is: the piece lies there, is taken as a piece and stays taken as every piece does. Its
   check's line says what it gives, and the game's side puts that item in the pouch in the piece's place
   (`host/hos_main.c` `oot_piece_gives`: a Piece of Heart entering the pouch within 12 m of such a check, not from an
@@ -500,7 +501,23 @@ not known without reading that format.
   their Skulltulas were back when the room was entered again; the nuts were got once some had been bought. It is
   there for later, as a token out of reach is, with no text to say why. The stick and Bombchu bundles have not been
   seen.
-- **Gating items on Skulltulas** (`gate_skulltulas`, with Major items and the logic): after the chests are placed, about
+- **Placement 12: the Skulltulas and the pieces lying in the world take part as chests do** (bug 67, the owner's word,
+  2026-11-17; `SHUFFLED_FROM`). Each is a spot of the main placement (`place`), its token or its piece in the pool,
+  and holds what it may (`place`'s `holds`): a Skulltula its token, the supplies above, a gating item as
+  `gate_skulltulas` let one before (not the Silver Scale, the wallets, the songs or the tunics) and the one-of-a-kind
+  items of the same make (`SKULLTULA_MORE`: the Stone of Agony, the magic arrows and spells, the bigger bags, quivers
+  and bullet bags, the shields, the large Bombchu bundle), never a rupee, a Piece of Heart, a dungeon's key, map or
+  compass, a song, a bottle, a scale or a wallet (`skulltula_holds`); a piece any item of the pool but a dungeon's
+  key, map or compass, a song, a tunic, a stone or medallion (`piece_holds`). The Skulltula house's rewards ask for
+  their tokens, counted (`HOUSE_TOKENS`, `tokens`: a rule's "Tokens:N" is held when N places that give a token are
+  reached, the Skulltulas that keep theirs counted where they are), and the 40 tokens' reward, the large Bombchu
+  bundle, is a gift of the shuffle (`skulltula_house_40`); the 100 tokens' stays the game's. With a reward counting
+  them, the tokens are placed by the logic after the gating items (`place`'s `counted`), first to the Skulltulas while
+  the other items could not fill them all. The Tracker tab writes the count "T<N>" and holds it by the inventory's
+  Gold Skulltula Tokens. Not seen in play yet: a Skulltula dropping one of `SKULLTULA_MORE`, a piece giving anything
+  but a gating item (a rupee, a token, a bundle: a bundle Link cannot carry is given as nothing, the piece taken).
+  Before 12 (below) they took part only partly.
+- **Gating items on Skulltulas** (`gate_skulltulas`, with Major items and the logic, until placement 11): after the chests are placed, about
   a third of the gating items are each tried on a Skulltula that still drops its token, and stay there if every
   gating item can still be got by the rules; the chest left behind gives the token. What a Skulltula asks for is not
   known one by one yet, so each asks for too much (`SKULLTULA_ASKS`: the three stones' items, the Longshot and the

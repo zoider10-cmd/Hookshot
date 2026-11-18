@@ -60,7 +60,7 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 12  # 12: the Goron and Zora Tunics are gifts of the shuffle, and the rules ask for them (TUNICS); the chests with a substitute take part (SUBSTITUTE_CHESTS); 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+PLACEMENT = 12  # 12: the Goron and Zora Tunics are gifts of the shuffle, and the rules ask for them (TUNICS); the chests with a substitute take part (SUBSTITUTE_CHESTS); the Gold Skulltulas and the Pieces of Heart lying in the world take part as chests do (SHUFFLED_FROM), and the Skulltula house's rewards, with the 40 tokens' one, ask for their tokens, counted (HOUSE_TOKENS); 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
                 # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
                 # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
                 #    asking for the forest's way out (forest_open)
@@ -456,18 +456,35 @@ Gift = collections.namedtuple("Gift", "key flow olds item area name need when en
 # for Quest rewards). entry: None, or the one entry point of the flow whose calls are the gift's (two sales of one
 # flow that name the same item: the Business Scrubs' two Pieces of Heart).
 # (a gift added after seeds were made takes part from the placement that added it: the seeds before keep their shuffle)
-GIFTS_FROM = {"potion_bottle": 9, "goron_tunic": 12, "zora_tunic": 12}
+GIFTS_FROM = {"potion_bottle": 9, "goron_tunic": 12, "zora_tunic": 12, "skulltula_house_40": 12}
 EVERYTHING = PROGRESSION | QUEST_GATES | TUNICS
+# The Skulltula house's rewards (bug 67, placement 12): each asks for its number of tokens, counted by the logic
+# (tokens), and for what it takes to come to the house in Kakariko, a child's or an adult's: out of the forest
+# (HOUSE_NEED, as the cucco lady's). Before 12 they asked for everything (the logic counted no tokens). The 40 tokens'
+# reward, the large Bombchu bundle (GatheringTokenGold's TakenReward_Common_Event, TakenRewardActor), takes part from
+# 12. The 100 tokens' (Obj_Rupee_Gold, given again at each talk: TakenReward_Common_Event_200Rupee) stays the game's,
+# as the owner said (2026-11-17).
+HOUSE_TOKENS = {"skulltula_house_10": 10, "skulltula_house_20": 20, "skulltula_house_30": 30, "skulltula_house_40": 40, "skulltula_house_50": 50}
+HOUSE_NEED = CHILD
+HOUSE_FROM = 12
+
+
+def house_need(key, need, placement):
+    """what a gift asks for: a Skulltula house's reward its tokens and the way to the house (from HOUSE_FROM), any
+    other gift `need`"""
+    return frozenset(HOUSE_NEED | {tokens(HOUSE_TOKENS[key])}) if placement >= HOUSE_FROM and key in HOUSE_TOKENS else need
 GIFTS = (
     Gift("darunia", "Dm_Goron_0030", ("Item_Gauntlet_Goron",), BR, "GoronCity", "Darunia's gift", CHILD, None),
     Gift("lostwood_target", "Dm_LostWood_0040", ("Item_BulletBag_Medium", "Item_BulletBag_Large"), "Item_BulletBag_Medium", "LostWood",
          "the Lost Woods target", CHILD, None),
     Gift("skulltula_house_10", "GatheringTokenGold", ("Item_Wallet_Medium",), "Item_Wallet_Medium", "KakarikoVillage",
-         "the Skulltula house: 10 tokens", EVERYTHING, None),   # (tokens: the logic does not count them yet)
+         "the Skulltula house: 10 tokens", EVERYTHING, None),   # (tokens: counted from placement 12, house_need)
     Gift("skulltula_house_20", "GatheringTokenGold", ("Item_AgonyStone",), "Item_AgonyStone", "KakarikoVillage",
          "the Skulltula house: 20 tokens", EVERYTHING, None),
     Gift("skulltula_house_30", "GatheringTokenGold", ("Item_Wallet_Large",), "Item_Wallet_Large", "KakarikoVillage",
          "the Skulltula house: 30 tokens", EVERYTHING, None),
+    Gift("skulltula_house_40", "GatheringTokenGold", ("Item_BombchuBundle_Large",), "Item_BombchuBundle_Large", "KakarikoVillage",
+         "the Skulltula house: 40 tokens", EVERYTHING, None),
     Gift("skulltula_house_50", "GatheringTokenGold", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "KakarikoVillage",
          "the Skulltula house: 50 tokens", EVERYTHING, None),
     Gift("forest_stage_skull", "LostWood_ScrubForestStageElder_SkullMaskFirst", ("Item_StickBag_Medium", "Item_StickBag_Large"),
@@ -1601,28 +1618,70 @@ def rule(area, event):
     return by_event.get(event, default)
 
 
+# Counted tokens (bug 67, placement 12). The Skulltula house's rewards ask for a number of Gold Skulltula tokens: its
+# flow asks the pouch (GatheringTokenGold: PouchData.Item_Token_Gold.StockNum at 10, 20, 30, 40 and 50), so a token got
+# anywhere counts, from a Skulltula, a chest, a gift or a piece. A rule asks for N of them by a word of its own,
+# tokens(N) ("Tokens:N"), held when N places that give a token can be reached: collect and reach count the places of
+# placed whose item is TOKEN and whose rule is met, and hold tokens(N) for each N of TOKEN_COUNTS up to that count.
+# Every other step that makes a rule (the progressive items, Open forest exit, the Door of Time...) leaves the word as
+# it is, and the tracker's file writes it "T<N>" (check_lines), which the Tracker tab reads by the pouch's tokens.
+TOKEN_WORD = "Tokens:%d"
+TOKEN_COUNTS = (10, 20, 30, 40, 50)
+
+
+def tokens(n):
+    """the word a rule asks for n tokens by"""
+    return TOKEN_WORD % n
+
+
+def token_marks(count):
+    """the words of TOKEN_COUNTS that `count` tokens hold"""
+    return {tokens(n) for n in TOKEN_COUNTS if n <= count}
+
+
+def token_count(word):
+    """N of the word tokens(N), or None for an item"""
+    head, _, n = word.partition(":")
+    return int(n) if head == "Tokens" and n.isdigit() else None
+
+
 def collect(placed):
     """What Link can get from nothing: placed is [(what the chest asks for, its item)]. Returns the spheres: the
-    items each round of opening every chest he can reach adds."""
+    items each round of opening every chest he can reach adds. The tokens of the places reached are counted, for the
+    rules that ask for a number of them (tokens): the words they hold are not in the spheres."""
     have, spheres = set(), []
     while True:
         new = sorted({item for need, item in placed if item in PROGRESSION and item not in have and met(need, have)})
-        if not new:
+        marks = token_marks(sum(1 for need, item in placed if item == TOKEN and met(need, have))) - have
+        if not new and not marks:
             return spheres
         have.update(new)
-        spheres.append(new)
+        have.update(marks)
+        if new:
+            spheres.append(new)
 
 
 def reach(have, placed):
-    """have, and every item that can then be got from the chests of placed"""
-    have = set(have)
+    """have (any iterable: each token in it counts), and every item that can then be got from the chests of placed,
+    with the words of the tokens held (tokens)"""
+    have = list(have)
+    count = have.count(TOKEN)
+    have = set(have) | token_marks(count)
+    got = [False] * len(placed)
     grew = True
     while grew:
         grew = False
-        for need, item in placed:
-            if item not in have and met(need, have):
-                have.add(item)
-                grew = True
+        for k, (need, item) in enumerate(placed):
+            if not got[k] and met(need, have):
+                got[k] = True
+                count += item == TOKEN
+                if item not in have:
+                    have.add(item)
+                    grew = True
+        marks = token_marks(count) - have
+        if marks:
+            have |= marks
+            grew = True
     return have
 
 
@@ -1972,6 +2031,50 @@ SKULLTULA_ITEMS = ("Item_ScrubBusinessSeed", "Item_BombBundle_Small", "Item_Bomb
 # world rupee thinks with (AIInfoRef DropItem: it fell); a world rupee (Obj_Rupee_*) dropped in a chest rupee's place
 # (it fell into water, and its Skulltula was back each time).
 SKULLTULA_ITEMS_NOT_YET = ("TBox_Rupee_Green", "TBox_Rupee_Blue", "TBox_Rupee_Red", "TBox_Rupee_Purple", "TBox_Rupee_Gold")
+# Placement 12 (bug 67, the owner's word, 2026-11-17): the Gold Skulltulas and the Pieces of Heart lying in the world
+# take part as chests do, in the main placement (place), their token and their piece going into the pool; each holds
+# what it can hold of the pool (place's `holds`), and the rest goes to the other places. What a Skulltula may drop
+# (skulltula_holds): its token; the supplies above; a gating item as gate_skulltulas let one before (the Boomerang,
+# the Megaton Hammer and the small Bomb Bag were seen dropped and got), but not those it never tried (SKULLTULA_NEVER:
+# the Silver Scale, the wallets, the songs), nor the tunics (not a chest's item: pickup_pack cannot make one a pick-up,
+# found making a seed of 12, "Obj_Armor_Goron is not made from Item_EventObject_Base"); and the one-of-a-kind items of
+# the same make as those gating items (SKULLTULA_MORE: the Stone of Agony, the magic arrows and spells, the bigger
+# bags, quivers and bullet bags, the shields), which no Skulltula has dropped yet: to be seen in play.
+# Not a Skulltula's: the Pieces of Heart and the rupees (above: seen not to work), a dungeon's keys, map and compass
+# (counted for the dungeon they are got in, and the rules know no Skulltula's place in a dungeon well enough), the
+# songs (none got from a pick-up yet), the bottles, the scales and the wallets (never tried on one), the Heart
+# Containers, the dungeons' stones and medallions, and anything else not named: they go to chests, gifts, shelves and
+# the pieces.
+SHUFFLED_FROM = 12   # (the placement from which they take part so; before, gate_skulltulas and mix_skulltulas)
+SKULLTULA_MORE = frozenset(("Item_AgonyStone", "Item_Arrow_Fire", "Item_Arrow_Ice", "Item_Arrow_Light", "Item_DinFire", "Item_FaroreWind",
+                            "Item_NayruLove", "Item_BombBag_Medium", "Item_BombBag_Large", "Item_BulletBag_Medium", "Item_BulletBag_Large",
+                            "Item_Quiver_Medium", "Item_Quiver_Large", "Item_StickBag_Medium", "Item_StickBag_Large", "Item_NutBag_Medium",
+                            "Item_NutBag_Large", "TBox_Shield_Deku", "TBox_Shield_Hylian", "Item_BombchuBundle_Large"))
+SKULLTULA_NEVER = frozenset(("Item_Scale_Silver", "Item_Scale_Gold", "Item_Wallet_Medium", "Item_Wallet_Large", "Item_Bottle",
+                             "Obj_Armor_Goron", "Obj_Armor_Zora", "Obj_Heart_Piece", "Obj_Heart_Container") + SKULLTULA_ITEMS_NOT_YET)
+
+
+def skulltula_holds(item, gating):
+    """whether a Gold Skulltula may drop this item (placement 12, see above); gating: the seed's gating items"""
+    if item in SKULLTULA_NEVER or item.startswith("Item_Melody_") or item in DUNGEON_ITEMS:
+        return False
+    return item == TOKEN or item in SKULLTULA_ITEMS or item in SKULLTULA_MORE or item in gating
+
+
+# What a Piece of Heart lying in the world may give (placement 12): the piece stays in the map and the game's side
+# renames the pouch's add of the piece to the item (host/hos_main.c oot_piece_gives), the way the game itself gives
+# any item (a gold rupee's add is 200 rupees, the game's side's own fill). Seen in play: the Megaton Hammer of Zora's
+# River. Not a piece's (PIECE_NEVER): a dungeon's keys, map and compass (a piece lies in the overworld, and a key is
+# counted for the dungeon it is got in), the songs (none given by an add's name yet: a song's scene and flags are the
+# lesson's), the tunics (gifts' items whose pouch names are not theirs, Armor_Adult_*), the dungeons' stones and
+# medallions and the Heart Containers. A bundle Link has nothing to carry in is given as nothing, the piece taken: a
+# supply lost, not a check left (to be seen in play).
+PIECE_NEVER = frozenset(("Obj_Armor_Goron", "Obj_Armor_Zora", "Obj_Heart_Container"))
+
+
+def piece_holds(item):
+    """whether a Piece of Heart lying in the world may give this item (placement 12, see above)"""
+    return not (item in PIECE_NEVER or item.startswith("Item_Melody_") or item in DUNGEON_ITEMS or item in REWARD_ITEMS)
 
 
 def skulltulas(data):
@@ -3508,6 +3611,12 @@ CHECK_CODES = collections.OrderedDict((
     ("Obj_Armor_Goron", "GT"), ("Obj_Armor_Zora", "ZT")))   # (the tunics, placement 12: TUNICS)
 
 
+def token_codes(way):
+    """the tracker's letters of the tokens a way of a rule asks for (tokens): "T<N>", which the Tracker tab holds when
+    the pouch has N Gold Skulltula tokens (gpu/vk/vk_menu.cpp tracker_way_held)"""
+    return ["T%d" % n for n in sorted(token_count(word) or 0 for word in way) if n]
+
+
 def check_ages(names):
     """C, A or CA: the ages whose map files (names) have a check. A map without an age in its name is both's."""
     child = any("_Child" in n or "_Adult" not in n for n in names)
@@ -3525,6 +3634,7 @@ GIFT_PLACES = {
     "skulltula_house_10": ("CA", (-26.5, 109.9, 74.5)),    # (Npc_SkullDad at z 72.5)
     "skulltula_house_20": ("CA", (-26.5, 109.9, 74.5)),
     "skulltula_house_30": ("CA", (-26.5, 109.9, 74.5)),
+    "skulltula_house_40": ("CA", (-26.5, 109.9, 74.5)),
     "skulltula_house_50": ("CA", (-26.5, 109.9, 74.5)),
     "forest_stage_skull": ("C", (-10.0, 83.2, -52.0)),     # (ScrubForestStageElder at z -54.5)
     "forest_stage_truth": ("C", (-10.0, 83.2, -52.0)),
@@ -3951,7 +4061,8 @@ def song_stone(data, now):
 # Obj_GerudoValley_Heart_Piece: the same without being lifted). With the setting on some gating items are moved to
 # the pieces, where the rules still let the game be finished (gate_skulltulas, as for the Skulltulas), and the chest
 # such an item leaves gives a Piece of Heart, as some of the game's do. A piece holds its own piece or a gating
-# item, nothing else, and nothing moves without the logic.
+# item, nothing else, and nothing moves without the logic. So until placement 11: from 12 (bug 67) a piece takes part
+# as a chest does, its piece in the pool, and gives any item of the pool it may (piece_holds).
 # The map is left as it is: the piece lies there, is taken as a piece and stays taken as every piece does. What it
 # gives is said in its check's line, and the game's side puts that item in the pouch in the piece's place
 # (host/hos_main.c oot_piece_gives). The scene is the piece's: it shows a Piece of Heart and says so.
@@ -4033,7 +4144,7 @@ def check_lines(chests, skulls, gifts=()):
                 continue
             name = more[0] if more else plain
             rows.append([AREA_NAMES.get(area, area).replace("|", "/")[:47], (name[:1].upper() + name[1:]).replace("|", "/"), area, ages, pos,
-                         "/".join(",".join(code for item, code in CHECK_CODES.items() if item in way) or "-" for way in (need if isinstance(need, Either) else (need,))),
+                         "/".join(",".join([code for item, code in CHECK_CODES.items() if item in way] + token_codes(way)) or "-" for way in (need if isinstance(need, Either) else (need,))),
                          order, more[1] if len(more) > 1 else None,
                          more[2] if len(more) > 2 else "", more[3] if len(more) > 3 else None])
     too_long = [r for r in rows if len(r[5]) > CHECK_NEED]
@@ -4077,7 +4188,7 @@ def remove_old(mod):
     return n
 
 
-def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart=()):
+def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart=(), holds=None, counted=False, fixed_more=()):
     """What each chest holds. spots: {hash: (area, item, is a dungeon's chest, why it stays or None)}, in a fixed order.
     needs: {hash: what the chest asks for} for the logic, or None: no logic.
     Returns ({hash: item} for the chests that take part, how many chests stay for each reason, the spheres or None).
@@ -4088,7 +4199,15 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart
     only: None, or {hash: (items, more items)}: that spot holds one of those items and nothing else (Songs: Anywhere,
     the lessons asked about by name). It is given one of `items` when one is left, else one of `more items`; the
     logic may put a gating item of either there, and does when too few of the others are left for them all.
-    apart: spots that are not a dungeon's chests though they are in its area (the lessons)."""
+    apart: spots that are not a dungeon's chests though they are in its area (the lessons).
+    holds: None, or {hash: the items that spot may hold}: it is given none other (placement 12: the Gold Skulltulas
+    and the Pieces of Heart lying in the world, skulltula_holds and piece_holds); the others take the rest. A token
+    the logic places goes to such a spot first while the items it does not place could not fill them all, and an
+    arrangement whose items left could not is tried again.
+    counted: the tokens are placed by the logic too, after the gating items, for the rules that count them (tokens):
+    each where it can be reached with the items still to be placed, as a gating item is.
+    fixed_more: [(what it asks for, its item)] of places that are not spots and keep an item the logic counts (a Gold
+    Skulltula that keeps its token)."""
     only = only or {}
     groups = [g for g in ([bound] if isinstance(bound, tuple) else bound or []) if g]
     bound = groups or None
@@ -4112,6 +4231,15 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart
             out[h] = rng.choice(mine)
             left.remove(out[h])
         return out
+
+    def holds_short(spots_left, items_left):
+        """how many of the spots of `holds` among spots_left would find nothing they may hold among items_left: their
+        kinds taken as nested, the smallest first (the Gold Skulltulas' within the pieces')"""
+        left = [h for h in spots_left if h in holds]
+        short = 0
+        for kind in sorted({holds[h] for h in left}, key=len):
+            short = max(short, sum(1 for h in left if holds[h] <= kind) - sum(1 for i in items_left if i in kind))
+        return short
     stays = collections.Counter()
     pool = []
     for h, (area, item, dungeon, why) in spots.items():
@@ -4132,6 +4260,8 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart
         own = [spots[h][1] for h in here if spots[h][1] in DUNGEON_ITEMS]
         if bound or apart:   # (a lesson in a dungeon's area is not one of its chests)
             here = [h for h in here if h not in bound_spots and h not in apart]
+        if holds:   # (a Gold Skulltula of a dungeon holds none of its keys)
+            here = [h for h in here if h not in holds or set(own) <= holds[h]]
         for h, item in zip(rng.sample(here, len(own)), own):
             gives[h] = item
     rest = [h for h in pool if h not in gives]
@@ -4140,11 +4270,15 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart
     held = None   # (what the spots of `only` hold that the logic did not put there)
     if needs is not None:
         gating = sorted(i for i in items if i in PROGRESSION)
-        # (a gating item in a chest that stays is got there, as the game has it)
-        fixed = [(needs[h], spots[h][1]) for h in spots if h not in pool and spots[h][1] in PROGRESSION]
+        tokens_in = [i for i in items if counted and i == TOKEN]   # (placed after the gating items: counted)
+        # (a gating item in a chest that stays is got there, as the game has it; and a token that stays, counted)
+        fixed = [(needs[h], spots[h][1]) for h in spots if h not in pool and (spots[h][1] in PROGRESSION or counted and spots[h][1] == TOKEN)]
+        fixed += list(fixed_more)
+        plain_items = [i for i in items if i not in PROGRESSION and not (counted and i == TOKEN)]   # (what the logic does not place)
         for attempt in range(400):
             order = list(gating)
             rng.shuffle(order)
+            order += tokens_in
             placed, ok = {}, True
             # (the spots of `only` that the items of their first kind which are not gating cannot fill: so many gating
             #  items of that kind go to them, so that the second kind, the songs, is left for the world)
@@ -4160,30 +4294,38 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart
             for k, item in enumerate(order):
                 # Link with every gating item still to be placed, and what the chests filled so far then give him
                 have = reach(order[k + 1:], fixed + [(needs[h], i) for h, i in placed.items()])
-                free = [h for h in rest if h not in placed and met(needs[h], have) and (not (bound or only) or fits(item, h))]
+                free = [h for h in rest if h not in placed and met(needs[h], have) and (not (bound or only) or fits(item, h)) and
+                        (not holds or h not in holds or item in holds[h])]
                 if short and any(h in only and item in only[h][0] for h in free):
                     free, short = [h for h in free if h in only and item in only[h][0]], short - 1
                 elif only and not first(item) and songs_in and any(h in only for h in free):
                     free, songs_in = [h for h in free if h in only], songs_in - 1
                 elif only and not first(item) and any(h not in only for h in free):
                     free = [h for h in free if h not in only]   # (an item of their second kind, a song: out in the world where it can be)
+                if holds and counted and item == TOKEN and any(h in holds for h in free) and holds_short([h for h in rest if h not in placed], plain_items):
+                    free = [h for h in free if h in holds]   # (a token to a Skulltula while the items left could not fill them all)
                 if not free:
                     ok = False
                     break
                 placed[rng.choice(free)] = item
             if ok and only:
-                held = fill_only([h for h in rest if h not in placed], [i for i in items if i not in PROGRESSION])
+                held = fill_only([h for h in rest if h not in placed], [i for i in items if i not in PROGRESSION and not (counted and i == TOKEN)])
                 ok = held is not None
+            if ok and holds:   # (the items left can fill the spots of `holds` that are left)
+                left_items = list(plain_items)
+                for i in (held or {}).values():
+                    left_items.remove(i)
+                ok = not holds_short([h for h in rest if h not in placed and h not in (held or {})], left_items)
             if ok:
                 spheres = collect(fixed + [(needs[h], i) for h, i in placed.items()])
-                if {i for sphere in spheres for i in sphere} >= {i for _, i in fixed} | set(gating):
+                if {i for sphere in spheres for i in sphere} >= {i for _, i in fixed if i in PROGRESSION} | set(gating):   # (a token kept in place is counted, not a sphere's)
                     break
             spheres = None
         if spheres is None:
             raise ValueError("no arrangement the logic accepts was found: fewer chests take part than it needs")
         gives.update(placed)
         rest = [h for h in rest if h not in placed]
-        items = [i for i in items if i not in PROGRESSION]
+        items = [i for i in items if i not in PROGRESSION and not (counted and i == TOKEN)]
     elif only:
         held = fill_only(rest, items)
         if held is None:
@@ -4200,6 +4342,13 @@ def place(rng, spots, which, keys_mode, needs=None, bound=None, only=None, apart
         rest, items = [h for h in rest if h not in group_spots], [i for i in items if i not in group_items]
     # everything else among the chests that are left, wherever they are
     rng.shuffle(items)
+    if holds:   # (a spot of `holds` first: the first of the shuffled items it may hold; the others take the rest)
+        for h in [h for h in rest if h in holds]:
+            k = next((k for k, i in enumerate(items) if i in holds[h]), None)
+            if k is None:
+                raise ValueError("a Gold Skulltula or a Piece of Heart has nothing left that it may hold")
+            gives[h] = items.pop(k)
+        rest = [h for h in rest if h not in holds]
     for h, item in zip(rest, items):
         gives[h] = item
     return gives, stays, spheres
@@ -4221,7 +4370,8 @@ def main():
     p.add_argument("--skip-intro", action="store_true", help="as rando_skip_intro=1: a new game starts in Link's house, without the two opening cutscenes")
     p.add_argument("--skip-cutscenes", action="store_true", help="as rando_skip_cutscenes=1: the scenes played as flowcharts lose their talks, camera moves and waits (quiet_scene); the game's side skips the others")
     p.add_argument("--skulltulas", type=int, choices=(0, 1, 2, 3), help="in place of rando_skulltulas: the Gold Skulltulas whose tokens change places "
-                                                                        "with the chests' rupees and supplies. 1 dungeons, 2 overworld, 3 all")
+                                                                        "with the chests' rupees and supplies (from placement 12: that take part as chests do, "
+                                                                        "skulltula_holds). 1 dungeons, 2 overworld, 3 all")
     p.add_argument("--quests", action="store_true", help="as rando_quests=1: what characters give takes part with the chests (GIFTS)")
     p.add_argument("--frogs", action="store_true", help="not used any more: with Quest rewards the frogs of Zora's River always take part")
     p.add_argument("--light-arrows", action="store_true", help="as rando_light_arrows=1: with Quest rewards, Zelda's Light Arrows take part too")
@@ -4232,7 +4382,8 @@ def main():
     p.add_argument("--sword-shield", type=int, choices=(0, 1), help="in place of rando_sword_shield: 0 the Kokiri Sword stays in its chest and the Deku Shield on "
                                                                      "its shelf, 1 both take part (the chest with Major items, the shelf with Shops)")
     p.add_argument("--heart-pieces", action="store_true", help="as rando_heart_pieces=1: the Pieces of Heart lying in the world change places with "
-                                                                "the chests' items a pick-up can be, and may hold a gating item")
+                                                                "the chests' items a pick-up can be, and may hold a gating item (from placement 12: take "
+                                                                "part as chests do, piece_holds)")
     p.add_argument("--songs", type=int, choices=(0, 1, 2), help="in place of rando_songs: 1, the twelve songs are shuffled among the twelve lessons (SONGS). "
                                                                "2, Anywhere: the songs are in the pool with every other item, and a lesson is a place as a gift is")
     p.add_argument("--dungeon-rewards", type=int, choices=(0, 1, 2), help="in place of rando_dungeon_rewards: the eight dungeons' stones and medallions are "
@@ -4388,6 +4539,7 @@ def main():
     sub_areas = collections.defaultdict(set)   # an area -> its parts with a name of their own: (place, reach, name)
     skulls = collections.OrderedDict()  # hash -> [area, position, can be given a drop (in every file it is in), a dungeon's, a child's map has it]
     pieces = collections.OrderedDict()  # a Piece of Heart lying in the world: hash -> [area, position]
+    every_skull = collections.OrderedDict()   # every Gold Skulltula, the setting's or not: hash -> [area, position]
     paths = []
     for top, dirs, names in os.walk(os.path.join(romfs, "Banc")):
         dirs.sort()
@@ -4429,7 +4581,13 @@ def main():
             for h, pos in lying:
                 maps[h].add(rel.split("/")[-1])
                 pieces.setdefault(h, [folder, pos])
-        here = skulltulas(data) if a.skulltulas else []
+        try:   # (every Gold Skulltula, whatever the setting: its token is counted for the Skulltula house, placement 12)
+            here = skulltulas(data)
+        except (ValueError, struct.error, IndexError):
+            here = []
+        for h, pos, _, _ in here:
+            every_skull.setdefault(h, [rel.split("/")[1] if rel.count("/") > 1 else "(Banc)", pos])
+        here = here if a.skulltulas else []
         if any(not can for _, _, can, _ in here):
             try:   # (a file that has to be written anew for its Skulltulas: can it be read whole?)
                 byml_parse(data)
@@ -4517,6 +4675,8 @@ def main():
     except ValueError as e:
         sys.exit("the shops: %s. Nothing written." % e)
     shelf_start = {} if os.environ.get("RANDO_TEST_SHELF_FLAGS") == "0" else {name: True for name in shelf_flag.values()}
+    # (the Skulltula house's rewards ask for their tokens from placement 12: house_need)
+    gifts.update((h, g._replace(need=house_need(g.key, g.need, placement))) for h, g in list(gifts.items()) if g.key in HOUSE_TOKENS)
     # (a string seed: the same on every Python 3. The seeds made before --event-chests keep their shuffle without it)
     logic = logic_now   # (without the event chests or the songs no gating item moves: nothing to ask)
     rng = random.Random("stage2:%d:%d:%d%s%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else "",
@@ -4559,8 +4719,10 @@ def main():
     skull_door = (lambda need, h, area: each(door_need, need, grown(h, area), a.open_forest, area)) if a.open_door else (
         lambda need, h, area: need)
     skull_door = skull_door if placement >= 8 else door
-    skull_asks = lambda h: skull_door(step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
-        quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0], placement >= 12) if a.quests else skulltula_rule(h, skulls[h][0]))), h, skulls[h][0])
+    skull_asks = lambda h, at=None: (lambda area: skull_door(step((lambda n: song_need(n, area) if a.songs else n)(
+        quest_need(skulltula_rule(h, area), area, placement >= 12) if a.quests else skulltula_rule(h, area))), h, area))(at or skulls[h][0])
+    heart_asks = lambda h: door(step((lambda n: song_need(n, pieces[h][0]) if a.songs else n)(
+        (lambda n: quest_need(n, pieces[h][0], placement >= 12) if a.quests else n)(heart_rule(h, pieces[h][0])))), h, pieces[h][0])
     # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags)
     lesson_safe, lesson_only = frozenset(), {}
     if a.songs == 2:
@@ -4580,28 +4742,61 @@ def main():
 
         lesson_safe = lesson_items(collections.Counter(s[1] for s in spots.values()), a.progressive, flagged)
         lesson_only = {gift_hash(key): (lesson_safe, frozenset(SONG_ITEMS)) for key in SONG_ASKED}
+    # (placement 12, SHUFFLED_FROM: the Gold Skulltulas of the setting and the Pieces of Heart lying in the world are
+    #  spots of the placement, with their token and their piece in the pool, each holding what it can: holds)
+    skull_drops, able, mine = {}, [], []
+    heart_drops = {}   # a piece's hash -> the item it gives now
+    if a.skulltulas:
+        mine = [h for h, s in skulls.items() if a.skulltulas == 3 or s[3] == (a.skulltulas == 1)]   # (this setting's)
+        able = [h for h in mine if skulls[h][2]]
+    joined = collections.OrderedDict()   # a Skulltula's or a piece's hash -> its spot (placement 12)
+    holds = {}
+    if placement >= SHUFFLED_FROM:
+        joined.update((h, [skulls[h][0], TOKEN, None, None, "skulltula", skulls[h][1], ""]) for h in able)
+        if a.heart_pieces:
+            joined.update((h, [pieces[h][0], HEART, None, None, "piece", pieces[h][1], ""]) for h in pieces)
+        kinds = {s[1] for s in spots.values()} | {s[1] for s in joined.values()}
+        skull_may = frozenset(i for i in kinds if skulltula_holds(i, PROGRESSION))
+        piece_may = frozenset(i for i in kinds if piece_holds(i))
+        for h, s in joined.items():
+            spots[h] = s
+            needs[h] = skull_asks(h) if s[4] == "skulltula" else heart_asks(h)
+            holds[h] = skull_may if s[4] == "skulltula" else piece_may
+    # (the tokens are placed by the logic when a rule counts them: the Skulltula house's rewards. The Skulltulas that
+    #  keep their token, of another setting or whose file cannot take a drop, are counted where they are)
+    counted = placement >= HOUSE_FROM and logic and any(token_count(word) for n in needs.values() for way in (n if isinstance(n, Either) else (n,)) for word in way)
+    kept_tokens = [(skull_asks(h, every_skull[h][0]), TOKEN) for h in every_skull if h not in joined] if counted else []
     try:
         gives, stays, spheres = place(rng, collections.OrderedDict((h, tuple(s[:4])) for h, s in spots.items()), which, keys_mode,
                                       needs if logic else None,
                                       [group for group in ((frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs == 1 else None,
                                                            (frozenset(REWARD_ITEMS), frozenset(endings)) if a.dungeon_rewards else None) if group] or None,
-                                      only=lesson_only, apart=frozenset(lessons) if a.songs == 2 else ())
+                                      only=lesson_only, apart=frozenset(lessons) if a.songs == 2 else (),
+                                      holds=holds or None, counted=counted, fixed_more=kept_tokens)
     except ValueError as e:
         sys.exit("%s. Nothing written. Try Chests: All, or --no-logic." % e)
-    unknown = sorted({s[0] for h, s in spots.items() if s[0] not in RULES and h not in gifts})
+    unknown = sorted({s[0] for h, s in spots.items() if s[0] not in RULES and h not in gifts and h not in joined})
 
     # (the game's own count of each item is kept: every item given was some chest's)
     before = collections.Counter(spots[h][1] for h in gives)
     if before != collections.Counter(gives.values()):
         sys.exit("the shuffle lost or made an item: nothing written")
+    # (the Skulltulas and the pieces out of the chests' lists again: what each gives now is a drop)
+    for h, s in joined.items():
+        item = gives.pop(h)
+        del spots[h]
+        if s[4] == "skulltula" and item != TOKEN:
+            skull_drops[h] = item
+        elif s[4] == "piece" and item != HEART:
+            heart_drops[h] = item
+    if joined and any(not skulltula_holds(i, PROGRESSION) for i in skull_drops.values()) | any(not piece_holds(i) for i in heart_drops.values()):
+        sys.exit("a Gold Skulltula or a Piece of Heart was given what it may not hold: nothing written")
 
     # ---- the Gold Skulltulas: their tokens and the chests' rupees and supplies change places ----
-    skull_drops, able = {}, []
     if a.skulltulas:
-        mine = [h for h, s in skulls.items() if a.skulltulas == 3 or s[3] == (a.skulltulas == 1)]   # (this setting's)
-        able = [h for h in mine if skulls[h][2]]
-        gives, skull_drops = mix_skulltulas(random.Random("skulltulas:%d:%d:%d" % (seed, a.skulltulas, len(able))), gives, able)
-        if logic:   # (some of the gating items to the Skulltulas, where the rules still let the game be finished)
+        if placement < SHUFFLED_FROM:
+            gives, skull_drops = mix_skulltulas(random.Random("skulltulas:%d:%d:%d" % (seed, a.skulltulas, len(able))), gives, able)
+        if logic and placement < SHUFFLED_FROM:   # (some of the gating items to the Skulltulas, where the rules still let the game be finished)
             fixed = [(needs[h], spots[h][1]) for h in spots if h not in gives and spots[h][1] in PROGRESSION]
             gives, skull_drops, spheres, gated = gate_skulltulas(
                 random.Random("skulltulas gated:%d:%d:%d" % (seed, a.skulltulas, len(able))), gives, skull_drops,
@@ -4616,12 +4811,12 @@ def main():
               "chest's item, %d chests hold a token" % (("", "dungeons", "overworld", "all")[a.skulltulas], len(able),
                                                         len(mine) - len(able), len(skulls), len(skull_drops),
                                           sum(1 for i in gives.values() if i == TOKEN)))
+        if placement >= SHUFFLED_FROM:
+            print("Gold Skulltulas: %d gating item%s now dropped by one (they take part as chests do)" % (
+                sum(1 for i in skull_drops.values() if i in PROGRESSION), "" if sum(1 for i in skull_drops.values() if i in PROGRESSION) == 1 else "s"))
 
     # ---- Heart Pieces: the pieces lying in the world and the chests' items a pick-up can be change places ----
-    heart_drops = {}   # a piece's hash -> the item it gives now
-    heart_asks = lambda h: door(step((lambda n: song_need(n, pieces[h][0]) if a.songs else n)(
-        (lambda n: quest_need(n, pieces[h][0], placement >= 12) if a.quests else n)(heart_rule(h, pieces[h][0])))), h, pieces[h][0])
-    if a.heart_pieces and pieces:
+    if a.heart_pieces and pieces and placement < SHUFFLED_FROM:
         if logic:   # (some of the gating items to the pieces, where the rules still let the game be finished)
             fixed = [(needs[h], spots[h][1]) for h in spots if h not in gives and spots[h][1] in PROGRESSION] + [
                 (skull_asks(h), item) for h, item in skull_drops.items() if item in PROGRESSION]
@@ -4632,10 +4827,15 @@ def main():
                 keep=frozenset(lesson_only))
         else:
             print("Heart Pieces: nothing moves without the logic (Major items, or Songs)")
+    if a.heart_pieces and pieces:
         for word in os.environ.get("RANDO_TEST_HEARTS", "").split():   # (a test: "<a piece's hash>=<an item>")
             heart_drops[int(word.split("=")[0], 16)] = word.split("=")[1]
-        print("Heart Pieces: %d lying in the world take part, %d now give a gating item, and the chest each left holds a Piece of Heart" % (
-            len(pieces), len(heart_drops)))
+        if placement < SHUFFLED_FROM:
+            print("Heart Pieces: %d lying in the world take part, %d now give a gating item, and the chest each left holds a Piece of Heart" % (
+                len(pieces), len(heart_drops)))
+        else:
+            print("Heart Pieces: %d lying in the world take part as chests do, %d now give another item (%d a gating item)" % (
+                len(pieces), len(heart_drops), sum(1 for i in heart_drops.values() if i in PROGRESSION)))
 
     if test_chests:   # (a test: these chests give what the file says)
         strangers = sorted(h for h in test_chests if h not in gives)

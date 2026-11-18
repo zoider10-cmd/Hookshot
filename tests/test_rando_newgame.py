@@ -225,7 +225,7 @@ def sources():
           S.DOOR_ADULT_AREAS <= set(S.RULES),
           "a dungeon a child enters is taken for an adult's alone")
     check("needs = {h: each(door_need, n, shelves[h][0].ages == \"A\" if h in shelves else" in script and
-          "skull_asks = lambda h: skull_door(step(" in script and "each(door_need, need, grown(h, area), a.open_forest, area)" in script and "heart_asks = lambda h: door(step(" in script,
+          "skull_asks = lambda h, at=None: (lambda area: skull_door(step(" in script and "each(door_need, need, grown(h, area), a.open_forest, area)" in script and "heart_asks = lambda h: door(step(" in script,
           "the Door of Time's rules are not the chests', the gifts', the Gold Skulltulas' and the Pieces of Heart's")
     # (the flag alone did not open the door: reported from play. The door's actor is put far under the map)
     def door_file(*actors):

@@ -173,7 +173,131 @@ def main():
         check(False, "an actor that is no chest's item was made a pick-up")
     except ValueError:
         pass
+    placement_12()
     print("PASS: the Gold Skulltulas")
+
+
+def placement_12():
+    """bug 67: the Skulltulas and the pieces lying in the world take part as chests do, and the Skulltula house's rewards
+    ask for their tokens, counted"""
+    T, HEART = seed.TOKEN, seed.HEART
+    # ---- what a Skulltula and a piece may hold ----
+    gating = seed.PROGRESSION | seed.QUEST_GATES | seed.TUNICS | seed.SHOP_GATES | seed.SONG_GATES
+    for item in ("TBox_Rupee_Green", "TBox_Rupee_Gold", HEART, "Item_Dungeon_SmallKey", "Item_Dungeon_Map", "Item_Melody_SunSong", seed.ZL,
+                 "Item_Bottle", seed.SSC, "Item_Scale_Gold", "Item_Wallet_Medium", seed.GT, seed.ZT, "Obj_Heart_Container"):
+        check(not seed.skulltula_holds(item, gating), "a Skulltula may drop %s" % item)
+    for item in [T, seed.HAM, seed.BM, seed.BB, "Item_AgonyStone"] + list(seed.SKULLTULA_ITEMS):
+        check(seed.skulltula_holds(item, gating), "a Skulltula may not drop %s" % item)
+    check(not seed.skulltula_holds("Item_Something_Else", gating), "a Skulltula may drop what no list names")
+    for item in ("Item_Dungeon_SmallKey", "Item_Dungeon_BossKey", "Item_Melody_SunSong", seed.ZL, seed.GT, "Item_Stone_Forest"):
+        check(not seed.piece_holds(item), "a piece lying in the world may give %s" % item)
+    for item in (T, HEART, "TBox_Rupee_Red", seed.HAM, "Item_Bottle", "Item_Wallet_Large", "Item_BombchuBundle_Small"):
+        check(seed.piece_holds(item), "a piece lying in the world may not give %s" % item)
+
+    # ---- counted tokens: collect and reach ----
+    ten = [(seed.NONE, T)] * 9
+    late = (frozenset({seed.tokens(10)}), seed.HAM)
+    check(seed.collect(ten + [late]) == [] and seed.collect(ten + [(seed.NONE, T), late]) == [[seed.HAM]],
+          "a rule that asks for 10 tokens is held with 9, or not with 10")
+    check(seed.collect([(frozenset({seed.BOW}), T)] * 10 + [late, (seed.NONE, seed.BOW)]) == [[seed.BOW], [seed.HAM]],
+          "the tokens behind an item are counted before it")
+    check(seed.HAM not in seed.reach([], ten + [late]) and seed.HAM in seed.reach([T], ten + [late]) and
+          seed.tokens(10) in seed.reach([T] * 10, []) and seed.tokens(20) not in seed.reach([T] * 10, []),
+          "reach does not count the tokens held and those it gets")
+    check(seed.collect([(seed.NONE, seed.HAM), (frozenset({seed.HAM}), seed.BOW)]) == [[seed.HAM], [seed.BOW]] and
+          seed.reach({seed.HAM}, [(frozenset({seed.HAM}), seed.BOW)]) == {seed.HAM, seed.BOW}, "without tokens the spheres are not as before")
+    either = seed.Either([{seed.tokens(10)}, {seed.BOW}])
+    check(seed.collect(ten + [(seed.NONE, T), (either, seed.HAM)]) == [[seed.HAM]], "a way of a rule that asks for tokens is not held by them")
+    check(seed.token_count(seed.tokens(40)) == 40 and seed.token_count(seed.HAM) is None and seed.token_codes(frozenset({seed.S, seed.tokens(30)})) == ["T30"],
+          "the tokens' word is not read back, or not written for the tracker")
+    line = seed.check_lines([], [], [("KakarikoVillage", (1.0, 2.0, 3.0), "CA", frozenset({seed.S, seed.SL, seed.tokens(20)}), "the Skulltula house: 20 tokens")])[1]
+    check(line.split("|")[5] == "KS,SL,T20", "a house reward's rule is not written with its tokens: %r" % line)
+
+    # ---- the house's rewards ----
+    houses = {g.key: g for g in seed.GIFTS if g.key.startswith("skulltula_house_")}
+    check(set(houses) == set(seed.HOUSE_TOKENS) == {"skulltula_house_%d" % n for n in (10, 20, 30, 40, 50)} and
+          houses["skulltula_house_40"].olds == ("Item_BombchuBundle_Large",) and houses["skulltula_house_40"].flow == "GatheringTokenGold" and
+          seed.GIFTS_FROM["skulltula_house_40"] == 12 and "skulltula_house_40" in seed.GIFT_PLACES and
+          not any("100" in k for k in houses), "the house's rewards are not the five of 10 to 50 tokens, the 40's from placement 12")
+    check(all(seed.house_need(k, seed.EVERYTHING, 11) == seed.EVERYTHING for k in houses) and
+          all(seed.house_need(k, seed.EVERYTHING, 12) == seed.CHILD | {seed.tokens(n)} for k, n in seed.HOUSE_TOKENS.items()) and
+          seed.house_need("darunia", seed.CHILD, 12) == seed.CHILD, "a house reward does not ask for its tokens from placement 12 only")
+
+    # ---- place: the Skulltulas and the pieces as spots, what each may hold, the tokens placed by the logic ----
+    P = sorted(seed.PROGRESSION)
+    spots, needs, holds = collections.OrderedDict(), {}, {}
+    for k in range(60):   # (chests: the gating items, rupees, supplies)
+        spots[k] = ("A", P[k] if k < len(P) else "TBox_Rupee_Red" if k % 3 else "Item_ScrubBusinessSeed", False, None)
+        needs[k] = seed.NONE
+    skull_may = frozenset(i for i in set(s[1] for s in spots.values()) | {T, HEART} if seed.skulltula_holds(i, seed.PROGRESSION))
+    for k in range(100, 140):   # (Skulltulas: their token; the last ten ask for the Megaton Hammer)
+        spots[k] = ("A", T, None, None)
+        needs[k] = frozenset({seed.HAM}) if k >= 130 else seed.NONE
+        holds[k] = skull_may
+    for k in range(200, 205):   # (pieces)
+        spots[k] = ("A", HEART, None, None)
+        needs[k] = seed.NONE
+        holds[k] = frozenset(i for i in set(s[1] for s in spots.values()) if seed.piece_holds(i))
+    for k, n in ((300, 10), (301, 30)):   # (rewards at 10 and 30 tokens)
+        spots[k] = ("A", "TBox_Rupee_Red", None, None)
+        needs[k] = frozenset({seed.tokens(n)})
+    on_them = in_rewards = 0
+    for n in range(40):
+        gives, _, spheres = seed.place(random.Random("p%d" % n), spots, 3, 0, needs, holds=holds, counted=True)
+        check(collections.Counter(gives.values()) == collections.Counter(s[1] for s in spots.values()), "the placement lost or made an item")
+        check(all(gives[h] in holds[h] for h in holds), "a Skulltula or a piece was given what it may not hold")
+        check(not any(gives[h].startswith("TBox_Rupee") or gives[h] == HEART for h in range(100, 140)), "a Skulltula drops a rupee or a piece")
+        check({i for s in spheres for i in s} == seed.PROGRESSION, "a gating item cannot be got")
+        on_them += sum(1 for h in list(range(100, 140)) + list(range(200, 205)) if gives[h] in seed.PROGRESSION)
+        in_rewards += sum(1 for h in (300, 301) if gives[h] in seed.PROGRESSION)
+        # (by this test's own count: every place is reached in the end, and a reward only with its tokens reached before it)
+        places, have, done = [(needs[h], gives[h], h) for h in gives], set(), set()
+        while True:
+            now = [k for k, (need, _, _) in enumerate(places) if k not in done and seed.met(need, have)]
+            if not now:
+                break
+            before = sum(1 for k in done if places[k][1] == T)
+            check(all(before >= {300: 10, 301: 30}[places[k][2]] for k in now if places[k][2] in (300, 301)), "a reward reached before its tokens")
+            done.update(now)
+            have |= {places[k][1] for k in now} | seed.token_marks(sum(1 for k in done if places[k][1] == T))
+        check(len(done) == len(places), "a place cannot be reached: %r" % [places[k] for k in range(len(places)) if k not in done][:3])
+    check(on_them > 40 and in_rewards > 0, "the gating items do not go to the Skulltulas, the pieces and the house's rewards (%d, %d)" % (on_them, in_rewards))
+    # (Skulltulas that keep their token, counted where they are: the setting off, or another's)
+    chests_only = collections.OrderedDict((k, s) for k, s in spots.items() if k < 100 or k >= 300)
+    kept = [(frozenset({seed.HAM}) if k < 25 else seed.NONE, T) for k in range(40)]
+    for n in range(10):
+        gives, _, spheres = seed.place(random.Random("f%d" % n), chests_only, 3, 0, {k: needs[k] for k in chests_only}, counted=True, fixed_more=kept)
+        check({i for s in spheres for i in s} == seed.PROGRESSION, "with the tokens kept in place, a gating item cannot be got")
+        if gives[301] in seed.PROGRESSION:   # (30 tokens: 15 free, the rest behind the Megaton Hammer)
+            check([k for k, s in enumerate(spheres) if gives[301] in s][0] > [k for k, s in enumerate(spheres) if seed.HAM in s][0],
+                  "the 30 tokens' reward gave its gating item before the Megaton Hammer opened the tokens behind it")
+    # (a dungeon's keys go to its chests, not to its Skulltulas)
+    keyed = collections.OrderedDict((k, ("Dungeon", "Item_Dungeon_SmallKey" if k < 5 else "TBox_Rupee_Red", True, None)) for k in range(20))
+    keyed.update((k, ("Dungeon", T, None, None)) for k in range(100, 120))
+    for n in range(10):
+        gives, _, _ = seed.place(random.Random("k%d" % n), keyed, 3, 1, None, holds={k: skull_may for k in range(100, 120)})
+        check(all(gives[k] != "Item_Dungeon_SmallKey" for k in range(100, 120)), "a dungeon's key went to one of its Skulltulas")
+    # (no holds and no counting: as placement 11 placed)
+    plain = collections.OrderedDict((k, s) for k, s in spots.items() if k < 100)
+    check(seed.place(random.Random("same"), plain, 3, 0, {k: needs[k] for k in plain}) ==
+          seed.place(random.Random("same"), plain, 3, 0, {k: needs[k] for k in plain}, holds=None, counted=False), "place is not the same without holds")
+
+    # ---- the script ----
+    script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
+    check(seed.SHUFFLED_FROM == seed.HOUSE_FROM == 12 <= seed.PLACEMENT and "if placement >= SHUFFLED_FROM:" in script and
+          "if placement < SHUFFLED_FROM:\n            gives, skull_drops = mix_skulltulas(" in script and
+          "if logic and placement < SHUFFLED_FROM:" in script and "if a.heart_pieces and pieces and placement < SHUFFLED_FROM:" in script,
+          "the Skulltulas and the pieces take part as chests do in a seed made before placement 12, or not from it")
+    check("holds=holds or None, counted=counted, fixed_more=kept_tokens)" in script and
+          "kept_tokens = [(skull_asks(h, every_skull[h][0]), TOKEN) for h in every_skull if h not in joined] if counted else []" in script and
+          "gifts.update((h, g._replace(need=house_need(g.key, g.need, placement))) for h, g in list(gifts.items()) if g.key in HOUSE_TOKENS)" in script,
+          "the placement is not given the Skulltulas' and the pieces' holds, the tokens kept in place, or the house's rules")
+    menu = (ROOT / "gpu" / "vk" / "vk_menu.cpp").read_text(encoding="utf-8")
+    check("constexpr const char* kTokenRow = \"Gold Skulltula Tokens\";" in menu and
+          "if (n >= 2 && p[0] == 'T' && strspn(p + 1, \"0123456789\") >= n - 1) {" in menu and
+          "item_counts[i].load(std::memory_order_relaxed) >= want" in menu and
+          'OOT_ITEM("Gold Skulltula Tokens", "Item_Token_Gold", 1)' in (ROOT / "gpu" / "vk" / "oot_cheat_items.h").read_text(encoding="utf-8"),
+          "the Tracker tab does not hold a rule's T<N> by the pouch's tokens")
 
 
 if __name__ == "__main__":
