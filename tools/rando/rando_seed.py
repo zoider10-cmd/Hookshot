@@ -84,7 +84,7 @@ LOCKED_ROOMS = ("ForestTemple_GetBow",)
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 41   # (41: before an empty child's sword slot was given the Kokiri Sword on the way back, era_sword_fix. 40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 42   # (42: before Death Mountain Trail's and Goron City's intros were left to play (their arrivals take the Fire quest a step), and an adult's first visit to Goron City went on to the rolling Goron, goron_arrival_fix. 41: before an empty child's sword slot was given the Kokiri Sword on the way back, era_sword_fix. 40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -238,9 +238,15 @@ FIELD_CLOCK = {"HyruleField_ArriveEntrance": True}
 # the Deku Tree's, Zora's Domain's and the Desert Colossus's arrivals (a quest step follows them). Read elsewhere, and
 # harmless when set early: Gerudo Valley's (a common logic's event, with the Deku Tree done), Zora's River's (the
 # owl's event waits for it), Goron City's (a Goron's talk branch).
+# Also left out, found 2026-11-18 (bug 64): Death Mountain Trail's and Goron City's. A map picks the first-visit
+# arrival by the intro's flag (Kakariko's maps for the trail, Death Mountain Trail's for the city), and only that
+# arrival takes the Goron's Ruby quest a step (Dm_SY_BancChangeArrive's DeathMountainTrail_Arrive and
+# GoronCity_InitDemo_Arrive call Get_StoneOfFire's DeathMtTrailIn and ArriveCity): with the flag set the quest would
+# stay a step behind. Every other arrival that leads into an intro was read: none takes a step (the Crater's sets its
+# first-entry flag and Navi's warning after the intro, whatever the intro does).
 AREA_INTROS = {"HavePlayedEvent.Dm_%s_0000%s" % (n, x): True for n, x in (
-    ("DeathMtTrail", ""), ("DeathMtCrater", ""), ("DeathMtCrater", "_FromTop"), ("DodongoCave", ""), ("FireTemple", ""),
-    ("GanonCastle", ""), ("InsideGanonCastle", ""), ("GerudoValley", ""), ("Gerudo", ""), ("Goron", ""),
+    ("DeathMtCrater", ""), ("DeathMtCrater", "_FromTop"), ("DodongoCave", ""), ("FireTemple", ""),
+    ("GanonCastle", ""), ("InsideGanonCastle", ""), ("GerudoValley", ""), ("Gerudo", ""),
     ("Graveyard", ""), ("HrlCastle", ""), ("Kakariko", ""), ("LakeHrl", ""), ("SacredForest", ""), ("TimeTemple", ""),
     ("ZoraFountain", ""), ("ZoraRiver", ""))}
 # The HUD of the d-pad's items (Navi and the boots, by the hearts). A new game has none of it until the first scene in
@@ -2901,6 +2907,34 @@ def era_sword_fix(data):
     return lead_past(data, steps, firsts, set(kokiri), {})
 
 
+# Bug 64 (the owner, 2026-11-17): an adult's first visit to Goron City had no rolling Goron; he came at the next visit.
+# The first-visit arrival (Dm_SY_BancChangeArrive, GoronCity_InitDemo_Arrive: the city's intro, then the quest's
+# ArriveCity step) ends there; the ordinary one (GoronCity_Arrive) asks whether Link is a child and, for an adult who has
+# not seen it, plays his scene (SageOfFire_CityIn). The first-visit arrival is made to go on to that same question
+# after its quest step: a child then ends as an ordinary arrival does, an adult gets his scene.
+ARRIVE_FLOW = SCENE_FLOWS + "/Dm_SY_BancChangeArrive.bfevfl.zs"
+
+
+def goron_arrival_fix(data):
+    """Dm_SY_BancChangeArrive with the Goron City first-visit arrival's last step (the call of Get_StoneOfFire's
+    ArriveCity) going on to the ordinary arrival's child-or-adult question: the new bytes, of the same size.
+    ValueError: not the flow this was written for."""
+    steps, _, _ = scene_steps(data)
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    scene = [i for i, s in enumerate(steps) if s["kind"] == 0 and s.get("event") == "SageOfFire_CityIn"]
+    seen = [i for i, s in enumerate(steps) if s["kind"] == 1 and any(u16(c) in scene for c in s.get("cases", []))]
+    child = [i for i, s in enumerate(steps) if s["kind"] == 1 and s["what"] == "EventQueryPlayerIsChild" and
+             any(u16(c) in seen for c in s.get("cases", []))]
+    call = [i for i, s in enumerate(steps) if s["kind"] == 4 and s["what"] == "Get_StoneOfFire" and s.get("entry") == "Get_StoneOfFire_ArriveCity"]
+    if len(scene) != 1 or len(seen) != 1 or len(child) != 1 or len(call) != 1:
+        raise ValueError("not the arrivals this was written for (%d, %d, %d, %d)" % (len(scene), len(seen), len(child), len(call)))
+    if u16(steps[call[0]]["next"]) != 0xFFFF:
+        raise ValueError("the first-visit arrival's quest step does not end the arrival")
+    out = bytearray(data)
+    struct.pack_into("<H", out, steps[call[0]]["next"], child[0])
+    return bytes(out)
+
+
 def quiet_scene(data, entries=None):
     """A scene (a BFEVFL file of one flowchart: a Dm_ flow the game plays as a flowchart) with what only shows
     something passed over (SCENE_SHOWS, above): the new bytes, of the same size, and how many talks were taken out;
@@ -4733,6 +4767,14 @@ def main():
     except (OSError, ValueError, struct.error) as e:
         sys.exit("%s: %s. Nothing written." % (ERA_FLOW, e))
     print("back to a child: an empty sword slot stays empty (no Kokiri Sword Link never got)")
+    # (bug 64: an adult's first visit to Goron City goes on to the rolling Goron's scene: goron_arrival_fix)
+    try:
+        was = gift_files[ARRIVE_FLOW] if ARRIVE_FLOW in gift_files else unpack(open(os.path.join(romfs, *ARRIVE_FLOW.split("/")), "rb").read(), zs, dicts)
+        gift_files[ARRIVE_FLOW] = goron_arrival_fix(was)
+        gift_sizes[ARRIVE_FLOW[:-3]] = len(gift_files[ARRIVE_FLOW])
+    except (OSError, ValueError, struct.error) as e:
+        sys.exit("%s: %s. Nothing written." % (ARRIVE_FLOW, e))
+    print("Goron City's first visit: an adult goes on to the rolling Goron's scene")
     # ---- the songs: each lesson gives the song the shuffle put there, and who asks about a lesson asks for that song ----
     song_parts = set()
     if lessons:

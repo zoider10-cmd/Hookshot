@@ -289,9 +289,10 @@ def main():
           "oot_gamedata_set_bool(c, 0x2e315eb6u, 1);" in host and seed.FIXES_VERSION >= 22,
           "a new game does not start with the minimap's flag, or an older save is not given it")
     # ---- bug 66: with Skip cutscenes the areas' first-visit intros start played; the ones that do more stay ----
-    check(len(seed.AREA_INTROS) == 18 and all(v is True and k.startswith("HavePlayedEvent.Dm_") for k, v in seed.AREA_INTROS.items()) and
-          not any(n in k for k in seed.AREA_INTROS for n in ("ForestTemple", "WaterTemple", "ShadowTemple", "SpiritTemple", "Dm_Deku_", "Dm_Zora_", "DesertColossus")) and
-          seed.FIXES_VERSION >= 40,
+    check(len(seed.AREA_INTROS) == 16 and all(v is True and k.startswith("HavePlayedEvent.Dm_") for k, v in seed.AREA_INTROS.items()) and
+          not any(n in k for k in seed.AREA_INTROS for n in ("ForestTemple", "WaterTemple", "ShadowTemple", "SpiritTemple", "Dm_Deku_", "Dm_Zora_", "DesertColossus",
+                                                             "Dm_DeathMtTrail_", "Dm_Goron_")) and
+          seed.FIXES_VERSION >= 42,
           "the areas' intros are not all marked played with Skip cutscenes, or one that moves a quest or sets a flag is")
     # ---- Link's door: with Skip opening a new game starts with it open and the scene at it done ----
     check(seed.LINK_DOOR == {"KokiriForest_LinkHouseDoor_Open": True, "Dm_Kokiri_0050_After_Near_End": True},
