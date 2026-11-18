@@ -37,7 +37,7 @@ struct BufferRef {
     VkBuffer buffer{}; uint64_t offset = 0, size = 64; VkDeviceAddress address = 0;
     explicit operator bool() const { return buffer != VK_NULL_HANDLE; }
 };
-struct { VkDevice device{}; VkPhysicalDeviceProperties props{}; } dev;
+struct { VkDevice device{}; VkPhysicalDeviceProperties props{}; bool null_descriptor = true; } dev;
 uint64_t frame_no = 1, mem_rec_value = 1, mem_completed = 0, mapping = 0x1000;
 bool mapped = true;
 std::atomic<unsigned> lookups{0};
@@ -76,6 +76,9 @@ Format vk_format(int nf) {
     return {nf == 42 ? VK_FORMAT_R32_UINT : nf == 43 ? VK_FORMAT_R32_SFLOAT : VK_FORMAT_UNDEFINED};
 }
 int nvn_block_size(int, int* w, int* h) { *w = *h = 1; return 4; }
+VkFormatFeatureFlags buffer_features = VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT | VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT;
+VkFormatProperties format_props(VkFormat) { VkFormatProperties p{}; p.bufferFeatures = buffer_features; return p; }
+VkBufferView dummy_texel_view(VkFormat) { return handle<VkBufferView>(0xd0d0); }   // (made once, outside the registry)
 void texture_gpu_wrote(uint64_t gpu, uint64_t size) { writes++; written_gpu = gpu; written_size = size; }
 using VmaAllocation = void*;
 struct DeadMirror { uint64_t value; VkBuffer buffer; VmaAllocation alloc; };
@@ -149,6 +152,13 @@ void run(const std::string& test) {
     } else if (test == "clamped-range") {
         dev.props.limits.maxTexelBufferElements = 8; auto v = get(tex); assert(v && live.at(v).range == 32);
         tex.d.width = 32; assert(get(tex) == v && creates == 1);
+    } else if (test == "unsupported") {
+        // A format the device has no texel buffers of: no view and no lookup; the dummy without a null descriptor.
+        buffer_features = VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT;
+        assert(!get(tex, nullptr, true)); assert(creates == 0 && lookups == 0 && writes == 0);
+        assert(get(tex));
+        dev.null_descriptor = false; buffer_features = 0;
+        assert(get(tex) == handle<VkBufferView>(0xd0d0)); assert(creates == 1 && lookups == 1);
     } else if (test == "invalid") {
         assert(!texel_buffer_view(nullptr, nullptr, false));
         tex.gpu = 0; assert(!get(tex)); tex.gpu = 0x1000;
