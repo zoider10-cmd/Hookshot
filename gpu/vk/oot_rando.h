@@ -54,7 +54,7 @@
       "Song spots: the twelve songs are shuffled among the twelve lessons. The teacher still plays the old song's notes; the song you get is named after. Anywhere: the songs are items like any other, in chests, shops and gifts (a song looks like a green rupee), and a lesson gives whatever the seed put there. Some lessons can only hold a song or a few one-of-a-kind items, so some songs stay in lessons.", \
       "Off", "Song spots", "Anywhere") \
     X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \
-      "The 14 Pieces of Heart lying in the world take part as chests do: a piece can give any item of the shuffle but keys and songs. It still looks like a Piece of Heart and its scene says so, but the item is what Link gets, and the piece is somewhere else. Pieces given by a character or held by a chest are not these.", \
+      "The 14 Pieces of Heart lying in the world and the 8 Heart Containers the bosses leave take part as chests do: each can give any item of the shuffle but keys and songs. It still looks like a Piece of Heart or a Heart Container and its scene says so, but the item is what Link gets, and the heart is somewhere else. Pieces given by a character or held by a chest are not these.", \
       "Off", "On") \
     X(SHOPS, "Shops", "rando_shops", \
       "Four shelves of each shop sell a shuffled item, once each, at a rolled price of 1 to 750 rupees. The wallets are shuffled too: a price asks for one that holds it. Needs Chests.", \

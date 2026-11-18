@@ -74,10 +74,10 @@ def main():
     check("{h: heart_asks(h) for h in pieces}, fixed, token=HEART," in script and
           "(skull_asks(h), item) for h, item in skull_drops.items() if item in PROGRESSION]" in script,
           "the pieces are not placed by the rules with the Skulltulas' gating items counted")
-    check('named("Piece of Heart", h, pieces[h][0], pieces[h][1]), h,' in script and "heart_drops.get(h, HEART)) for h in pieces]," in script,
+    check('named("Piece of Heart", h, pieces[h][0], pieces[h][1]), h,' in script and "heart_drops.get(h, own(h))) for h in pieces]," in script,
           "the pieces are not written with the checks")
     header = (ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
-    check('X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \\' in header and "The 14 Pieces of Heart lying in the world take part as chests do: a piece can give any item of the shuffle but keys and songs. It still looks like a Piece of Heart" in header,
+    check('X(HEART_PIECES, "Heart Pieces", "rando_heart_pieces", \\' in header and "The 14 Pieces of Heart lying in the world and the 8 Heart Containers the bosses leave take part as chests do: each can give any item of the shuffle but keys and songs. It still looks like a Piece of Heart or a Heart Container" in header,
           "the setting's row does not say what it does")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     check('oot_checks[oot_check_count].piece = got >= 9 && !strncmp(kind, "Piece of Heart", 14) ? strtoull(hash, NULL, 16) : 0;' in host and
@@ -87,7 +87,8 @@ def main():
           "view = oot_pouch_name(c, view, gives);" in block and 'snprintf(name, sizeof name, "%s", gives);' in block and
           block.index("view = oot_pouch_name(c, view, gives);") < block.index("oot_tracker_item(name);") < block.index("hos_rando_progressive()"),
           "a piece lying in the world does not give its check's item, a chest's piece does, or the record and Progressive items see the piece")
-    check("const int other = best >= 0 && oot_checks[best].item[0] && strcmp(oot_checks[best].item, OOT_PIECE);" in host and "#define OOT_PIECE_NEAR 12.0f" in host,
+    check("const int other = best >= 0 && oot_checks[best].item[0] && strcmp(oot_checks[best].item, boss ? OOT_CONTAINER : OOT_PIECE);" in host and "#define OOT_PIECE_NEAR 12.0f" in host and
+          "float nearest = boss ? 1e30f : OOT_PIECE_NEAR;" in host,
           "a piece that is its own piece is made another item, or one far from Link is")
     # (the piece's own taking counts it apart from the add: one is taken out again, before the count when Link has one,
     #  so that three are never made four, and after it when he has none)
@@ -96,6 +97,23 @@ def main():
           block.index("oot_pouch_change(c, OOT_PIECE, -1);") < block.index("view = oot_pouch_name(c, view, gives);") and
           "if (!(left % 4) && oot_pouch_count(c, OOT_PIECE) > 0) {" in host,
           "the piece counted with the seed's item is not taken out of the pouch again")
+    # ---- the bosses' Heart Containers (bug 31) ----
+    boss_map = S.byml_build(("dict", collections.OrderedDict((("Actors", ("array", [
+        actor(0x21, "Obj_Heart_Container", (24.0, 73.0, -66.0)), actor(0x22, "Obj_Heart_Piece", (1.0, 2.0, 3.0))])),))), 7)
+    check(S.boss_hearts(boss_map) == [(0x21, (24.0, 73.0, -66.0))] and any(m[1] == S.CONTAINER for m in S.marks(boss_map)),
+          "a boss's Heart Container in a map file is not found, or the map reader leaves it out")
+    check(len(S.BOSS_HEARTS) == 8 and {k for k, _ in S.BOSS_HEARTS.values()} == {g.key for g in S.REWARDS} and
+          all(S.boss_need(f) == next(g.need for g in S.REWARDS if g.key == S.BOSS_HEARTS[f][0]) for f in S.BOSS_HEARTS),
+          "a boss's container does not ask for what its dungeon's reward asks for")
+    check(not S.piece_holds(S.CONTAINER) and "piece_may | {CONTAINER} if h in bosses else piece_may" in script and
+          "any(not (piece_holds(i) or h in bosses and i == CONTAINER) for h, i in heart_drops.items())" in script,
+          "a piece may give a container, or a container's spot may not give its own")
+    check('"Heart Container, " + BOSS_HEARTS[bosses[h]][1] if h in bosses else named("Piece of Heart"' in script and
+          'oot_checks[oot_check_count].boss = !strncmp(kind, "Heart Container, ", 17);' in host,
+          "the containers' checks are not named so that the game's side knows them")
+    check('} else if (!strcmp(name, OOT_CONTAINER) && c->x[30] != 0x828d50acULL && oot_piece_gives(gives, sizeof gives, 1)) {' in block and
+          block.index("oot_piece_gives(gives, sizeof gives, 1)") < block.index("oot_tracker_item(name);"),
+          "a boss's container that the seed made another item does not give it, or a chest's container is renamed")
     print("PASS: Heart Pieces")
 
 

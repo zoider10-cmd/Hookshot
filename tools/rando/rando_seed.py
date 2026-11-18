@@ -3713,7 +3713,8 @@ def spaced(name):
 
 def marks(data):
     """What a map file has to name its checks by: [(hash, Gyaml, place, scale, {a Dynamic's name: its text, or its
-    number as it is written})] for its chests, Gold Skulltulas, LocationAreas and MapIconEntranceAnchors."""
+    number as it is written})] for its chests, Gold Skulltulas, Pieces of Heart, Heart Containers, LocationAreas and
+    MapIconEntranceAnchors."""
     if data[:2] != b"YB":
         raise ValueError("not a little-endian BYML")
     key_at, str_at, root = struct.unpack_from("<III", data, 4)
@@ -3742,7 +3743,7 @@ def marks(data):
                     turned = struct.unpack_from("<3f", data, v + 8)
                 elif k == "Dynamic" and t == 0xC1:
                     dyn = v
-            if gyaml in MARKS or gyaml == SKULLTULA or gyaml.startswith("Obj_TBox") or gyaml in HEART_ACTORS:
+            if gyaml in MARKS or gyaml == SKULLTULA or gyaml.startswith("Obj_TBox") or gyaml in HEART_ACTORS or gyaml == CONTAINER:
                 words = {}
                 for dk, dt, dv, _ in entries(data, dyn, keys) if dyn is not None else ():
                     words[dk] = (strings[dv] if dv < len(strings) else "") if dt == 0xA0 else dv
@@ -4086,6 +4087,31 @@ def heart_rule(h, area):
 def hearts(data):
     """The Pieces of Heart lying in a map file: [(hash, place)]."""
     return [(h, pos) for h, gyaml, pos, _, _ in marks(data) if gyaml in HEART_ACTORS and h is not None]
+
+
+# ---- the bosses' Heart Containers (bug 31, placement 12, with Heart Pieces on) ----
+# A boss's Heart Container is an actor of its dungeon's map, Obj_Heart_Container, made when the boss falls; eight, one
+# a dungeon (Ganon leaves none). With the Heart Pieces setting on they take part as the lying pieces do: their
+# container in the pool, each giving what a piece may give or a container, and asking for what its dungeon's reward
+# asks for (REWARDS: the boss beaten). The add of a container gives its heart by itself and the pouch keeps none, so
+# the game's side renames that add to the seed's item (host/hos_main.c oot_piece_gives, by the check's name "Heart
+# Container, ..."): no heart then, and nothing to take back. Their checks are named by the boss.
+CONTAINER = "Obj_Heart_Container"
+BOSS_HEARTS = {"InsideTheDekuTree": ("reward_deku", "Gohma"), "DodongoCavern": ("reward_dodongo", "King Dodongo"),
+               "InsideJabuJabuBelly": ("reward_jabu", "Barinade"), "ForestTemple": ("reward_forest", "Phantom Ganon"),
+               "FireTemple": ("reward_fire", "Volvagia"), "WaterTemple": ("reward_water", "Morpha"),
+               "ShadowTemple": ("reward_shadow", "Bongo Bongo"), "SpiritTemple": ("reward_spirit", "Twinrova")}
+CONTAINERS_FROM = 12
+
+
+def boss_hearts(data):
+    """The bosses' Heart Containers in a map file: [(hash, place)]."""
+    return [(h, pos) for h, gyaml, pos, _, _ in marks(data) if gyaml == CONTAINER and h is not None]
+
+
+def boss_need(folder):
+    """what the Heart Container of this dungeon asks for: its reward's rule (the boss beaten)"""
+    return next(g.need for g in REWARDS if g.key == BOSS_HEARTS[folder][0])
 
 
 def check_name(kind, item, about, pos, exits=(), parts=()):
@@ -4539,6 +4565,7 @@ def main():
     sub_areas = collections.defaultdict(set)   # an area -> its parts with a name of their own: (place, reach, name)
     skulls = collections.OrderedDict()  # hash -> [area, position, can be given a drop (in every file it is in), a dungeon's, a child's map has it]
     pieces = collections.OrderedDict()  # a Piece of Heart lying in the world: hash -> [area, position]
+    bosses = {}                          # the same of a boss's Heart Container in pieces (placement 12): hash -> its dungeon
     every_skull = collections.OrderedDict()   # every Gold Skulltula, the setting's or not: hash -> [area, position]
     paths = []
     for top, dirs, names in os.walk(os.path.join(romfs, "Banc")):
@@ -4581,6 +4608,14 @@ def main():
             for h, pos in lying:
                 maps[h].add(rel.split("/")[-1])
                 pieces.setdefault(h, [folder, pos])
+            if placement >= CONTAINERS_FROM and folder in BOSS_HEARTS:
+                try:
+                    for h, pos in boss_hearts(data):
+                        maps[h].add(rel.split("/")[-1])
+                        pieces.setdefault(h, [folder, pos])
+                        bosses[h] = folder
+                except (ValueError, struct.error, IndexError):
+                    pass
         try:   # (every Gold Skulltula, whatever the setting: its token is counted for the Skulltula house, placement 12)
             here = skulltulas(data)
         except (ValueError, struct.error, IndexError):
@@ -4722,7 +4757,9 @@ def main():
     skull_asks = lambda h, at=None: (lambda area: skull_door(step((lambda n: song_need(n, area) if a.songs else n)(
         quest_need(skulltula_rule(h, area), area, placement >= 12) if a.quests else skulltula_rule(h, area))), h, area))(at or skulls[h][0])
     heart_asks = lambda h: door(step((lambda n: song_need(n, pieces[h][0]) if a.songs else n)(
-        (lambda n: quest_need(n, pieces[h][0], placement >= 12) if a.quests else n)(heart_rule(h, pieces[h][0])))), h, pieces[h][0])
+        (lambda n: quest_need(n, pieces[h][0], placement >= 12) if a.quests else n)(
+            boss_need(bosses[h]) if h in bosses else heart_rule(h, pieces[h][0])))), h, pieces[h][0])
+    own = lambda h: CONTAINER if h in bosses else HEART   # (what a piece's or a container's spot holds of its own)
     # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags)
     lesson_safe, lesson_only = frozenset(), {}
     if a.songs == 2:
@@ -4754,14 +4791,14 @@ def main():
     if placement >= SHUFFLED_FROM:
         joined.update((h, [skulls[h][0], TOKEN, None, None, "skulltula", skulls[h][1], ""]) for h in able)
         if a.heart_pieces:
-            joined.update((h, [pieces[h][0], HEART, None, None, "piece", pieces[h][1], ""]) for h in pieces)
+            joined.update((h, [pieces[h][0], own(h), None, None, "piece", pieces[h][1], ""]) for h in pieces)
         kinds = {s[1] for s in spots.values()} | {s[1] for s in joined.values()}
         skull_may = frozenset(i for i in kinds if skulltula_holds(i, PROGRESSION))
         piece_may = frozenset(i for i in kinds if piece_holds(i))
         for h, s in joined.items():
             spots[h] = s
             needs[h] = skull_asks(h) if s[4] == "skulltula" else heart_asks(h)
-            holds[h] = skull_may if s[4] == "skulltula" else piece_may
+            holds[h] = skull_may if s[4] == "skulltula" else piece_may | {CONTAINER} if h in bosses else piece_may
     # (the tokens are placed by the logic when a rule counts them: the Skulltula house's rewards. The Skulltulas that
     #  keep their token, of another setting or whose file cannot take a drop, are counted where they are)
     counted = placement >= HOUSE_FROM and logic and any(token_count(word) for n in needs.values() for way in (n if isinstance(n, Either) else (n,)) for word in way)
@@ -4787,9 +4824,9 @@ def main():
         del spots[h]
         if s[4] == "skulltula" and item != TOKEN:
             skull_drops[h] = item
-        elif s[4] == "piece" and item != HEART:
+        elif s[4] == "piece" and item != own(h):
             heart_drops[h] = item
-    if joined and any(not skulltula_holds(i, PROGRESSION) for i in skull_drops.values()) | any(not piece_holds(i) for i in heart_drops.values()):
+    if joined and any(not skulltula_holds(i, PROGRESSION) for i in skull_drops.values()) | any(not (piece_holds(i) or h in bosses and i == CONTAINER) for h, i in heart_drops.items()):
         sys.exit("a Gold Skulltula or a Piece of Heart was given what it may not hold: nothing written")
 
     # ---- the Gold Skulltulas: their tokens and the chests' rupees and supplies change places ----
@@ -4834,8 +4871,8 @@ def main():
             print("Heart Pieces: %d lying in the world take part, %d now give a gating item, and the chest each left holds a Piece of Heart" % (
                 len(pieces), len(heart_drops)))
         else:
-            print("Heart Pieces: %d lying in the world take part as chests do, %d now give another item (%d a gating item)" % (
-                len(pieces), len(heart_drops), sum(1 for i in heart_drops.values() if i in PROGRESSION)))
+            print("Heart Pieces: %d lying in the world and %d bosses' Heart Containers take part as chests do, %d now give another item (%d a gating item)" % (
+                len(pieces) - len(bosses), len(bosses), len(heart_drops), sum(1 for i in heart_drops.values() if i in PROGRESSION)))
 
     if test_chests:   # (a test: these chests give what the file says)
         strangers = sorted(h for h in test_chests if h not in gives)
@@ -5393,7 +5430,7 @@ def main():
             "  %d. %s" % (k + 1, ", ".join("%s (%s)" % (i, next(spots[h][0] for h in gives if gives[h] == i) if i in gives.values() else
                                                       next(skulls[h][0] for h in skull_drops if skull_drops[h] == i) + ", a Gold Skulltula"
                                                       if i in skull_drops.values() else
-                                                      next(pieces[h][0] for h in heart_drops if heart_drops[h] == i) + ", where a Piece of Heart lay"
+                                                      next(pieces[h][0] + (", the boss's Heart Container" if h in bosses else ", where a Piece of Heart lay") for h in heart_drops if heart_drops[h] == i)
                                                       if i in heart_drops.values() else "its own chest")
                                            for i in sphere)) for k, sphere in enumerate(spheres)]
     area_now = None
@@ -5411,9 +5448,9 @@ def main():
             area, pos, can = skulls[h][:3]
             spoiler.append("  %-22s %-26s -> %s" % (area, str(pos), skull_drops.get(h) or drops.get(h, "(its token)" if can else "(its token: cannot be given a drop)")))
     if a.heart_pieces:
-        spoiler += ["", "Pieces of Heart lying in the world (area, position -> what lies there)"]
+        spoiler += ["", "Pieces of Heart lying in the world and the bosses' Heart Containers (area, position -> what it gives)"]
         for h in sorted(pieces, key=lambda q: (pieces[q][0], str(pieces[q][1]), q)):
-            spoiler.append("  %-22s %-26s -> %s" % (pieces[h][0], str(pieces[h][1]), heart_drops.get(h, "(its piece)")))
+            spoiler.append("  %-22s %-26s -> %s" % (pieces[h][0], str(pieces[h][1]), heart_drops.get(h, "(its container)" if h in bosses else "(its piece)")))
     if a.dry_run:
         print("\n".join(spoiler[:50]))
         print("(dry run: nothing written)")
@@ -5545,8 +5582,9 @@ def main():
                                        for h in gives if h not in gifts],
                                       [(skulls[h][0], skulls[h][1], check_ages(maps[h]), skull_need(h), named("Gold Skulltula", h, skulls[h][0], skulls[h][1]), h, skull_drops.get(h) or drops.get(h) or TOKEN)
                                        for h in took] +
-                                      [(pieces[h][0], pieces[h][1], check_ages(maps[h]), heart_asks(h), named("Piece of Heart", h, pieces[h][0], pieces[h][1]), h,
-                                        heart_drops.get(h, HEART)) for h in pieces],
+                                      [(pieces[h][0], pieces[h][1], check_ages(maps[h]), heart_asks(h),
+                                        "Heart Container, " + BOSS_HEARTS[bosses[h]][1] if h in bosses else named("Piece of Heart", h, pieces[h][0], pieces[h][1]), h,
+                                        heart_drops.get(h, own(h))) for h in pieces],
                                       [(g.area, GIFT_PLACES[g.key][1], GIFT_PLACES[g.key][0], needs[h], g.name, gift_key[h], gives[h])
                                        for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES] +
                                       [(shop.areas[0], shop.place, shop.ages, needs[h], gifts[h].name, None, gives[h])

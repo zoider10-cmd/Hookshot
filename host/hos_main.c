@@ -1614,6 +1614,7 @@ static struct {
     float place[3];
     signed char done;
     uint64_t piece;   /* (a Piece of Heart lying in the world: its actor's hash; 0: another kind of check) */
+    int boss;         /* (a boss's Heart Container: tools/rando/rando_seed.py BOSS_HEARTS, bug 31) */
     uint32_t shelf;   /* (a shop's shelf: the hash of the flag it waits for, "still for sale"; 0: another kind of check) */
     signed char sold; /* (a shelf bought, or a check with a key collected, just now: its flag is to be set, oot_shelf_flags) */
     uint64_t key;     /* (an actor of a map: its hash, by which the save keeps a truth value; 0: none) */
@@ -1701,6 +1702,7 @@ static void oot_tracker_load(const char *stamp) {
         snprintf(oot_checks[oot_check_count].item, sizeof oot_checks[0].item, "%s", got >= 10 ? item : "");
         /* (tools/rando/rando_seed.py names such a check "Piece of Heart", and no other kind begins so) */
         oot_checks[oot_check_count].piece = got >= 9 && !strncmp(kind, "Piece of Heart", 14) ? strtoull(hash, NULL, 16) : 0;
+        oot_checks[oot_check_count].boss = !strncmp(kind, "Heart Container, ", 17);   /* (the seed's name for a boss's) */
         oot_checks[oot_check_count].key = got >= 9 ? strtoull(hash, NULL, 16) : 0;   /* ("-": 0) */
         oot_checks[oot_check_count].opened = 0;
         if (oot_checks[oot_check_count].key && strstr(kind, "hest")) {   /* ("Chest ...", "Big chest ...": tools/rando/rando_seed.py's names) */
@@ -1896,6 +1898,7 @@ static void oot_tracker_item(const char *name) {
 #define OOT_PIECE_NEAR 12.0f
 #define OOT_PIECE "Obj_Heart_Piece"
 #define OOT_PIECE_VALLEY "Obj_GerudoValley_Heart_Piece"
+#define OOT_CONTAINER "Obj_Heart_Container"
 #define OOT_PIECE_WAIT 600   /* (the player's updates a piece counted late is waited for: some seconds) */
 static int oot_piece_back;   /* (a piece to take back out of the pouch: the updates it is still waited for) */
 /* (a piece that gives another item still healed Link, as a piece does: bug 4, reported 2026-11-13. Until this time
@@ -1978,18 +1981,18 @@ static void oot_fill_note(const char *item) {
             return;
         }
 }
-static int oot_piece_gives(char *out, size_t size) {
+static int oot_piece_gives(char *out, size_t size, int boss) {   /* (boss: a boss's Heart Container's check instead) */
     int best = -1;
-    float nearest = OOT_PIECE_NEAR;
+    float nearest = boss ? 1e30f : OOT_PIECE_NEAR;   /* (a dungeon has one boss container: where it falls is not asked) */
     AcquireSRWLockShared(&oot_checks_lock);
     for (int i = 0; i < oot_check_count; i++) {
-        if (!oot_checks[i].piece || !oot_banc_in_folder(oot_link_map, oot_checks[i].folder)) continue;
+        if (!(boss ? oot_checks[i].boss : oot_checks[i].piece != 0) || !oot_banc_in_folder(oot_link_map, oot_checks[i].folder)) continue;
         const float dx = oot_checks[i].place[0] - oot_link_place[0], dy = oot_checks[i].place[1] - oot_link_place[1],
                     dz = oot_checks[i].place[2] - oot_link_place[2];
         const float away = sqrtf(dx * dx + dy * dy + dz * dz);
         if (away < nearest) nearest = away, best = i;
     }
-    const int other = best >= 0 && oot_checks[best].item[0] && strcmp(oot_checks[best].item, OOT_PIECE);
+    const int other = best >= 0 && oot_checks[best].item[0] && strcmp(oot_checks[best].item, boss ? OOT_CONTAINER : OOT_PIECE);
     if (other) snprintf(out, size, "%s", oot_checks[best].item);
     ReleaseSRWLockShared(&oot_checks_lock);
     return other;
@@ -3435,7 +3438,7 @@ int hos_oot_pouch_add(Ctx *c) {
         /* (Heart Pieces: a piece lying in the world that the seed made another item gives that item) */
         char gives[64];
         if ((!strcmp(name, OOT_PIECE) || !strcmp(name, OOT_PIECE_VALLEY)) && c->x[30] != 0x828d50acULL &&
-            oot_piece_gives(gives, sizeof gives)) {
+            oot_piece_gives(gives, sizeof gives, 0)) {
             hos_log("rando: the Piece of Heart lying here is the seed's %s: that is given", gives);
             /* (and the piece's heal is not: bug 4, oot_piece_heal) */
             __atomic_store_n(&oot_life_held, __atomic_load_n(&oot_life_seen, __ATOMIC_RELAXED), __ATOMIC_RELAXED);
@@ -3451,6 +3454,12 @@ int hos_oot_pouch_add(Ctx *c) {
             hos_log("rando: Link had %d Pieces of Heart at the add: %s", has,
                     has > 0 ? (result >= 0 ? "one is taken out" : "one could not be taken out") :
                     valley ? "none is taken out (the piece made a heart of three)" : "the one to come is taken out");
+            view = oot_pouch_name(c, view, gives);
+            snprintf(name, sizeof name, "%s", gives);
+        } else if (!strcmp(name, OOT_CONTAINER) && c->x[30] != 0x828d50acULL && oot_piece_gives(gives, sizeof gives, 1)) {
+            /* (bug 31: a boss's Heart Container that the seed made another item gives that item. The container's add
+               gives its heart by itself and the pouch keeps none, so the add renamed gives no heart: nothing to take back) */
+            hos_log("rando: the boss's Heart Container here is the seed's %s: that is given", gives);
             view = oot_pouch_name(c, view, gives);
             snprintf(name, sizeof name, "%s", gives);
         }
