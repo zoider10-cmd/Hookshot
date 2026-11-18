@@ -79,6 +79,7 @@ extern "C" unsigned ZSTD_isError(size_t code);
 #include "translate_wait.h"
 #include "precompile_save.h"   // (the pipeline cache written before the title after a long precompile)
 #include "quick_pipe.h"
+#include "desc_keep.h"        // (Triforce: per-binding descriptor reuse, build_descriptors; RX_VK_DESC_KEEP)
 
 #include "vk_builtin_spv.h"   // (RX_VK_SHADER_DIR)
 #include "shaders/clear_f_frag_spv.h"
@@ -4094,7 +4095,147 @@ void desc_counts_unpack(uint64_t packed, size_t* nbuf, size_t* nimg, size_t* nvi
     *nbuf = (size_t)(packed & kMask), *nimg = (size_t)(packed >> 21 & kMask), *nview = (size_t)(packed >> 42 & kMask);
 }
 
-void build_descriptors(const NvnState& s, const Program& p) {
+// ---- (Triforce) Per-binding descriptor reuse (desc_keep.h) ----
+// (Triforce v0.5.0 72793f2, vk_draw.cpp: desc_keep_mode, kept_uniform, kept_texture, buf_stamps, buf_keep, keep_check, as there;
+// the counts are added as a load and a store, not an atomic add: a few a draw on a recording thread, and the helper threads'
+// racing adds lose a count at worst)
+std::atomic<int64_t> st_dk_builds{0}, st_dk_resolved{0}, st_dk_taken{0}, st_dk_checked{0}, st_dk_bad{0};
+inline void count_add(std::atomic<int64_t>& c, int64_t n) {
+    c.store(c.load(std::memory_order_relaxed) + n, std::memory_order_relaxed);
+}
+/// (Triforce) RX_VK_DESC_KEEP: the per-binding reuse of a draw's descriptors (desc_keep.h). Unset or 0: off, every descriptor of
+/// every draw resolved, as before (here off by default until the A/B decides; Triforce has it on). 1: on. check: every one resolved
+/// too, and one that comes out otherwise than the result kept for the same inputs is counted and logged ("vk: descriptor reuse
+/// check"): the way to try the rules in the game before trusting them. Off as well with the switches whose readings a kept result
+/// would leave out: every draw building its own (RX_VK_DESC_REUSE=never), the sampler cache off (RX_VK_SAMPLER_CACHE=0), the
+/// descriptor diagnostics (RX_VK_DRAW_STATS, RX_VK_WATCH_PROG, RX_VK_SLOW_DESC, RX_VK_PEEK_PROG, RX_VK_TRACE_TEX, RX_VK_LOG_IMG,
+/// RX_VK_LOG_TABLE), the late pages left to their reads asked for (RX_VK_LATE_DEFER, as Triforce) and the stretched and wide
+/// storage buffers (RX_VK_SSBO_STRETCH, RX_VK_SSBO_WIDE). A dump's draws and every dispatch resolve theirs
+int desc_keep_mode() {
+    static const int mode = [] {
+        const char* e = getenv("RX_VK_DESC_KEEP");
+        int m = e && !strcmp(e, "check") ? 2 : e && atoi(e) != 0 ? 1 : 0;
+        const char* why = m ? nullptr : "RX_VK_DESC_KEEP=1 turns it on, =check checks it";
+        static const char* const off_with[] = {"RX_VK_DRAW_STATS", "RX_VK_WATCH_PROG", "RX_VK_SLOW_DESC", "RX_VK_PEEK_PROG",
+                                               "RX_VK_TRACE_TEX", "RX_VK_LOG_IMG", "RX_VK_LOG_TABLE", "RX_VK_SSBO_STRETCH",
+                                               "RX_VK_SSBO_WIDE"};
+        for (const char* n : off_with)
+            if (m && getenv(n)) m = 0, why = n;
+        if (const char* v = getenv("RX_VK_DESC_REUSE"); m && v && !strcmp(v, "never")) m = 0, why = "RX_VK_DESC_REUSE=never";
+        if (const char* v = getenv("RX_VK_SAMPLER_CACHE"); m && v && atoi(v) == 0) m = 0, why = "RX_VK_SAMPLER_CACHE=0";
+        if (const char* v = getenv("RX_VK_LATE_DEFER"); m && v && atoi(v) != 0) m = 0, why = "RX_VK_LATE_DEFER";
+        logf("vk: per-binding descriptor reuse %s%s%s", m == 2 ? "on, each kept result checked (RX_VK_DESC_KEEP=check)" : m ? "on" : "off",
+             why ? ": " : "", why ? why : "");
+        return m;
+    }();
+    return mode;
+}
+// (each recording thread's: the recording it records, moved at each draw_begin_recording. The buffers' results stand only within it:
+// its streams hold c1, and its parts each begin a submission's memory work)
+thread_local uint64_t desc_rec = 0;
+TLS_OBJECT(kept_descs, std::array<desc_keep::Prog, desc_keep::kSlots>)
+/// (whether a buffer is one of the recording's streams: a copy made there is made again each time, never kept)
+bool recording_stream(VkBuffer b) {
+    if (!cur || b == cur->stream) return true;
+    for (const RecordingRes::Stream& st : cur->streams)
+        if (st.buffer == b) return true;
+    return false;
+}
+/// (RX_VK_DESC_KEEP) Every 2^k builds, then every 65536: how many descriptors were resolved and taken, and in check mode how many
+/// kept results came out otherwise
+void keep_report() {
+    const int64_t b = st_dk_builds.load(std::memory_order_relaxed);
+    if (b <= 0 || ((b & (b - 1)) && b % 65536)) return;
+    logf("vk: per-binding descriptor reuse: %lld builds, %lld descriptors resolved, %lld taken as kept; checked %lld, differed %lld",
+         (long long)b, (long long)st_dk_resolved.load(), (long long)st_dk_taken.load(), (long long)st_dk_checked.load(),
+         (long long)st_dk_bad.load());
+}
+/// (RX_VK_DESC_KEEP=check) A descriptor kept and resolved again: counted, and logged (40 times) when it came out otherwise
+void keep_check(const desc_keep::Prog& kp, size_t j, const desc_keep::Elem& e, uint64_t o0, uint64_t o1, uint64_t o2) {
+    count_add(st_dk_checked, 1);
+    if (desc_keep::same(e, o0, o1, o2)) return;
+    count_add(st_dk_bad, 1);
+    static std::atomic<int> told{0};
+    if (told++ < 40)
+        logf("vk: descriptor reuse check: program %016llx descriptor %zu (kind %d, from %#llx %#llx): resolved %#llx %#llx %#llx, "
+             "kept %#llx %#llx %#llx", (unsigned long long)static_cast<const Program*>(kp.prog)->key, j, (int)e.kind,
+             (unsigned long long)e.in[0], (unsigned long long)e.in[1], (unsigned long long)o0, (unsigned long long)o1,
+             (unsigned long long)o2, (unsigned long long)e.out[0], (unsigned long long)e.out[1], (unsigned long long)e.out[2]);
+}
+/// The stamps a buffer descriptor of kind k stands on, read before it resolves (desc_keep.h)
+desc_keep::Stamps buf_stamps(desc_keep::Kind k) {
+    desc_keep::Stamps s;
+    s.rec = desc_rec;
+    if (k != desc_keep::kC1) s.bind = gpu_bind_stamp();
+    if (k == desc_keep::kUbo) s.ub = ub_generation();
+    return s;
+}
+/// A buffer descriptor resolved to bi (ok: a buffer was bound): kept, unless it failed or is a copy in the recording's stream
+void buf_keep(const desc_keep::Prog& kp, size_t j, desc_keep::Elem& e, desc_keep::Kind k, uint64_t in0, uint64_t in1,
+              const desc_keep::Stamps& before, bool took, bool ok, const VkDescriptorBufferInfo& bi) {
+    count_add(st_dk_resolved, 1);
+    const uint64_t b = (uint64_t)(uintptr_t)bi.buffer;
+    if (took) keep_check(kp, j, e, b, bi.offset, bi.range);
+    if (ok && bi.buffer && (k == desc_keep::kC1 || !recording_stream(bi.buffer))) desc_keep::keep(e, k, in0, in1, 0, before, b, bi.offset, bi.range);
+    else desc_keep::drop(e);
+}
+/// uniform_range through the per-binding reuse: descriptor j of kp (null: resolved, as before). c1 and the user uniform buffers
+/// are kept (the user ones not with the uniform snapshot: desc_keep.h); the driver's banks have their own cache (BankCache)
+VkDescriptorBufferInfo kept_uniform(desc_keep::Prog* kp, size_t j, const NvnState& s, const Stage& st, uint32_t index) {
+    using namespace desc_keep;
+    static const bool snapshot = ub_snapshot_wanted();
+    const bool user = index >= 3 && index < 3 + 16 && st.nvn_stage >= 0 && st.nvn_stage < kNvnStages && !snapshot;
+    const Kind k = !kp ? kNone : index == 1 ? kC1 : user ? kUbo : kNone;
+    if (k == kNone) return uniform_range(s, st, index);
+    const uint64_t in0 = k == kC1 ? (uint64_t)(uintptr_t)&st : s.ubo[st.nvn_stage][index - 3].addr;
+    const uint64_t in1 = k == kC1 ? 0 : s.ubo[st.nvn_stage][index - 3].size;
+    const Stamps now = buf_stamps(k);
+    Elem& e = kp->e[j];
+    const bool took = take(e, k, in0, in1, 0, now);
+    if (took && desc_keep_mode() != 2) {
+        count_add(st_dk_taken, 1);
+        return {(VkBuffer)(uintptr_t)e.out[0], e.out[1], e.out[2]};
+    }
+    const VkDescriptorBufferInfo bi = uniform_range(s, st, index);
+    buf_keep(*kp, j, e, k, in0, in1, now, took, true, bi);
+    return bi;
+}
+/// A sampled texture's view (as texture_view_of gives it: null, the dummy is drawn) and Texture, and its sampler, through the
+/// per-binding reuse: descriptor j of kp (null: resolved, as before). A draw's (not compute's) new ASTC textures may wait a frame
+VkSampler kept_texture(desc_keep::Prog* kp, size_t j, uint32_t handle, VkImageViewType vt, bool compare, bool compute,
+                       VkImageView* view, Texture** tex) {
+    using namespace desc_keep;
+    Elem* e = kp && handle ? &kp->e[j] : nullptr;
+    uint64_t in = 0;
+    uint32_t version = 0;
+    Stamps now;
+    bool took = false;
+    if (e) {   // (all read before the lookups below: a generation they move makes the next draw's look again)
+        in = handle | (uint64_t)vt << 32 | (uint64_t)compare << 40;
+        version = texture_slot_version((int)(handle & 0xFFFFF));
+        now.samp = sampler_registrations_generation(), now.destroy = texture_destroy_generation(), now.epoch = texture_epoch();
+        took = take(*e, kTex, in, 0, version, now);
+        if (took && desc_keep_mode() != 2) {
+            count_add(st_dk_taken, 1);
+            *view = (VkImageView)(uintptr_t)e->out[1], *tex = (Texture*)(uintptr_t)e->out[2];
+            return (VkSampler)(uintptr_t)e->out[0];
+        }
+    }
+    upload_defer_ok = !compute;
+    *view = handle ? texture_view_of(handle, vt, ViewUse::Sample, VK_FORMAT_UNDEFINED, tex) : VK_NULL_HANDLE;
+    upload_defer_ok = false;
+    const VkSampler smp = sampler_for((int)(handle >> 20), compare);
+    if (e) {
+        count_add(st_dk_resolved, 1);
+        const uint64_t o0 = (uint64_t)(uintptr_t)smp, o1 = (uint64_t)(uintptr_t)*view, o2 = (uint64_t)(uintptr_t)*tex;
+        if (took) keep_check(*kp, j, *e, o0, o1, o2);
+        if (smp) keep(*e, kTex, in, 0, version, now, o0, o1, o2);
+        else drop(*e);   // (no sampler: the draw is left out, and the next one makes it again)
+    }
+    return smp;
+}
+
+void build_descriptors(const NvnState& s, const Program& p, bool keep = false) {
     // (hookshot) the thread's writer asked for once: each dw() is a thread-local lookup, a call in a shared library, and a
     // build made dozens of them
     const UbReadsScope ub_reads;   // (the uniform copies' reads made together when the build is over: ub_read_batch_mode)
@@ -4132,21 +4273,31 @@ void build_descriptors(const NvnState& s, const Program& p) {
     }
     out.data.reserve(3 * (nbuf + nimg) + nview);   // (hookshot: one vector, grown once at most per build)
     FINE_N(FC_DESCS, (int64_t)(nbuf + nimg + nview));
+    // ((Triforce) a draw's descriptors through the per-binding reuse (desc_keep.h), each by its place in this order (jn): kp's
+    // results are this program's. Not a dispatch's (keep: draw() only) or a dump's)
+    desc_keep::Prog* const kp = keep && desc_keep_mode() && !dump_on() ? &desc_keep::prog_of(kept_descs(), &p, nbuf + nimg + nview)
+                                                                       : nullptr;
+    if (kp) count_add(st_dk_builds, 1), keep_report();
+    size_t jn = 0;
     uint32_t nimg_built = 0;   // (the image descriptors so far: their index in the dumps)
     const uint64_t salign = storage_binding_align();   // (the translator's: vk_internal.h)
     for (const Stage& st : p.stages) {
         const Shader::Info& info = st.info;
         const int ns = st.nvn_stage;
         for (const auto& d : info.constant_buffer_descriptors) {
+            const size_t jb = jn;
+            jn += d.count;
             for (uint32_t k = 0; k < d.count; k++) {
                 const auto t0 = slow_desc_timing() ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-                out.put_buffer(uniform_range(s, st, d.index + k));
+                out.put_buffer(kept_uniform(kp, jb + k, s, st, d.index + k));
                 if (slow_desc_timing()) slow_descriptor(t0, "uniform buffer", d.index + k, out.data.back());
             }
         }
         for (const auto& d : info.storage_buffers_descriptors) {
             FINE_SCOPE(FT_STORAGE);
             FINE_N(FC_SSBO_DESCS, d.count);
+            const size_t jb = jn;
+            jn += d.count;
             for (uint32_t k = 0; k < d.count; k++) {
                 const uint32_t off = d.cbuf_offset + k * 16;
                 if (d.count == 1 && d.cbuf_index == 0 && d.cbuf_offset == 0xff0) {   // (EvilOOT, RX_VK_MISS_LOG)
@@ -4159,6 +4310,16 @@ void build_descriptors(const NvnState& s, const Program& p) {
                 const uint64_t addr = stage_cbuf_word(s, st, d.cbuf_index, off) |
                                       (uint64_t)stage_cbuf_word(s, st, d.cbuf_index, off + 4) << 32;
                 uint64_t size = stage_cbuf_word(s, st, d.cbuf_index, off + 8);
+                // ((Triforce) desc_keep.h: a single storage buffer the program only reads, kept with its address and size. The
+                // rest of what follows is for tables, written buffers, the bare and wide ones and the diagnostics, none of them kept)
+                desc_keep::Elem* const ke = kp && d.count == 1 && !d.is_written && !info.native_global_bounds ? &kp->e[jb + k] : nullptr;
+                const desc_keep::Stamps kn = ke ? buf_stamps(desc_keep::kSsbo) : desc_keep::Stamps{};
+                const bool kept_took = ke && desc_keep::take(*ke, desc_keep::kSsbo, addr, size, 0, kn);
+                if (kept_took && desc_keep_mode() != 2) {
+                    count_add(st_dk_taken, 1);
+                    out.put_buffer({(VkBuffer)(uintptr_t)ke->out[0], ke->out[1], ke->out[2]});
+                    continue;
+                }
                 // (EvilOOT) a table entry that is a bare pointer (its size word 0, as OoT's culling setup keeps them): bound up to
                 // 1 MB of its pool, as the mesh pointer table's regions are; the shader takes the binding's length as its end.
                 // Not marked written: the 1 MB is a guess past the real buffer, and its copy back to guest memory overwrote
@@ -4374,9 +4535,11 @@ void build_descriptors(const NvnState& s, const Program& p) {
                              "%#llx%s", (unsigned long long)p.key, ns, (unsigned)d.cbuf_index, off,
                              (unsigned long long)addr, (unsigned long long)size, d.is_written ? " (written)" : "");
                 }
-                out.put_buffer(b ? VkDescriptorBufferInfo{b.buffer, b.offset, n}
-                                 : VkDescriptorBufferInfo{dev.null_descriptor ? VK_NULL_HANDLE : zero_buffer, 0,
-                                                          dev.null_descriptor ? VK_WHOLE_SIZE : 16});
+                const VkDescriptorBufferInfo sbi = b ? VkDescriptorBufferInfo{b.buffer, b.offset, n}
+                                                     : VkDescriptorBufferInfo{dev.null_descriptor ? VK_NULL_HANDLE : zero_buffer, 0,
+                                                                              dev.null_descriptor ? VK_WHOLE_SIZE : 16};
+                out.put_buffer(sbi);
+                if (ke) buf_keep(*kp, jb + k, *ke, desc_keep::kSsbo, addr, size, kn, kept_took, (bool)b, sbi);
                 {   // (RX_VK_LOG_WRITTEN=1: every storage buffer range a program writes, once, 300 of them)
                     static const bool on = env_on("RX_VK_LOG_WRITTEN");
                     if (on && d.is_written) {
@@ -4398,6 +4561,7 @@ void build_descriptors(const NvnState& s, const Program& p) {
         }
         auto texel_views = [&](const auto& list, bool storage) {
             for (const auto& d : list) {
+                jn += d.count;   // ((Triforce) not kept: desc_keep.h)
                 for (uint32_t k = 0; k < d.count; k++) {
                     const uint32_t handle = handle_of(s, st, d, k);
                     desc_fp_note(handle);   // (Descriptor reuse)
@@ -4428,7 +4592,10 @@ void build_descriptors(const NvnState& s, const Program& p) {
             uint32_t prev_handle = 0;
             VkImageView prev_view = VK_NULL_HANDLE;
             Texture* prev_tex = nullptr;
+            VkSampler prev_smp = VK_NULL_HANDLE;
             bool have_prev = false;
+            const size_t jb = jn;
+            jn += d.count;
             for (uint32_t k = 0; k < d.count; k++) {
                 // (Fritchii d603d98bb) A handle word where a storage buffer of the same program keeps its address is not a
                 // handle: OoT's water samples each light's texture with a handle loaded per pixel from the light buffer, and
@@ -4446,12 +4613,14 @@ void build_descriptors(const NvnState& s, const Program& p) {
                 desc_fp_note(handle);   // (Descriptor reuse)
                 Texture* tex = nullptr;
                 VkImageView view = VK_NULL_HANDLE;
+                VkSampler smp = VK_NULL_HANDLE;
                 if (is_table && have_prev && handle == prev_handle) {   // (a table repeats entries: unused ones are 0)
-                    view = prev_view, tex = prev_tex;
+                    view = prev_view, tex = prev_tex, smp = prev_smp;   // (the same handle: the same sampler id)
                 } else {
-                    upload_defer_ok = st.vk_stage != VK_SHADER_STAGE_COMPUTE_BIT;   // (a draw's: its new ASTC textures may wait a frame)
-                    view = handle ? texture_view_of(handle, vt, ViewUse::Sample, VK_FORMAT_UNDEFINED, &tex) : VK_NULL_HANDLE;
-                    upload_defer_ok = false;
+                    // (texture_view_of and sampler_for, or what they gave this descriptor before: desc_keep.h. A handle table's
+                    // elements are not kept)
+                    smp = kept_texture(is_table ? nullptr : kp, jb + k, handle, vt, d.is_depth,
+                                       st.vk_stage == VK_SHADER_STAGE_COMPUTE_BIT, &view, &tex);
                     // (Lichii bd0171f7) A depth-compare sample of a colour texture is undefined and differs between vendors: a
                     // handle read from memory (an unused or stale table entry) that names one binds nothing
                     if (is_table && view && tex && d.is_depth && !is_depth_format(tex->format)) {
@@ -4461,7 +4630,7 @@ void build_descriptors(const NvnState& s, const Program& p) {
                                  "comparison: bound as nothing", k, (unsigned long long)p.key, tex->id, (int)tex->format);
                         view = VK_NULL_HANDLE, tex = nullptr;
                     }
-                    if (is_table) prev_handle = handle, prev_view = view, prev_tex = tex, have_prev = true;
+                    if (is_table) prev_handle = handle, prev_view = view, prev_tex = tex, prev_smp = smp, have_prev = true;
                 }
                 // (the shader clamps its index to the last element: a table that names a texture there may run past the
                 // array, and its lights from that index on all take this one's texture. Said once)
@@ -4498,11 +4667,12 @@ void build_descriptors(const NvnState& s, const Program& p) {
                                (void*)view, view ? "" : " (dummy)");
                 if (view && tex && tex->gpu_written) draw_sampled().push_back(tex);
                 if (!view) view = dummies.view[(int)vt], st_dummy_textures += handle != 0;
-                out.put_image(sampler_for((int)(handle >> 20), d.is_depth), view), nimg_built++;
+                out.put_image(smp, view), nimg_built++;
             }
         }
         for (const auto& d : info.image_descriptors) {
             const VkImageViewType vt = view_type(d.type);
+            jn += d.count;   // ((Triforce) not kept: desc_keep.h)
             for (uint32_t k = 0; k < d.count; k++) {
                 const uint32_t handle = handle_of(s, st, d, k);
                 desc_fp_note(handle);   // (Descriptor reuse)
@@ -5999,6 +6169,7 @@ void draw_begin_recording(int slot, VkCommandBuffer cmd, uint64_t value) {
     static std::atomic<uint64_t> ub_snap_epochs{0};   // (every recording a number of its own: ub_snap_slot gives out only its copies)
     r.ub_snap_epoch = ++ub_snap_epochs;   // (the uniform copies of the slot's last recording are no longer given out)
     cur = &r;
+    desc_rec++;   // ((Triforce) the buffers' kept descriptors are the last recording's: desc_keep.h)
     pass() = Pass{};
     work_since_barrier = false;
     last_dyn_valid = false, last_desc_valid = false, last_vb_valid = false, last_pipeline = VK_NULL_HANDLE;
@@ -8195,7 +8366,7 @@ void draw(VkCommandBuffer cmd, NvnState& s, const DrawArgs& d) {
         PROF_HOT(PROF_DESC);
         FINE_N(FC_BUILDS, 1);
         trace_tex_hit = nullptr, trace_tex_mask = 0;
-        build_descriptors(s, p);   // (textures first used here are uploaded by the recording's upload command buffer)
+        build_descriptors(s, p, true);   // (textures first used here are uploaded by the recording's upload command buffer)
         FINE_N(FC_WRITES, (int64_t)p.binding_types.size());
         static std::string last_logged;
         if (dump_on()) {

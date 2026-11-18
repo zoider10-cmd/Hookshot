@@ -62,13 +62,13 @@ def main():
     p.add_argument("--cxx", default="g++")
     a = p.parse_args()
     src = (ROOT / "gpu" / "vk" / "vk_draw.cpp").read_text(encoding="utf-8")
-    build = block(src, "void build_descriptors(const NvnState& s, const Program& p) {")
+    build = block(src, "void build_descriptors(const NvnState& s, const Program& p, bool keep = false) {")
     for needle, why in (
         ("if (kept != ~0ull) {", "the kept word is used only when the program has one"),
         ("p.ready.load(std::memory_order_acquire)", "the counts are kept only for a program that is ready"),
         ("if (packed != ~0ull) p.desc_counts.store(", "counts that do not fit are not kept"),
         ('getenv("RX_VK_DESC_COUNTS")', "the switch is read"),
-        ("out.bufs.reserve(nbuf), out.imgs.reserve(nimg), out.views.reserve(nview);", "the reserve is made from the counts"),
+        ("out.data.reserve(3 * (nbuf + nimg) + nview);", "the reserve is made from the counts"),
     ):
         if needle not in build:
             raise SystemExit("build_descriptors: " + why + " (not found: " + needle + ")")

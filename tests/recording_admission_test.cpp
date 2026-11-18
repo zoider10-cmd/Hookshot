@@ -122,6 +122,7 @@ bool work_since_barrier = false, last_dyn_valid = false, last_desc_valid = false
 VkPipeline last_pipeline{};
 struct { bool on = false; } vertex_set, last_ib;
 void descriptors_disturbed() {}
+thread_local uint64_t desc_rec = 0;   // (the per-binding descriptor reuse's recording stamp: desc_keep.h)
 std::unordered_map<int, int>& handle_hits() { static thread_local std::unordered_map<int, int> h; return h; }
 struct Program {};
 constexpr int kNvnStages = 8;
