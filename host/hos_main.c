@@ -1599,7 +1599,11 @@ static int oot_gamedata_keyed_set_bool(Ctx *c, uint64_t key, int value) {
    which the game was not seen to set for a chest (no save looked at had one, and a chest with it set was shut as
    before: seen without a window in Mido's house). It is set when the check is collected, by the game's own setter,
    and the mark of such a check is what the save loaded says (oot_shelf_flags). A shelf has its own flag. So a save
-   from before, and a new game of the seed, have their own marks. */
+   from before, and a new game of the seed, have their own marks.
+   Found 2026-11-17 (bug 70, a blue rupee chest never marked): the game does keep a chest opened, in the flag
+   IsTreasureBoxOpen.<the chest's actor hash, in decimal> (murmur3, as every flag; REALAZK's OOTRR named it, checked
+   here in saves: 0 for the chests not opened, 1 for Mido's house's opened ones). A chest's check is marked by it too
+   (oot_shelf_flags), so a chest whose item reaches Link by no add the record sees (a blue rupee's) is marked. */
 #define OOT_CHECK_NEAR 60.0f
 static float oot_load_float(Ctx *c, uint64_t addr);
 static int oot_gamedata_string(Ctx *c, uint32_t hash, char *buf, size_t size);
@@ -1613,6 +1617,7 @@ static struct {
     uint32_t shelf;   /* (a shop's shelf: the hash of the flag it waits for, "still for sale"; 0: another kind of check) */
     signed char sold; /* (a shelf bought, or a check with a key collected, just now: its flag is to be set, oot_shelf_flags) */
     uint64_t key;     /* (an actor of a map: its hash, by which the save keeps a truth value; 0: none) */
+    uint32_t opened;  /* (a chest: the hash of the game's own flag IsTreasureBoxOpen.<key in decimal>, set when it is opened, bug 70; 0: none) */
 } oot_checks[OOT_TRACKER_MAX];
 static int oot_check_count = -1;
 static char oot_checks_seed[200];   /* (the stamp the checks and the record are of) */
@@ -1657,6 +1662,27 @@ static int oot_tracker_stamp(char *out, size_t size) {
     return out[0] != 0;
 }
 
+/* MurmurHash3 x86 32, seed 0: the hash the game names its flags by (as host/oot_state_tap.c state_murmur) */
+static uint32_t oot_flag_hash(const char *s) {
+    const size_t n = strlen(s);
+    uint32_t h = 0, k;
+    size_t i = 0;
+    for (; i + 4 <= n; i += 4) {
+        k = (uint32_t)(unsigned char)s[i] | (uint32_t)(unsigned char)s[i + 1] << 8 | (uint32_t)(unsigned char)s[i + 2] << 16 |
+            (uint32_t)(unsigned char)s[i + 3] << 24;
+        k *= 0xcc9e2d51u, k = k << 15 | k >> 17, k *= 0x1b873593u;
+        h ^= k, h = h << 13 | h >> 19, h = h * 5 + 0xe6546b64u;
+    }
+    k = 0;
+    switch (n & 3) {
+    case 3: k ^= (uint32_t)(unsigned char)s[i + 2] << 16; /* fall through */
+    case 2: k ^= (uint32_t)(unsigned char)s[i + 1] << 8; /* fall through */
+    case 1: k ^= (uint32_t)(unsigned char)s[i]; k *= 0xcc9e2d51u, k = k << 15 | k >> 17, k *= 0x1b873593u, h ^= k;
+    }
+    h ^= (uint32_t)n, h ^= h >> 16, h *= 0x85ebca6bu, h ^= h >> 13, h *= 0xc2b2ae35u, h ^= h >> 16;
+    return h;
+}
+
 /* (the lock held) the seed's checks with what each gives, and the record of that seed */
 static void oot_tracker_load(const char *stamp) {
     char path[MAX_PATH + 48], line[400];
@@ -1676,6 +1702,12 @@ static void oot_tracker_load(const char *stamp) {
         /* (tools/rando/rando_seed.py names such a check "Piece of Heart", and no other kind begins so) */
         oot_checks[oot_check_count].piece = got >= 9 && !strncmp(kind, "Piece of Heart", 14) ? strtoull(hash, NULL, 16) : 0;
         oot_checks[oot_check_count].key = got >= 9 ? strtoull(hash, NULL, 16) : 0;   /* ("-": 0) */
+        oot_checks[oot_check_count].opened = 0;
+        if (oot_checks[oot_check_count].key && strstr(kind, "hest")) {   /* ("Chest ...", "Big chest ...": tools/rando/rando_seed.py's names) */
+            char flag[64];
+            snprintf(flag, sizeof flag, "IsTreasureBoxOpen.%llu", (unsigned long long)oot_checks[oot_check_count].key);
+            oot_checks[oot_check_count].opened = oot_flag_hash(flag);
+        }
         oot_checks[oot_check_count].shelf = 0;
         oot_checks[oot_check_count].sold = 0;
         oot_checks[oot_check_count++].done = 0;
@@ -1734,6 +1766,13 @@ static int oot_shelf_flags(Ctx *c) {
             }
         } else if (oot_checks[i].key) {   /* (an actor of a map: the save's truth value by its hash, true once collected) */
             if (!oot_gamedata_keyed_bool(c, oot_checks[i].key, &now)) continue;
+            /* (bug 70: a chest the game says is open is collected, whatever it gave: a blue rupee's rupees reach Link by
+               no add the record sees. Its own truth value is set too, so the mark stays with the save) */
+            int open = 0;
+            if (!now && !oot_checks[i].sold && oot_checks[i].opened && oot_gamedata_bool(c, oot_checks[i].opened, &open) && open) {
+                if (oot_gamedata_keyed_set_bool(c, oot_checks[i].key, 1)) changed++;
+                now = 1;
+            }
             if (oot_checks[i].sold) {
                 oot_checks[i].sold = 0;
                 if (!now && oot_gamedata_keyed_set_bool(c, oot_checks[i].key, 1)) changed++;

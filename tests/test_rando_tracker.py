@@ -308,6 +308,14 @@ def main():
           'snprintf(k.hash, sizeof k.hash, "%s", got >= 9 ? hash : "");' in menu and
           'std::string("How to get there: ") + way->second' in menu,
           "the Tracker tab does not read the ways or say the chosen check's")
+    # ---- bug 70: a chest is marked by the game's own "opened" flag, IsTreasureBoxOpen.<actor hash in decimal> ----
+    host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
+    check('snprintf(flag, sizeof flag, "IsTreasureBoxOpen.%llu", (unsigned long long)oot_checks[oot_check_count].key);' in host and
+          'oot_checks[oot_check_count].opened = oot_flag_hash(flag);' in host and
+          "if (!now && !oot_checks[i].sold && oot_checks[i].opened && oot_gamedata_bool(c, oot_checks[i].opened, &open) && open) {" in host,
+          "a chest the game says is open is not marked collected")
+    # (the hash: MurmurHash3 x86 32, seed 0, as the seed tool's; Mido's house's chest, seen set in a save)
+    check(seed.murmur3(b"IsTreasureBoxOpen.9725242744547055868") == 0xf870d00b, "the flag's name does not hash as the save keeps it")
     print("PASS: the randomizer's Tracker tab")
 
 
