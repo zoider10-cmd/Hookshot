@@ -56,7 +56,7 @@ def main():
     check(all(seed.gift_hash(k) >> 48 == 0xF1F7 for k in keys), "a gift's hash is not kept apart from the chests'")
     for g in seed.GIFTS:
         check(g.item in g.olds and g.olds, "%s puts %s in the pool, which its flow does not name for it" % (g.key, g.item))
-        check(isinstance(g.need, frozenset) and g.need <= seed.PROGRESSION | seed.QUEST_GATES, "%s asks for something that is no gating item" % g.key)
+        check(isinstance(g.need, frozenset) and g.need <= seed.PROGRESSION | seed.QUEST_GATES | seed.TUNICS, "%s asks for something that is no gating item" % g.key)
         # (bombs asked for the bracelet until every seed let Link lift a bomb without it: bomb_lift)
         check(g.need != seed.CHILD | {seed.BB, seed.BR}, "%s asks for the bracelet with a child's bombs still" % g.key)
         check(not (g.need >= seed.ADULT and seed.SSC not in g.need), "%s is an adult's and does not ask for the Silver Scale" % g.key)

@@ -2325,6 +2325,9 @@ constexpr LogicItem kLogicItems[] = {
     {"SO", "Song of Storms", {"Song of Storms"}},
     {"RQ", "Requiem of Spirit", {"Requiem of Spirit"}},
     {"NC", "Nocturne of Shadow", {"Nocturne of Shadow"}},
+    // (The tunics, placement 12: tools/rando/rando_seed.py TUNICS)
+    {"GT", "Goron Tunic", {"Goron Tunic"}},
+    {"ZT", "Zora Tunic", {"Zora Tunic"}},
 };
 int tracker_in_logic(const TrackerCheck& k, std::string* missing) {
     if (k.needs[0] == '?' || item_counts[0].load(std::memory_order_relaxed) < 0) return -1;

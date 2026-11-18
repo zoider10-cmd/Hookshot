@@ -60,7 +60,7 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 11  # 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+PLACEMENT = 12  # 12: the Goron and Zora Tunics are gifts of the shuffle, and the rules ask for them (TUNICS); 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
                 # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
                 # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
                 #    asking for the forest's way out (forest_open)
@@ -412,7 +412,6 @@ RULES = {
 # NOT in the shuffle yet, each for a reason found in its flow (they stay as the game has them):
 #   the six Great Fairies            ask "has Link got my item" (IsGet.Item_...): another item would be given at
 #                                    every visit, and theirs found elsewhere would shut the fountain
-#   the Goron and Zora Tunics        the same, by what is in the pouch (Armor_Adult_Goron, Armor_Adult_Zora)
 #   Biggoron's Sword, the lake       the same (Weapon_Sword_Giant; Item_Scale_Gold)
 #   scientist's Piece of Heart
 #   the two ocarinas                 put in the pouch by the scene itself, not through the gift's flow
@@ -420,6 +419,18 @@ RULES = {
 #   Dampe's Piece of Heart           is dropped from the hole as an actor of its own, then picked up
 BR, SSC = "Item_Gauntlet_Goron", "Item_Scale_Silver"
 QUEST_GATES = frozenset((BR, SSC))
+# The tunics (bug 65, placement 12): the adult rolling Goron's Goron Tunic and the thawed King Zora's Zora Tunic are
+# gifts of the shuffle. Read in their flows (2026-11-18): each is given once, on its own story's path (SageOfFire's
+# rolling Goron stopped, a quest step; SageOfWater's first talk after the thaw, which sets
+# SageOfWater_KingZora_adult_Talk_Event198); the flows' questions of the pouch (Armor_Adult_Goron, Armor_Adult_Zora)
+# only choose Navi's hints and which branch of the Ice Cavern's Serenade lesson plays, both of which give the song.
+# (The note here before said they asked the pouch for the gift: it was not so.) In the remake heat and deep water hurt
+# Link slowly, with no timer (the owner, 2026-11-17), so the rules ask for the tunics (TUNIC_AREAS: an adult's checks
+# there, and every rule that has the Fire and Water Temples done). Not the Ice Cavern (asked for with a "?"; its water
+# is short). Hard logic, later, may leave them out (the owner, 2026-11-18; not yet tried in play).
+GT, ZT = "Obj_Armor_Goron", "Obj_Armor_Zora"
+TUNICS = frozenset((GT, ZT))
+TUNIC_AREAS = {"DeathMountainCrater": GT, "FireTemple": GT, "WaterTemple": ZT, "ZoraFountain": ZT}
 CHILD_BOMBS = CHILD | {BB}   # (with the bracelet too, until a bomb was lifted without it: bomb_lift)
 GROWN = ADULT | QUEST_GATES
 Gift = collections.namedtuple("Gift", "key flow olds item area name need when entry", defaults=(None,))
@@ -432,8 +443,8 @@ Gift = collections.namedtuple("Gift", "key flow olds item area name need when en
 # for Quest rewards). entry: None, or the one entry point of the flow whose calls are the gift's (two sales of one
 # flow that name the same item: the Business Scrubs' two Pieces of Heart).
 # (a gift added after seeds were made takes part from the placement that added it: the seeds before keep their shuffle)
-GIFTS_FROM = {"potion_bottle": 9}
-EVERYTHING = PROGRESSION | QUEST_GATES
+GIFTS_FROM = {"potion_bottle": 9, "goron_tunic": 12, "zora_tunic": 12}
+EVERYTHING = PROGRESSION | QUEST_GATES | TUNICS
 GIFTS = (
     Gift("darunia", "Dm_Goron_0030", ("Item_Gauntlet_Goron",), BR, "GoronCity", "Darunia's gift", CHILD, None),
     Gift("lostwood_target", "Dm_LostWood_0040", ("Item_BulletBag_Medium", "Item_BulletBag_Large"), "Item_BulletBag_Medium", "LostWood",
@@ -467,6 +478,8 @@ GIFTS = (
          "horseback archery: 1000 points", GROWN | {BOW}, None),
     Gift("archery_quiver", "Minigame_HorsebackArchery", ("Item_Quiver_Medium", "Item_Quiver_Large"), "Item_Quiver_Large", "GerudoFortress",
          "horseback archery: 1500 points", GROWN | {BOW}, None),
+    Gift("goron_tunic", "SageOfFire", ("Obj_Armor_Goron",), GT, "GoronCity", "the rolling Goron, as an adult", GROWN | {BB}, None),
+    Gift("zora_tunic", "SageOfWater", ("Obj_Armor_Zora",), ZT, "ZoraDomain", "King Zora, thawed", EVERYTHING, None),   # (the thaw's Blue Fire: its way not in the rules' terms)
     Gift("rolling_goron", "Npc_Goron_006_Child", ("Item_BombBag_Medium", "Item_BombBag_Large"), "Item_BombBag_Medium", "GoronCity",
          "the rolling Goron", CHILD_BOMBS, None),
     Gift("roof_man", "Npc_Hylia_001_Adult", ("Obj_Heart_Piece",), "Obj_Heart_Piece", "KakarikoVillage",
@@ -1467,7 +1480,7 @@ def gift_hash(key):
     return 0xF1F7000000000000 | zlib.crc32(key.encode())
 
 
-def quest_need(need, area):
+def quest_need(need, area, tunics=False):
     """what a chest or a Gold Skulltula asks for (by the rules made before Quest rewards) with the gifts' two gating
     items named: the bracelet in Dodongo's Cavern, whose way in is a bomb flower's, and where a rule asks for
     everything; the Silver Scale wherever an adult is. Bombs no longer ask for the bracelet: every seed lets Link
@@ -1477,6 +1490,11 @@ def quest_need(need, area):
         need.add(BR)
     if need >= ADULT:
         need.add(SSC)
+    if tunics:   # (placement 12: an adult's check where heat or deep water hurts, and every rule past the Fire and Water Temples)
+        if need >= ADULT and area in TUNIC_AREAS:
+            need.add(TUNIC_AREAS[area])
+        if need >= MEDALS3 or need >= THIRTEEN:
+            need |= TUNICS
     return frozenset(need)
 
 
@@ -3469,7 +3487,8 @@ CHECK_CODES = collections.OrderedDict((
     ("Item_Longshot", "LS"), ("Item_Gauntlet_Silver", "SG"), ("Item_Shield_Mirror", "MS"), ("Item_Gauntlet_Gold", "GG"),
     ("Item_Gauntlet_Goron", "GB"), ("Item_Scale_Silver", "SS"), ("Item_Wallet_Medium", "AW"), ("Item_Wallet_Large", "GW"),
     ("Item_Melody_ZeldaLullaby", "ZL"), ("Item_Melody_EponaSong", "EP"), ("Item_Melody_SariaSong", "SR"), ("Item_Melody_TimeSong", "ST"),
-    ("Item_Melody_StormSong", "SO"), ("Item_Melody_SpiritRequiem", "RQ"), ("Item_Melody_ShadowNocturne", "NC")))
+    ("Item_Melody_StormSong", "SO"), ("Item_Melody_SpiritRequiem", "RQ"), ("Item_Melody_ShadowNocturne", "NC"),
+    ("Obj_Armor_Goron", "GT"), ("Obj_Armor_Zora", "ZT")))   # (the tunics, placement 12: TUNICS)
 
 
 def check_ages(names):
@@ -3504,6 +3523,8 @@ GIFT_PLACES = {
     "archery_heart": ("A", (69.5, 115.0, 36.3)),           # (HorsebackArcheryPlayerPos)
     "archery_quiver": ("A", (69.5, 115.0, 36.3)),
     "rolling_goron": ("C", (-10.3, 109.6, -16.5)),         # (Npc_Goron_006_Child)
+    "goron_tunic": ("A", (5.8, 109.9, -12.1)),             # (Npc_Goron_DaruniaJr_Adult, where he waits in the city's ring)
+    "zora_tunic": ("A", (66.1, 119.5, 12.5)),              # (Npc_Zora_KingZora_adult, on his throne)
     "roof_man": ("CA", (-36.1, 107.5, 29.0)),              # (his HeartPieceAnchor)
     "skull_kid_song": ("C", (-28.6, 101.0, 1.6)),          # (On_Center_Npc_SkullKid_Child)
     "skull_kid_game": ("C", (48.4, 97.8, 15.8)),           # (OcarinaPoint_SkullKidSession)
@@ -4434,7 +4455,7 @@ def main():
     gifts = collections.OrderedDict()   # its hash -> the Gift
     global PROGRESSION
     if a.quests:
-        PROGRESSION = PROGRESSION | QUEST_GATES
+        PROGRESSION = PROGRESSION | QUEST_GATES | (TUNICS if placement >= 12 else frozenset())
         for g in GIFTS:
             if g.key in GIFTS_FROM and placement < GIFTS_FROM[g.key]:
                 continue
@@ -4489,7 +4510,7 @@ def main():
     slingshot_room = {h for h in SLINGSHOT_ROOM if h in needs} if placement >= 7 else set()
     needs = {h: n | CHILD if h in slingshot_room else n for h, n in needs.items()}
     if a.quests:   # (the rules with the gifts' two gating items named; a gift asks for what its line of GIFTS says)
-        needs = {h: quest_need(gifts[h].need, gifts[h].area) if h in gifts else quest_need(n, spots[h][0]) for h, n in needs.items()}
+        needs = {h: quest_need(gifts[h].need, gifts[h].area, placement >= 12) if h in gifts else quest_need(n, spots[h][0], placement >= 12) for h, n in needs.items()}
     elif gifts:    # (the scrubs alone)
         needs = {h: gifts[h].need if h in gifts else n for h, n in needs.items()}
     if a.songs:    # (the songs named: a lesson's line names its own; the frogs ask for everything)
@@ -4522,7 +4543,7 @@ def main():
         lambda need, h, area: need)
     skull_door = skull_door if placement >= 8 else door
     skull_asks = lambda h: skull_door(step((lambda n: song_need(n, skulls[h][0]) if a.songs else n)(
-        quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0]) if a.quests else skulltula_rule(h, skulls[h][0]))), h, skulls[h][0])
+        quest_need(skulltula_rule(h, skulls[h][0]), skulls[h][0], placement >= 12) if a.quests else skulltula_rule(h, skulls[h][0]))), h, skulls[h][0])
     # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags)
     lesson_safe, lesson_only = frozenset(), {}
     if a.songs == 2:
@@ -4582,7 +4603,7 @@ def main():
     # ---- Heart Pieces: the pieces lying in the world and the chests' items a pick-up can be change places ----
     heart_drops = {}   # a piece's hash -> the item it gives now
     heart_asks = lambda h: door(step((lambda n: song_need(n, pieces[h][0]) if a.songs else n)(
-        (lambda n: quest_need(n, pieces[h][0]) if a.quests else n)(heart_rule(h, pieces[h][0])))), h, pieces[h][0])
+        (lambda n: quest_need(n, pieces[h][0], placement >= 12) if a.quests else n)(heart_rule(h, pieces[h][0])))), h, pieces[h][0])
     if a.heart_pieces and pieces:
         if logic:   # (some of the gating items to the pieces, where the rules still let the game be finished)
             fixed = [(needs[h], spots[h][1]) for h in spots if h not in gives and spots[h][1] in PROGRESSION] + [
