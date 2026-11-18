@@ -49,6 +49,9 @@ struct HosThread {
        for it; and, as a grant ends its wait, the thread that let the core go, its priority, how long it had held it and how
        long before it let go it was asked (-1: never) */
     int64_t vc_held_at, vc_kick_at;
+    /* (hookshot, HOS_VCORE_TURN_US) until when the core it took as a starved waiter is its turn: no waiter asks for it back
+       before then (0: no turn) */
+    int64_t vc_turn_until;
     char vc_by[48];
     int vc_by_prio;
     int64_t vc_by_held, vc_by_asked;
@@ -1669,7 +1672,7 @@ void hos_thread_log_handles(void) {
    core it may use, and asks the worst holder of those cores to give the core up, whatever its priority. It runs a turn,
    the holders ask for the core back as for any worse thread, and a wait that long ends in a grant, not an escape (#262;
    the 5 s line counts these grants). Every 5 s the log has a "vcores:" line. GetCurrentCoreNumber answers the
-   core a thread holds. */
+   core a thread holds. HOS_VCORE_TURN_US (off by default) makes that turn last: vc_turn_ns. */
 #if !defined(__EMSCRIPTEN__)
 static SRWLOCK vc_lock = SRWLOCK_INIT;
 static HosThread *vc_owner[8];
@@ -1708,14 +1711,39 @@ static int vc_free_for(HosThread *t) {
         if ((m >> c & 1) && !vc_owner[c]) return c;
     return -1;
 }
+/* (hookshot) HOS_VCORE_TURN_US=<microseconds> (0, off, by default; at most 100000): a starved waiter's turn
+   (HOS_VCORE_STARVE_US) lasts. Without it the turn ends at the thread's next checkpoint (an nn::os call, an SVC, a loop
+   poll) as soon as a better thread waits, which the holder it took the core from always is: a thread that needs more
+   than one checkpoint of work is starved again, a full HOS_VCORE_STARVE_US later. The Market's long waits (HOS_VCORE_LOG_MS)
+   are the loading threads pinned to one core (tera::FileResourceMgr 25, GeneralFormatAsync_ 24, PreActorModelCompose 26
+   on core 1) behind the frame's workers there (16 to 23), 50-120 ms each and one after the other; each of them, once it
+   had the core, gave it up within 0.1 ms. With it a thread that took a core as a starved waiter is not asked to give it
+   up for this long (vc_askable): it runs until it blocks or yields, or until its turn ends and the waiters ask as before.
+   Who holds a core is decided as before (vc_grant, vc_free_for, under vc_lock): only when a holder is asked changes, so a
+   core still has one thread at a time. A better waiter waits at most the turn longer (far under the 2 s escape). Meant
+   with a shorter HOS_VCORE_STARVE_US (tens of ms), so that a pinned thread gets a short turn every so often. */
+static int64_t vc_turn_ns(void) {
+    static int64_t v = -1;
+    if (v < 0) {
+        const char *e = getenv("HOS_VCORE_TURN_US");
+        int64_t us = e && *e ? atoll(e) : 0;
+        us = us < 0 ? 0 : us > 100000 ? 100000 : us;
+        v = us * 1000;
+        if (v) hos_log("vcores: a starved thread keeps the core it is given for up to %lld us (HOS_VCORE_TURN_US)", (long long)us);
+    }
+    return v;
+}
 static void vc_take(HosThread *t, int c) {
     vc_owner[c] = t;
     t->vc_held = c + 1;
     t->vc_last = c + 1;
     t->vc_kick = 0;
-    t->vc_starved = 0;
     t->vc_held_at = hos_now_ns(), t->vc_kick_at = 0;
+    t->vc_turn_until = t->vc_starved && vc_turn_ns() ? t->vc_held_at + vc_turn_ns() : 0;
+    t->vc_starved = 0;
 }
+/* h (a holder) may be asked to give its core up: not in a starved thread's turn (HOS_VCORE_TURN_US) */
+static int vc_askable(HosThread *h, int64_t now) { return h && h->vc_turn_until <= now; }
 static void vc_dequeue(HosThread *t) {
     for (int i = 0; i < vc_nq; i++)
         if (vc_queue[i] == t) {
@@ -1835,18 +1863,20 @@ static void vc_acquire(HosThread *t) {
            t is starved (HOS_VCORE_STARVE_US), the worst holder there is, whatever its priority. The holder sees the
            request at its next nn::os call or SVC, or at a loop header (the interrupt polls) */
         const unsigned m = vc_allowed(t);
-        HosThread *worst = NULL;
+        const int64_t now = hos_now_ns();
+        HosThread *worst = NULL;   /* (a holder in a starved thread's turn is not asked: vc_askable) */
         for (int k = 0; k < vc_cores(); k++) {
             HosThread *h = vc_owner[k];
-            if ((m >> k & 1) && h && h->priority > t->priority && (!worst || h->priority > worst->priority)) worst = h;
+            if ((m >> k & 1) && vc_askable(h, now) && h->priority > t->priority && (!worst || h->priority > worst->priority))
+                worst = h;
         }
-        if (!worst && hos_now_ns() - t0 > slice)
+        if (!worst && now - t0 > slice)
             for (int k = 0; k < vc_cores() && !worst; k++)
-                if ((m >> k & 1) && vc_owner[k] && vc_owner[k]->priority == t->priority) worst = vc_owner[k];
+                if ((m >> k & 1) && vc_askable(vc_owner[k], now) && vc_owner[k]->priority == t->priority) worst = vc_owner[k];
         if (!worst && t->vc_starved)
             for (int k = 0; k < vc_cores(); k++) {
                 HosThread *h = vc_owner[k];
-                if ((m >> k & 1) && h && (!worst || h->priority > worst->priority)) worst = h;
+                if ((m >> k & 1) && vc_askable(h, now) && (!worst || h->priority > worst->priority)) worst = h;
             }
         if (worst && !worst->vc_kick) {
             worst->vc_kick = worst->priority > t->priority ? 1 : 2;
