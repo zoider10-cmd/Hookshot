@@ -26,6 +26,10 @@ Each is a runtime switch where it can be, so the game's own path stays reachable
   GameDataMgr whether the option was written (f_80a9d1c0) and applies it only then; option.sav's value replaces the
   option without a write, so a saved choice was never applied (issue 430). The call goes through hos_oot_voice_option,
   which also says yes when the option's value is not the one of the update before. The supported build only.
+- The texture data heap's compaction asked for once in a while (host/oot_tex_compact.h, from Longshot 7b229f6): the manager's
+  per-frame step (f_80797240) asks the Compaction thread for a round whenever none runs (its flag bit 1, always set), and each
+  texture a round moved is made again; hos_oot_tex_compact_due says whether it may ask now (HOS_TEX_COMPACT_MS: once a second
+  as shipped, 0 at every frame, the game's own). The round itself is untouched.
 - Ocarina note controls: the note-wait action's start (f_828a9190) and tick (f_828a9280) report the wait to the host (hos_oc_wait, hos_oc_beat), which swaps the five notes for its own controls (host/nn_hid.c); a tick whose gates refuse reports no wait, so a dialogue keeps its buttons.
 """
 import collections
@@ -856,6 +860,36 @@ def patch_bgm_time(s):
     return s, 1
 
 
+# The texture data heap's compaction, asked for once in a while (host/oot_tex_compact.h has why; from Longshot 7b229f6). f_80797240
+# is the texture data manager's per-frame step: with no round asked for (+776) and its flag bit 1 set (+960, set once at its setup)
+# it asks for one (+776 = 1), and with one asked for it sends the Compaction thread its message. The second test also asks the host.
+TEXC_HEAD = "void f_80797240(Ctx *__restrict A64_NOESC c) {\n"
+TEXC_OLD = ("    c->x[8]=recomp_load8(c,c->x[19] + 960);\n"
+            "if (!((c->x[8] >> 1) & 1)) { goto L_80797288; }\n")
+TEXC_NEW = ("    c->x[8]=recomp_load8(c,c->x[19] + 960);\n"
+            "if (!((c->x[8] >> 1) & 1) || !hos_oot_tex_compact_due()) { goto L_80797288; }"
+            "   /* (nx2/oot_patches.py: the texture heap's compaction once in a while) */\n")
+TEXC_DECL = "extern int hos_oot_tex_compact_due(void);\n"
+
+
+def patch_tex_compact(s):
+    """The texture data manager's request for a compaction round through the host: (s, 1) when its step is in s with it (made
+    now or before), (s, 0) when it is not here or its code differs (another game version: left as it is)"""
+    at = _function(s, TEXC_HEAD)
+    if at is None:
+        return s, 0
+    head, end = at
+    body = s[head:end]
+    if body.count(TEXC_NEW) == 1:
+        return s, 1
+    if body.count(TEXC_OLD) != 1:
+        return s, 0
+    s = s[:head] + body.replace(TEXC_OLD, TEXC_NEW, 1) + s[end:]
+    if TEXC_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + TEXC_DECL, 1)
+    return s, 1
+
+
 def patch_bgm_flags(s):
     """The music manager's change flags with the ones the gate held back: (s, 1) when its update is in s with them (made now
     or before), (s, 0) when it is not here or its code differs (another game version: left as it is)"""
@@ -1353,6 +1387,11 @@ def patch_file(s, name, protect_hearts=False):
     if bgm != out:
         lines.append("oot_patches: the music manager's whole step above 60 fps in " + name)
     out = bgm
+    texc, found = patch_tex_compact(out)
+    counts["texture compaction"] += found
+    if texc != out:
+        lines.append("oot_patches: the texture heap's compaction asked for through the host in " + name)
+    out = texc
     flags, found = patch_bgm_flags(out)
     counts["music manager flags"] += found
     if flags != out:
@@ -1428,6 +1467,8 @@ def report(paths, counts, protect_hearts=False):
         print("oot_patches: WARNING: the sound job was found %d times, not once" % total["sound jobs"])
     if total["music manager time"] != 1:   # (without it, above 60 fps the music manager's timers run at 60 / fps of real time)
         print("oot_patches: WARNING: the music manager's time was found %d times, not once" % total["music manager time"])
+    if total["texture compaction"] != 1:   # (without it HOS_TEX_COMPACT_MS does nothing: the game compacts at every frame)
+        print("oot_patches: WARNING: the texture heap's compaction request was found %d times, not once" % total["texture compaction"])
     if total["music manager flags"] != 1:   # (without it, above 60 fps the battle music can play on after a fight)
         print("oot_patches: WARNING: the music manager's change flags were found %d times, not once" % total["music manager flags"])
     if total["solver sites"] != len(SOLVER_HEADS):   # (without them, above 60 fps moving platforms can drop Link)
