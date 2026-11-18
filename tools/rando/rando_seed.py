@@ -60,7 +60,7 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 12  # 12: the Goron and Zora Tunics are gifts of the shuffle, and the rules ask for them (TUNICS); 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+PLACEMENT = 12  # 12: the Goron and Zora Tunics are gifts of the shuffle, and the rules ask for them (TUNICS); the chests with a substitute take part (SUBSTITUTE_CHESTS); 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
                 # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
                 # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
                 #    asking for the forest's way out (forest_open)
@@ -71,6 +71,11 @@ PLACEMENT = 12  # 12: the Goron and Zora Tunics are gifts of the shuffle, and th
                 # 10: Hyrule Field's Piece of Heart chest asks for having been an adult and coming back (CHEST_NEEDS)
                 # 11: Kakariko's Bazaar and Potion Shop are shops of their own, the adult's, apart from the Market's (SHOP_TOWNS)
 # (a chest with one of these parameters is left as it is: see the top of this file)
+# SUBSTITUTE_CHESTS (bug 62, placement 12): a chest with Drop__CheckActor and Drop__DropActor_Substitute gives its item,
+# or the substitute when Link has the CheckActor's already (the Graveyard grave's Hylian Shield chest: a red rupee when
+# Link has the shield; Deku Shields in the Bottom of the Well, Dodongo's Cavern and the Spirit Temple; two of the
+# Gerudo Training Ground's). With only those two of KEEP_IF it takes part: rewrite() writes the shuffled item into
+# both its item and its substitute, so it gives that item whatever Link holds.
 KEEP_IF = ("GetEventName", "CheckEventName", "CheckEventNameIndoor", "Drop__CheckActor", "Drop__DropActor_Substitute",
            "DropViewActor", "IsEnableRepeatOpen", "SpawnType")
 # (a chest's GetEventName that is known not to care what the chest holds: Mido's house's chests, whose event only
@@ -1619,6 +1624,8 @@ def stays_why(c, events, placement=PLACEMENT):
     if placement == 2 and c.event in LOCKED_ROOMS:
         return "its room cannot be left without the item it holds"
     kept = [k for k in KEEP_IF if k in c.params]
+    if placement >= 12 and kept == ["Drop__CheckActor", "Drop__DropActor_Substitute"]:
+        kept = []   # (SUBSTITUTE_CHESTS: a chest that gives another item when Link has one already takes part)
     if "GetEventName" in kept and (c.event in PLAIN_EVENTS or events and not c.event.startswith("MiniGame")):
         kept.remove("GetEventName")
     if kept == ["GetEventName"]:
@@ -1726,7 +1733,7 @@ def rewrite(data, gives):
         n = int.from_bytes(data[c.dyn_at + 1:c.dyn_at + 4], "little")
         block = bytearray(data[c.dyn_at:c.dyn_at + 4 + 8 * n])
         for k, (dk, dt, dv, _) in enumerate(entries(data, c.dyn_at, keys)):
-            if dk == "Drop__DropActor":
+            if dk in ("Drop__DropActor", "Drop__DropActor_Substitute"):   # (SUBSTITUTE_CHESTS: the same item either way)
                 struct.pack_into("<I", block, 4 + 8 * k + 4, names.index(gives[c.hash]))
         at = len(out)
         out += block
