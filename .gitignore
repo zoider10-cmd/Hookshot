@@ -63,3 +63,4 @@ _deps/
 .vs/
 .vscode/
 CppProperties.json
+.claude/settings.local.json

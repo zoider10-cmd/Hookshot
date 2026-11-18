@@ -9,7 +9,12 @@ if tasklist | grep -qi "hookshot.exe\|Mako Launcher"; then echo "the game or the
 VS=${VARIANTS:-"$A $B"}
 for v in $VS; do [ -d "$V/$v" ] || { echo "no variant $V/$v"; exit 1; }; done
 [ -d "$V/base" ] || { echo "no $V/base (the installed build's hookshot.exe and hookshot_vk.dll)"; exit 1; }
-put() { cp "$V/base/hookshot.exe" "$V/base/hookshot_vk.dll" "$G/"; for f in hookshot.exe hookshot_vk.dll; do [ -f "$V/$1/$f" ] && cp "$V/$1/$f" "$G/"; done; }
+# (CACHES=1: each variant keeps its own shader cache in variants/<v>/cache, moved into the game copy for its runs: for
+# sides whose shader stamp or renderer API differ, which would otherwise drop and rebuild the one cache at every switch)
+CUR=$P/cache_owner.txt
+swap_cache() { [ "${CACHES:-0}" = 1 ] || return 0; local was; was=$(cat "$CUR" 2>/dev/null); [ "$was" = "$1" ] && return 0
+  [ -n "$was" ] && [ -d "$G/cache" ] && mv "$G/cache" "$V/$was/cache"; [ -d "$V/$1/cache" ] && mv "$V/$1/cache" "$G/cache"; echo "$1" > "$CUR"; }
+put() { swap_cache "$1"; cp "$V/base/hookshot.exe" "$V/base/hookshot_vk.dll" "$G/"; for f in hookshot.exe hookshot_vk.dll; do [ -f "$V/$1/$f" ] && cp "$V/$1/$f" "$G/"; done; }
 run() {  # run <label>
   local R=$P/runs/$1; rm -rf "$R"; mkdir -p "$R/shots" "$R/user"; cp -r "$G/user/save_rando" "$R/user/save_rando"
   : > "$R/live.txt"; ( IFS=";"; for s in ${STEPS:-72:!cheat 1003;12:0:LUP/13000}; do sleep "${s%%:*}"; w="${s#*:}"; case "$w" in GO\ *) echo "${w#GO }" > "$G/rando/goto_check.txt"; echo "!cheat 5" >> "$R/live.txt";; *) echo "$w" >> "$R/live.txt";; esac; done ) &
@@ -27,6 +32,6 @@ for rep in $(seq 1 "$reps"); do
   for v in $VS; do put "$v"; VENV=$(cat "$V/$v/env.txt" 2>/dev/null | tr '
 ' ' '); run "${name}_${v}_$rep"; echo "${name}_${v}_$rep: $(tail -1 $P/runs/${name}_${v}_$rep/stdout.txt)"; done
 done
-put base
+CACHES=0 put base   # (the game copy's files back to the base's; its cache stays where it is, cache_owner.txt says whose)
 set -- $VS; first=$1; shift
 for v in "$@"; do echo "== $first vs $v"; py -I "$(dirname "$0")/gate.py" "$name" "$first" "$v"; done
