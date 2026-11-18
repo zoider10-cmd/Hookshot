@@ -5035,6 +5035,7 @@ const char* checkpoint_kind(char c) {
          : c == 'm' ? "mirror sync of pool"
          : c == 'b' ? "write-back of pool" : c == 'w' ? "write-back diff pass, chunk count" : c == 'u' ? "upload of texture"
          : c == 'g' ? "GPU unswizzle of texture"
+         : c == 's' ? "mirror syncs' pass, chunk count"
          : "?";
 }
 
