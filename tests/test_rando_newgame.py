@@ -193,7 +193,7 @@ def sources():
     check(seed.OPEN_DOOR == {"Market_Child_TimeTempleDoor_Opened": True, "HavePlayedEvent.Dm_TimeTemple_0065": True} and
           "#define OOT_LEFT_TEMPLE_FLAG 0x%08xu" % seed.murmur3(b"HavePlayedEvent.Dm_TimeTemple_0065") in host and '"rando_open_door": 0' in script and
           'a.open_door = a.open_door or ini["rando_open_door"] != 0' in script and
-          "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **MINIMAP, **(OPEN_DOOR if a.open_door else {}), **(LINK_DOOR if a.skip_intro else {})))" in script and
+          "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **MINIMAP, **(OPEN_DOOR if a.open_door else {}), **(LINK_DOOR if a.skip_intro else {}), **(AREA_INTROS if a.skip_cutscenes else {})))" in script and
           'X(OPEN_DOOR, "Open Door of Time", "rando_open_door",' in header,
           "the Door of Time's flag does not start set with the setting, or the setting is not read")
     # (the rules: only what it takes to be an adult is taken off, only from a place that is an adult's alone)
@@ -266,7 +266,7 @@ def main():
     #  Found with a save made before the owl: with HyruleField_ArriveEntrance set, a night asked for stayed)
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    check(seed.FIELD_CLOCK == {"HyruleField_ArriveEntrance": True} and "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **MINIMAP, **(OPEN_DOOR if a.open_door else {}), **(LINK_DOOR if a.skip_intro else {})))" in script and
+    check(seed.FIELD_CLOCK == {"HyruleField_ArriveEntrance": True} and "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **MINIMAP, **(OPEN_DOOR if a.open_door else {}), **(LINK_DOOR if a.skip_intro else {}), **(AREA_INTROS if a.skip_cutscenes else {})))" in script and
           "if True:   # (every seed: Hyrule Field's clock, FIELD_CLOCK" in script,
           "a seed's new game does not start with the flag that ends Hyrule Field's held day, or only with other settings on")
     check(seed.FIXES_VERSION >= 5 and "field_clock(" not in script, "a seed made before the field's clock ran is not made again, or the step tried first is still passed over")
@@ -288,6 +288,11 @@ def main():
     check(seed.MINIMAP == {"#2e315eb6": True} and "if (oot_gamedata_bool(c, 0x2e315eb6u, &shown) && !shown) {" in host and
           "oot_gamedata_set_bool(c, 0x2e315eb6u, 1);" in host and seed.FIXES_VERSION >= 22,
           "a new game does not start with the minimap's flag, or an older save is not given it")
+    # ---- bug 66: with Skip cutscenes the areas' first-visit intros start played; the ones that do more stay ----
+    check(len(seed.AREA_INTROS) == 18 and all(v is True and k.startswith("HavePlayedEvent.Dm_") for k, v in seed.AREA_INTROS.items()) and
+          not any(n in k for k in seed.AREA_INTROS for n in ("ForestTemple", "WaterTemple", "ShadowTemple", "SpiritTemple", "Dm_Deku_", "Dm_Zora_", "DesertColossus")) and
+          seed.FIXES_VERSION >= 40,
+          "the areas' intros are not all marked played with Skip cutscenes, or one that moves a quest or sets a flag is")
     # ---- Link's door: with Skip opening a new game starts with it open and the scene at it done ----
     check(seed.LINK_DOOR == {"KokiriForest_LinkHouseDoor_Open": True, "Dm_Kokiri_0050_After_Near_End": True},
           "Link's door is not open from a new game's start with Skip opening")
