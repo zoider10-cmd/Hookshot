@@ -1323,6 +1323,17 @@ bool upload_unswizzle_gpu(Texture& tex, uint64_t total, const Ranges* dirty) {
     default: return false;
     }
     if (!unswizzle_ready()) return false;
+    // (Reborn 6babdc2) Only from a pool already imported: an import made here, for one upload, took 22-25 ms on the
+    // replay thread there (the driver locks the pages; here an import's vkAllocateMemory takes 10-14 ms, logged as
+    // "vk: import ... allocate"), three of them when the camera turns to the Deku Tree, a 60 ms hitch. The CPU path
+    // (several threads from 4 MB) does a 15 MB level in a few ms. RX_VK_UNSWIZZLE_IMPORT=1: import as before
+    static const bool may_import = env_on("RX_VK_UNSWIZZLE_IMPORT");
+    if (!may_import) {   // (a virtual pool's address above 1 TB: its guest address, as gpu_buffer translates it)
+        uint64_t avail = 0;
+        if (!host->gpu_ptr(tex.gpu, &avail) || avail < total) return false;
+        const uint64_t guest = tex.gpu < (1ull << 40) ? tex.gpu : host->gpu_guest(tex.gpu);
+        if (!memory_guest_contained(guest, guest + total)) return false;
+    }
     const BufferRef src = gpu_buffer(tex.gpu, total);
     const uint64_t align = std::max<uint64_t>(dev.props.limits.minStorageBufferOffsetAlignment, 16);
     if (!src || (src.offset % align)) return false;

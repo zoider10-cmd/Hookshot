@@ -544,6 +544,7 @@ SW(RX_VK_UI_PROMPTS, diag, enum, "prompts follow the device used last", "Forces 
 SW(RX_VK_UNEVEN_BC, attempt, bool, "AMD uneven-BC-level fix off: BC3 as in v2.0.4", "=0 turns on resizing of ASTC-as-BC3 textures whose mip block grids do not halve evenly (the AMD seam-lines fix), on every card.")
 SW(RX_VK_UNEVEN_RGBA8, attempt, bool, "off: uneven textures are resized (when the fix is on)", "With RX_VK_UNEVEN_BC=0, keeps uneven-level textures as RGBA8 instead of resizing them for BC3.")
 SW(RX_VK_UNSWIZZLE_CHECK, diag, bool, "off: no check", "=1 checks each threaded unswizzle against a single-thread one and logs whether they match.")
+SW(RX_VK_UNSWIZZLE_IMPORT, kill, bool, "off: a GPU unswizzle only reads a pool already imported, else the CPU path (no 10-25 ms import for one upload)", "=1 lets the GPU unswizzle import a pool for its upload, as before (Reborn 6babdc2).")
 SW(RX_VK_UPLOAD_ALL, kill, bool, "off: storage last written by GPU render targets and untouched by the CPU is not uploaded", "Uploads new textures from guest memory even when that storage was last a GPU render target's (an A/B switch).")
 SW(RX_VK_UPLOAD_BUDGET_MS, tune, float, "12 ms of uploads a frame, then new small ASTC textures wait a frame", "Sets the per-frame upload time after which new non-terrain ASTC textures are deferred to a later frame; 0 means no deferral.")
 SW(RX_VK_UPSCALE, player, int, "the upscaling filter row", "Chooses the upscaling filter (0 to 2) for one run, over the options file.")

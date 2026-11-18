@@ -4650,6 +4650,16 @@ void memory_pool_created(uint64_t gpu, uint64_t size) {
 struct DeadImport { VkBuffer buffer; VkDeviceMemory memory; uint64_t value; uint64_t lo, bytes; std::vector<VkDeviceMemory> pieces; };
 std::deque<DeadImport> dead_imports;
 
+// (Reborn 6babdc2) Whether one imported pool holds all of [lo, hi): a lookup there imports nothing (vk_texture.cpp
+// upload_unswizzle_gpu asks before it reaches for one)
+int memory_guest_contained(uint64_t lo, uint64_t hi) {
+    std::lock_guard lk(pools_mu);
+    auto it = imported.upper_bound(lo);   // (pools by lo: the last one starting at or below lo)
+    if (it == imported.begin()) return 0;
+    --it;
+    return it->second.lo <= lo && it->second.hi >= hi ? 1 : 0;
+}
+
 extern std::deque<std::map<uint64_t, Pool>::node_type> evicted_pools;   // (imports_give_back's, below)
 int memory_guest_imported(uint64_t lo, uint64_t hi) {
     if (hi <= lo) return 0;
