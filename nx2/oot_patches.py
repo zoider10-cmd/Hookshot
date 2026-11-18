@@ -1205,6 +1205,40 @@ def patch_turn_rate(s):
     return s[:head] + body.replace(TURN_RATE_OLD, TURN_RATE_NEW, 1) + s[end:], 1
 
 
+# A song's playback after the ocarina (the ocarina's state machine f_8019bad0 runs f_832b2af0 in state 5, the song just played,
+# and f_832b2dc0 in state 6, its other melody playback): each update while the melody plays it calls f_832b7b50, whether the
+# note flag the sound engine sets for one of its runs at each of the melody's notes is set, and goes on to the next note when
+# it is. Above 60 fps the sound job runs at 60 Hz and the playback went on two or three notes at each (host/oot_high_fps.h has
+# why and the rule). After each call its result goes through hos_oot_song_cue; the call carries its return address, so it is
+# once in its function.
+SONG_CUE_SITES = (("void f_832b2af0(Ctx *__restrict A64_NOESC c) {\n", "c->x[30] = 0x832b2c84ULL; f_832b7b50(c);\n"),
+                  ("void f_832b2dc0(Ctx *__restrict A64_NOESC c) {\n", "c->x[30] = 0x832b2ed4ULL; f_832b7b50(c);\n"))
+SONG_CUE_NEW = ("    c->x[0] = hos_oot_song_cue(%d, c->x[0]);"
+                "   /* (nx2/oot_patches.py: the note flag once a note above 60 fps) */\n")
+SONG_CUE_DECL = "extern uint64_t hos_oot_song_cue(uint32_t site, uint64_t game);\n"
+
+
+def patch_song_cue(s):
+    """The song playbacks' note flag through the host: (s, how many of the two calls are in s with it, made now or before);
+    a call not found once in its function is left alone"""
+    done = 0
+    for site, (head_text, call) in enumerate(SONG_CUE_SITES):
+        at = _function(s, head_text)
+        if at is None:
+            continue
+        head, end = at
+        body = s[head:end]
+        new = call + SONG_CUE_NEW % site
+        if body.count(new) == 1:
+            done += 1
+        elif body.count(call) == 1:
+            s = s[:head] + body.replace(call, new, 1) + s[end:]
+            done += 1
+    if done and SONG_CUE_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + SONG_CUE_DECL, 1)
+    return s, done
+
+
 def patch_text_speed(s):
     """The scale at the head of the letters' block of f_80b1e140 (Text speed), and the call to hos_oot_text_pane after it
     (Text size: host/oot_text_size.c); None when the file has no such function, s unchanged when the
@@ -1698,6 +1732,11 @@ def patch_file(s, name, protect_hearts=False):
     if floor != out:
         lines.append("oot_patches: a moving floor's carry above 60 fps in " + name)
     out = floor
+    cue, found = patch_song_cue(out)
+    counts["song note flag"] += found
+    if cue != out:
+        lines.append("oot_patches: the song playbacks' note flag once a note above 60 fps in " + name)
+    out = cue
     return out, counts, lines
 
 
@@ -1768,6 +1807,9 @@ def report(paths, counts, protect_hearts=False):
         print("oot_patches: WARNING: the cloth's time was found %d times, not once" % total["cloth time"])
     if total["cloth solve"] != 1:   # (without it, above 60 fps with HOS_FPS_CLOTH_60=1 the cloth is still solved every frame)
         print("oot_patches: WARNING: the cloth's solve job was found %d times, not once" % total["cloth solve"])
+    if total["song note flag"] != len(SONG_CUE_SITES):   # (without them, above 60 fps a song's notes come in twos and threes)
+        print("oot_patches: WARNING: the song playbacks' note flag was found at %d of %d places" % (total["song note flag"],
+                                                                                                 len(SONG_CUE_SITES)))
     for what, n in done.items():
         if n != expected.get(what, 1):
             print("oot_patches: WARNING: the %s was found %d times" % (what, n))

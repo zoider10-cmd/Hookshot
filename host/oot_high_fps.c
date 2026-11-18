@@ -1,7 +1,7 @@
-/* (hookshot) The sound manager's job at 60 Hz, the physics solver's steps rounded up, a horse's jump blend and a moving floor's
-   carry, under a Frame rate cap above 60, the cloth's time below 60 fps and its solves above 60: the lifted f_80435300,
-   f_83373400, f_838ceb80, f_838cfc10, f_82c59eb0, f_80159dc0, f_8015d490, f_838baa40, f_81b3aa48 and f_81b47080 call these
-   (nx2/oot_patches.py);
+/* (hookshot) The sound manager's job at 60 Hz, the physics solver's steps rounded up, a horse's jump blend, a moving
+   floor's carry and a song playback's note flag once a note, under a Frame rate cap above 60, the cloth's time below 60
+   fps and its solves above 60: the lifted f_80435300, f_83373400, f_838ceb80, f_838cfc10, f_82c59eb0, f_80159dc0,
+   f_8015d490, f_838baa40, f_81b3aa48, f_81b47080, f_832b2af0 and f_832b2dc0 call these (nx2/oot_patches.py);
    host/oot_high_fps.h has why and the logic.
    HOS_FPS_LOG (on, by the switches' rule: =0 is off): what they do, every 600 calls. */
 #include "hos.h"
@@ -31,6 +31,9 @@ static uint8_t bgm_held;        /* (the flags seen on frames the gate held the j
 /* shortcut: one bit set on two held frames between runs is handled once (bit 6 then counts down once); count per bit if that is
    ever seen to matter */
 static uint8_t bgm_run;         /* (those, handed to the update's run: its own thread) */
+static long long sound_job_runs;   /* (phase 0's runs, for the song playbacks' note flag; under sound_lock) */
+static OotSongCue song_cue[2];     /* (each playback's last read of it; under sound_lock) */
+static long long cue_reads, cue_held;   /* (HOS_FPS_LOG's counts, under sound_lock) */
 
 /* f_80435300's head: phase w2, slot the guest address of the pointer to the object whose +0x10 is the game step (the job's own
    load). 0: the job returns at once */
@@ -47,6 +50,7 @@ int hos_oot_sound_gate(Ctx *c, uint32_t phase, uint64_t slot) {
     AcquireSRWLockExclusive(&sound_lock);
     const int run = oot_sound_gate(&sound_gate, phase, step, t);
     if (!run && bgm_flags_at) bgm_held |= *(const uint8_t *)GP(bgm_flags_at);   /* (what the update would have read now) */
+    if (run && phase == 0) sound_job_runs++;
     if (phase == 0 && fps_log()) {
         sound_runs += run;
         if (!(++sound_calls % 600)) ran = sound_runs, sound_runs = 0;
@@ -56,6 +60,23 @@ int hos_oot_sound_gate(Ctx *c, uint32_t phase, uint64_t slot) {
         hos_log("oot: sound job ran %lld of the last 600 frames (step %.3f%s)", ran, step,
                 oot_sound_partial(step, t) ? ", held to 60 Hz" : "");
     return run;
+}
+
+/* After f_832b7b50 in a song's playback (site 0: f_832b2af0, the song just played; 1: f_832b2dc0, the ocarina's other melody
+   playback): game, its result (bit 0: the note flag is set). Above a cap of 60, bit 0 cleared when the flag was read set before
+   and the sound job has not run since */
+uint64_t hos_oot_song_cue(uint32_t site, uint64_t game) {
+    const int t = timed();
+    long long held = -1;
+    AcquireSRWLockExclusive(&sound_lock);
+    const int cue = oot_song_cue(&song_cue[site & 1], (int)(game & 1), sound_job_runs, t);
+    if (t && fps_log()) {
+        cue_held += (int)(game & 1) && !cue;
+        if (!(++cue_reads % 600)) held = cue_held, cue_held = 0;
+    }
+    ReleaseSRWLockExclusive(&sound_lock);
+    if (held >= 0) hos_log("oot: a song's playback read its note flag set again before the sound job ran %lld of the last 600 reads", held);
+    return cue ? game : game & ~(uint64_t)1;
 }
 
 /* The step f_80435300's phase 0 hands to the sound engine, and the music manager's update f_83373400 reads (its float's bits) */
