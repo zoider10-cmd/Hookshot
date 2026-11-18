@@ -98,6 +98,16 @@ class RendererDepsTests(unittest.TestCase):
         self.read.write_bytes(b"int a; /* an edit */\n")
         self.assertNotEqual(self.deps(), first)
 
+    def test_a_def_table_it_reads_changes_the_key(self):
+        # (gpu/vk/switches.h includes switches.def: a row added there alone left the renderer's table as it was, and a
+        #  run said "RX_VK_DESC_KEEP is set, and is not a switch of this build" while the switch worked, 2026-11-18)
+        table = self.vk / "switches.def"
+        table.write_bytes(b'SW(RX_VK_A, kill, bool, "a", "b")' + b"\n")
+        self.write_depfile(self.read, table)
+        first = self.deps()
+        table.write_bytes(b'SW(RX_VK_A, kill, bool, "a", "b")' + b"\n" + b'SW(RX_VK_B, kill, bool, "c", "d")' + b"\n")
+        self.assertNotEqual(self.deps(), first)
+
     def test_a_header_gone_changes_the_key(self):
         self.write_depfile(self.read)
         first = self.deps()
