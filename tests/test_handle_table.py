@@ -1,5 +1,6 @@
-"""The resolved texture handles are kept in a flat open-addressing table (gpu/vk/vk_draw.cpp HandleTable), not a node map:
-every texture binding of every draw looks one up. The table is cut out of the source, compiled, and checked against
+"""The resolved texture handles are kept in a flat open-addressing table (gpu/vk/vk_draw.cpp HandleTable, FlatMap of
+gpu/vk/flat_map.h), not a node map: every texture binding of every draw looks one up. The table is compiled from the header with
+the source's HandleHit, and checked against
 std::unordered_map on random keys shaped like the real ones (a 20-bit slot, view type, use and format above it): every
 key inserted is found with its value, a key never inserted is not, growth keeps them all, and clear() empties it.
 
@@ -32,6 +33,7 @@ DRIVER = r"""
 #include <unordered_map>
 #include <vector>
 #include <algorithm>
+#include "flat_map.h"
 typedef struct VkImageView_T* VkImageView;
 struct Texture;
 @HIT@
@@ -75,13 +77,13 @@ def main():
     ap.add_argument("--cxx", default="c++")
     a = ap.parse_args()
     source = (ROOT / "gpu" / "vk" / "vk_draw.cpp").read_text(encoding="utf-8")
-    hit, table = block(source, "struct HandleHit {"), block(source, "struct HandleTable {")
-    if "TLS_OBJECT(handle_hits, HandleTable)" not in source:
+    hit, table = block(source, "struct HandleHit {"), "using HandleTable = FlatMap<HandleHit>;"
+    if "TLS_OBJECT(handle_hits, HandleTable)" not in source or table not in source:
         raise SystemExit("handle_hits is no longer the flat table")
     with tempfile.TemporaryDirectory() as d:
         src, exe = Path(d) / "t.cpp", Path(d) / "t.exe"
         src.write_text(DRIVER.replace("@HIT@", hit).replace("@TABLE@", table), encoding="utf-8")
-        r = subprocess.run([a.cxx, "-std=c++17", "-O2", str(src), "-o", str(exe)], capture_output=True, text=True)
+        r = subprocess.run([a.cxx, "-std=c++17", "-O2", "-I", str(ROOT / "gpu" / "vk"), str(src), "-o", str(exe)], capture_output=True, text=True)
         if r.returncode:
             raise SystemExit("compile failed:\n" + r.stderr[-3000:])
         r = subprocess.run([str(exe)], capture_output=True, text=True, timeout=120)

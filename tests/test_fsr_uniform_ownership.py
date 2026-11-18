@@ -77,7 +77,7 @@ def main():
             code = fixture.replace("/* BACKEND */", types + "\n" + state + "\n" + block(source, "void make_uniform_layout()") + "\n" + helper)
             cpp, exe = Path(tmp) / (name + ".cpp"), Path(tmp) / (name + ".exe")
             cpp.write_text(code, encoding="utf-8")
-            subprocess.run([args.cxx, "-std=c++20", "-include", ENV_ON_H, "-O1", "-pthread", "-Wall", "-Wextra", "-Werror", "-Wno-missing-field-initializers", "-I" + args.headers, str(cpp), "-o", str(exe)], check=True)
+            subprocess.run([args.cxx, "-std=c++20", "-include", ENV_ON_H, "-include", str(ROOT / "gpu" / "vk" / "flat_map.h"), "-O1", "-pthread", "-Wall", "-Wextra", "-Werror", "-Wno-missing-field-initializers", "-I" + args.headers, str(cpp), "-o", str(exe)], check=True)
             for cache in ["coherent", "noncoherent"]:
                 for case in ["queued", "growth", "reuse", "workers", "failure", "growth-off", "empty", "no-recording", "initial-missing", "admission-failure", "fence-reuse", "batch-reuse"]:
                     subprocess.run([str(exe), case, cache], check=True, timeout=20)

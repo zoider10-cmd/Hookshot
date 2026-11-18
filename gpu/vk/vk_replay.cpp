@@ -859,10 +859,19 @@ void use_queue_state(uint64_t queue) {
     for (int k = 0; k < kNvnStages; k++) s->tex_gen[k] = gen_base, s->ssbo_gen[k] = gen_base;
 }
 
+/// (hookshot, after Hookshot eda64e895) payload's copy of a payload shorter than its type, rare: a function of its own, so that the
+/// compiler can't merge it with the copy at the type's size into one call of memcpy with a chosen size (clang does, at -O2)
+[[gnu::noinline, gnu::cold]] void payload_short(void* v, const uint8_t* a, uint32_t bytes) { std::memcpy(v, a, bytes); }
+
 template <class T>
 T payload(const uint8_t* a, uint32_t bytes) {
+    // (a payload at least as long as T, nearly every one, is copied at T's size: a copy the compiler makes inline. A variable size
+    // was a call of the C library's memcpy for every op replayed)
     T v{};
-    std::memcpy(&v, a, std::min<size_t>(sizeof v, bytes));
+    if (bytes >= sizeof v) [[likely]]
+        std::memcpy(&v, a, sizeof v);
+    else
+        payload_short(&v, a, bytes);
     return v;
 }
 

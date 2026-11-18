@@ -42,6 +42,7 @@
 #include "shader_recompiler/backend/spirv/emit_spirv.h"
 
 #include "vk_paths.h"
+#include "flat_map.h"
 #include "pipeline_cache_file.h"
 #include "vk_draw.h"
 #include "vk_menu.h"          // (opts.anisotropy: the Anisotropic filtering row; resolution_scale)
@@ -420,7 +421,8 @@ struct RecordingRes {
     size_t si = 0;                 // (the one in use)
     uint64_t before = 0;           // (what the recording used of the streams before this one)
     uint32_t idle = 0;             // (recordings of the slot that stayed in the first stream)
-    std::unordered_map<const void*, std::pair<VkBuffer, uint64_t>> c1_at;   // (c1 of a stage: uploaded once a recording)
+    // (hookshot, after Hookshot eda64e895: flat (flat_map.h): a node map put a malloc into every c1 upload kept, a free into the next clear)
+    FlatMap<std::pair<VkBuffer, uint64_t>> c1_at;   // (c1 of a stage, by the stage's address: uploaded once a recording)
 };
 // (a recording's first stream: one for each of the kRecordings slots. RX_VK_STREAM_MB=<n>: that size, 2 by default; a recording
 // that needs more is given a bigger stream for the rest of it (RX_VK_STREAM_GROW_OFF=1: draws are skipped instead, and the default
@@ -2429,8 +2431,8 @@ PipeEntry* graphics_pipeline(const Program& p, const NvnState& s, const Targets&
     uint64_t key = pipeline_key(p, s, at, topo);
     const uint64_t own = mix(key, (uint64_t)(uintptr_t)&p);
     const uint64_t mkey = by_program ? own : key;   // (a thread's map: by key and object)
-    static thread_local std::unordered_map<uint64_t, PipeEntry*> mine;   // (entries live as long as the cache)
-    if (auto m = mine.find(mkey); m != mine.end()) return FINE_X(FC_PIPE_MAP, 1), remember(m->second);
+    static thread_local FlatMap<PipeEntry*> mine;   // (entries live as long as the cache; flat, flat_map.h)
+    if (PipeEntry* const* m = mine.find(mkey)) return FINE_X(FC_PIPE_MAP, 1), remember(*m);
     PROF_EXACT();   // (new to this thread, or new: rare, and a pipeline made can take milliseconds)
     ParLock lk;
     auto it = pipelines.find(key);
@@ -3216,53 +3218,7 @@ struct HandleHit {
 /// in one flat open-addressing table: every texture binding of every draw looks a key up, and a node map's hash, bucket
 /// and node pointer chase cost more than the lookup's work. Linear probing over a power-of-two array, kept at most half
 /// full; nothing is erased one by one (the replay clears it whole), so no tombstones
-struct HandleTable {
-    struct Slot {
-        uint64_t key;
-        HandleHit hit;
-    };
-    std::vector<Slot> slots;
-    std::vector<uint8_t> used;
-    size_t count = 0;
-    static size_t mix(uint64_t k) {   // (the key's low bits are the slot number: spread the view type, use and format in)
-        k ^= k >> 29;
-        k *= 0xbf58476d1ce4e5b9ull;
-        k ^= k >> 32;
-        return (size_t)k;
-    }
-    HandleHit* find(uint64_t key) {
-        if (!count) return nullptr;
-        const size_t m = slots.size() - 1;
-        for (size_t i = mix(key) & m;; i = (i + 1) & m) {
-            if (!used[i]) return nullptr;
-            if (slots[i].key == key) return &slots[i].hit;
-        }
-    }
-    HandleHit& operator[](uint64_t key) {
-        if ((count + 1) * 2 > slots.size()) grow();
-        const size_t m = slots.size() - 1;
-        size_t i = mix(key) & m;
-        for (; used[i]; i = (i + 1) & m)
-            if (slots[i].key == key) return slots[i].hit;
-        used[i] = 1, slots[i].key = key, slots[i].hit = HandleHit{}, count++;
-        return slots[i].hit;
-    }
-    void grow() {
-        std::vector<Slot> old = std::move(slots);
-        std::vector<uint8_t> old_used = std::move(used);
-        const size_t n = old.empty() ? 1024 : old.size() * 2;
-        slots.assign(n, Slot{});
-        used.assign(n, 0);
-        count = 0;
-        for (size_t j = 0; j < old.size(); j++)
-            if (old_used[j]) (*this)[old[j].key] = old[j].hit;
-    }
-    size_t size() const { return count; }
-    void clear() {
-        std::fill(used.begin(), used.end(), (uint8_t)0);
-        count = 0;
-    }
-};
+using HandleTable = FlatMap<HandleHit>;   // (flat_map.h, shared with the replay's other per-thread caches)
 TLS_OBJECT(handle_hits, HandleTable)
 // (hookshot) RX_VK_TRACE_TEX=<w>x<h>,...: each draw sampling a texture of that size is logged with its state, every 30th frame, 600 lines: a
 // model that does not show is found by its textures, and whether the game draws it, and how, read from the line
@@ -3449,10 +3405,10 @@ VkDescriptorBufferInfo uniform_range(const NvnState& s, const Stage& st, uint32_
     if (index == 1) {
         FINE_SCOPE(FT_C1);
         FINE_N(FC_C1_CALLS, 1);
-        const void* key = &st;
-        auto it = cur->c1_at.find(key);
+        const uint64_t key = (uint64_t)(uintptr_t)&st;
+        const auto* it = cur->c1_at.find(key);
         const uint64_t n = std::max<uint64_t>((st.c1.size() + 15) & ~15ull, 16);
-        if (it != cur->c1_at.end()) return {it->second.first, it->second.second, n};
+        if (it) return {it->first, it->second, n};
         const uint64_t at = stream_alloc(n, align);
         if (at == UINT64_MAX) return bi;
         std::memset(cur->mapped + at, 0, n);

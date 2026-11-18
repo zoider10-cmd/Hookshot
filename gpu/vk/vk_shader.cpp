@@ -56,6 +56,7 @@
 #include "vk_internal.h"
 #include "vk_jobs.h"
 #include "vk_draw.h"
+#include "flat_map.h"
 #include "vk_progcache.h"
 #include "vk_menu.h"
 
@@ -2009,7 +2010,7 @@ struct Pick {
     const Program* p = nullptr;
     std::vector<uint32_t> handles;   // (at its answers' descriptors: their slots and the slots' versions)
 };
-thread_local std::unordered_map<uint64_t, Pick> picks;   // (each recording thread's: program_pick has its own lock)
+thread_local FlatMap<Pick> picks;   // (each recording thread's: program_pick has its own lock; flat, flat_map.h)
 uint64_t pick_inputs(const NvnState& s, const uint8_t color_types[8]) {
     uint64_t h = 0x9E37;
     for (int i = 0; i < 16; i++) h = h * 1099511628211ull ^ (uint64_t)s.vattr[i];
@@ -2161,7 +2162,7 @@ const Program* program_for(const NvnState& s, ProgramKind kind, const uint8_t co
         }
     }
     const uint64_t key = (compute ? 0x5EED : pick_inputs(s, color_types)) * 1099511628211ull ^ s.prog.serial;
-    Pick& pk = picks[key];
+    Pick& pk = picks[key];   // (flat_map.h: an insert into picks can move it; not held across program_pick)
     auto keep = [&](const Program* p) {
         if (!p || !p->ready.load(std::memory_order_acquire) || p->failed) return p;
         if (!(prog_fast[0].on && prog_fast[0].p == p)) prog_fast[1] = prog_fast[0];
@@ -2188,11 +2189,12 @@ const Program* program_for(const NvnState& s, ProgramKind kind, const uint8_t co
         st_none++;
     }
     const Program* picked = program_pick(s, kind, color_types);
+    Pick& pw = picks[key];   // (looked up again: nothing program_pick does is meant to reach this thread's picks, but a move would be silent)
     if (picked && picked->ready.load(std::memory_order_acquire) && !picked->failed) {
-        pk.p = picked;
-        answer_handles(s, *picked, pk.handles);
+        pw.p = picked;
+        answer_handles(s, *picked, pw.handles);
     } else {
-        pk.p = nullptr;
+        pw.p = nullptr;
     }
     if (picks.size() > 65536) picks.clear();
     return keep(picked);

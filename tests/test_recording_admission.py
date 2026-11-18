@@ -58,7 +58,7 @@ def main():
         cpp, exe = Path(tmp) / 'fixture.cpp', Path(tmp) / 'fixture.exe'
         cpp.write_text(fixture, encoding='utf-8')
         flags = ['-fsanitize=address,undefined', '-fno-sanitize-recover=all'] if a.sanitize else []
-        subprocess.run([a.cxx, '-std=c++20', '-include', ENV_ON_H, '-O1', '-pthread', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers', *flags,
+        subprocess.run([a.cxx, '-std=c++20', '-include', ENV_ON_H, '-include', str(ROOT / 'gpu' / 'vk' / 'flat_map.h'), '-O1', '-pthread', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers', *flags,
                         '-I' + str(a.headers), str(cpp), '-o', str(exe)], check=True)
         env = {k: v for k, v in os.environ.items() if not k.startswith('RX_VK_')}
         for case in cases:
