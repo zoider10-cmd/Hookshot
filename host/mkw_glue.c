@@ -773,15 +773,38 @@ static int sample_stack_bounds(HANDLE h, uint64_t *lo, uint64_t *hi) {
     const uint8_t *teb = (const uint8_t *)info.teb;
     uint64_t base, limit, bottom;
     memcpy(&base, teb + 8, 8), memcpy(&limit, teb + 16, 8), memcpy(&bottom, teb + 0x1478, 8);
-    *lo = bottom && bottom < limit ? bottom : limit, *hi = base;
+    /* (the committed part only, StackLimit up: the reserve below it (from DeallocationStack) is not all committed, and an
+       unwind that read there took the game down twice, 2026-11-18, RtlVirtualUnwind at ntdll+0x1ff2a in headless Market
+       runs with HOS_PROFILE=1. A thread's stack pointer is never below its StackLimit but while the stack grows) */
+    (void)bottom;
+    *lo = limit, *hi = base;
     return *lo && *hi > *lo;
+}
+/* (hookshot) Whether the unwind of the function at `rip` (its entry f, in the module at image) may be followed from ctx: a
+   function that keeps its frame in a register (UNWIND_INFO's FrameRegister) is unwound from that register, which must be on
+   the thread's stack too. Seen 2026-11-18 (a headless Market run with HOS_PROFILE=1): RtlVirtualUnwind read 0x61898081f8,
+   a frame register that held something else at that instant, and took the game down */
+/* (an unwind reads above the stack pointer, up to the frame's size and its saved registers: a frame within this of the
+   stack's top is not followed, the thread's outermost frames. Seen 2026-11-18: reads 0x868 past a stack's top took the
+   game down, after the frame register and the committed bounds were checked) */
+#define SAMPLE_UNWIND_READ 0x2000
+static int sample_frame_ok(const CONTEXT *ctx, DWORD64 image, PRUNTIME_FUNCTION f, uint64_t lo, uint64_t hi) {
+    const uint8_t *info = (const uint8_t *)(image + f->UnwindData);
+    const int reg = info[3] & 15;
+    if (!reg) return 1;
+    const DWORD64 *regs = &ctx->Rax;   /* (CONTEXT's Rax..R15 in the encoding's order: Rax Rcx Rdx Rbx Rsp Rbp Rsi Rdi R8..R15) */
+    const uint64_t v = regs[reg];
+    return v >= lo && v + SAMPLE_UNWIND_READ <= hi;
 }
 static DWORD WINAPI sample_all_thread(void *p) {
     const char *path = (const char *)p;
     char go[MAX_PATH];
     snprintf(go, sizeof go, "%s.go", path);
     FILE *out = NULL;
-    static HMODULE mods[64];
+    /* (hookshot) The modules, listed with the threads while none is suspended: a module asked for by address
+       (GetModuleHandleExA, GetModuleFileNameA) while a thread is suspended waits for the loader's lock, which that thread
+       may hold. Seen 2026-11-18: a run with HOS_PROFILE=1 stopped for good at the boot, as the renderer's DLLs loaded */
+    static uint64_t mod_lo[64], mod_hi[64];
     static char modname[64][64];
     int nmods = 0;
     enum { MAXT = 128 };
@@ -836,6 +859,15 @@ static DWORD WINAPI sample_all_thread(void *p) {
                 nt++;
             }
             CloseHandle(snap);
+            nmods = 0;
+            HANDLE msnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
+            MODULEENTRY32 me = {sizeof me};
+            for (BOOL ok = msnap != INVALID_HANDLE_VALUE && Module32First(msnap, &me); ok && nmods < 64; ok = Module32Next(msnap, &me)) {
+                mod_lo[nmods] = (uint64_t)me.modBaseAddr, mod_hi[nmods] = (uint64_t)me.modBaseAddr + me.modBaseSize;
+                snprintf(modname[nmods], sizeof modname[nmods], "%s", me.szModule);
+                nmods++;
+            }
+            if (msnap != INVALID_HANDLE_VALUE) CloseHandle(msnap);
             if (ring) {
                 if (!listed_at) hos_log("prof: slow frames: %d threads sampled every %d ms, written for a slow frame to %s-<n>.txt", nt,
                                         hos_slow_frames_every_ms(), path);
@@ -859,31 +891,20 @@ static DWORD WINAPI sample_all_thread(void *p) {
             char line[1024];
             int len = snprintf(line, sizeof line, "%ld %s|", ms, tn[i]);
             for (int depth = 0; got && depth < 16 && ctx.Rip && len < (int)sizeof line - 96; depth++) {
-                HMODULE m = NULL;
-                GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                                   (LPCSTR)ctx.Rip, &m);
                 int mi = -1;
-                for (int k = 0; k < nmods; k++) if (mods[k] == m) mi = k;
-                if (mi < 0 && nmods < 64) {
-                    mi = nmods++;
-                    mods[mi] = m;
-                    char mp[MAX_PATH] = "?";
-                    if (m) GetModuleFileNameA(m, mp, MAX_PATH);
-                    const char *b = strrchr(mp, '\\');
-                    snprintf(modname[mi], sizeof modname[mi], "%s", b ? b + 1 : mp);
-                }
+                for (int k = 0; k < nmods && mi < 0; k++) if (ctx.Rip >= mod_lo[k] && ctx.Rip < mod_hi[k]) mi = k;
                 len += snprintf(line + len, sizeof line - len, "%s%s+%llx", depth ? ";" : "", mi < 0 ? "?" : modname[mi],
-                                (unsigned long long)(ctx.Rip - (uint64_t)m));
+                                (unsigned long long)(ctx.Rip - (mi < 0 ? 0 : mod_lo[mi])));
                 /* (hookshot) unwound only from code in a module, with the stack pointer on the thread's own stack: else the
                    innermost frames already written are what this sample has */
-                if (!m || !bounded || ctx.Rsp < stack_lo || ctx.Rsp >= stack_hi) break;
+                if (mi < 0 || !bounded || ctx.Rsp < stack_lo || ctx.Rsp + SAMPLE_UNWIND_READ > stack_hi) break;
                 DWORD64 image = 0;
                 PRUNTIME_FUNCTION f = RtlLookupFunctionEntry(ctx.Rip, &image, NULL);
-                if (!f) break;
+                if (!f || !sample_frame_ok(&ctx, image, f, stack_lo, stack_hi)) break;
                 void *hd;
                 DWORD64 frame;
                 RtlVirtualUnwind(UNW_FLAG_NHANDLER, image, ctx.Rip, f, &ctx, &hd, &frame, NULL);
-                if (ctx.Rsp < stack_lo || ctx.Rsp >= stack_hi) break;
+                if (ctx.Rsp < stack_lo || ctx.Rsp + SAMPLE_UNWIND_READ > stack_hi) break;
             }
             ResumeThread(th[i]);
             if (ring) hos_slow_sample(sweep_ns, strchr(line, ' ') + 1);
