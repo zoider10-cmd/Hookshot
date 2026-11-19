@@ -22,6 +22,9 @@ typedef struct Obj {
     int kind;
     SRWLOCK lk;
     CONDITION_VARIABLE cv;
+    /* how many times the address was made again (obj_lookup), kept like lk and cv: a condition variable's waiter still
+       in from an earlier one (a misuse) is told apart by it (cv_same_life) */
+    unsigned life;
     /* mutex / rwlock */
     HosThread *owner;
     int count, readers;
@@ -38,10 +41,12 @@ typedef struct Obj {
     uint64_t gen;
     /* (EvilOOT) Horizon's handoff: mutex: condition variable waiters a signal has woken that the mutex is owed to;
        condvar: its waiters, those a signal has given the mutex to and not yet out, the mutex they wait with
-       (cv_mixed: waiters with more than one: no handoff) */
+       (cv_mixed: waiters with more than one: no handoff); each owed mutex with the generation its signal was made at
+       (cv_owed_gen: only a waiter that came in at that generation or before, one the signal woke, may take it) */
     int reserved;
     int cv_waiting, cv_in, cv_owed, cv_mixed;   /* (cv_waiting: counted before cv->lk, read by Signal without it; cv_in: under cv->lk) */
     struct Obj *cv_mutex, *cv_owed_mutex[8];
+    uint64_t cv_owed_gen[8];
     /* multi-wait holder: its event; multi-wait: linked holders */
     uint64_t event;
     struct Obj **links;
@@ -100,6 +105,14 @@ static void bury_locked(Obj *o) {
         Obj *d = graves[grave_head];
         grave_head = (grave_head + 1) % grave_cap;
         grave_count--;
+        if (__atomic_load_n(&d->cv_waiting, __ATOMIC_SEQ_CST) > 0) {
+            /* (a condition variable waiter still in, a misuse: its lock and condition variable are not made again under
+               it; looked at again in 30 s) */
+            graves[(grave_head + grave_count) % grave_cap] = d;
+            grave_times[(grave_head + grave_count) % grave_cap] = now;
+            grave_count++;
+            continue;
+        }
         if (!d->kind && !d->mw && !d->nlinks) {
             free(d->q);
             free(d->links);
@@ -241,12 +254,16 @@ static Obj *obj_lookup(uint64_t key, int kind) {
            lock and condition variable stay as they are: nothing holds them now) */
         free(o->q);
         free(o->links);
+        /* (the life first: a condition variable's waiter that comes in after the clear is of the new life, and counted
+           in it; one that came in before it is of the old one, its count cleared. Writers hold table_lock) */
+        __atomic_store_n(&o->life, o->life + 1, __ATOMIC_SEQ_CST);
         memset(&o->owner, 0, sizeof *o - offsetof(Obj, owner));
         __atomic_store_n(&o->kind, kind, __ATOMIC_RELEASE);
     }
     if (!o) {
         if ((o = spares)) {   /* (its old address's caches see the new key: see spares) */
             spares = o->spare;
+            __atomic_store_n(&o->life, o->life + 1, __ATOMIC_SEQ_CST);   /* (as above) */
             memset(&o->owner, 0, sizeof *o - offsetof(Obj, owner));
             __atomic_store_n(&o->kind, 0, __ATOMIC_RELAXED);
         } else {
@@ -282,7 +299,9 @@ static int wait_until(Obj *o, int64_t deadline) {
     if (!deadline) return hos_cv_sleep(&o->cv, &o->lk, INFINITE), 1;
     int64_t left = deadline - hos_now_ns();
     if (left <= 0) return 0;
-    hos_cv_sleep(&o->cv, &o->lk, (DWORD)((left + 999999) / 1000000));
+    /* (in steps of at most ~49 days: 0xFFFFFFFF ms is INFINITE; callers wait again until the deadline) */
+    const uint64_t ms = ((uint64_t)left + 999999) / 1000000;
+    hos_cv_sleep(&o->cv, &o->lk, ms >= INFINITE ? INFINITE - 1 : (DWORD)ms);
     return 1;
 }
 
@@ -455,20 +474,47 @@ static void cv_enter(Obj *cv, Obj *m) {
     cv->cv_mutex = m;
     cv->cv_in++;
 }
-/* a waiter out (cv->lk held): whether a signal reserved its mutex m for it. A reservation made on another mutex (a
-   waiter with a different one came in after the signal) is given back: never left owed to nobody */
-static int cv_leave(Obj *cv, Obj *m) {
+/* a waiter out (cv->lk held), gen the generation it came in at: whether a signal reserved its mutex m for it.
+   A reservation belongs to the waiters that were in when it was made (its generation or later: gen moves right after
+   cv_reserve, under the same lock). A waiter that came in after it, as one that broadcasts and then waits with a zero
+   timeout while still holding the mutex, never takes it: it was not woken by that signal, and taking it would let it
+   relock ahead of the waiter the mutex is owed to. Of the reservations it may take, the oldest: a waiter that came
+   in later can take only newer ones, so each reservation is left to a waiter that can still take it. Every
+   reservation has one: each signal wakes a waiter that was in when it was made (Signal wakes under cv->lk, Broadcast
+   wakes all), and that waiter comes out. A waiter still in from before the condition variable was made again (life,
+   the one it came in at: a misuse) was counted in the counts obj_lookup cleared, so it does not count itself out of
+   the new ones, and no reservation is made for it (cv_in counts the new waiters only): it takes none, and taking one
+   would let it relock ahead of a new waiter a signal did wake. The wake it came out at may have been the one a signal
+   made for a new waiter, though, which then sleeps on while its mutex stays reserved, refused to every other locker:
+   so it wakes them all while a reservation is owed (the new waiters a signal moved past come out and take theirs, the
+   others sleep again; one wake could reach a waiter that came in after the signal, which sleeps again with it).
+   A reservation made on another mutex is given back: never left owed to nobody (all the waiters a reservation is made
+   for wait with one mutex: cv_mixed) */
+static int cv_same_life(Obj *cv, unsigned life) { return __atomic_load_n(&cv->life, __ATOMIC_RELAXED) == life; }
+static int cv_leave(Obj *cv, Obj *m, uint64_t gen, unsigned life) {
+    if (!cv_same_life(cv, life)) {   /* (an earlier life's waiter) */
+        if (cv->cv_owed) WakeAllConditionVariable(&cv->cv);
+        return 0;
+    }
     cv->cv_in--;
     __atomic_sub_fetch(&cv->cv_waiting, 1, __ATOMIC_SEQ_CST);   /* (counted in by cv_count_in) */
-    if (cv->cv_owed <= 0) return 0;
-    Obj *r = cv->cv_owed_mutex[--cv->cv_owed];
+    int k = -1;
+    for (int i = 0; i < cv->cv_owed; i++)
+        if (cv->cv_owed_gen[i] >= gen && (k < 0 || cv->cv_owed_gen[i] < cv->cv_owed_gen[k])) k = i;
+    if (k < 0) return 0;
+    Obj *r = cv->cv_owed_mutex[k];
+    cv->cv_owed--;
+    cv->cv_owed_mutex[k] = cv->cv_owed_mutex[cv->cv_owed];
+    cv->cv_owed_gen[k] = cv->cv_owed_gen[cv->cv_owed];
     if (r == m) return 1;
     __atomic_sub_fetch(&r->reserved, 1, __ATOMIC_SEQ_CST);
     return 0;
 }
-/* a signal (cv->lk held): the mutex reserved for the waiter it wakes */
+/* a signal (cv->lk held, before it moves gen): the mutex reserved for a waiter it wakes. At most one per waiter in:
+   every waiter in came in at this generation or before, so each reservation has a waiter that may take it */
 static void cv_reserve(Obj *cv) {
     if (!handoff_on() || cv->cv_mixed || !cv->cv_mutex || cv->cv_in <= cv->cv_owed || cv->cv_owed >= 8) return;
+    cv->cv_owed_gen[cv->cv_owed] = cv->gen;
     cv->cv_owed_mutex[cv->cv_owed++] = cv->cv_mutex;
     __atomic_add_fetch(&cv->cv_mutex->reserved, 1, __ATOMIC_SEQ_CST);
 }
@@ -610,8 +656,26 @@ HLE(_ZN2nn2os23SignalConditionVariableEPNS0_21ConditionVariableTypeE) {
     AcquireSRWLockExclusive(&cv->lk);
     cv_reserve(cv);
     cv->gen++;
-    ReleaseSRWLockExclusive(&cv->lk);
+    /* (the one wake made under cv->lk: it goes to a waiter that was in before this signal. Made after the unlock, a
+       waiter that came in meanwhile could take it, find its generation unchanged and sleep again, while the waiter
+       the signal was for, and the mutex reserved for it, slept on: the host's wake order is not the order of entry) */
     WakeConditionVariable(&cv->cv);
+    ReleaseSRWLockExclusive(&cv->lk);
+}
+/* (longshot) Broadcast: every waiter wakes. Left to the guest SDK, it signals the kernel key at cv+4, which no HLE waiter
+   sleeps on, so its waiters slept on until some Signal (the movie framework's reply and buffer queues, NVIDIA's OS layer:
+   untimed waits). Horizon moves all the waiters onto the mutex, so each is owed it, as a Signal's one is (cv_reserve: one mutex for all of them, at most 8 owed).
+   (cv_in, not cv_waiting: a waiter counted in by cv_count_in but not yet in cv_enter is owed nothing; it reads the new
+   generation and does not sleep. A waiter that comes in after the broadcast takes none of them: cv_leave) */
+HLE(_ZN2nn2os26BroadcastConditionVariableEPNS0_21ConditionVariableTypeE) {
+    Obj *cv = obj(ARG(0), K_COND);
+    if (watched_cv(ARG(0))) watch_log("broadcast", watch_mutex(), ARG(0), c, NULL);
+    HOS_CHAIN(HOS_CHAIN_SIGNAL, cv->key);
+    AcquireSRWLockExclusive(&cv->lk);
+    for (int n = cv->cv_in - cv->cv_owed; n > 0; n--) cv_reserve(cv);
+    cv->gen++;
+    ReleaseSRWLockExclusive(&cv->lk);
+    WakeAllConditionVariable(&cv->cv);
 }
 HLE(_ZN2nn2os21WaitConditionVariableEPNS0_21ConditionVariableTypeEPNS0_9MutexTypeE) {
     Obj *cv = obj(ARG(0), K_COND), *m = obj(ARG(1), K_MUTEX);
@@ -625,12 +689,15 @@ HLE(_ZN2nn2os21WaitConditionVariableEPNS0_21ConditionVariableTypeEPNS0_9MutexTyp
     cv_count_in(cv);
     AcquireSRWLockExclusive(&cv->lk);
     uint64_t gen = cv->gen;
+    const unsigned life = __atomic_load_n(&cv->life, __ATOMIC_RELAXED);
     cv_enter(cv, m);
     /* release the guest mutex fully while holding the condvar's lock: a signal cannot slip in between */
     const int count = mutex_release_all(m);
     HOS_CHAIN(HOS_CHAIN_WAIT, cv->key);
-    while (cv->gen == gen) hos_cv_sleep(&cv->cv, &cv->lk, INFINITE);
-    const int owed = cv_leave(cv, m);
+    /* (a waiter from an earlier life comes out at its next wake: gen was cleared under it, and only a wake that
+       reaches it ends its wait now) */
+    while (cv->gen == gen && cv_same_life(cv, life)) hos_cv_sleep(&cv->cv, &cv->lk, INFINITE);
+    const int owed = cv_leave(cv, m, gen, life);
     ReleaseSRWLockExclusive(&cv->lk);
     HOS_CHAIN(HOS_CHAIN_WOKE, cv->key);
     if (w) watch_log(owed ? "cv woken, owed the mutex" : "cv woken", ARG(1), ARG(0), c, m);
@@ -944,6 +1011,20 @@ static void sema_release(Obj *s, int n) {
     WakeAllConditionVariable(&s->cv);
     poke_multiwait(s);
 }
+/* an acquire that waits at most ns (<= 0: does not wait); whether it got one */
+static int sema_acquire_for(Obj *s, int64_t ns) {
+    const int64_t now = hos_now_ns();
+    const int64_t deadline = ns <= 0 ? now : ns > INT64_MAX - now ? INT64_MAX : now + ns;   /* (a huge TimeSpan: no wrap) */
+    const int chain = ns > 0 && hos_chain_on && __atomic_load_n(&s->sem, __ATOMIC_RELAXED) <= 0;
+    if (chain) hos_chain_note(HOS_CHAIN_WAIT, s->key, 0);
+    AcquireSRWLockExclusive(&s->lk);
+    while (s->sem <= 0 && wait_until(s, deadline) && hos_now_ns() < deadline) {}
+    const int ok = s->sem > 0;
+    if (ok) __atomic_store_n(&s->sem, s->sem - 1, __ATOMIC_RELEASE);   /* (as sema_acquire: read without lk by spins, WaitAny) */
+    ReleaseSRWLockExclusive(&s->lk);
+    if (chain) hos_chain_note(HOS_CHAIN_WOKE, s->key, 0);
+    return ok;
+}
 HLE(_ZN2nn2os19InitializeSemaphoreEPNS0_13SemaphoreTypeEii) { sema_init(ARG(0), (int)ARG(1), (int)ARG(2)); }
 HLE(_ZN2nn2os17FinalizeSemaphoreEPNS0_13SemaphoreTypeE) { drop(ARG(0)); }
 HLE(_ZN2nn2os16AcquireSemaphoreEPNS0_13SemaphoreTypeE) { sema_acquire(obj(ARG(0), K_SEMA)); }
@@ -954,6 +1035,12 @@ HLE(_ZN2nn2os21AcquireLightSemaphoreEPNS0_18LightSemaphoreTypeE) { sema_acquire(
 HLE(_ZN2nn2os21ReleaseLightSemaphoreEPNS0_18LightSemaphoreTypeE) { sema_release(obj(ARG(0), K_SEMA), 1); }
 /* (hookshot) the count overload, which OoT imports: left to the guest SDK it would bypass the host's state */
 HLE(_ZN2nn2os21ReleaseLightSemaphoreEPNS0_18LightSemaphoreTypeEi) { sema_release(obj(ARG(0), K_SEMA), (int)ARG(1)); }
+/* (longshot) the timed and try acquires: left to the guest SDK they read its count words, which the HLE never writes, and
+   wait on a kernel key no HLE release signals (the C library's timed semaphore wait and NVIDIA's OS layer call
+   TimedAcquireSemaphore). */
+HLE(_ZN2nn2os21TimedAcquireSemaphoreEPNS0_13SemaphoreTypeENS_8TimeSpanE) { RET(sema_acquire_for(obj(ARG(0), K_SEMA), (int64_t)ARG(1))); }
+HLE(_ZN2nn2os26TimedAcquireLightSemaphoreEPNS0_18LightSemaphoreTypeENS_8TimeSpanE) { RET(sema_acquire_for(obj(ARG(0), K_SEMA), (int64_t)ARG(1))); }
+HLE(_ZN2nn2os24TryAcquireLightSemaphoreEPNS0_18LightSemaphoreTypeE) { RET(sema_acquire_for(obj(ARG(0), K_SEMA), 0)); }
 
 /* ---- message queues (normal and light): the guest's buffer size is the capacity ------------------------------ */
 static void queue_init(uint64_t key, int capacity) {
@@ -1280,14 +1367,15 @@ HLE(_ZN2nn2os26TimedWaitConditionVariableEPNS0_21ConditionVariableTypeEPNS0_9Mut
     cv_count_in(cv);
     AcquireSRWLockExclusive(&cv->lk);
     uint64_t gen = cv->gen;
+    const unsigned life = __atomic_load_n(&cv->life, __ATOMIC_RELAXED);
     cv_enter(cv, m);
     const int count = mutex_release_all(m);
     int signaled = 1;
     HOS_CHAIN(HOS_CHAIN_WAIT, cv->key);
-    while (cv->gen == gen) {
+    while (cv->gen == gen && cv_same_life(cv, life)) {   /* (an earlier life's waiter: as in WaitConditionVariable) */
         if (!wait_until(cv, deadline) || hos_now_ns() >= deadline) { signaled = cv->gen != gen; break; }
     }
-    const int owed = cv_leave(cv, m);
+    const int owed = cv_leave(cv, m, gen, life);
     ReleaseSRWLockExclusive(&cv->lk);
     HOS_CHAIN(HOS_CHAIN_WOKE, cv->key);
     mutex_lock_owed(m, ARG(1), owed);

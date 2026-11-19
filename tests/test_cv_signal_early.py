@@ -29,7 +29,7 @@ WAIT = "HLE(_ZN2nn2os21WaitConditionVariableEPNS0_21ConditionVariableTypeEPNS0_9
 TIMED = "HLE(_ZN2nn2os26TimedWaitConditionVariableEPNS0_21ConditionVariableTypeEPNS0_9MutexTypeENS_8TimeSpanE) {"
 PARTS = {"@HANDOFF@": "static int handoff_on(void) {", "@COUNT@": "static void cv_count_in(Obj *cv) {",
          "@ENTER@": "static void cv_enter(Obj *cv, Obj *m) {",
-         "@LEAVE@": "static int cv_leave(Obj *cv, Obj *m) {", "@RESERVE@": "static void cv_reserve(Obj *cv) {",
+         "@SAME@": "static int cv_same_life(Obj *cv, unsigned life) {", "@LEAVE@": "static int cv_leave(Obj *cv, Obj *m, uint64_t gen, unsigned life) {", "@RESERVE@": "static void cv_reserve(Obj *cv) {",
          "@ALWAYS@": "static int cv_signal_always(void) {", "@SIGNAL@": SIGNAL}
 
 
@@ -37,6 +37,9 @@ def block(source, marker):
     if marker not in source:
         raise SystemExit("FAIL: host/nn_os_sync.c has no '%s'" % marker.strip())
     start = source.index(marker)
+    line = source[start:source.index("\n", start)]
+    if line.rstrip().endswith("}"):   # (a function on one line)
+        return line
     return source[start:start + re.search(r"^}", source[start:], re.M).end()]
 
 
@@ -58,14 +61,17 @@ static int locks, wakes;
 static void AcquireSRWLockExclusive(SRWLOCK *l) { CHECK(!l->held); l->held = 1; locks++; }
 static void ReleaseSRWLockExclusive(SRWLOCK *l) { CHECK(l->held); l->held = 0; }
 static void WakeConditionVariable(CONDITION_VARIABLE *cv) { (void)cv; wakes++; }
+static void WakeAllConditionVariable(CONDITION_VARIABLE *cv) { (void)cv; }   /* (cv_leave's, for an earlier life's waiter) */
 typedef struct Obj {
     uint64_t key;
     SRWLOCK lk;
     CONDITION_VARIABLE cv;
+    unsigned life;
     uint64_t gen;
     int reserved;
     int cv_waiting, cv_in, cv_owed, cv_mixed;
     struct Obj *cv_mutex, *cv_owed_mutex[8];
+    uint64_t cv_owed_gen[8];
 } Obj;
 static Obj cvo, mo, mo2;
 enum { K_COND = 2 };
@@ -82,6 +88,7 @@ enum { HOS_CHAIN_WAIT = 1, HOS_CHAIN_WOKE, HOS_CHAIN_SIGNAL };
 @HANDOFF@
 @COUNT@
 @ENTER@
+@SAME@
 @LEAVE@
 @RESERVE@
 @ALWAYS@
@@ -105,21 +112,22 @@ int main(int argc, char **argv) {
     CHECK(signal_once() == always);
     /* a waiter in (as WaitConditionVariable does under cv->lk, before it gives the mutex back): the signal is made, and
        reserves the mutex for it */
+    uint64_t g = cvo.gen, g2;
     cv_count_in(&cvo), cv_enter(&cvo, &mo);
     CHECK(signal_once() == 1 && mo.reserved == 1);
     /* woken and not yet out: still counted, so another signal is made (and reserves nothing more: one waiter) */
     CHECK(signal_once() == 1 && mo.reserved == 1);
-    CHECK(cv_leave(&cvo, &mo) == 1);   /* (out, owed the mutex) */
+    CHECK(cv_leave(&cvo, &mo, g, cvo.life) == 1);   /* (out, owed the mutex) */
     mo.reserved--;   /* (as mutex_take_owed does once it has the mutex) */
     /* the last one out: back to returning at once */
     CHECK(signal_once() == always);
     /* two waiters with different mutexes, one leaves: the other is still signalled */
-    cv_count_in(&cvo), cv_enter(&cvo, &mo);
-    cv_count_in(&cvo), cv_enter(&cvo, &mo2);
+    g = cvo.gen, cv_count_in(&cvo), cv_enter(&cvo, &mo);
+    g2 = cvo.gen, cv_count_in(&cvo), cv_enter(&cvo, &mo2);
     CHECK(cvo.cv_mixed);
-    CHECK(cv_leave(&cvo, &mo) == 0);
+    CHECK(cv_leave(&cvo, &mo, g, cvo.life) == 0);
     CHECK(signal_once() == 1);
-    CHECK(cv_leave(&cvo, &mo2) == 0);
+    CHECK(cv_leave(&cvo, &mo2, g2, cvo.life) == 0);
     CHECK(signal_once() == always);
     CHECK(cvo.cv_waiting == 0 && cvo.cv_in == 0 && cvo.cv_owed == 0 && !cvo.lk.held);
     return 0;

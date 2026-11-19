@@ -30,15 +30,21 @@ WAIT = "HLE(_ZN2nn2os21WaitConditionVariableEPNS0_21ConditionVariableTypeEPNS0_9
 TIMED = "HLE(_ZN2nn2os26TimedWaitConditionVariableEPNS0_21ConditionVariableTypeEPNS0_9MutexTypeENS_8TimeSpanE) {"
 PARTS = {"@HANDOFF@": "static int handoff_on(void) {", "@ALWAYS@": "static int cv_signal_always(void) {",
          "@COUNT@": "static void cv_count_in(Obj *cv) {", "@ENTER@": "static void cv_enter(Obj *cv, Obj *m) {",
-         "@LEAVE@": "static int cv_leave(Obj *cv, Obj *m) {", "@RESERVE@": "static void cv_reserve(Obj *cv) {",
+         "@LEAVE@": ("static int cv_leave(Obj *cv, Obj *m, uint64_t gen, unsigned life) {",
+                     "static int cv_leave(Obj *cv, Obj *m) {"), "@RESERVE@": "static void cv_reserve(Obj *cv) {",
          "@UNTIL@": "static int wait_until(Obj *o, int64_t deadline) {",
+         "@SAME@": "static int cv_same_life(Obj *cv, unsigned life) {",
          "@SIGNAL@": "HLE(_ZN2nn2os23SignalConditionVariableEPNS0_21ConditionVariableTypeE) {", "@WAIT@": WAIT, "@TIMED@": TIMED}
-OPTIONAL = {"@COUNT@"}   # (absent before the waiters were counted in before cv->lk: the fixture must then fail)
+OPTIONAL = {"@COUNT@", "@SAME@"}   # (@COUNT@ absent before the waiters were counted in before cv->lk: the fixture
+# must then fail; @SAME@ absent before the per-waiter hand-off, as is cv_leave's later form: older sources still cut)
 HOOK_AT = "uint64_t gen = cv->gen;\n"
 
 
 def block(source, marker):
     start = source.index(marker)
+    line = source[start:source.index("\n", start)]
+    if line.rstrip().endswith("}"):   # (a function on one line)
+        return line
     return source[start:start + re.search(r"^}", source[start:], re.M).end()]
 
 
@@ -65,6 +71,7 @@ typedef unsigned DWORD;
 static void AcquireSRWLockExclusive(SRWLOCK *l) { pthread_mutex_lock(l); }
 static void ReleaseSRWLockExclusive(SRWLOCK *l) { pthread_mutex_unlock(l); }
 static void WakeConditionVariable(CONDITION_VARIABLE *cv) { pthread_cond_signal(cv); }
+static void WakeAllConditionVariable(CONDITION_VARIABLE *cv) { pthread_cond_broadcast(cv); }
 static int64_t hos_now_ns(void) {
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
@@ -83,10 +90,12 @@ typedef struct Obj {
     uint64_t key;
     SRWLOCK lk;
     CONDITION_VARIABLE cv;
+    unsigned life;
     uint64_t gen;
     int reserved;
     int cv_waiting, cv_in, cv_owed, cv_mixed;
     struct Obj *cv_mutex, *cv_owed_mutex[8];
+    uint64_t cv_owed_gen[8];
     int count;
     pthread_mutex_t guest;   /* (the guest mutex the waits give back and take again) */
 } Obj;
@@ -120,6 +129,7 @@ static void window_hook(void) { if (hook_on) { __atomic_store_n(&in_window, 1, _
 @ALWAYS@
 @COUNT@
 @ENTER@
+@SAME@
 @LEAVE@
 @RESERVE@
 @UNTIL@
@@ -241,6 +251,8 @@ def main():
     src = Path(a.source).read_text(encoding="utf-8")
     parts = {}
     for key, marker in PARTS.items():
+        if isinstance(marker, tuple):   # (the first form the source has)
+            marker = next((m for m in marker if m in src), marker[0])
         if marker not in src:
             check(key in OPTIONAL, "host/nn_os_sync.c has no '%s'" % marker)
             parts[key] = ""

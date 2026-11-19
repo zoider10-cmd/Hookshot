@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-14 | longshot main 839e85ff (v3.0.0-rc.2-1-g839e85ff), built from source (no DLSS): the control arm of #157's A/B | Windows 11, 1280x720 window (16:9) | RX 9070 XT, AMD 26.10.2 | Ryzen 7 5700X3D, 64 GB | defaults, the fixed Custom test profile | Hyrule Field, the standard test: the save loaded, the camera turning at full speed, frame rate unlocked (`HOS_FPS_MAX=240`), 20 s window; 3 alternating pairs, no warm-ups, pair 2 skipped (the PR run's clock) | 2 runs (pairs 1 and 3): fps 61.49, 61.44; CPU 67.57, 66.65 ms a frame; worst frame 60, 67 ms |
