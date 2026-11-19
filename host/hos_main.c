@@ -2859,6 +2859,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
                 hos_log("test: clock +0x20..0x3c: %d %d %d %d %d %d %d %d", (int)recomp_load32(c, clock + 0x20), (int)recomp_load32(c, clock + 0x24),
                         (int)recomp_load32(c, clock + 0x28), (int)recomp_load32(c, clock + 0x2c), (int)recomp_load32(c, clock + 0x30),
                         (int)recomp_load32(c, clock + 0x34), (int)recomp_load32(c, clock + 0x38), (int)recomp_load32(c, clock + 0x3c));
+            hos_log("test: Link at %.1f %.1f %.1f", oot_link_place[0], oot_link_place[1], oot_link_place[2]);   /* (to go back there) */
         }
     }
     if (action >= OOT_CHEAT_ITEM_ACTION && action < OOT_CHEAT_ITEM_ACTION + 256 * (int)OOT_ITEM_COUNT) {

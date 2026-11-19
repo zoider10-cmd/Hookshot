@@ -97,7 +97,7 @@ DAMPE_RACE_CHESTS = frozenset((0x4ccffbd5778b67e2,))
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 46   # (46: before a Heart Container on a shelf was made a piece's size, bug 72. 45: before the empty bottle stood up on its shelf, and Kakariko's Potion Shop had its own turns and sizes, SHELF_TURN_SHOP. 44: before the royal tomb's opening, the Sun's Song's lesson and its sunrise were skipped, SCENE_SILENT. 43: before the cucco lady's game wanted one cucco, CUCCO_LOGIC. 42: before Death Mountain Trail's and Goron City's intros were left to play (their arrivals take the Fire quest a step), and an adult's first visit to Goron City went on to the rolling Goron, goron_arrival_fix. 41: before an empty child's sword slot was given the Kokiri Sword on the way back, era_sword_fix. 40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 47   # (47: before the Gold Skulltulas by day had their AI never told it is day, bug 82. 46: before a Heart Container on a shelf was made a piece's size, bug 72. 45: before the empty bottle stood up on its shelf, and Kakariko's Potion Shop had its own turns and sizes, SHELF_TURN_SHOP. 44: before the royal tomb's opening, the Sun's Song's lesson and its sunrise were skipped, SCENE_SILENT. 43: before the cucco lady's game wanted one cucco, CUCCO_LOGIC. 42: before Death Mountain Trail's and Goron City's intros were left to play (their arrivals take the Fire quest a step), and an adult's first visit to Goron City went on to the rolling Goron, goron_arrival_fix. 41: before an empty child's sword slot was given the Kokiri Sword on the way back, era_sword_fix. 40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -876,6 +876,9 @@ SHELF_TURN_SHOP = {"kmedicine": {"Item_DekuStickBundle_Small": (1.57, 0.0, 0.0),
 # (and its own sizes and heights, its arches being narrow: standing, the stick bundle reached through the shelf over it.
 #  (how much higher, size) for an item, in place of shelf_fit's)
 SHELF_FIT_SHOP = {"kmedicine": {"Item_DekuStickBundle_Small": (0.3, 0.4)}}
+# (the Market's Potion Shop has the same cabinet (the owner's pictures, 2026-11-18: the Deku Sticks lying at the back of
+#  their arch, the Kokiri Sword small and on its side, the bomb bag behind its price board, the Hylian Shield large and
+#  over its shelf's edge): the same turns and fits as Kakariko's)
 
 
 def shelf_shop(actor):
@@ -2130,6 +2133,73 @@ def skulltulas_by_day(data):
                     seen.add(where)
                     count += 1
     return (bytes(out), count) if count else (None, 0)
+
+
+# (bug 82, the owner's run 2026-11-18: with NOCTURNAL false in the maps they still kept to the night: by day only their
+#  web showed. Their own utility AI (SKULLTULA_AI in SKULLTULA_PACK) asks QueryTimeDivision and a bool selector takes its
+#  IsDayTime output: by day it keeps them hidden. With the setting on, that selector's input is unlinked and false: the
+#  AI is never told it is day. Seen without a window on the owner's save by the Bottom of the Well exit: at noon the web
+#  alone before, the Skulltula after. Every Gold Skulltula takes the same AI; the day ones are out day and night anyway)
+SKULLTULA_PACK = "Pack/Actor/Enemy_Skulltula_Gold.pack.zs"
+SKULLTULA_AI = "AI/Enemy_Skulltula_Gold.utility.root.ainb"
+# (what in fact keeps them to the night, found the same day: each night Skulltula and its web are an AI group of their
+#  map (AiGroups) with one shared logic, NIGHT_SKULLTULA_LOGIC: HoldWmGetTimeDiv's Day output, through an OR, deletes
+#  the Skulltula. With the setting on, the input that takes Day is unlinked and false: never deleted by day)
+NIGHT_SKULLTULA_LOGIC = "Logic/Gimmick_Nighttime_Skulltula_Gold_Appear_05a9.logic.module.ainb"
+
+
+def night_skulltula_logic_day(data):
+    """The night Skulltulas' logic (NIGHT_SKULLTULA_LOGIC) never told it is day: the bool input that takes
+    HoldWmGetTimeDiv's Day output (its output 0) unlinked and false. The new bytes, of the same size. ValueError: not the
+    file, or not one such input. (The layout as skulltula_ai_day's; an unlinked bool input's flags 0x01800000)"""
+    u32 = lambda at: struct.unpack_from("<I", data, at)[0]
+    if data[:4] != b"AIB " or u32(4) != 0x408:
+        raise ValueError("not the logic file this was written for")
+    pool = u32(0x24)
+    name = lambda off: data[pool + (off & 0x3FFFFFFF):].split(bytes(1))[0].decode("utf-8", "replace")
+    nodes = 0x74 + 0x18 * u32(0x0C)
+    time = [i for i in range(u32(0x10)) if name(u32(nodes + 0x3C * i + 8)) == "HoldWmGetTimeDiv"]
+    if len(time) != 1:
+        raise ValueError("%d HoldWmGetTimeDiv nodes where one was expected" % len(time))
+    io = u32(0x34)
+    bool_in, bool_out, bool_out_end = u32(io + 8), u32(io + 12), u32(io + 16)
+    outs = [name(u32(at)) for at in range(bool_out, bool_out_end, 4)]
+    if "Day" not in outs or outs.index("Night") != outs.index("Day") + 1:
+        raise ValueError("no Day and Night outputs")
+    hits = [at for at in range(bool_in, bool_out, 16) if u32(at + 4) == time[0]]   # (output 0 of the node: Day)
+    if len(hits) != 1:
+        raise ValueError("%d inputs take the time's Day where one was expected" % len(hits))
+    out = bytearray(data)
+    struct.pack_into("<IIII", out, hits[0], u32(hits[0]), 0xFFFF, 0x01800000, 0)
+    return bytes(out)
+
+
+def skulltula_ai_day(data):
+    """The Gold Skulltula's utility AI (SKULLTULA_AI) never told it is day: the bool input that takes QueryTimeDivision's
+    IsDayTime output unlinked (no node, its own value false). The new bytes, of the same size. An AIB file of version
+    0x408: commands of 0x18 bytes at 0x74, then the nodes, 0x3C bytes each (name at +8); its parameters' section (header
+    +0x34) begins with twelve offsets, the bool inputs' at +8, of 16 bytes each (name, node | output index << 16, flags,
+    value), the bool outputs' at +12, of 4 bytes each. ValueError: not the file, or not one such input."""
+    u32 = lambda at: struct.unpack_from("<I", data, at)[0]
+    if data[:4] != b"AIB " or u32(4) != 0x408:
+        raise ValueError("not the AI file this was written for")
+    pool = u32(0x24)
+    name = lambda off: data[pool + (off & 0x3FFFFFFF):].split(bytes(1))[0].decode("utf-8", "replace")
+    nodes = 0x74 + 0x18 * u32(0x0C)
+    query = [i for i in range(u32(0x10)) if name(u32(nodes + 0x3C * i + 8)) == "QueryTimeDivision"]
+    if len(query) != 1:
+        raise ValueError("%d QueryTimeDivision nodes where one was expected" % len(query))
+    io = u32(0x34)
+    bool_in, bool_out, bool_out_end = u32(io + 8), u32(io + 12), u32(io + 16)
+    outs = [name(u32(at)) for at in range(bool_out, bool_out_end, 4)]
+    if "IsDayTime" not in outs:
+        raise ValueError("no IsDayTime output")
+    hits = [at for at in range(bool_in, bool_out, 16) if u32(at + 4) == query[0]]   # (output 0 of the node: IsDayTime)
+    if len(hits) != 1:
+        raise ValueError("%d inputs take the time's IsDayTime where one was expected" % len(hits))
+    out = bytearray(data)
+    struct.pack_into("<IIII", out, hits[0], u32(hits[0]), 0xFFFF, 0x80000000, 0)
+    return bytes(out)
 
 
 def skulltula_holds(item, gating):
@@ -5556,9 +5626,19 @@ def main():
                         changed[rel] = new
                         sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
                         day += count
-        except (OSError, ValueError, struct.error, IndexError) as e:
+            # (and their AI never told it is day: bug 82)
+            rel = SKULLTULA_PACK
+            was = pack_files[rel] if rel in pack_files else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
+            parts = sarc_read(was)
+            parts[SKULLTULA_AI] = skulltula_ai_day(parts[SKULLTULA_AI])
+            new = sarc_write(parts)
+            pack_files[rel] = new
+            pack_sizes[rel[:-3]] = len(new)
+            rel = NIGHT_SKULLTULA_LOGIC   # (and their map groups' logic never told it is day)
+            changed[rel] = night_skulltula_logic_day(changed[rel] if rel in changed else open(os.path.join(romfs, *rel.split("/")), "rb").read())
+        except (OSError, ValueError, struct.error, IndexError, KeyError) as e:
             sys.exit("Gold Skulltulas by day: %s. Nothing written." % e)
-        print("Gold Skulltulas by day: %d night-only ones are out by day too" % day)
+        print("Gold Skulltulas by day: %d night-only ones are out by day too, their AI never told it is day" % day)
 
     def shop_table(tbl):
         """the size table with the shops' files: the new packs and their own files added, the keepers' packs' goods

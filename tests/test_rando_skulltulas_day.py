@@ -65,7 +65,64 @@ def main():
     header = (ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
     rows = header[header.index("#define OOT_RANDO_SETTINGS(X)"):header.index("enum {")]
     check(rows.index("X(RUPEE_FILL,") < rows.index("X(SKULLTULAS_DAY,"), "the setting is not appended after the others")
+    check_night_logic(S, script)
     print("PASS: Gold Skulltulas by day")
+
+
+def logic_file(time_nodes=1):
+    """A small AIB 0x408 file like the night Skulltulas' logic: node 1 HoldWmGetTimeDiv (bool outputs Day, Night),
+    three bool inputs: one from Day, one from Night, one fixed true."""
+    pool = bytearray()
+    def s(text):
+        at = len(pool)
+        pool.extend(text.encode() + bytes(1))
+        return at
+    names = [s("ActorLogicEnemySkulltulaGold"), s("HoldWmGetTimeDiv" if time_nodes else "OperateOR"), s("OperateOR")]
+    if time_nodes == 2:
+        names[2] = names[1]
+    io_names = [s("BoolMulti"), s("Reset"), s("Logic_Create"), s("Day"), s("Night")]
+    nodes = 0x74
+    io = nodes + 0x3C * 3
+    bool_in = io + 48
+    bool_out = bool_in + 16 * 3
+    end = bool_out + 8
+    data = bytearray(end)
+    data[:4] = b"AIB "
+    struct.pack_into("<I", data, 4, 0x408)
+    struct.pack_into("<I", data, 0x0C, 0)
+    struct.pack_into("<I", data, 0x10, 3)
+    struct.pack_into("<I", data, 0x24, end)
+    struct.pack_into("<I", data, 0x34, io)
+    for i, n in enumerate(names):
+        struct.pack_into("<I", data, nodes + 0x3C * i + 8, n)
+    struct.pack_into("<III", data, io + 8, bool_in, bool_out, end)
+    struct.pack_into("<IIII", data, bool_in, io_names[0], 1, 0, 0)               # BoolMulti <- Day
+    struct.pack_into("<IIII", data, bool_in + 16, io_names[1], 1 | 1 << 16, 0, 0)  # Reset <- Night
+    struct.pack_into("<IIII", data, bool_in + 32, io_names[2], 0xFFFF, 0x01800000, 1)
+    struct.pack_into("<II", data, bool_out, io_names[3], io_names[4])
+    return bytes(data + pool), bool_in
+
+
+def check_night_logic(S, script):
+    """The night Skulltulas' map logic (bug 82, the owner's run 2026-11-19: with the setting on, the night-only ones
+    still were not out by day, the AiGroup's logic deleting them on HoldWmGetTimeDiv's Day): only the input from Day is
+    unlinked, false; the Night one and the fixed one are left; the size is kept."""
+    data, bool_in = logic_file()
+    new = S.night_skulltula_logic_day(data)
+    check(len(new) == len(data), "the logic file changed size")
+    check(struct.unpack_from("<IIII", new, bool_in)[1:] == (0xFFFF, 0x01800000, 0),
+          "the input from the time's Day is not unlinked and false")
+    check(new[bool_in + 16:] == data[bool_in + 16:] and new[:bool_in] == data[:bool_in],
+          "more than the Day input changed")
+    for bad, why in ((logic_file(0)[0], "no time node"), (logic_file(2)[0], "two time nodes"), (b"XXXX" + data[4:], "not AIB")):
+        try:
+            S.night_skulltula_logic_day(bad)
+            check(False, "a logic file with %s was changed" % why)
+        except ValueError:
+            pass
+    check("changed[rel] = night_skulltula_logic_day(" in script and
+          script.index("changed[rel] = night_skulltula_logic_day(") < script.index("# ---- the size table ----"),
+          "the seed does not write the night Skulltulas' logic, or writes it after the size table")
 
 
 if __name__ == "__main__":
