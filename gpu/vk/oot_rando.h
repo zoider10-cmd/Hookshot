@@ -60,8 +60,8 @@
       "Four shelves of each shop sell a shuffled item, once each, at a rolled price of 10 to 750 rupees, in tens. Affordable: every shelf costs 10 rupees. The wallets are shuffled too: a price asks for one that holds it. Needs Chests.", \
       "Off", "Low prices", "Any price", "Affordable") \
     X(SCRUBS, "Deku Scrubs", "rando_scrubs", \
-      "The Business Scrubs' one-time sales (two Pieces of Heart, the Deku Stick and Deku Nut upgrades) take part with the chests. Needs Chests.", \
-      "Off", "On") \
+      "The Business Scrubs' one-time sales (two Pieces of Heart, the Deku Stick and Deku Nut upgrades) take part with the chests. On, 10 rupees each: the same, and each of those four costs 10 rupees (moves no item). Needs Chests.", \
+      "Off", "On", "On, 10 rupees each") \
     X(DUNGEON_REWARDS, "Dungeon rewards", "rando_dungeon_rewards", \
       "The Spiritual Stones and Medallions the eight dungeons end in. Dungeons: shuffled among those eight endings. Anywhere: any item's place. None is needed to go on: the story goes by each dungeon being done, not by its stone or medallion.", \
       "Off", "Dungeons", "Anywhere") \

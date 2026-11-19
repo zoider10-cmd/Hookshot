@@ -3167,6 +3167,43 @@ def cucco_logic_one(data, want=CUCCOS):
     return bytes(out)
 
 
+# ---- Deku Scrubs, On, 10 rupees each (rando_scrubs 2, asked for 2026-11-17 with the scrubs' menus) ----
+# Each of the four one-time sales (SCRUBS) is a call of SimpleShopSub_Scrub_Business_OneTime with its item and its
+# Price, a number the scrub's line says by a tag ("It's <price> rupees"): so the price is set in the call, in place,
+# for every call of the sale's entry point that names its item (both sizes of an upgrade). It moves no item: the
+# stamp's second line (QOL_STAMP). NOT SEEN IN PLAY.
+SCRUB_CHEAP = 10
+
+
+def scrub_prices(data, sales, price=SCRUB_CHEAP):
+    """The Business Scrubs' flow (SCRUB_FLOW) with the Price of each call that is one of `sales` ({(entry point, the
+    item it names)}) made `price`: (the new bytes, of the same size; the sales found). ValueError: not a flow file."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+    if data[:6] != b"BFEVFL" or u16(0x20) != 1:
+        raise ValueError("not an event flow file of one flowchart")
+    chart = u64(u64(0x28))
+    count, events = u16(chart + 0x16), u64(chart + 0x30)
+    text = lambda ptr: bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if 0 < ptr < len(data) - 2 else ""
+    reach = {entry: flow_reach(data, entry) for entry in {entry for entry, _ in sales}}
+    out, found = bytearray(data), set()
+    for i in range(count):
+        e = events + 0x30 * i
+        params = u64(e + 0x10)
+        if data[e + 8] != 4 or not params or data[params] != 1:
+            continue
+        keys = u64(params + 8)
+        got = {text(u64(keys + 8 + 16 * (k + 1) + 8)): u64(params + 0x10 + 8 * k) for k in range(u16(params + 2))} if keys else {}
+        name, cost = got.get("ActorName"), got.get("Price")
+        if name is None or cost is None or data[name] != 5 or data[cost] != 2:
+            continue
+        for entry, item in sales:
+            if i in reach[entry] and text(u64(name + 0x10)) == item:
+                struct.pack_into("<i", out, cost + 0x10, price)
+                found.add((entry, item))
+    return bytes(out), found
+
+
 def cucco_flow_one(data, want=CUCCOS):
     """The cucco lady's flow (CUCCO_FLOW) with its count of 7 cuccos made `want` (the set and the question of
     CUCCO_COUNT): the new bytes, of the same size. ValueError: not the file, or not two such steps."""
@@ -4882,7 +4919,7 @@ def ocarina_need(need, lesson=False):
 # first line: they are taken out of it to compare (stamp_settings), and the Tracker's records of that seed
 # (rando/collected.txt, rando/junk.txt: their first line is "seed " and the stamp's first line) are moved to the new
 # first line, so the marks are kept (records_moved).
-QOL_STAMP = (" intro skipped", " talks skipped", " rupees %d" % START_RUPEES, " skulltulas by day")
+QOL_STAMP = (" intro skipped", " talks skipped", " rupees %d" % START_RUPEES, " skulltulas by day", " scrubs cheap")
 RECORDS = ("collected.txt", "junk.txt")
 
 
@@ -5202,6 +5239,7 @@ def main():
     a.skip_cutscenes = a.skip_cutscenes or ini["rando_skip_cutscenes"] != 0
     a.start_rupees = a.start_rupees or ini["rando_start_rupees"] != 0
     a.scrubs = a.scrubs or ini["rando_scrubs"] != 0
+    a.scrubs_cheap = a.scrubs and ini["rando_scrubs"] == 2   # (On, 10 rupees each: SCRUB_CHEAP)
     a.progressive = a.progressive or ini["rando_progressive"] != 0
     a.shops = a.shops if a.shops is not None else ini["rando_shops"]
     a.shops = a.shops if 0 <= a.shops <= 3 else 0
@@ -5262,7 +5300,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 7" if a.open_door else "") + (" door song 1" if a.door_song else "") + (" intro skipped" if a.skip_intro else "") + (" talks skipped" if a.skip_cutscenes else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s%s" % (" anywhere 2" if a.songs == 2 else "", " ocarina 1" if a.ocarina else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + (" skulltulas by day" if a.skulltulas_day else "") + (" letter 1" if a.letter else "") + " checks 10" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" scrubs cheap" if a.scrubs_cheap else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s%s" % (" anywhere 2" if a.songs == 2 else "", " ocarina 1" if a.ocarina else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + (" skulltulas by day" if a.skulltulas_day else "") + (" letter 1" if a.letter else "") + " checks 10" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -5803,11 +5841,23 @@ def main():
     for flow, old, new in test_gifts:
         swaps.setdefault(flow, {})[old] = new
         print("TEST: %s gives %s in place of %s (rando\\test_gifts.txt)" % (flow, new, old))
+    if a.scrubs_cheap:   # (Deku Scrubs, On, 10 rupees each: the sales' prices, before their items are changed, SCRUB_CHEAP)
+        sales = {(g.entry, old) for g in SCRUBS for old in g.olds}
+        twin = "%s/%s%s.bfevfl.zs" % (GIFT_FLOWS, SCRUB_FLOW, FLOW_TWIN)
+        for rel in ["%s/%s.bfevfl.zs" % (GIFT_FLOWS, SCRUB_FLOW)] + ([twin] if os.path.isfile(os.path.join(romfs, *twin.split("/"))) else []):
+            try:
+                now, found = scrub_prices(unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts), sales)
+            except (OSError, ValueError, struct.error) as e:
+                sys.exit("the Business Scrubs' flow, %s: %s. Nothing written." % (rel, e))
+            if sales - found:
+                sys.exit("%s names no %s. Nothing written." % (rel, ", ".join(sorted("%s %s" % s for s in sales - found))))
+            gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
+        print("Deku Scrubs: the four one-time sales cost %d rupees each" % SCRUB_CHEAP)
     for flow, change in swaps.items():
         twin = "%s/%s%s.bfevfl.zs" % (GIFT_FLOWS, flow, FLOW_TWIN)
         for rel in ["%s/%s.bfevfl.zs" % (GIFT_FLOWS, flow)] + ([twin] if os.path.isfile(os.path.join(romfs, *twin.split("/"))) else []):
             try:
-                now, found = gift_items(unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts), change,
+                now, found = gift_items(gift_files[rel] if rel in gift_files else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts), change,
                                         kinds=OCARINA_KINDS.get(flow, (4,)))
             except (OSError, ValueError, struct.error) as e:
                 sys.exit("a gift's flow, %s: %s. Nothing written." % (rel, e))
