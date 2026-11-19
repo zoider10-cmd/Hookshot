@@ -3442,6 +3442,19 @@ void hos_oot_get_name(Ctx *c, uint64_t node, int kind) {
                 give ? (strcmp(give, name) ? "is shown as the family's next" : "is the family's next") : "is shown as it is");
         if (give && strcmp(give, name)) hos_log("rando: progressive: shown: %s", give);
     }
+    /* (bugs 54, 55, 56: the item Link holds up is shown by the Item_ spelling. The Armor_ spellings (oot_show_as) have the
+       "You got" words, but are the pieces Link wears: held up, nothing showed (the bracelet from a chest, the Silver
+       Gauntlets bought). Both spellings' packs name the same model; the game's own bracelet scene, Dm_Goron_0030, holds
+       up Item_Gauntlet_Goron. The window's words keep the Armor_ spelling) */
+    if (kind == 1) {
+        const char *shown = give ? give : name;
+        for (size_t i = 0; i < sizeof oot_show_as / sizeof oot_show_as[0]; i++)
+            if (!strncmp(oot_show_as[i][1], "Armor_", 6) && !strcmp(shown, oot_show_as[i][1])) {
+                if (strcmp(give ? give : "", oot_show_as[i][0]))
+                    hos_log("rando: progressive: a show item's %s is held up as %s", shown, oot_show_as[i][0]);
+                give = oot_show_as[i][0];
+            }
+    }
     if (!give || !strcmp(give, name)) return;
     const uint64_t kept = oot_kept_name(give);
     if (kept) recomp_store64(c, slot, kept);
