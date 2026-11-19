@@ -54,6 +54,7 @@ struct {
 } dev;
 VkPipelineCache pcache = nullptr;
 bool pcache_no_save = false;   // (pcache_init sets this in the renderer)
+bool pcache_file_rejected = false;   // (pcache_init: the cache's file was another driver's)
 std::atomic<size_t> pcache_saved_size{0};
 std::string pcache_dir, pcache_path;
 // (vk_draw.cpp's ordinary save, pipeline_cache_save, extracted unmodified after the play caches: the no-save-periodic case. What the

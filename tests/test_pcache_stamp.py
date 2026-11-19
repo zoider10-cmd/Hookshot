@@ -42,6 +42,16 @@ def check_source():
     # (the stale files go before anything reads them: the main file here, the play files in play_files_merge)
     if not init.index("pcache_drop_stale();") < init.index("pcache_file_read(pcache_path)") < init.index("play_files_merge()"):
         raise SystemExit("vk_draw.cpp: pcache_init() reads the cache's files before it drops those of another translator")
+    # (a file another driver made, refused by pcache_file_read, empties the cache as a dropped one does: the noted pipelines'
+    # marker goes, and create mode warms again before the game rather than compile them in play, after a driver update.
+    # Longshot 10470bd0)
+    if not init.index("pcache_file_read(pcache_path)") < init.index("pcache_file_rejected = true;") < init.index("vkCreatePipelineCache"):
+        raise SystemExit("vk_draw.cpp: pcache_init() does not note a cache file it refused (another driver's) before it makes the cache")
+    run = block(draw, "void precompile_run(")
+    drop = "if (pcache_drop_stale() || pcache_file_rejected) remove(precompile_built_path().c_str());"
+    if drop not in run or not run.index("pcache_init();") < run.index(drop) < run.index("precompile_covers_notes()"):
+        raise SystemExit("vk_draw.cpp: precompile_run() judges the pipelines' marker before the cache's file is read, or keeps it "
+                         "when another driver's file was refused (the noted pipelines compile in play after a driver update)")
     # (the warm pass keeps the stage libraries in the dropped file: its record must not say they are made)
     prep = block(draw, "bool prepare_run(")
     reset = "if (!background && pcache_drop_stale() && rewarm_once.exchange(false)) prepared_for.warmed = 0;"

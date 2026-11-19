@@ -781,6 +781,7 @@ std::atomic<int64_t> pcache_built_since_save{0};
 // most precompiled pipelines as not found in the app's cache (~460 of ~12,900 here), which it then serves from its own.
 std::atomic<size_t> pcache_saved_size{0};
 bool pcache_no_save = false;   // (RX_VK_PCACHE_LOAD=0: pcache_init)
+bool pcache_file_rejected = false;   // (pcache_init: the cache's file was there but not for this device and driver)
 /// A pipeline cache file's data, or nothing when it cannot be read or was made by another device or driver
 PipelineCacheFile pcache_file_read(const std::string& path) {
     return PipelineCacheFile::read(path, [](const uint8_t* head, uint64_t size) {
@@ -1171,6 +1172,18 @@ void pcache_init() {
     pcache_no_save = off;
     pcache_drop_stale();   // (before the files are read)
     auto data = off ? PipelineCacheFile{} : pcache_file_read(pcache_path);
+    // (a file there that this device and driver cannot take: another driver made it (a driver update changes the
+    // pipelineCacheUUID), another GPU, or a write cut short. The cache starts empty, and what the pipelines' marker says is in
+    // it is gone: precompile_run warms again before the game rather than compile the noted pipelines in play. Longshot
+    // 10470bd0, after ProjectReLink db54a4bc and aabc7ad8)
+    FILE* was = !off && data.empty() ? fopen(pcache_path.c_str(), "rb") : nullptr;   // (as pcache_file_read opens it)
+    const bool refused = was && fgetc(was) != EOF;
+    if (was) fclose(was);
+    if (refused) {
+        pcache_file_rejected = true;
+        logf("vk: pipeline cache: %s was made for another driver or GPU (or is damaged): it starts empty, and the noted "
+             "pipelines are built again", pcache_path.c_str());
+    }
     VkPipelineCacheCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
     ci.initialDataSize = data.size();
     ci.pInitialData = data.empty() ? nullptr : data.data();
@@ -10204,8 +10217,10 @@ void precompile_run(void (*progress)(size_t done, size_t total)) {
     // caches alone never meets a pipeline the prepare should have compiled. The first start after a preparation builds them
     // there and lets each go, precompile_warm: before the game, and never more of them alive than workers)
     if (programs_load_at_create()) {
-        // (the pipeline cache's files dropped at this start, pcache_drop_stale: what the marker says is in them is gone)
-        if (pcache_drop_stale()) remove(precompile_built_path().c_str());
+        // (the pipeline cache's files dropped at this start, pcache_drop_stale, or its file refused as another driver's,
+        // pcache_init: what the marker says is in them is gone. The file read first, so the marker is judged on what it holds)
+        pcache_init();
+        if (pcache_drop_stale() || pcache_file_rejected) remove(precompile_built_path().c_str());
         // (and where the driver's own cache lost what the marker says was built: notes_lost_by_driver)
         if (precompile_covers_notes() && !env_on("HOOKSHOT_PREPARE_ONLY") && notes_lost_by_driver())
             remove(precompile_built_path().c_str());

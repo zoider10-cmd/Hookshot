@@ -47,9 +47,12 @@ def check_source():
         raise SystemExit("precompile_warm writes the marker by another way than warm_bounded::leaves_marker, or before the cache is saved")
     if 'if (prepare_stopped() || env_on("HOOKSHOT_PREPARE_ONLY")) return;' not in run:
         raise SystemExit("a --prepare-shaders run goes on after its warm")
-    if "if (pcache_drop_stale()) remove(precompile_built_path().c_str());" not in run or \
-            run.index("pcache_drop_stale()") > run.index("precompile_covers_notes()"):
-        raise SystemExit("the marker outlives the pipeline cache files a start dropped")
+    # (dropped as another translator's, or refused as another driver's: pcache_init reads the file before the marker is
+    # judged. Longshot 10470bd0)
+    if "if (pcache_drop_stale() || pcache_file_rejected) remove(precompile_built_path().c_str());" not in run or \
+            run.index("pcache_drop_stale()") > run.index("precompile_covers_notes()") or \
+            run.index("pcache_init();") > run.index("pcache_drop_stale()"):
+        raise SystemExit("the marker outlives the pipeline cache files a start dropped, or another driver's it refused")
 
 
 def main():
