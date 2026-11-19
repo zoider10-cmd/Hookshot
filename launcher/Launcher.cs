@@ -216,6 +216,9 @@ public static class SaveSlots {
     }
 
     // (the randomizer's lines a save has: its own seed's, else the ones set now)
+    // That save has a seed of its own (made by New seed), not only the settings set.
+    public static bool HasSeed(string dir, string name) { try { return File.Exists(Path.Combine(SeedRoot(dir), name) + ".txt"); } catch { return false; } }
+
     public static List<string> SeedOf(string dir, string name) {
         var lines = new List<string>();
         try {
@@ -738,63 +741,149 @@ class RandoSeedForm : Form {
     readonly string dir, save;
     readonly List<ComboBox> boxes = new List<ComboBox>();
     readonly List<object[]> rows = new List<object[]>();
+    readonly ComboBox preset = new ComboBox();
+    bool presetting;
+
+    // (the sections the settings are shown in, by key; a key not named here goes to the last, "Other")
+    internal static readonly string[][] Sections = {
+        new[] { "Shuffle", "rando_chests", "rando_skulltulas", "rando_heart_pieces", "rando_quests", "rando_light_arrows",
+                "rando_songs", "rando_shops", "rando_shop_shelves", "rando_scrubs", "rando_dungeon_rewards", "rando_keys",
+                "rando_major", "rando_sword_shield", "rando_progressive" },
+        new[] { "Open world", "rando_open_deku", "rando_open_forest", "rando_open_door", "rando_ganon_bridge" },
+        new[] { "Quality of life (moves no item)", "rando_skip_intro", "rando_skip_cutscenes", "rando_start_rupees",
+                "rando_ammo_pickups", "rando_rupee_fill", "rando_skulltulas_day" },
+    };
+    // (the presets: each a setting's choice by its place in the row's choices, clamped to the choices available. A key
+    // not named keeps its first choice, Off)
+    internal static readonly string[] PresetNames = { "Last used", "Beginner", "Standard", "Everything shuffled" };
+    static readonly Dictionary<string, int>[] Presets = {
+        null,
+        new Dictionary<string, int> { { "rando_chests", 3 }, { "rando_quests", 1 }, { "rando_shops", 3 }, { "rando_major", 1 },
+            { "rando_progressive", 1 }, { "rando_open_deku", 1 }, { "rando_open_forest", 1 }, { "rando_open_door", 1 },
+            { "rando_ganon_bridge", 2 }, { "rando_skip_intro", 1 }, { "rando_skip_cutscenes", 1 }, { "rando_start_rupees", 1 },
+            { "rando_ammo_pickups", 2 }, { "rando_rupee_fill", 1 }, { "rando_skulltulas_day", 1 } },
+        new Dictionary<string, int> { { "rando_chests", 3 }, { "rando_skulltulas", 3 }, { "rando_heart_pieces", 1 }, { "rando_quests", 1 },
+            { "rando_light_arrows", 1 }, { "rando_songs", 1 }, { "rando_shops", 1 }, { "rando_scrubs", 1 }, { "rando_keys", 1 },
+            { "rando_major", 1 }, { "rando_sword_shield", 1 }, { "rando_progressive", 1 }, { "rando_open_forest", 1 },
+            { "rando_open_door", 1 }, { "rando_skip_intro", 1 }, { "rando_skip_cutscenes", 1 }, { "rando_ammo_pickups", 1 },
+            { "rando_skulltulas_day", 1 } },
+        new Dictionary<string, int> { { "rando_chests", 3 }, { "rando_skulltulas", 3 }, { "rando_heart_pieces", 1 }, { "rando_quests", 1 },
+            { "rando_light_arrows", 1 }, { "rando_songs", 2 }, { "rando_shops", 2 }, { "rando_shop_shelves", 1 }, { "rando_scrubs", 1 },
+            { "rando_dungeon_rewards", 2 }, { "rando_keys", 2 }, { "rando_major", 1 }, { "rando_sword_shield", 1 },
+            { "rando_progressive", 1 }, { "rando_open_forest", 1 }, { "rando_open_door", 1 }, { "rando_skip_intro", 1 },
+            { "rando_skip_cutscenes", 1 }, { "rando_ammo_pickups", 1 }, { "rando_skulltulas_day", 1 } },
+    };
+    // (the settings of the last seed made, for a save that has none of its own yet: the window opens with the last
+    // settings used)
+    internal static string LastFile(string dir) { return Path.Combine(dir, "rando_last_settings.txt"); }
 
     public RandoSeedForm(string dir, string save, string shown) {
         this.dir = dir; this.save = save;
         Text = "New seed: " + shown;
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(520, 520);
+        ClientSize = new Size(600, 660);
         BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
-        var top = new Label { Text = "The randomizer's settings for this save. A new seed is made of them:", AutoSize = true, Location = new Point(16, 14) };
-        var panel = new Panel { Location = new Point(16, 42), Size = new Size(488, 412), AutoScroll = true, BackColor = Color.FromArgb(20, 30, 50) };
-        var tips = new ToolTip { AutoPopDelay = 20000, InitialDelay = 300 };
-        // (what the save has now: its own seed's settings, else the ones set)
+        var top = new Label { Text = "The randomizer's settings for this save. A new seed is made of them.", AutoSize = true, Location = new Point(16, 14) };
+        var pl = new Label { Text = "Preset:", AutoSize = true, Location = new Point(16, 46) };
+        preset.DropDownStyle = ComboBoxStyle.DropDownList; preset.FlatStyle = FlatStyle.Flat; preset.SetBounds(80, 42, 240, 26);
+        preset.BackColor = Color.FromArgb(24, 36, 60); preset.ForeColor = Theme.Text;
+        foreach (string p in PresetNames) preset.Items.Add(p);
+        var panel = new Panel { Location = new Point(16, 78), Size = new Size(568, 528), AutoScroll = true, BackColor = Color.FromArgb(20, 30, 50) };
+        var small = new Font("Segoe UI", 8.5f);
+        // (what the save has now: its own seed's settings; for a save with none, the last seed's made, else the ones set)
         var has = new Dictionary<string, int>();
-        foreach (string line in SaveSlots.SeedOf(dir, save)) {
+        List<string> start = SaveSlots.SeedOf(dir, save);
+        if (!SaveSlots.HasSeed(dir, save))
+            try { if (File.Exists(LastFile(dir))) start = new List<string>(File.ReadAllLines(LastFile(dir))); } catch { }
+        foreach (string line in start) {
             int eq = line.IndexOf('='), v;
             if (eq > 0 && int.TryParse(line.Substring(eq + 1).Trim(), out v)) has[line.Substring(0, eq).Trim()] = v;
         }
-        int y = 8;
-        for (int i = 1; i < LauncherForm.RandoRows.Length; i++) {   // (not the first: the switch is the game chosen)
-            object[] row = LauncherForm.RandoRows[i];
-            string key = (string)row[0];
-            if (LauncherForm.RandoHidden.Contains(key)) continue;   // (no longer a choice)
-            var values = (int[])row[3];
-            var label = new Label { Text = (string)row[1], AutoSize = false, Location = new Point(10, y + 3), Size = new Size(200, 24) };
-            var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat, Location = new Point(216, y), Size = new Size(240, 26),
-                                     BackColor = Color.FromArgb(24, 36, 60), ForeColor = Theme.Text };
-            // (the choices not available yet are left out; with only Off left the row says so and cannot be changed)
-            var names = (string[])row[2];
-            int choices = LauncherForm.RandoChoices(key, names.Length);
-            if (choices <= 1) { box.Items.Add(Selector.NotYet); box.Enabled = false; label.ForeColor = Theme.Faint; }
-            else for (int k = 0; k < choices; k++) box.Items.Add(names[k]);
-            int at = has.ContainsKey(key) ? Array.IndexOf(values, has[key]) : 0;
-            box.SelectedIndex = Math.Max(0, Math.Min(box.Items.Count - 1, at));
-            if (row.Length > 4 && row[4] is string) { tips.SetToolTip(label, (string)row[4]); tips.SetToolTip(box, (string)row[4]); }
-            panel.Controls.Add(label); panel.Controls.Add(box);
-            boxes.Add(box); rows.Add(row);
-            y += 32;
+        // (the rows by section, in the sections' order, then any other)
+        var byKey = new Dictionary<string, object[]>();
+        for (int i = 1; i < LauncherForm.RandoRows.Length; i++) byKey[(string)LauncherForm.RandoRows[i][0]] = LauncherForm.RandoRows[i];
+        var order = new List<KeyValuePair<string, List<object[]>>>();
+        var placed = new HashSet<string>();
+        foreach (string[] s in Sections) {
+            var list = new List<object[]>();
+            for (int k = 1; k < s.Length; k++) if (byKey.ContainsKey(s[k])) { list.Add(byKey[s[k]]); placed.Add(s[k]); }
+            order.Add(new KeyValuePair<string, List<object[]>>(s[0], list));
         }
+        var rest = new List<object[]>();
+        for (int i = 1; i < LauncherForm.RandoRows.Length; i++) if (!placed.Contains((string)LauncherForm.RandoRows[i][0])) rest.Add(LauncherForm.RandoRows[i]);
+        order.Add(new KeyValuePair<string, List<object[]>>("Other", rest));
+        int y = 8, textW = 520;
+        foreach (var section in order) {
+            var shownRows = section.Value.FindAll(r => !LauncherForm.RandoHidden.Contains((string)r[0]));
+            if (shownRows.Count == 0) continue;
+            var head = new Label { Text = section.Key, AutoSize = true, Location = new Point(8, y), ForeColor = Theme.Cyan,
+                                   Font = new Font("Segoe UI", 11f, FontStyle.Bold) };
+            panel.Controls.Add(head);
+            y += 30;
+            foreach (object[] row in shownRows) {
+                string key = (string)row[0];
+                var values = (int[])row[3];
+                var label = new Label { Text = (string)row[1], AutoSize = false, Location = new Point(14, y + 3), Size = new Size(240, 24) };
+                var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat, Location = new Point(262, y), Size = new Size(270, 26),
+                                         BackColor = Color.FromArgb(24, 36, 60), ForeColor = Theme.Text };
+                // (the choices not available yet are left out; with only Off left the row says so and cannot be changed)
+                var names = (string[])row[2];
+                int choices = LauncherForm.RandoChoices(key, names.Length);
+                if (choices <= 1) { box.Items.Add(Selector.NotYet); box.Enabled = false; label.ForeColor = Theme.Faint; }
+                else for (int k = 0; k < choices; k++) box.Items.Add(names[k]);
+                int at = has.ContainsKey(key) ? Array.IndexOf(values, has[key]) : 0;
+                box.SelectedIndex = Math.Max(0, Math.Min(box.Items.Count - 1, at));
+                box.SelectedIndexChanged += (o, e) => { if (!presetting) preset.SelectedIndex = 0; };
+                panel.Controls.Add(label); panel.Controls.Add(box);
+                y += 30;
+                // (a short line under each setting: what it does, not only a tooltip)
+                if (row.Length > 4 && row[4] is string) {
+                    string words = (string)row[4];
+                    Size need = TextRenderer.MeasureText(words, small, new Size(textW, 0), TextFormatFlags.WordBreak);
+                    var about = new Label { Text = words, AutoSize = false, Location = new Point(14, y), Size = new Size(textW, need.Height + 2),
+                                            ForeColor = Theme.Dim, Font = small };
+                    panel.Controls.Add(about);
+                    y += need.Height + 10;
+                }
+                boxes.Add(box); rows.Add(row);
+            }
+            y += 6;
+        }
+        preset.SelectedIndex = 0;
+        preset.SelectedIndexChanged += (o, e) => ApplyPreset(preset.SelectedIndex);
         var ok = new Button { Text = "Create seed" };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
         foreach (var b in new[] { ok, cancel }) {
             b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White;
             b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
         }
-        ok.SetBounds(258, 472, 130, 30); cancel.SetBounds(394, 472, 110, 30); ok.BackColor = Theme.Blue;
-        var foot = new Label { Text = "Hold the mouse over a setting\nfor what it does.", AutoSize = false, ForeColor = Theme.Dim,
-                               Location = new Point(16, 470), Size = new Size(230, 36), Font = new Font("Segoe UI", 8.5f) };
-        Controls.AddRange(new Control[] { top, panel, foot, ok, cancel });
+        ok.SetBounds(338, 616, 130, 30); cancel.SetBounds(474, 616, 110, 30); ok.BackColor = Theme.Blue;
+        var foot = new Label { Text = "A preset sets every row; change any row after.", AutoSize = false, ForeColor = Theme.Dim,
+                               Location = new Point(16, 620), Size = new Size(310, 24), Font = small };
+        Controls.AddRange(new Control[] { top, pl, preset, panel, foot, ok, cancel });
         AcceptButton = ok; CancelButton = cancel;
         ok.Click += (o, e) => {
             var lines = new List<string>();
             for (int i = 0; i < rows.Count; i++) lines.Add((string)rows[i][0] + "=" + ((int[])rows[i][3])[boxes[i].SelectedIndex]);
+            try { File.WriteAllLines(LastFile(dir), lines.ToArray()); } catch { }   // (before the seed's number: settings only)
             lines.Add("rando_seed=" + LauncherForm.NewSeed());
             string error = SaveSlots.SeedSet(dir, save, lines);
             if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             DialogResult = DialogResult.OK; Close();
         };
+    }
+
+    // A preset chosen: each row to its choice (clamped to what the row offers); Last used leaves the rows as they are.
+    void ApplyPreset(int p) {
+        if (p <= 0 || p >= Presets.Length) return;
+        presetting = true;
+        for (int i = 0; i < rows.Count; i++) {
+            int want;
+            if (!Presets[p].TryGetValue((string)rows[i][0], out want)) want = 0;
+            if (boxes[i].Enabled) boxes[i].SelectedIndex = Math.Max(0, Math.Min(boxes[i].Items.Count - 1, want));
+        }
+        presetting = false;
     }
 }
 

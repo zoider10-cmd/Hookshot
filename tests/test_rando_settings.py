@@ -76,9 +76,15 @@ def sources(rows):
           "off (SONGS_ANYWHERE), or held off while the script makes it (%r)" % limits)
     # (the frogs are no longer a choice: the row is kept for a seed's ID and shown nowhere, and Quest rewards says so)
     check('RandoHidden = new HashSet<string> { "rando_frogs" };' in launcher and "Page = hidden ? NoPage : page" in launcher and
-          "if (!hidden) place++;" in launcher and "if (LauncherForm.RandoHidden.Contains(key)) continue;" in launcher and
+          "if (!hidden) place++;" in launcher and "section.Value.FindAll(r => !LauncherForm.RandoHidden.Contains((string)r[0]))" in launcher and
           "the frogs of Zora's River among them" in launcher,
           "the Frogs row is still shown on the page or in the New seed window, or Quest rewards does not name the frogs")
+    # (the New seed window shows the rows in sections: each shown key in one section at most, and the rest under Other)
+    sections = re.search(r"string\[\]\[\] Sections = \{(.*?)\n    \};", launcher, re.S)
+    named = re.findall(r'"(rando_\w+)"', sections.group(1)) if sections else []
+    check(sections and len(named) == len(set(named)) and set(named) <= {f[0] for f in found} and
+          'order.Add(new KeyValuePair<string, List<object[]>>("Other", rest));' in launcher,
+          "the New seed window's sections name a key twice or one that is not a row, or lose the rows they do not name")
     check("Most of the logic (what each place asks for) is taken from the original game's" in launcher,
           "the Randomizer switch no longer says where the logic is from")
     check(all(key in {f[0] for f in found} for key in limits), "a setting listed as not available yet is not a row of the page")
@@ -99,7 +105,7 @@ def sources(rows):
           "the launcher does not show its Randomizer page")
     # (more settings than the page has room for: the list scrolls, and a row is shown, lit and pressed only inside its view)
     check("if (PageNow == RandoPage) ScrollRando(-e.Delta * 47f / 120);" in launcher and "g.SetClip(RandoView, CombineMode.Intersect);" in launcher and
-          "w.Hit(p) && InView(w, p)) return w;" in launcher and "foreach (var w in widgets) if (w.Scrolls) w.R.Y = w.HomeY - randoScroll;" in launcher,
+          "w.Hit(p) && InView(w, p)) return w;" in launcher and "foreach (var w in widgets) if (w.Scrolls && w.Page == RandoPage) w.R.Y = w.HomeY - randoScroll;" in launcher,
           "the Randomizer page's list does not scroll by the wheel, is drawn over the seed's buttons, or a row scrolled out of view can be pressed")
     check('lines[i] = k + "=" + randoSeed;' in launcher and 'lines.RemoveAll(l => l.StartsWith("rando_import="))' in launcher,
           "the launcher does not keep the seed, or leaves an import that would undo its settings")
@@ -127,11 +133,11 @@ def sources(rows):
     # (the scenes the game plays as flowcharts, Saria's first words and the owl's: the seed takes their talks, camera moves
     #  and waits out and keeps what they do. Seen without a window: the owl's Hyrule Field scene with no talk, in under 5 s)
     check('a.skip_cutscenes = a.skip_cutscenes or ini["rando_skip_cutscenes"] != 0' in script and '(" talks skipped" if a.skip_cutscenes else "")' in script and
-          "now, taken = quiet_scene(was)" in script and "if struct.unpack_from(\"<H\", was, 0x20)[0] != 1:" in script and
+          "now, taken = quiet_scene(was, silent=stem in SCENE_SILENT)" in script and "if struct.unpack_from(\"<H\", was, 0x20)[0] != 1:" in script and
           '"rando_skip_cutscenes": 0' in script and "list(shop_files.items()) + list(scene_files.items())" in script,
           "Skip cutscenes does not take the talks out of the scenes the game plays as flowcharts, or a seed made with it is not told apart")
     check('    "EventTalk", "EventTalkIgnoreSameTalkAS", "EventWait",' in script and 'SCENE_NOTHING = ("EventDemoProductSupportComment", "EventDoNothing")' in script and
-          '("Dm_SY_Ocarina", "LearningOcarinaFollowExample")' in script and 'SCENE_KEEP = ("Dm_MelodyGet_Sun",)' in script and
+          '("Dm_SY_Ocarina", "LearningOcarinaFollowExample")' in script and 'SCENE_KEEP = ()' in script and
           "if stem in SCENE_KEEP or any(" in script and '"Dm_FairyFountain_"' in script and 'SCENE_CHOICE = ("EventQueryTalkChoice2", "EventQueryTalkChoice3", "EventQueryTalkChoice4")' in script and
           all('"%s"' % w not in script.split("SCENE_SHOWS = frozenset((")[1].split("))")[0] for w in (
               "EventTriggerSetGameDataBool", "EventTriggerSetGameDataInt", "EventTriggerAddOrRemovePouchContent", "EventTransition", "EventEventFadeOut",
