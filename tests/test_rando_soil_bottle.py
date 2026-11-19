@@ -37,7 +37,7 @@ def main():
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
     check("if placement >= BOTTLE_FROM and any(g.item == BOTTLE for g in gifts.values()):" in script and
           "PROGRESSION = PROGRESSION | {BOTTLE}" in script, "the bottle is not a gating item where a gift gives one")
-    check('soil_need(skulltula_rule(h, area), about.get(h, {}).get("soil"), bottles)' in script and
+    check('soil_need(skull_rule(h, area), about.get(h, {}).get("soil"), bottles)' in script and
           "bottles = BOTTLE in PROGRESSION" in script, "the Skulltulas' rules are not asked through soil_need with the soil mark")
     check(S.CHECK_CODES.get(S.BOTTLE) == "BO", "the Tracker has no letters for the bottle")
     menu = (ROOT / "gpu" / "vk" / "vk_menu.cpp").read_text(encoding="utf-8")

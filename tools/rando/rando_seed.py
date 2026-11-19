@@ -60,7 +60,7 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 14  # 14: the Great Fairies of the three spells are gifts of the shuffle with Quest rewards, each holding what a lesson asked about by name may (FAIRY_GIFTS); 13: a bottle is a gating item where the bottles are shuffled (Quest rewards), and a Gold Skulltula in bean soil asks for one, its bugs (BOTTLE, soil_need: bug 84); 12: the Goron and Zora Tunics are gifts of the shuffle, and the rules ask for them (TUNICS); the chests with a substitute take part (SUBSTITUTE_CHESTS); the Gold Skulltulas and the Pieces of Heart lying in the world take part as chests do (SHUFFLED_FROM), and the Skulltula house's rewards, with the 40 tokens' one, ask for their tokens, counted (HOUSE_TOKENS); 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+PLACEMENT = 15  # 15: the Deku Tree's third floor (room 3: a chest and a Gold Skulltula) asks for the Slingshot (DEKU_THIRD_FLOOR); 14: the Great Fairies of the three spells are gifts of the shuffle with Quest rewards, each holding what a lesson asked about by name may (FAIRY_GIFTS); 13: a bottle is a gating item where the bottles are shuffled (Quest rewards), and a Gold Skulltula in bean soil asks for one, its bugs (BOTTLE, soil_need: bug 84); 12: the Goron and Zora Tunics are gifts of the shuffle, and the rules ask for them (TUNICS); the chests with a substitute take part (SUBSTITUTE_CHESTS); the Gold Skulltulas and the Pieces of Heart lying in the world take part as chests do (SHUFFLED_FROM), and the Skulltula house's rewards, with the 40 tokens' one, ask for their tokens, counted (HOUSE_TOKENS); 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
                 # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
                 # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
                 #    asking for the forest's way out (forest_open)
@@ -1753,6 +1753,14 @@ DEKU_STORY = ("song_zelda", "song_saria", "zelda_letter", "fairy_ocarina")
 # tracker's Return home takes him out. The owner chose this for now over keeping the Slingshot in its chest, and may
 # look at it again.
 SLINGSHOT_ROOM = (0x0b66198d17d6584e, 0xb4ca60d52ca4d05f)
+# The Deku Tree's third floor (room 3, y ~121-126: "Chest (Deku Nuts), room 3" and "Gold Skulltula, room 3") is reached in
+# the remake with the Slingshot or the Boomerang, and a weapon for the big Skulltula at its door (the other randomizer's
+# logic, OOTRR adf81ae, "Match the Deku Tree ... logic to the remake", 2026-11-18). Ours asked for the sword alone, so
+# the Slingshot could be put there. From placement 15 both ask for CHILD (the sword and the Slingshot; the Boomerang's way
+# is not counted: too much, never too little). NOT SEEN IN PLAY: which room the remake calls the third floor was matched by
+# height only.
+DEKU_THIRD_FLOOR = (0x9dc359c40cd5dfe7, 0xbce05898ce61f1c0)
+DEKU_THIRD_FROM = 15
 
 
 def forest_open(need, area=None):
@@ -5532,6 +5540,7 @@ def main():
     if placement >= 10:   # (a chest's own rule, CHEST_NEEDS)
         needs = {h: chest_need(h, n, door_rules) for h, n in needs.items()}
     slingshot_room = {h for h in SLINGSHOT_ROOM if h in needs} if placement >= 7 else set()
+    slingshot_room |= {h for h in DEKU_THIRD_FLOOR if h in needs} if placement >= DEKU_THIRD_FROM else set()
     needs = {h: n | CHILD if h in slingshot_room else n for h, n in needs.items()}
     if a.quests:   # (the rules with the gifts' two gating items named; a gift asks for what its line of GIFTS says)
         needs = {h: quest_need(gifts[h].need, gifts[h].area, placement >= 12) if h in gifts else quest_need(n, spots[h][0], placement >= 12) for h, n in needs.items()}
@@ -5574,9 +5583,10 @@ def main():
         lambda need, h, area: gate(need, area))
     skull_door = skull_door if placement >= 8 else door
     bottles = BOTTLE in PROGRESSION   # (placement BOTTLE_FROM with the bottles shuffled: soil_need)
+    skull_rule = lambda h, area: skulltula_rule(h, area) | (CHILD if placement >= DEKU_THIRD_FROM and h in DEKU_THIRD_FLOOR else NONE)
     skull_asks = lambda h, at=None: (lambda area: skull_door(step((lambda n: song_need(n, area) if a.songs else n)(
-        quest_need(soil_need(skulltula_rule(h, area), about.get(h, {}).get("soil"), bottles), area, placement >= 12) if a.quests else
-        skulltula_rule(h, area))), h, area))(at or skulls[h][0])
+        quest_need(soil_need(skull_rule(h, area), about.get(h, {}).get("soil"), bottles), area, placement >= 12) if a.quests else
+        skull_rule(h, area))), h, area))(at or skulls[h][0])
     # (a boss's container: without Open forest exit's step, as a Skulltula's: its CHILD is the weapons to beat the boss.
     #  Seen 2026-11-18: Gohma's asked for nothing)
     heart_asks = lambda h: (skull_door if h in bosses else door)(step((lambda n: song_need(n, pieces[h][0]) if a.songs else n)(
