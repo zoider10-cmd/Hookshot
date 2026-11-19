@@ -142,6 +142,26 @@ def patch_pouch_add(source):
         '#include "a64.h"\n', '#include "a64.h"\nextern int hos_oot_pouch_add(Ctx *c);\n', 1)
 
 
+# A Gold Skulltula's bundle with nothing to carry it in (the randomizer's fork, bug 87: host/hos_main.c hos_oot_pickup_room).
+# A pick-up touched asks f_80a94ea0 (x0 the pouch manager, x1 the pick-up's name, w2 1, x3 a reason, x4 0) whether the pouch
+# has room, from the touch update f_82ea8f70 (the call at 0x82ea91d8, so lr 0x82ea91dc); no room, and it is not got: a Deku
+# Nut bundle with no nut bag stayed, and its Skulltula was back. The host is asked first, from that call only (six others
+# call the function): it may give the smallest holder (then the game's own answer follows), or answer yes itself (w0 1) for
+# a bundle whose holder the seed's logic counts (a Bomb Bag, a quiver, a bullet bag): taken, nothing given.
+ROOM_HEAD = "void f_80a94ea0(Ctx *__restrict A64_NOESC c) {\n"
+ROOM_HOOK = ("    if (c->x[30] == 0x82ea91dcULL && hos_oot_pickup_room(c)) { c->x[0] = 1; return; }   /* (nx2/oot_patches.py: a Gold "
+             "Skulltula's bundle with nothing to carry it in, bug 87) */\n")
+
+
+def patch_pickup_room(source):
+    if source.count(ROOM_HEAD) != 1:
+        return None
+    if ROOM_HEAD + ROOM_HOOK in source:   # (made by an earlier run over this file)
+        return source
+    return source.replace(ROOM_HEAD, ROOM_HEAD + ROOM_HOOK, 1).replace(
+        '#include "a64.h"\n', '#include "a64.h"\nextern int hos_oot_pickup_room(Ctx *c);\n', 1)
+
+
 # Progressive items, what a chest shows and says (the randomizer's fork: host/hos_main.c hos_oot_drop_name): f_80bf1c00
 # reads an actor's Drop__DropActor into its own name, which the chest's scene shows, names and adds. The function is
 # kept under another name and called by one of the same name, which then hands the host the x0 it was called with.
@@ -1373,6 +1393,12 @@ def patch_file(s, name, protect_hearts=False):
             lines.append("oot_patches: progressive items in " + name)
         out = pouch
         counts["progressive items"] += 1
+    room = patch_pickup_room(out) if protect_hearts else None   # (the randomizer's fork: a Skulltula's bundle, bug 87)
+    if room is not None:
+        if room != out:
+            lines.append("oot_patches: a pick-up's room asked of the host in " + name)
+        out = room
+        counts["pickup room"] += 1
     drop = patch_drop_name(out) if protect_hearts else None   # (the randomizer's fork: what a chest shows)
     if drop is not None:
         if drop != out:
@@ -1534,6 +1560,7 @@ def report(paths, counts, protect_hearts=False):
         done["mouse camera"] = 0
         done["disable camera centering"] = 0
         done["progressive items"] = 0
+        done["pickup room"] = 0
         done["progressive chest name"] = 0
         done["day clock cap"] = 0
         done["item wheel count"] = 0

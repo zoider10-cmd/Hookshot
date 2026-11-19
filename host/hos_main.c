@@ -3707,7 +3707,88 @@ static int oot_bombs_bagless(Ctx *c, const char *name) {
         if (oot_pouch_count(c, bags[i]) != 0) return 0;   /* (-1, not known: as if he had one) */
     return 1;
 }
+
+/* (the randomizer's fork, bug 87: the owner's run 2026-11-19) A Gold Skulltula's bundle with nothing to carry it in: a
+   pick-up touched asks the game whether the pouch has room (f_80a94ea0, from the touch update: nx2/oot_patches.py
+   ROOM_HOOK), and with no holder the answer was no: a Deku Nut bundle with no nut bag stayed where it fell, and its
+   Skulltula was back when the area was entered again. What the seed may put on a Skulltula that needs a holder
+   (tools/rando/rando_seed.py SKULLTULA_ITEMS): 1, the holder may be given (sizes: smallest first), the nuts and sticks,
+   whose bags no rule asks for; 2, the holder is one the logic counts (a Bomb Bag, a quiver with the bow, a bullet bag
+   with the Slingshot): the bundle is taken and nothing given, as a chest's bombs are without a bag (bug 42). 0: none.
+   Bombchus need no bag. tests/test_rando_skulltula_bagless.py */
+static int oot_bundle_holder(const char *name, const char *const **sizes) {
+    static const char *const nuts[3] = {"Item_NutBag_Small", "Item_NutBag_Medium", "Item_NutBag_Large"};
+    static const char *const sticks[3] = {"Item_StickBag_Small", "Item_StickBag_Medium", "Item_StickBag_Large"};
+    static const char *const bombs[3] = {"Item_BombBag_Small", "Item_BombBag_Medium", "Item_BombBag_Large"};
+    static const char *const arrows[3] = {"Item_Quiver_Small", "Item_Quiver_Medium", "Item_Quiver_Large"};
+    static const char *const seeds[3] = {"Item_BulletBag_Small", "Item_BulletBag_Medium", "Item_BulletBag_Large"};
+    static const struct { const char *name; const char *const *sizes; int rule; } bundles[] = {
+        {"TBox_DekuNutBundle", nuts, 1}, {"Item_DekuStickBundle_Small", sticks, 1}, {"Item_BombBundle_Small", bombs, 2},
+        {"TBox_ArrowBundle_Medium", arrows, 2}, {"TBox_ArrowBundle_Large", arrows, 2}, {"Item_ScrubBusinessSeed", seeds, 2},
+    };
+    for (unsigned i = 0; i < sizeof bundles / sizeof bundles[0]; i++)
+        if (!strcmp(name, bundles[i].name)) {
+            *sizes = bundles[i].sizes;
+            return bundles[i].rule;
+        }
+    *sizes = NULL;
+    return 0;
+}
+
+/* (a check of the seed not yet collected that gives this, in the map Link is in and near him: the pick-up is a
+   Skulltula's drop, not one of the world's own) */
+static int oot_drop_check_near(const char *name) {
+    int near = 0;
+    AcquireSRWLockShared(&oot_checks_lock);
+    for (int i = 0; i < oot_check_count && !near; i++) {
+        if (oot_checks[i].done == 1 || strcmp(oot_checks[i].item, name) || !oot_banc_in_folder(oot_link_map, oot_checks[i].folder))
+            continue;
+        const float dx = oot_checks[i].place[0] - oot_link_place[0], dy = oot_checks[i].place[1] - oot_link_place[1],
+                    dz = oot_checks[i].place[2] - oot_link_place[2];
+        near = dx * dx + dy * dy + dz * dz <= OOT_CHECK_NEAR * OOT_CHECK_NEAR;
+    }
+    ReleaseSRWLockShared(&oot_checks_lock);
+    return near;
+}
+static int oot_holder_giving;   /* (a holder the host gives just now: not a check's item for the tracker's record) */
 #endif
+
+/* 1: the pick-up is to be got with nothing given (w0 1 in the game's answer); 0: the game answers, with a holder given
+   first when Link had none (an add is counted an update later: the touch is answered no this time and yes the next) */
+int hos_oot_pickup_room(Ctx *c) {
+#if defined(_WIN32) || defined(__linux__)
+    if (!hos_rando_on()) return 0;
+    char name[96];
+    uint64_t text = c->x[1] ? recomp_load64(c, c->x[1]) : 0;   /* (a name as the pouch's add has it: a pointer to the text) */
+    if (!text || text < 0x80000000ULL) text = c->x[1];        /* (else the text itself) */
+    size_t length = 0;
+    for (; text && length + 1 < sizeof name; length++) {
+        name[length] = (char)recomp_load8(c, text + length);
+        if (!name[length]) break;
+    }
+    name[length] = 0;
+    const char *const *sizes;
+    const int rule = oot_bundle_holder(name, &sizes);
+    if (!rule || !oot_drop_check_near(name)) return 0;
+    for (int i = 0; i < 3; i++)
+        if (oot_pouch_count(c, sizes[i]) != 0) return 0;   /* (he has one, or it is not known: the game's answer) */
+    if (rule == 2) {
+        hos_log("rando: a Gold Skulltula's %s with no %s: taken, nothing given", name, sizes[0]);
+        return 1;
+    }
+    static int64_t given_at;   /* (the holder's add is counted an update later: not given twice meanwhile) */
+    const int64_t now = hos_now_ns();
+    if (given_at && now - given_at < 3000000000LL) return 0;
+    given_at = now;
+    oot_holder_giving = 1;
+    const int result = oot_pouch_change(c, sizes[0], 1);
+    oot_holder_giving = 0;
+    hos_log("rando: a Gold Skulltula's %s with no holder: %s %s", name, sizes[0], result >= 0 ? "given first" : "could not be given");
+#else
+    (void)c;
+#endif
+    return 0;
+}
 int hos_oot_pouch_add(Ctx *c) {
 #if defined(_WIN32) || defined(__linux__)
     if (!hos_rando_on()) return 0;
@@ -3771,7 +3852,7 @@ int hos_oot_pouch_add(Ctx *c) {
             view = oot_pouch_name(c, view, gives);
             snprintf(name, sizeof name, "%s", gives);
         }
-        oot_tracker_item(name);
+        if (!oot_holder_giving) oot_tracker_item(name);   /* (a holder given for a Skulltula's bundle is no check's: bug 87) */
     }
     /* (bug 42: with no Bomb Bag, the bombs that follow the bag the game is not let give made the inventory's bombs at
        0/0, a slot that can't be used: a bomb added while Link has no bag adds nothing. Here, after the tracker's record
