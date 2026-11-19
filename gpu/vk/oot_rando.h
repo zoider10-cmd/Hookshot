@@ -123,7 +123,10 @@
       "Off", "On") \
     X(AGELESS, "Either age's items", "rando_ageless", \
       "Swords: the Kokiri Sword and the Master Sword can be equipped by both ages. Swords and items: also the shields, the boots, the Biggoron's Sword, the Slingshot, the Boomerang, Deku Sticks, the Hammer, the Hookshots and the Bow with its arrows (not yet tried in play: an item may look or act wrong on the other age). The logic does not count on it. Moves no item.", \
-      "Off", "Swords", "Swords and items")
+      "Off", "Swords", "Swords and items") \
+    X(LETTER, "Zelda's Letter", "rando_letter", \
+      "The letter Zelda gives at the end of her meeting is an item of the shuffle, and the meeting gives what the seed put there. A child passes Kakariko's gate to Death Mountain by showing it to the guard, so a child's check up there asks for the letter, or bombs (the Lost Woods' way to Goron City), or the Bolero of Fire when the songs are shuffled. A new seed.", \
+      "Off", "On")
 
 enum {
 #define OOT_RANDO_ENUM(NAME, label, key, help, ...) OOT_RANDO_##NAME,

@@ -2410,6 +2410,7 @@ constexpr LogicItem kLogicItems[] = {
     {"ZT", "Zora Tunic", {"Zora Tunic"}},
     // (a bottle, placement 13: a bean-soil Gold Skulltula's bugs. tools/rando/rando_seed.py BOTTLE, bug 84)
     {"BO", "a bottle", {"Empty Bottle"}},
+    {"LE", "Zelda's Letter", {"Zelda's Letter"}},
 };
 // (a rule's "T<N>": N Gold Skulltula tokens, by the Inventory page's count of them. tools/rando/rando_seed.py token_codes,
 // placement 12: the Skulltula house's rewards)

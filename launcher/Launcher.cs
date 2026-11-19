@@ -748,7 +748,7 @@ class RandoSeedForm : Form {
     internal static readonly string[][] Sections = {
         new[] { "Shuffle", "rando_chests", "rando_skulltulas", "rando_heart_pieces", "rando_quests", "rando_light_arrows",
                 "rando_songs", "rando_shops", "rando_shop_shelves", "rando_scrubs", "rando_dungeon_rewards", "rando_keys",
-                "rando_major", "rando_sword_shield", "rando_progressive" },
+                "rando_major", "rando_sword_shield", "rando_progressive", "rando_letter" },
         new[] { "Open world", "rando_open_deku", "rando_open_forest", "rando_open_door", "rando_ganon_bridge" },
         new[] { "Quality of life (moves no item)", "rando_skip_intro", "rando_skip_cutscenes", "rando_start_rupees",
                 "rando_ammo_pickups", "rando_rupee_fill", "rando_skulltulas_day", "rando_hints", "rando_ageless" },
@@ -2364,6 +2364,8 @@ class LauncherForm : Form {
             "Talking to a Gossip Stone gives one of the seed's hints, each said by two stones: where a needed item is, an area on the way of the hero (it holds a needed item), or a foolish one (it holds none). No Mask of Truth needed. Moves no item: it can be turned on for a seed being played." },
         new object[] { "rando_ageless", "Either age's items", new[] { "Off", "Swords", "Swords and items" }, new[] { 0, 1, 2 },
             "Swords: the Kokiri Sword and the Master Sword can be equipped by both ages. Swords and items: also the shields, the boots, the Biggoron's Sword, the Slingshot, the Boomerang, Deku Sticks, the Hammer, the Hookshots and the Bow with its arrows (not yet tried in play: an item may look or act wrong on the other age). The logic does not count on it. Moves no item." },
+        new object[] { "rando_letter", "Zelda's Letter", new[] { "Off", "On" }, new[] { 0, 1 },
+            "The letter Zelda gives at the end of her meeting is an item of the shuffle, and the meeting gives what the seed put there. A child passes Kakariko's gate to Death Mountain by showing it to the guard, so a child's check up there asks for the letter, or bombs (the Lost Woods' way to Goron City), or the Bolero of Fire when the songs are shuffled. A new seed." },
     };
     // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and

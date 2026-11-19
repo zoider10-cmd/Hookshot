@@ -1684,7 +1684,7 @@ FOREST_FLOOR = {"DodongoCavern": frozenset((BB,))}
 # Saria's lesson in the meadow waits for the same meeting: its trigger asks for DoorOfTime_IsAfter_Step01_Exp, which
 # Goto_HyruleCastle_MeetZelda sets (SacredForestMeadow_Child_Prefab_bbc3; found in play, 2026-11-15: the lesson was
 # not there in a new game with Open forest exit). Open forest exit leaves their CHILD (the Deku Tree done) in place.
-DEKU_STORY = ("song_zelda", "song_saria")
+DEKU_STORY = ("song_zelda", "song_saria", "zelda_letter")
 # The Deku Tree's Slingshot room (room 2) can't be left without the Slingshot in the remake: its way out is a ladder
 # that the eye switch drops (Obj_InsideTheDekuTree_FallingLadder_A_01, Obj_EyeSwitch_A_02), and a child has no warp
 # song (the owner's word, 2026-11-15). Its two chests, the Slingshot's own and "Chest (Deku Nuts), room 2", ask for the
@@ -2139,7 +2139,7 @@ SKULLTULA_MORE = frozenset(("Item_AgonyStone", "Item_Arrow_Fire", "Item_Arrow_Ic
                             "Item_NayruLove", "Item_BombBag_Medium", "Item_BombBag_Large", "Item_BulletBag_Medium", "Item_BulletBag_Large",
                             "Item_Quiver_Medium", "Item_Quiver_Large", "Item_StickBag_Medium", "Item_StickBag_Large", "Item_NutBag_Medium",
                             "Item_NutBag_Large", "TBox_Shield_Deku", "TBox_Shield_Hylian", "Item_BombchuBundle_Large"))
-SKULLTULA_NEVER = frozenset(("Item_Scale_Silver", "Item_Scale_Gold", "Item_Wallet_Medium", "Item_Wallet_Large", "Item_Bottle",
+SKULLTULA_NEVER = frozenset(("Item_ZeldaLetter", "Item_Scale_Silver", "Item_Scale_Gold", "Item_Wallet_Medium", "Item_Wallet_Large", "Item_Bottle",
                              "Obj_Armor_Goron", "Obj_Armor_Zora", "Obj_Heart_Piece", "Obj_Heart_Container") + SKULLTULA_ITEMS_NOT_YET)
 
 
@@ -2260,7 +2260,7 @@ def skulltula_holds(item, gating):
 # lesson's), the tunics (gifts' items whose pouch names are not theirs, Armor_Adult_*), the dungeons' stones and
 # medallions and the Heart Containers. A bundle Link has nothing to carry in is given as nothing, the piece taken: a
 # supply lost, not a check left (to be seen in play).
-PIECE_NEVER = frozenset(("Obj_Armor_Goron", "Obj_Armor_Zora", "Obj_Heart_Container"))
+PIECE_NEVER = frozenset(("Item_ZeldaLetter", "Obj_Armor_Goron", "Obj_Armor_Zora", "Obj_Heart_Container"))
 
 
 def piece_holds(item):
@@ -3756,7 +3756,7 @@ def settings(game):
            "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
            "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0, "rando_open_door": 0,
            "rando_ammo_pickups": 0, "rando_rupee_fill": 0, "rando_skulltulas_day": 0,
-           "rando_ganon_bridge": 0, "rando_hints": 0, "rando_ageless": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
+           "rando_ganon_bridge": 0, "rando_hints": 0, "rando_ageless": 0, "rando_letter": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -3880,7 +3880,7 @@ CHECK_CODES = collections.OrderedDict((
     ("Item_Gauntlet_Goron", "GB"), ("Item_Scale_Silver", "SS"), ("Item_Wallet_Medium", "AW"), ("Item_Wallet_Large", "GW"),
     ("Item_Melody_ZeldaLullaby", "ZL"), ("Item_Melody_EponaSong", "EP"), ("Item_Melody_SariaSong", "SR"), ("Item_Melody_TimeSong", "ST"),
     ("Item_Melody_StormSong", "SO"), ("Item_Melody_SpiritRequiem", "RQ"), ("Item_Melody_ShadowNocturne", "NC"),
-    ("Obj_Armor_Goron", "GT"), ("Obj_Armor_Zora", "ZT"), (BOTTLE, "BO")))   # (the tunics, placement 12: TUNICS)
+    ("Obj_Armor_Goron", "GT"), ("Obj_Armor_Zora", "ZT"), (BOTTLE, "BO"), ("Item_ZeldaLetter", "LE")))   # (the tunics, placement 12: TUNICS)
 
 
 def token_codes(way):
@@ -3934,6 +3934,7 @@ GIFT_PLACES = {
     "scrub_heart_secret": ("C", (-23.0, 119.1, 33.0)),
     "scrub_sticks": ("CA", (-45.2, 95.2, 72.6)),
     "scrub_nuts": ("CA", (7.3, 82.9, -85.6)),
+    "zelda_letter": ("C", (5.1, 126.8, -236.4)),           # (as Impa's lesson: the meeting's end, in the courtyard)
     "song_zelda": ("C", (5.1, 126.8, -236.4)),             # (DoorOfTime_MeetImpa_StartPos: before Impa, in the castle's courtyard)
     "song_epona": ("C", (-91.9, 150.6, 247.0)),            # (Npc_Hylia_Malon_Child at z 245.4, Lon Lon Ranch)
     "song_saria": ("C", (-6.9, 114.4, -85.2)),             # (Dm_MelodyGet_Saria_Start)
@@ -3968,7 +3969,7 @@ ITEM_WORDS = {
     "Item_GlassTruth": "Lens of Truth", "Item_Range_Bow": "Bow", "Item_Hammer": "Megaton Hammer", "Item_HeavyBoot": "Iron Boots",
     "Item_HoverBoot": "Hover Boots", "Item_Longshot": "Longshot", "Item_Gauntlet_Silver": "Silver Gauntlets", "Item_Shield_Mirror": "Mirror Shield",
     "Item_Gauntlet_Gold": "Golden Gauntlets", "Item_Gauntlet_Goron": "Goron's Bracelet", "Item_Dungeon_SmallKey": "small key", "Item_Dungeon_BossKey": "boss key", "Item_Dungeon_Map": "map",
-    "Item_Dungeon_Compass": "compass",
+    "Item_Dungeon_Compass": "compass", "Item_ZeldaLetter": "Zelda's Letter",
 }
 EXIT_NEAR = 40.0
 MARKS = ("LocationArea", "MapIconEntranceAnchor")
@@ -4692,6 +4693,33 @@ def pouch_ageless(data, actors):
     return bytes(out), count
 
 
+# ---- Zelda's Letter shuffled (rando_letter, asked for 2026-11-15) ----
+# Zelda gives her letter at the end of the castle courtyard's meeting (Dm_HrlCastle_0050, through Dm_SY_GetInEvent's
+# GetInEvent_Zeldaletter with ActorName Item_ZeldaLetter): with the setting the letter is an item of the shuffle and the
+# meeting gives what the seed put there (gift_items, as Darunia's). Kakariko's gate to Death Mountain opens for a child
+# who shows the letter to its guard (Npc_Hylia_Soldier_003); the owner's word on the other ways up (2026-11-15): bombs,
+# by the Lost Woods' way to Goron City (its boulder), or the Bolero of Fire, a warp to the crater. So a child's check
+# on Death Mountain (LETTER_AREAS) asks for the letter, or bombs, or the Bolero (when the songs are shuffled: otherwise
+# the Bolero is an adult's lesson's): letter_need. An adult passes the gate; his rules ask for bombs already (ADULT).
+LETTER = "Item_ZeldaLetter"
+LETTER_GIFT = Gift("zelda_letter", "Dm_HrlCastle_0050", (LETTER,), LETTER, "HyruleCastle", "Zelda's letter, in the courtyard", CHILD, "letter")
+LETTER_AREAS = frozenset(("DeathMountainTrail", "GoronCity", "DodongoCavern", "DeathMountainCrater", "FireTemple"))
+LETTER_BOLERO = "Item_Melody_FireBolero"
+
+
+def letter_need(need, area, bolero=False):
+    """a rule of a check on Death Mountain with the ways past Kakariko's gate named: each way that asks for neither bombs
+    nor the letter becomes three, the letter's, the bombs' and (bolero) the Bolero's. Elsewhere, as it was."""
+    if area not in LETTER_AREAS:
+        return need
+
+    def way(w):
+        if BB in w or LETTER in w:
+            return w
+        return either([w | {LETTER}, w | {BB}] + ([w | {LETTER_BOLERO}] if bolero else []))
+    return each(way, need)
+
+
 def remove_old(mod):
     """the files a run before this one wrote (its list: rando_manifest.txt), and the folders they leave empty"""
     listing = os.path.join(mod, "rando_manifest.txt")
@@ -4909,6 +4937,7 @@ def main():
     p.add_argument("--sword-shield", type=int, choices=(0, 1), help="in place of rando_sword_shield: 0 the Kokiri Sword stays in its chest and the Deku Shield on "
                                                                      "its shelf, 1 both take part (the chest with Major items, the shelf with Shops)")
     p.add_argument("--ageless", type=int, choices=(0, 1, 2), help="as rando_ageless: 1 the swords, 2 also the age-only items, for both ages (pouch_ageless)")
+    p.add_argument("--letter", action="store_true", help="as rando_letter=1: Zelda's Letter is shuffled (letter_need)")
     p.add_argument("--hints", action="store_true", help="as rando_hints=1: the Gossip Stones give hints (choose_hints)")
     p.add_argument("--skulltulas-day", action="store_true", help="as rando_skulltulas_day=1: the night-only Gold Skulltulas are out by day too (NOCTURNAL)")
     p.add_argument("--heart-pieces", action="store_true", help="as rando_heart_pieces=1: the Pieces of Heart lying in the world change places with "
@@ -4952,6 +4981,7 @@ def main():
     a.heart_pieces = a.heart_pieces or ini["rando_heart_pieces"] != 0
     a.skulltulas_day = a.skulltulas_day or ini["rando_skulltulas_day"] != 0
     a.hints = a.hints or ini["rando_hints"] != 0
+    a.letter = a.letter or ini["rando_letter"] != 0
     a.ageless = a.ageless if a.ageless is not None else ini["rando_ageless"] if ini["rando_ageless"] in (0, 1, 2) else 0
     # (the songs gate the game: with them shuffled the logic places them, whatever Major items says)
     logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic
@@ -5023,7 +5053,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 7" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" talks skipped" if a.skip_cutscenes else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + (" skulltulas by day" if a.skulltulas_day else "") + " checks 10" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + (" skulltulas by day" if a.skulltulas_day else "") + (" letter 1" if a.letter else "") + " checks 10" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -5187,6 +5217,10 @@ def main():
         for g in SCRUBS:
             gifts[gift_hash(g.key)] = g
             spots[gift_hash(g.key)] = [g.area, g.item, None, None, "scrub", g.name, ""]
+    if a.letter:   # (Zelda's Letter: with or without Quest rewards, letter_need)
+        PROGRESSION = PROGRESSION | {LETTER}
+        gifts[gift_hash(LETTER_GIFT.key)] = LETTER_GIFT
+        spots[gift_hash(LETTER_GIFT.key)] = [LETTER_GIFT.area, LETTER_GIFT.item, None, None, "gift", LETTER_GIFT.name, ""]
     lessons = collections.OrderedDict()   # a lesson's hash -> its Gift
     if a.songs:   # (Songs: with or without the others)
         PROGRESSION = PROGRESSION | SONG_GATES
@@ -5259,13 +5293,16 @@ def main():
         needs = {h: each(door_need, n, shelves[h][0].ages == "A" if h in shelves else
                               GIFT_PLACES.get(gifts[h].key, ("CA",))[0] == "A" if h in gifts else grown(h, spots[h][0]), a.open_forest, spots[h][0])
                  for h, n in needs.items()}
-    door = (lambda need, h, area: each(door_need, forest(need, area), grown(h, area), a.open_forest, area)) if a.open_door else (
-        lambda need, h, area: forest(need, area))   # (with Open forest exit's step: the Gold Skulltulas' and the Pieces of Heart's)
+    bolero = LETTER_BOLERO in PROGRESSION and a.songs != 0
+    gate = (lambda need, area: letter_need(need, area, bolero)) if a.letter else (lambda need, area: need)
+    needs = {h: gate(n, spots[h][0]) for h, n in needs.items()}
+    door = (lambda need, h, area: gate(each(door_need, forest(need, area), grown(h, area), a.open_forest, area), area)) if a.open_door else (
+        lambda need, h, area: gate(forest(need, area), area))   # (with Open forest exit's step: the Gold Skulltulas' and the Pieces of Heart's)
     # (what a Gold Skulltula asks for, by the same settings; from placement 8 without Open forest exit's step: in a
     #  Skulltula's rule CHILD is often a weapon to kill it, or the sword past Mido into the Deku Tree, not the forest's
     #  way out. Found 2026-11-15: a seed put the Kokiri Sword on a Deku Tree Skulltula, with Open Deku Tree off)
-    skull_door = (lambda need, h, area: each(door_need, need, grown(h, area), a.open_forest, area)) if a.open_door else (
-        lambda need, h, area: need)
+    skull_door = (lambda need, h, area: gate(each(door_need, need, grown(h, area), a.open_forest, area), area)) if a.open_door else (
+        lambda need, h, area: gate(need, area))
     skull_door = skull_door if placement >= 8 else door
     bottles = BOTTLE in PROGRESSION   # (placement BOTTLE_FROM with the bottles shuffled: soil_need)
     skull_asks = lambda h, at=None: (lambda area: skull_door(step((lambda n: song_need(n, area) if a.songs else n)(
