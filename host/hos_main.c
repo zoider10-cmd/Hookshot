@@ -3476,6 +3476,12 @@ void hos_oot_get_name(Ctx *c, uint64_t node, int kind) {
         if (shop) return;
     } else {
         const uint64_t a = recomp_load64(c, node + 0x28) & ~3ULL, b = recomp_load64(c, node + 0x30) & ~3ULL;
+        if (getenv("HOS_OOT_SHOW_LOG")) {   /* (a test's: every show item asked for, before the checks below) */
+            const uint64_t s = recomp_load64(c, node + 0x38) & ~3ULL;
+            char seen[96] = "";
+            if (s) oot_guest_string(c, recomp_load64(c, s), seen, sizeof seen);
+            hos_log("rando: show item asked: a %d b %d name '%s'", a ? (int32_t)recomp_load32(c, a) : -999, b ? (int32_t)recomp_load32(c, b) : -999, seen);
+        }
         if (!a || !b || (int32_t)recomp_load32(c, a) != -1 || (int32_t)recomp_load32(c, b) != -1) return;
         slot = recomp_load64(c, node + 0x38) & ~3ULL;
         if (!slot || !oot_guest_string(c, recomp_load64(c, slot), name, sizeof name)) return;
