@@ -54,10 +54,8 @@
 namespace mkwvk {
 
 extern std::atomic<bool> present_native_pq;   // (vk_replay.cpp do_present: the game presents its own HDR10 picture, Native)
-// (vk_draw.cpp: a pipeline cache of FSR 4's own in cache/, apart from the translator's files; a pipeline built through it)
-VkPipelineCache own_pipeline_cache(const char* name, size_t* read, bool* refused);
-bool own_pipeline_cache_save(VkPipelineCache cache, const char* name, size_t* saved);
-VkResult own_cache_compute_pipeline(VkPipelineCache cache, const VkComputePipelineCreateInfo* ci, VkPipeline* out);
+VkResult shared_compute_pipeline(const VkComputePipelineCreateInfo* ci, VkPipeline* out);   // (vk_draw.cpp: through the pipeline cache kept across runs)
+void pipeline_cache_save_play();   // (vk_draw.cpp)
 
 namespace {
 int env_switch(const char* name) {   // (-1: unset)
@@ -616,28 +614,6 @@ VkPipeline make_plain(const Plain& p) {
     return made;
 }
 
-/// The unrolled layers' pipeline cache (cache/hookshot_fsr4_pipelines.bin): kept apart from the translator's pipeline cache,
-/// whose files a new translator drops (pcache_stamp.h), so that an update keeps them: the launcher moves cache/ into the new
-/// build's folder whole. Before it, an update that changed the translator built them cold again at its first FSR 4 frame, about 50
-/// s and 3 GB of memory each on an RX 6700 XT. Made at the first build; written after a layer's build when its data grew: the
-/// driver may hand a layer over at once from its own disk cache, which a game folder of another path (an update's) does not
-/// share, so a quick build is no sign that the file holds it
-constexpr const char* kOwnCacheFile = "hookshot_fsr4_pipelines.bin";
-size_t own_cache_saved = 0;   // (the bytes last read or written: own_cache, build_unrolled)
-VkPipelineCache own_cache() {
-    static std::mutex m;
-    static VkPipelineCache cache = VK_NULL_HANDLE;
-    static bool made = false;
-    std::lock_guard lk(m);
-    if (made) return cache;
-    made = true;
-    size_t read = 0;
-    bool refused = false;
-    cache = own_pipeline_cache(kOwnCacheFile, &read, &refused);
-    own_cache_saved = read;
-    logf("vk: AMD FSR 4: the unrolled layers' pipeline cache: %s", read ? "read" : refused ? "made by another driver or GPU: starts empty" : "starts empty");
-    return cache;
-}
 /// A job: the layer unrolled and built with copies of its layouts; bound in the library's pipeline's place when made. Its
 /// thread counted in jobs().running from before it starts (fsr4_close waits for it)
 void build_unrolled(VkPipeline original, std::shared_ptr<const std::vector<uint32_t>> code, std::string name, VkComputePipelineCreateInfo ci,
@@ -668,8 +644,12 @@ void build_unrolled(VkPipeline original, std::shared_ptr<const std::vector<uint3
     int left = -1;
     const bool ok = spirv_unroll::unroll_all(code->data(), code->size(), unrolled, kUnrollWords, 64, &left) && left == 0;
     VkPipeline made = VK_NULL_HANDLE;
-    bool cached = false;   // (taken from the cache, not compiled)
-    if (ok && !closing) {
+    uint64_t avail = 0;
+    const bool room = ok && !closing && build_headroom(&avail);
+    if (ok && !room && !closing)
+        logf("vk: AMD FSR 4: %s: not unrolled now: %llu MB of memory to spare, %llu wanted (the next start tries again)",
+             name.c_str(), (unsigned long long)(avail >> 20), (unsigned long long)(kBuildHeadroom >> 20));
+    if (room) {
         VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
         mci.codeSize = unrolled.size() * 4, mci.pCode = unrolled.data();
         VkShaderModule module = VK_NULL_HANDLE;
@@ -680,38 +660,13 @@ void build_unrolled(VkPipeline original, std::shared_ptr<const std::vector<uint3
             ci.stage.pSpecializationInfo = nullptr;   // (only layers without one are taken)
             ci.basePipelineHandle = VK_NULL_HANDLE, ci.basePipelineIndex = -1;
             ci.flags &= ~(VkPipelineCreateFlags)VK_PIPELINE_CREATE_DERIVATIVE_BIT;
-            // (through its own pipeline cache, kept across runs and updates: built once, loaded after. Asked of the caches
-            // first, with no compile: a layer built before costs nothing then, and the memory a compile wants is not asked
-            // for it. Before, a PC with less than kBuildHeadroom to spare at the first FSR 4 frame (a 16 GB one, often) ran
-            // without the unrolled layers even when their pipelines were in the caches. A failure is not tried again: the
-            // library's pipeline stays)
-            VkResult rr = VK_PIPELINE_COMPILE_REQUIRED;
-            if (dev.vk13.pipelineCreationCacheControl) {
-                VkComputePipelineCreateInfo ask = ci;
-                ask.flags |= VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT;
-                rr = own_cache_compute_pipeline(own_cache(), &ask, &made);
-                cached = rr == VK_SUCCESS && made;
-                if (!cached) made = VK_NULL_HANDLE, rr = VK_PIPELINE_COMPILE_REQUIRED;
-            }
-            uint64_t avail = 0;
-            if (!cached && !closing) {
-                if (build_headroom(&avail)) {
-                    rr = own_cache_compute_pipeline(own_cache(), &ci, &made);
-                } else {
-                    logf("vk: AMD FSR 4: %s: not unrolled now: %llu MB of memory to spare, %llu wanted (the next start tries again)",
-                         name.c_str(), (unsigned long long)(avail >> 20), (unsigned long long)(kBuildHeadroom >> 20));
-                    rr = VK_PIPELINE_COMPILE_REQUIRED;
-                }
-            }
+            // (through the pipeline cache kept across runs, as FSR 3.1's: built once, loaded after. A failure is not tried again:
+            // the library's pipeline stays)
+            const VkResult rr = shared_compute_pipeline(&ci, &made);
             // (the window closed while the driver built it: fsr4_close may have stopped waiting, and the process be ending.
-            // Nothing more is touched, its cache not written either: the next start finds it in the driver's own disk cache, or
-            // builds it again, and writes the file then)
+            // Nothing more is touched; the pipeline cache's save at the close has what the driver made)
             if (closing) return;
-            if (rr != VK_SUCCESS) {
-                made = VK_NULL_HANDLE;
-                if (rr != VK_PIPELINE_COMPILE_REQUIRED)
-                    logf("vk: AMD FSR 4: %s: its unrolled pipeline was not built (%d): AMD's stays", name.c_str(), (int)rr);
-            }
+            if (rr != VK_SUCCESS) made = VK_NULL_HANDLE, logf("vk: AMD FSR 4: %s: its unrolled pipeline was not built (%d): AMD's stays", name.c_str(), (int)rr);
             real_dsm(dev.device, module, nullptr);
         }
     }
@@ -730,10 +685,9 @@ void build_unrolled(VkPipeline original, std::shared_ptr<const std::vector<uint3
         }
     }
     // (each one kept as soon as it is built, whether or not the game closes normally: a build of a minute is not done again)
-    if (made && own_cache() && !own_pipeline_cache_save(own_cache(), kOwnCacheFile, &own_cache_saved))
-        logf("vk: AMD FSR 4: %s: its unrolled pipeline could not be saved (the next start builds it again)", name.c_str());
-    if (made) logf("vk: AMD FSR 4: tuned %s: its loops unrolled (%zu -> %zu words), bound in its place from now (%.1f s %s)",
-                   name.c_str(), code->size(), unrolled.size(), s, cached ? "from the caches" : "to build");
+    if (made && s > 1.0) pipeline_cache_save_play();
+    if (made) logf("vk: AMD FSR 4: tuned %s: its loops unrolled (%zu -> %zu words), bound in its place from now (%.1f s to build)",
+                   name.c_str(), code->size(), unrolled.size(), s);
     else if (!ok) logf("vk: AMD FSR 4: %s left rolled (%d loops kept: unrolled whole it would pass %zu words, or they cannot be)",
                        name.c_str(), left, kUnrollWords);
 }
