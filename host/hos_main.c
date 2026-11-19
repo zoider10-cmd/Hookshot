@@ -3559,6 +3559,19 @@ int hos_oot_shelf_map(const char *rel, char *out, size_t cap) {
 #endif
 }
 
+#if defined(_WIN32) || defined(__linux__)
+/* (bug 42) A bomb added while Link has no Bomb Bag: bombs (Item_Bomb), a chest's bundle (Item_BombBundle_*), a bomb
+   lying in the world (Obj_Bomb: not a bomb flower, Obj_BombFlower_*). Not Bombchus, which need no bag, nor an add as a
+   save is loaded. 1: it is to add nothing */
+static int oot_bombs_bagless(Ctx *c, const char *name) {
+    if ((int32_t)c->x[3] <= 0 || c->x[30] == 0x8112d4b8ULL) return 0;
+    if (strcmp(name, "Item_Bomb") && strncmp(name, "Item_BombBundle_", 16) && strcmp(name, "Obj_Bomb")) return 0;
+    static const char *const bags[3] = {"Item_BombBag_Small", "Item_BombBag_Medium", "Item_BombBag_Large"};
+    for (int i = 0; i < 3; i++)
+        if (oot_pouch_count(c, bags[i]) != 0) return 0;   /* (-1, not known: as if he had one) */
+    return 1;
+}
+#endif
 int hos_oot_pouch_add(Ctx *c) {
 #if defined(_WIN32) || defined(__linux__)
     if (!hos_rando_on()) return 0;
@@ -3623,6 +3636,13 @@ int hos_oot_pouch_add(Ctx *c) {
             snprintf(name, sizeof name, "%s", gives);
         }
         oot_tracker_item(name);
+    }
+    /* (bug 42: with no Bomb Bag, the bombs that follow the bag the game is not let give made the inventory's bombs at
+       0/0, a slot that can't be used: a bomb added while Link has no bag adds nothing. Here, after the tracker's record
+       and a piece's or a container's item named: a check that gave bombs is still a check got) */
+    if (oot_bombs_bagless(c, name)) {
+        hos_log("rando: %s x%d with no Bomb Bag: nothing is added", name, (int)(int32_t)c->x[3]);
+        return 1;
     }
     oot_pickup_qol(c, name);   /* (Ammo pick-ups, Rupees fill the wallet) */
     if ((int32_t)c->x[3] <= 0) return 0;
