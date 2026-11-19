@@ -917,6 +917,14 @@ SHELF_WORN = 0.5
 # (the Goron's Bracelet, small and low: on a shelf of the Kokiri shop with a price board only its top showed over the
 #  board (seen without a window, 2026-11-14). It is put this much higher than its box says)
 SHELF_MORE = {"Item_Gauntlet_Goron": 0.15}
+# (bug 55: the Silver and Golden Gauntlets' only model is the pair Link wears, which shows on no shelf, with its pose
+#  or without (seen without a window 2026-11-18 and 19, eight shelves of the Kokiri shop empty). Their shelves show
+#  the Goron's Bracelet's model, its row of the list of actors and its box; the name, words and item are their own)
+SHELF_MODEL_AS = {"Item_Gauntlet_Silver": "Item_Gauntlet_Goron", "Item_Gauntlet_Gold": "Item_Gauntlet_Goron"}
+SHELF_MORE.update({"Item_Gauntlet_Silver": 0.15, "Item_Gauntlet_Gold": 0.15})
+# (the fields of the list of actors' row that are the model's; ActorName is the item's: it names the shelf, seen
+#  2026-11-19 as "Goron Bracelet" with the whole row taken)
+SHELF_MODEL_FIELDS = ("FmdbName", "ModelProjectName", "ModelAabbMin", "ModelAabbMax", "AnimationResources")
 
 
 def shelf_fit(item, box):
@@ -1105,12 +1113,13 @@ def own_model_pack(item, pack):
     return sarc_write(files)
 
 
-def shop_pack(item, item_pack, base_pack, sample_pack, price, pouch=None, name=None):
+def shop_pack(item, item_pack, base_pack, sample_pack, price, pouch=None, name=None, model_pack=None):
     """An item's shelf actor (name: its actor's, shop_actor(item) when not given): (its pack, the names of the three files it has that no other pack has, the name its
     texts go by). The pack is the shelf base's files and the item's; its actor has the base's as its parent and the
     item's own name, model, animation and place in the pouch; its table of game parameters is the item's entries,
     the base's table as its parent, and a price of its own. pouch: pouch files to take in place of the item's ({name:
-    bytes}: the ones a pick-up's pack changed, of which the game uses the first copy it loads)."""
+    bytes}: the ones a pick-up's pack changed, of which the game uses the first copy it loads). model_pack: the pack of
+    the item whose model the shelf shows in place of its own (SHELF_MODEL_AS), or None."""
     base, own, sample = sarc_read(base_pack), sarc_read(item_pack), sarc_read(sample_pack)
     name = name or shop_actor(item)
     chain = actor_chain(item, own)
@@ -1142,6 +1151,15 @@ def shop_pack(item, item_pack, base_pack, sample_pack, price, pouch=None, name=N
     _, version = byml_parse(sample[sample_actor])
     # (not the item's pose and animation, ASInfoRef, ASRef and AnimationRef: they are its "item got" scene's: SHELF_POSE, above SHELF_LIFT)
     comps = collections.OrderedDict((key, part(key)) for key in ("ActorNameRef", "ModelInfoRef", "PouchContentRef") if part(key))
+    if model_pack is not None:   # (bug 55: another item's model, SHELF_MODEL_AS)
+        other = actor_chain(SHELF_MODEL_AS[item], sarc_read(model_pack))
+        ref = next((tree[1].get("Components", ("dict", {}))[1].get("ModelInfoRef") for _, tree, _ in other
+                    if tree[1].get("Components", ("dict", {}))[1].get("ModelInfoRef")), None)
+        source = sarc_read(model_pack).get(ref_file(ref[1])) if ref and ref[0] == "string" else None
+        if source is None:
+            raise ValueError("%s: the model of %s is not in its pack" % (item, SHELF_MODEL_AS[item]))
+        files[MODEL_INFO_FILE % name] = source
+        comps["ModelInfoRef"] = ("string", "?" + MODEL_INFO_FILE % name)
     # (a shield's model file is the shelf's own, under the shelf's name: SHELF_OWN_MODEL)
     model_file = ref_file(comps["ModelInfoRef"][1])
     if model_file.split("/")[-1].split(".")[0] in SHELF_OWN_MODEL and model_file in files:
@@ -1174,12 +1192,15 @@ def shop_rows(data, kind, item, price, name=None):
     tree, version = byml_parse(data)
     name = name or shop_actor(item)
     by = {r[1]["__RowId"][1]: r for r in tree[1]}
-    need = (SHOP_ROW,) if kind == "GameActorInfo" else (item, SHOP_ROW_HEAPS if kind == "ActorInfo" else SHOP_ROW)
+    need = (SHOP_ROW,) if kind == "GameActorInfo" else (item, SHOP_ROW_HEAPS if kind == "ActorInfo" else SHOP_ROW) + (
+        (SHELF_MODEL_AS[item],) if kind == "ActorInfo" and item in SHELF_MODEL_AS else ())
     if any(n not in by for n in need):
         raise ValueError("the game's %s has no row of %s" % (kind, " or of ".join(n for n in need if n not in by)))
     number = lambda node, value: (node[0], struct.pack("<I", value))
-    if kind == "ActorInfo":
+    if kind == "ActorInfo":   # (the item's row; its model's fields those of the item it is shown as, SHELF_MODEL_AS)
         row = ("dict", collections.OrderedDict(by[item][1]))
+        if item in SHELF_MODEL_AS:
+            row[1].update((k, v) for k, v in by[SHELF_MODEL_AS[item]][1].items() if k in SHELF_MODEL_FIELDS)
         for k in ("InstanceHeapSize", "PreActorRenderInfoHeapSize"):
             if k in row[1] and k in by[SHOP_ROW_HEAPS][1]:
                 row[1][k] = number(row[1][k], max(struct.unpack("<I", row[1][k][1])[0], struct.unpack("<I", by[SHOP_ROW_HEAPS][1][k][1])[0]) + 32768)
@@ -5754,7 +5775,8 @@ def main():
                     continue
                 try:
                     new, parts, names[actor] = shop_pack(item, unpack(open(os.path.join(romfs, "Pack", "Actor", item + ".pack.zs"), "rb").read(), zs, dicts),
-                                                         base, sample, price, pouch_changed, actor)
+                                                         base, sample, price, pouch_changed, actor,
+                                                         pack(SHELF_MODEL_AS[item]) if item in SHELF_MODEL_AS else None)
                 except (OSError, ValueError) as e:
                     owner = next((o for o, t in tiers.items() if actor in t), None)
                     if owner is None:
@@ -5779,7 +5801,7 @@ def main():
                     raise ValueError("the game has no list %s" % kind)
                 table = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
                 if kind == "ActorInfo":   # (how high each shelf's actor stands: by its item's model)
-                    fits = {actor: SHELF_FIT_SHOP.get(shelf_shop(actor), {}).get(item) or shelf_fit(item, model_box(table, item))
+                    fits = {actor: SHELF_FIT_SHOP.get(shelf_shop(actor), {}).get(item) or shelf_fit(item, model_box(table, SHELF_MODEL_AS.get(item, item)))
                             for actor, (item, _) in on_sale.items()}
                     lifts = {actor: lift for actor, (lift, _) in fits.items() if lift}
                     scales = {actor: scale for actor, (_, scale) in fits.items() if scale != 1.0}

@@ -41,7 +41,7 @@ def main():
     lift, size = R.SHELF_FIT_SHOP["kmedicine"]["Item_DekuStickBundle_Small"]
     check(0 < size < 0.6 and 0 < lift < 0.5, "the stick bundle's size or height in the Potion Shop is not set")
     src = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check("SHELF_FIT_SHOP.get(shelf_shop(actor), {}).get(item) or shelf_fit(item, model_box(table, item))" in src and
+    check("SHELF_FIT_SHOP.get(shelf_shop(actor), {}).get(item) or shelf_fit(item, model_box(table, SHELF_MODEL_AS.get(item, item)))" in src and
           "turns = {actor: shelf_turn(actor, item) for actor, (item, _) in on_sale.items() if shelf_turn(actor, item)}" in src,
           "the shop's own turns and fits are not used where the shelves are made")
     check(R.FIXES_VERSION >= 45, "FIXES_VERSION did not move on: a seed made before keeps the old poses")
@@ -53,6 +53,12 @@ def main():
     fn = fn[:fn.index("\n}\n")]
     check("if (kind == 1) {" in fn and "if (!strcmp(shown, oot_show_as[i][1])) {" in fn and
           "give = oot_show_as[i][0];" in fn, "a held-up gauntlet is still shown by its worn piece's spelling")
+    # (bug 55: the Silver and Golden Gauntlets show the bracelet's model on a shelf, their own name)
+    check("SHELF_MODEL_AS = {\"Item_Gauntlet_Silver\": \"Item_Gauntlet_Goron\", \"Item_Gauntlet_Gold\": \"Item_Gauntlet_Goron\"}" in src and
+          'SHELF_MODEL_FIELDS = ("FmdbName", "ModelProjectName", "ModelAabbMin", "ModelAabbMax", "AnimationResources")' in src and
+          "row[1].update((k, v) for k, v in by[SHELF_MODEL_AS[item]][1].items() if k in SHELF_MODEL_FIELDS)" in src and
+          "pack(SHELF_MODEL_AS[item]) if item in SHELF_MODEL_AS else None)" in src,
+          "the gauntlets' shelves do not show the bracelet's model with their own name (bug 55)")
     print("PASS: the bottle and Kakariko's Potion Shop's shelves")
 
 

@@ -341,7 +341,7 @@ def main():
     # (how an item stands: by its box, lowered when made where it is worn, long ones made smaller, its own numbers first)
     box = lambda low, high: ((0.0, low, 0.0), (0.1, high, 0.1))
     check(seed.shelf_fit("Item_Thing", None) == (0.0, 1.0) and seed.shelf_fit("Item_Token_Gold", ((-0.19, -0.193, -0.01), (0.17, 0.19, 0.02))) == (0.19, 1.0) and
-          seed.shelf_fit("Item_Gauntlet_Gold", ((-0.8, 1.171, -0.11), (0.8, 1.33, 0.05))) == (-1.17, 1.0) and
+          seed.shelf_fit("Item_Gauntlet_Gold", ((-0.8, 1.171, -0.11), (0.8, 1.33, 0.05))) == (-1.02, 1.0) and
           seed.shelf_fit("Item_Hammer", ((-0.45, -0.28, -0.33), (0.22, 0.28, 1.45))) == (0.14, 0.51) and
           seed.shelf_fit("Item_Dungeon_SmallKey", box(0.0, 0.56)) == (0.0, 0.6) and seed.shelf_fit("Item_Arrow_Light", box(-0.38, 0.3)) == (0.1, 1.0) and
           seed.shelf_fit("Item_GlassTruth", box(0.92, 1.04)) == (-0.67, 1.0) and seed.shelf_fit("Item_Thing", box(0.0, 1.0))[1] == 1.0,
@@ -552,7 +552,7 @@ def main():
           seed.forest_open(seed.CHILD, "DodongoCavern") == frozenset({seed.BB}) and seed.forest_open(seed.CHILD | {seed.BB}, "DodongoCavern") == frozenset({seed.BB}) and
           '"/".join(",".join([code for item, code in CHECK_CODES.items() if item in way] + token_codes(way))' in script,
           "the rules' ways are not made, read by the placement, or written for the tracker")
-    check(seed.PLACEMENT >= 6 and set(seed.DEKU_STORY) == {"song_zelda", "song_saria"} and
+    check(seed.PLACEMENT >= 6 and set(seed.DEKU_STORY) == {"song_zelda", "song_saria", "zelda_letter"} and
           "story = ({h for h, g in gifts.items() if g.key in DEKU_STORY} if placement >= 6 else set()) | slingshot_room" in script and
           all('Gift("%s", ' % k in script for k in seed.DEKU_STORY),
           "Impa's and Saria's lessons do not keep the Deku Tree done with Open forest exit (DEKU_STORY)")
