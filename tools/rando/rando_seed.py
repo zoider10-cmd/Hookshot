@@ -6108,7 +6108,8 @@ def main():
             sys.exit("the Door of Time: the Market's map files have no such door. Nothing written.")
         if not sheiks:
             sys.exit("the Door of Time: the Market's map files have no Sheik by the sword. Nothing written.")
-        print("the Door of Time is out of the way in %d map file%s of the Market, and Sheik to the side of the sword" % (doors, "" if doors == 1 else "s"))
+        print("the Door of Time is out of the way in %d map file%s of the Market, and Sheik to the side of the sword" % (doors, "" if doors == 1 else "s")
+              if a.open_door else "the Door of Time opens with the Song of Time and an ocarina (the game's side), Sheik to the side of the sword")
 
     # ---- the Bombchu Shop: its keeper, music and sign by the quest no longer (every seed, BOMBCHU_ACTORS) ----
     try:
