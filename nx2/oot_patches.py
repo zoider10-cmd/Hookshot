@@ -943,6 +943,21 @@ FLOOR_BRANCH = "if ((c->n == c->v) && !c->z) { goto %s; }\n"
 FLOOR_NEW = ("if ((c->n == c->v) && !c->z && hos_oot_floor_carry_slow((uint32_t)c->vreg[0][0], " + SOUND_SLOT + " + 2192)) "
              "{ goto %s; }   /* (nx2/oot_patches.py: a moving floor's carry above 60 fps) */\n")
 FLOOR_DECL = "extern int hos_oot_floor_carry_slow(uint32_t inv_dt_bits, uint64_t slot);\n"
+# A rigid body's update before the physics step, f_804f5030, on its path for a body driven to a target (x20 the controller, x23
+# the body): the game sets the target (+0x3c) to the body's position plus this frame's move and asks for (target - position) /
+# dt. Above 60 fps Havok's solve delivers only part of it (0.86 at 120 fps), the next target starts from where the body ended
+# up, and Link's pull-up onto a ledge fell short: he slid back on the lip (issue 1494). Before the target is read,
+# hos_oot_drive_target adds last update's shortfall to Link's (host/oot_high_fps.h). The path is in the function twice.
+DRIVE_HEAD = "void f_804f5030(Ctx *__restrict A64_NOESC c) {\n"
+# (two copies of that path, the body loaded into x23 or x24: the same type test, reached from different places)
+DRIVE_REGS = (23, 24)
+DRIVE_READ = ("    c->x[%d]=recomp_load64(c,c->x[20] + 240);\n"
+              "    { uint64_t _b=c->x[20]; int64_t _o=60; { uint64_t _p0,_p1; recomp_ldp32(c,(_b+_o),&_p0,&_p1); "
+              "a64_vset64(c->vreg[2],_p0); a64_vset64(c->vreg[1],_p1); }}\n"
+              "    { { uint64_t _v=recomp_load32(c,(c->x[20]+68ULL)); a64_vset64(c->vreg[0],_v); } }\n")
+DRIVE_CALL = ("    hos_oot_drive_target(c->x[20], c->x[%d], " + SOUND_SLOT + " + 2192);"
+              "   /* (nx2/oot_patches.py: Link's driven body follows its target above 60 fps) */\n")
+DRIVE_DECL = "extern void hos_oot_drive_target(uint64_t controller, uint64_t body, uint64_t slot);\n"
 
 # Below 60 fps, Havok cloth (Link's cap, romfs Phive/Cloth): the simulate operator's per-frame setup, f_81b3aa48, loads its step
 # context's time (x22 + 8) and stores it with a substep's (+44, +48 of its frame data). The time is a 60th whatever the frame, so the
@@ -1101,6 +1116,32 @@ def patch_horse_jump(s):
     if HORSE_DECL not in s:
         s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + HORSE_DECL, 1)
     return s, 1
+
+
+def patch_drive_target(s):
+    """Link's driven body's target through the host before f_804f5030 reads it, at both copies of the path: (s, how many of them
+    are in s with it, made now or before); a copy whose body load and target reads are not found once, as written, is left"""
+    at = _function(s, DRIVE_HEAD)
+    if at is None:
+        return s, 0
+    head, end = at
+    body = s[head:end]
+    done = 0
+    for reg in DRIVE_REGS:
+        read, call = DRIVE_READ % reg, DRIVE_CALL % reg
+        load = read.index("    { uint64_t _b")
+        if body.count(read[:load] + call + read[load:]) == 1:
+            done += 1
+            continue
+        if body.count(read) != 1:
+            continue
+        i = body.index(read) + load
+        body = body[:i] + call + body[i:]
+        done += 1
+    s = s[:head] + body + s[end:]
+    if done and DRIVE_DECL not in s:
+        s = s.replace('#include "a64.h"\n', '#include "a64.h"\n' + DRIVE_DECL, 1)
+    return s, done
 
 
 def patch_floor_carry(s):
@@ -1732,6 +1773,11 @@ def patch_file(s, name, protect_hearts=False):
     if floor != out:
         lines.append("oot_patches: a moving floor's carry above 60 fps in " + name)
     out = floor
+    drive, found = patch_drive_target(out)
+    counts["driven target"] += found
+    if drive != out:
+        lines.append("oot_patches: Link's driven body's target above 60 fps in " + name)
+    out = drive
     cue, found = patch_song_cue(out)
     counts["song note flag"] += found
     if cue != out:
@@ -1803,6 +1849,8 @@ def report(paths, counts, protect_hearts=False):
         print("oot_patches: WARNING: the horse's jump step test was found %d times, not once" % total["horse jump step"])
     if total["floor carry"] != len(FLOOR_SITES):   # (without them, above 100 fps a moving floor leaves Link and enemies behind)
         print("oot_patches: WARNING: a moving floor's carry was found at %d of %d places" % (total["floor carry"], len(FLOOR_SITES)))
+    if total["driven target"] != len(DRIVE_REGS):   # (without them, above 60 fps Link's pull-up onto a ledge falls short)
+        print("oot_patches: WARNING: the driven body's target was found at %d of %d places" % (total["driven target"], len(DRIVE_REGS)))
     if total["cloth time"] != 1:   # (without it, below 60 fps Link's cap and the other cloth run slow: they swing out and settle slowly)
         print("oot_patches: WARNING: the cloth's time was found %d times, not once" % total["cloth time"])
     if total["cloth solve"] != 1:   # (without it, above 60 fps with HOS_FPS_CLOTH_60=1 the cloth is still solved every frame)

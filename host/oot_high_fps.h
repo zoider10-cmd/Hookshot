@@ -52,6 +52,20 @@
    is tested instead: the game's test as it would be at 60 fps, so time slowed below 0.6 still takes the tenth. At a cap of
    60, and on a frame of a 60 fps one or longer, the game's own test decides.
 
+   A driven body's target (f_804f5030, a rigid body's update before the physics step, on its path for a body driven to a target:
+   the controller's flags +0x100 have 0x80, the game's gate to the path, and 0x100, its gate to handing the velocity to the
+   world): while Link pulls himself up a ledge, his animation drives his body. Each update the game sets the
+   controller's target (+0x3c) to the body's position plus this frame's move and asks the physics for the velocity that reaches
+   it, (target - position) x 1/dt. At 60 fps the body lands on the target; above it Havok's constraint solve (f_8177b2a0)
+   delivers only part of the move (1.00 at 60, 0.94 at 90, 0.86 at 120, 0.82 at 144, 0.78 at 170, whatever the solver's
+   substep count), and the next target starts from where the body ended up, so the shortfall is never made up: the pull-up
+   lifted Link 2.5 m instead of 2.8 at 140 fps, and he slid back on the lip until he got over, falling back to the hang when
+   forward was let go (issue 1494). Above a cap of 60, on a frame shorter than a 60 fps one, Link's driven body is given last
+   update's target plus this frame's move instead (its target plus what the physics left of the last one), at most three
+   frames' moves more, so it follows the animation's path. A climb starts from the game's own target (the carry needs the
+   update before). At a cap of 60 nothing is carried: the body lands on its target there. (The physics' share is tuned in
+   Havok's solve to 60 fps frames; changing it there would change every constraint and contact in the game.)
+
    Below 60 fps, the game's Havok cloth (Link's cap, the .bphcl files in romfs Phive/Cloth): the simulate operator's per-frame
    setup (f_81b3aa48, the instance's frame-time mode: its fixed 1/60 mode, f_81b3a964, is left as it is) takes the frame's time
    from its step context (+8) and splits it into the context's count (+24) x the config's subSteps x the operator's own count of
@@ -181,6 +195,47 @@ static inline int oot_floor_carry_slow(uint32_t inv_dt_bits, uint32_t frame_step
     const float inv_dt = oot_bits_float(inv_dt_bits), step = oot_bits_float(frame_step_bits);
     if (!timed || !(step > 0.0f)) return 1;   /* (the game's own test decides) */
     return inv_dt * step > 100.0f;
+}
+
+/* A driven body's target with last update's shortfall carried. st: the last target given, the game's then, its body and Link's
+   update count then; body: the body (its guest address); update: Link's update count now (host/hos_main.c counts them);
+   driven: 1 for Link's body driven to a target above a 60 fps cap on a frame under a 60 fps one (0: the game's target is left
+   as it is; the next driven call then comes after a gap); at: the body's position now; target: the game's (the position plus
+   this frame's move), changed in place.
+   - A carry needs the same body and its last driven call in this update or the one before: the path is not reached on the
+     updates between two climbs, so a climb starts from the game's own target (the lag carried then, about (1/share - 1) of a
+     move, is lost on any gap). The count only finds gaps: a wrong count drops a carry, it never holds a target back.
+   - A target bit for bit the game's last (the body update run again before the physics) or the last one given (not renewed)
+     gets the last target given, so nothing is carried twice.
+   - The carry is at most three of this frame's moves (the physics' share down to a quarter, about 400 fps; above that it
+     falls behind), so a body the physics held back (a wall) is not flung when it frees. */
+typedef struct { float target[3], game[3]; uint64_t body; uint32_t update; int held; } OotDriveCarry;
+static inline void oot_drive_carry(OotDriveCarry *st, uint64_t body, uint32_t update, int driven, const float at[3],
+                                   float target[3]) {
+    for (int i = 0; i < 3 && driven; i++)
+        if (!(target[i] == target[i]) || !(at[i] == at[i]) || fabsf(target[i]) > 1e30f || fabsf(at[i]) > 1e30f) driven = 0;
+    if (!driven)
+        return;   /* (st->update stays behind: the next driven call is a gap) */
+    const int same = st->held && st->body == body && update - st->update <= 1u;
+    st->update = update;
+    if (same && (!memcmp(st->game, target, sizeof st->game) || !memcmp(st->target, target, sizeof st->target))) {
+        memcpy(target, st->target, sizeof st->target);   /* (run again, or not renewed: the target given) */
+        return;
+    }
+    memcpy(st->game, target, sizeof st->game);
+    if (same) {
+        float carry[3], carried = 0.0f, move = 0.0f;
+        for (int i = 0; i < 3; i++) {
+            carry[i] = st->target[i] - at[i];
+            carried += carry[i] * carry[i];
+            move += (target[i] - at[i]) * (target[i] - at[i]);
+        }
+        const float scale = carried > 9.0f * move ? 3.0f * sqrtf(move / carried) : 1.0f;   /* (at most three moves) */
+        for (int i = 0; i < 3 && carried > 0.0f; i++) target[i] += carry[i] * scale;
+    }
+    memcpy(st->target, target, sizeof st->target);
+    st->body = body;
+    st->held = 1;
 }
 
 /* The cloth's time: seconds_bits (the step context's time, a float), step_bits (the game's frame step, a float), on (HOS_FPS_CLOTH:

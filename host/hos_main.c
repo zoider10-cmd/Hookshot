@@ -4070,6 +4070,9 @@ void hos_oot_lift_player(Ctx *c, uint64_t actor) {
     if (movement < HOS_HEAP_BASE + 0x1d50 || recomp_load64(c, movement + 24) != actor ||
         !hos_oot_is_player(c, movement - 0x1d50)) return;
     if (!oot_event_playing(c)) hos_oot_opening(c, 3);   /* the opening has let Link go: later events keep their own skip */
+    void hos_oot_note_link(uint64_t components);   /* host/oot_high_fps.c: his driven body's target above 60 fps (here, in the
+                                                     debug tools' block, as the player's other hooks: built on both) */
+    hos_oot_note_link(components);
 
     // Link can be updated by different guest workers on successive frames.
     static SRWLOCK cheats_lock = SRWLOCK_INIT;

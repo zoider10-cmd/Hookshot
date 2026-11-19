@@ -1,7 +1,8 @@
 /* (hookshot) The sound manager's job at 60 Hz, the physics solver's steps rounded up, a horse's jump blend, a moving
-   floor's carry and a song playback's note flag once a note, under a Frame rate cap above 60, the cloth's time below 60
-   fps and its solves above 60: the lifted f_80435300, f_83373400, f_838ceb80, f_838cfc10, f_82c59eb0, f_80159dc0,
-   f_8015d490, f_838baa40, f_81b3aa48, f_81b47080, f_832b2af0 and f_832b2dc0 call these (nx2/oot_patches.py);
+   floor's carry, a song playback's note flag once a note and the target of Link's driven body, under a Frame rate cap above
+   60, the cloth's time below 60 fps and its solves above 60: the lifted f_80435300, f_83373400, f_838ceb80, f_838cfc10,
+   f_82c59eb0, f_80159dc0, f_8015d490, f_838baa40, f_81b3aa48, f_81b47080, f_832b2af0, f_832b2dc0 and f_804f5030 call these
+   (nx2/oot_patches.py; host/hos_main.c gives Link's body);
    host/oot_high_fps.h has why and the logic.
    HOS_FPS_LOG (on, by the switches' rule: =0 is off): what they do, every 600 calls. */
 #include "hos.h"
@@ -157,6 +158,51 @@ int hos_oot_floor_carry_slow(uint32_t inv_dt_bits, uint64_t slot) {
                     (long long)k, (long long)n, oot_bits_float(inv_dt_bits), oot_bits_float(frame));
     }
     return slow;
+}
+
+static volatile uint64_t link_body;      /* (Link's rigid body: hos_oot_note_link, from his update) */
+static volatile uint32_t link_updates;   /* (Link's updates, counted there: a carry needs the update before) */
+static OotDriveCarry drive_carry;        /* (under drive_lock) */
+static SRWLOCK drive_lock = SRWLOCK_INIT;
+
+/* Link's update (host/hos_main.c, hos_oot_lift_player): his components (actor +624); their +0x50, +0x20, +0x10, +8 is his
+   physics character, whose +0x20 is his rigid body. Each pointer is checked to be in guest memory. The count of his updates
+   goes first, whatever the walk finds */
+void hos_oot_note_link(uint64_t components) {
+    __atomic_add_fetch(&link_updates, 1, __ATOMIC_RELAXED);
+    uint64_t p = components;
+    static const uint32_t walk[5] = {0x50, 0x20, 0x10, 8, 0x20};
+    for (int i = 0; i < 5; i++) p = p >= HOS_HEAP_BASE && hos_guest_range(p + walk[i], 8) ? G64(p + walk[i]) : 0;
+    if (p >= HOS_HEAP_BASE && hos_guest_range(p + 0x8c, 0x24)) __atomic_store_n(&link_body, p, __ATOMIC_RELAXED);
+}
+
+/* f_804f5030, on its path for a body driven to a target, before it reads the target: controller x20 (its target at +0x3c, its
+   flags at +0x100), body x23 or x24 (its position at +0x8c, +0x9c, +0xac), slot the guest address of the pointer to the
+   game's time object (its +0x10 the frame's step) */
+void hos_oot_drive_target(uint64_t controller, uint64_t body, uint64_t slot) {
+    if (!body || body != __atomic_load_n(&link_body, __ATOMIC_RELAXED)) return;
+    const uint64_t object = G64(slot);
+    const uint64_t time = object ? G64(object) : 0;
+    const float step = time ? oot_bits_float(*(const uint32_t *)GP(time + 0x10)) : 0.0f;
+    const int driven = timed() && step > 0.0f && step < 1.0f && (G64(controller + 0x100) & 0x180) == 0x180;
+    float at[3], target[3], game[3];
+    memcpy(&at[0], GP(body + 0x8c), 4);
+    memcpy(&at[1], GP(body + 0x9c), 4);
+    memcpy(&at[2], GP(body + 0xac), 4);
+    memcpy(target, GP(controller + 0x3c), sizeof target);
+    memcpy(game, target, sizeof game);
+    AcquireSRWLockExclusive(&drive_lock);
+    oot_drive_carry(&drive_carry, body, __atomic_load_n(&link_updates, __ATOMIC_RELAXED), driven, at, target);
+    ReleaseSRWLockExclusive(&drive_lock);
+    if (!driven || !memcmp(game, target, sizeof game)) return;
+    memcpy(GP(controller + 0x3c), target, sizeof target);
+    if (fps_log()) {
+        static volatile LONG64 calls;
+        if (InterlockedIncrement64(&calls) % 600 == 0)
+            hos_log("oot: Link's driven body: its target carried %.4f m more than the game's (step %.3f)",
+                    sqrtf((target[0] - game[0]) * (target[0] - game[0]) + (target[1] - game[1]) * (target[1] - game[1]) +
+                          (target[2] - game[2]) * (target[2] - game[2])), step);
+    }
 }
 
 /* The time f_81b3aa48 loads from the cloth's step context, times the game's frame step below 60 fps (floats' bits). HOS_FPS_CLOTH=0
