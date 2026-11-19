@@ -552,7 +552,7 @@ def main():
           seed.forest_open(seed.CHILD, "DodongoCavern") == frozenset({seed.BB}) and seed.forest_open(seed.CHILD | {seed.BB}, "DodongoCavern") == frozenset({seed.BB}) and
           '"/".join(",".join([code for item, code in CHECK_CODES.items() if item in way] + token_codes(way))' in script,
           "the rules' ways are not made, read by the placement, or written for the tracker")
-    check(seed.PLACEMENT >= 6 and set(seed.DEKU_STORY) == {"song_zelda", "song_saria", "zelda_letter"} and
+    check(seed.PLACEMENT >= 6 and set(seed.DEKU_STORY) == {"song_zelda", "song_saria", "zelda_letter", "fairy_ocarina"} and
           "story = ({h for h, g in gifts.items() if g.key in DEKU_STORY} if placement >= 6 else set()) | slingshot_room" in script and
           all('Gift("%s", ' % k in script for k in seed.DEKU_STORY),
           "Impa's and Saria's lessons do not keep the Deku Tree done with Open forest exit (DEKU_STORY)")

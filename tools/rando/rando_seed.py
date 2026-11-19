@@ -1705,7 +1705,7 @@ FOREST_FLOOR = {"DodongoCavern": frozenset((BB,))}
 # Saria's lesson in the meadow waits for the same meeting: its trigger asks for DoorOfTime_IsAfter_Step01_Exp, which
 # Goto_HyruleCastle_MeetZelda sets (SacredForestMeadow_Child_Prefab_bbc3; found in play, 2026-11-15: the lesson was
 # not there in a new game with Open forest exit). Open forest exit leaves their CHILD (the Deku Tree done) in place.
-DEKU_STORY = ("song_zelda", "song_saria", "zelda_letter")
+DEKU_STORY = ("song_zelda", "song_saria", "zelda_letter", "fairy_ocarina")
 # The Deku Tree's Slingshot room (room 2) can't be left without the Slingshot in the remake: its way out is a ladder
 # that the eye switch drops (Obj_InsideTheDekuTree_FallingLadder_A_01, Obj_EyeSwitch_A_02), and a child has no warp
 # song (the owner's word, 2026-11-15). Its two chests, the Slingshot's own and "Chest (Deku Nuts), room 2", ask for the
@@ -2160,7 +2160,7 @@ SKULLTULA_MORE = frozenset(("Item_AgonyStone", "Item_Arrow_Fire", "Item_Arrow_Ic
                             "Item_NayruLove", "Item_BombBag_Medium", "Item_BombBag_Large", "Item_BulletBag_Medium", "Item_BulletBag_Large",
                             "Item_Quiver_Medium", "Item_Quiver_Large", "Item_StickBag_Medium", "Item_StickBag_Large", "Item_NutBag_Medium",
                             "Item_NutBag_Large", "TBox_Shield_Deku", "TBox_Shield_Hylian", "Item_BombchuBundle_Large"))
-SKULLTULA_NEVER = frozenset(("Item_ZeldaLetter", "Item_Scale_Silver", "Item_Scale_Gold", "Item_Wallet_Medium", "Item_Wallet_Large", "Item_Bottle",
+SKULLTULA_NEVER = frozenset(("Item_Ocarina_Fairy", "Item_ZeldaLetter", "Item_Scale_Silver", "Item_Scale_Gold", "Item_Wallet_Medium", "Item_Wallet_Large", "Item_Bottle",
                              "Obj_Armor_Goron", "Obj_Armor_Zora", "Obj_Heart_Piece", "Obj_Heart_Container") + SKULLTULA_ITEMS_NOT_YET)
 
 
@@ -2281,7 +2281,7 @@ def skulltula_holds(item, gating):
 # lesson's), the tunics (gifts' items whose pouch names are not theirs, Armor_Adult_*), the dungeons' stones and
 # medallions and the Heart Containers. A bundle Link has nothing to carry in is given as nothing, the piece taken: a
 # supply lost, not a check left (to be seen in play).
-PIECE_NEVER = frozenset(("Item_ZeldaLetter", "Obj_Armor_Goron", "Obj_Armor_Zora", "Obj_Heart_Container"))
+PIECE_NEVER = frozenset(("Item_Ocarina_Fairy", "Item_ZeldaLetter", "Obj_Armor_Goron", "Obj_Armor_Zora", "Obj_Heart_Container"))
 
 
 def piece_holds(item):
@@ -3901,7 +3901,7 @@ CHECK_CODES = collections.OrderedDict((
     ("Item_Gauntlet_Goron", "GB"), ("Item_Scale_Silver", "SS"), ("Item_Wallet_Medium", "AW"), ("Item_Wallet_Large", "GW"),
     ("Item_Melody_ZeldaLullaby", "ZL"), ("Item_Melody_EponaSong", "EP"), ("Item_Melody_SariaSong", "SR"), ("Item_Melody_TimeSong", "ST"),
     ("Item_Melody_StormSong", "SO"), ("Item_Melody_SpiritRequiem", "RQ"), ("Item_Melody_ShadowNocturne", "NC"),
-    ("Obj_Armor_Goron", "GT"), ("Obj_Armor_Zora", "ZT"), (BOTTLE, "BO"), ("Item_ZeldaLetter", "LE")))   # (the tunics, placement 12: TUNICS)
+    ("Obj_Armor_Goron", "GT"), ("Obj_Armor_Zora", "ZT"), (BOTTLE, "BO"), ("Item_ZeldaLetter", "LE"), ("Item_Ocarina_Fairy", "FO")))   # (the tunics, placement 12: TUNICS)
 
 
 def token_codes(way):
@@ -3955,6 +3955,7 @@ GIFT_PLACES = {
     "scrub_heart_secret": ("C", (-23.0, 119.1, 33.0)),
     "scrub_sticks": ("CA", (-45.2, 95.2, 72.6)),
     "scrub_nuts": ("CA", (7.3, 82.9, -85.6)),
+    "fairy_ocarina": ("C", (-115.0, 114.5, -38.2)),       # (Npc_Kokiri_Saria_Child, KokiriForest_ArriveLostWood, at x -117.1)
     "zelda_letter": ("C", (5.1, 126.8, -236.4)),           # (as Impa's lesson: the meeting's end, in the courtyard)
     "song_zelda": ("C", (5.1, 126.8, -236.4)),             # (DoorOfTime_MeetImpa_StartPos: before Impa, in the castle's courtyard)
     "song_epona": ("C", (-91.9, 150.6, 247.0)),            # (Npc_Hylia_Malon_Child at z 245.4, Lon Lon Ranch)
@@ -3990,7 +3991,7 @@ ITEM_WORDS = {
     "Item_GlassTruth": "Lens of Truth", "Item_Range_Bow": "Bow", "Item_Hammer": "Megaton Hammer", "Item_HeavyBoot": "Iron Boots",
     "Item_HoverBoot": "Hover Boots", "Item_Longshot": "Longshot", "Item_Gauntlet_Silver": "Silver Gauntlets", "Item_Shield_Mirror": "Mirror Shield",
     "Item_Gauntlet_Gold": "Golden Gauntlets", "Item_Gauntlet_Goron": "Goron's Bracelet", "Item_Dungeon_SmallKey": "small key", "Item_Dungeon_BossKey": "boss key", "Item_Dungeon_Map": "map",
-    "Item_Dungeon_Compass": "compass", "Item_ZeldaLetter": "Zelda's Letter",
+    "Item_Dungeon_Compass": "compass", "Item_ZeldaLetter": "Zelda's Letter", "Item_Ocarina_Fairy": "Fairy Ocarina",
 }
 EXIT_NEAR = 40.0
 MARKS = ("LocationArea", "MapIconEntranceAnchor")
@@ -4773,6 +4774,26 @@ def first_bag_words(data, english):
     return data, added
 
 
+# ---- The Fairy Ocarina shuffled (Songs: Anywhere, ocarina too, rando_songs 3; asked for 2026-11-15) ----
+# Saria gives the Fairy Ocarina on the forest's bridge (Dm_Kokiri_0155): the scene adds it to the pouch itself (an
+# action, EventTriggerAddOrRemovePouchContent with Actor Item_Ocarina_Fairy) and shows it (GetPouchContent's
+# DisplayGetByActorName with ActorName the same), so both are made the seed's item (gift_items with kinds 0 and 4:
+# OCARINA_KINDS). The ocarina is then a gating item: a song is played on one, so every way of a rule that names a song
+# asks for it too, and so does every lesson (the teacher's notes are played back): ocarina_need. The Ocarina of Time
+# (Zelda's, at the moat) is the other ocarina, given only with the three stones: the rules leave it out (too much,
+# never too little). Saria waits on the bridge after the Deku Tree (DEKU_STORY keeps its CHILD).
+OCARINA = "Item_Ocarina_Fairy"
+OCARINA_GIFT = Gift("fairy_ocarina", "Dm_Kokiri_0155", (OCARINA,), OCARINA, "KokiriForest", "Saria's gift, on the bridge", CHILD, "ocarina")
+OCARINA_KINDS = {"Dm_Kokiri_0155": (0, 4)}
+
+
+def ocarina_need(need, lesson=False):
+    """a rule with the ocarina asked for in each way that names a song (and in every way of a lesson's)"""
+    def way(w):
+        return w | {OCARINA} if lesson or any(i.startswith("Item_Melody_") for i in w) else w
+    return each(way, need)
+
+
 def remove_old(mod):
     """the files a run before this one wrote (its list: rando_manifest.txt), and the folders they leave empty"""
     listing = os.path.join(mod, "rando_manifest.txt")
@@ -5028,6 +5049,8 @@ def main():
         print("this seed was made with the big items shuffled: Major items is now On in the options, to keep it as it is")
     a.event_chests = a.event_chests or ini["rando_major"] != 0
     a.songs = a.songs if a.songs is not None else ini["rando_songs"]
+    a.ocarina = a.songs == 3 and SONGS_ANYWHERE   # (Anywhere, ocarina too: Anywhere with the Fairy Ocarina shuffled, OCARINA_GIFT)
+    a.songs = 2 if a.songs == 3 else a.songs
     a.songs = (a.songs if SONGS_ANYWHERE else 1) if a.songs in (1, 2) else 0
     a.dungeon_rewards = a.dungeon_rewards if a.dungeon_rewards is not None else ini["rando_dungeon_rewards"]
     a.dungeon_rewards = 1 if a.dungeon_rewards in (1, 2) and REWARDS_READY else 0
@@ -5107,7 +5130,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 7" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" talks skipped" if a.skip_cutscenes else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + (" skulltulas by day" if a.skulltulas_day else "") + (" letter 1" if a.letter else "") + " checks 10" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s%s" % (" anywhere 2" if a.songs == 2 else "", " ocarina 1" if a.ocarina else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + (" skulltulas by day" if a.skulltulas_day else "") + (" letter 1" if a.letter else "") + " checks 10" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -5271,6 +5294,10 @@ def main():
         for g in SCRUBS:
             gifts[gift_hash(g.key)] = g
             spots[gift_hash(g.key)] = [g.area, g.item, None, None, "scrub", g.name, ""]
+    if a.ocarina:   # (the Fairy Ocarina: with Songs' Anywhere, ocarina_need)
+        PROGRESSION = PROGRESSION | {OCARINA}
+        gifts[gift_hash(OCARINA_GIFT.key)] = OCARINA_GIFT
+        spots[gift_hash(OCARINA_GIFT.key)] = [OCARINA_GIFT.area, OCARINA_GIFT.item, None, None, "gift", OCARINA_GIFT.name, ""]
     if a.letter:   # (Zelda's Letter: with or without Quest rewards, letter_need)
         PROGRESSION = PROGRESSION | {LETTER}
         gifts[gift_hash(LETTER_GIFT.key)] = LETTER_GIFT
@@ -5348,8 +5375,11 @@ def main():
                               GIFT_PLACES.get(gifts[h].key, ("CA",))[0] == "A" if h in gifts else grown(h, spots[h][0]), a.open_forest, spots[h][0])
                  for h, n in needs.items()}
     bolero = LETTER_BOLERO in PROGRESSION and a.songs != 0
-    gate = (lambda need, area: letter_need(need, area, bolero)) if a.letter else (lambda need, area: need)
+    letter_gate = (lambda need, area: letter_need(need, area, bolero)) if a.letter else (lambda need, area: need)
+    gate = (lambda need, area: ocarina_need(letter_gate(need, area))) if a.ocarina else letter_gate
     needs = {h: gate(n, spots[h][0]) for h, n in needs.items()}
+    if a.ocarina:   # (a lesson: its notes are played back on an ocarina)
+        needs = {h: ocarina_need(n, True) if h in lessons else n for h, n in needs.items()}
     door = (lambda need, h, area: gate(each(door_need, forest(need, area), grown(h, area), a.open_forest, area), area)) if a.open_door else (
         lambda need, h, area: gate(forest(need, area), area))   # (with Open forest exit's step: the Gold Skulltulas' and the Pieces of Heart's)
     # (what a Gold Skulltula asks for, by the same settings; from placement 8 without Open forest exit's step: in a
@@ -5627,7 +5657,8 @@ def main():
         twin = "%s/%s%s.bfevfl.zs" % (GIFT_FLOWS, flow, FLOW_TWIN)
         for rel in ["%s/%s.bfevfl.zs" % (GIFT_FLOWS, flow)] + ([twin] if os.path.isfile(os.path.join(romfs, *twin.split("/"))) else []):
             try:
-                now, found = gift_items(unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts), change)
+                now, found = gift_items(unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts), change,
+                                        kinds=OCARINA_KINDS.get(flow, (4,)))
             except (OSError, ValueError, struct.error) as e:
                 sys.exit("a gift's flow, %s: %s. Nothing written." % (rel, e))
             if set(change) - found:
