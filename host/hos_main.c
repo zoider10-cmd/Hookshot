@@ -2898,6 +2898,15 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
             const char *home = child ? "KokiriForest_Child" : "Market_Adult";
             unsigned index = 0;
             const unsigned count = sizeof oot_destinations / sizeof oot_destinations[0];
+            /* (in a dungeon: its entrance, asked for 2026-11-18. A dungeon's row is one map for both ages, the Debug tab's
+               teleport into it; Link's map is the dungeon's when its name is the row's, or that and "_...") */
+            for (unsigned d = 0; d < count; d++) {
+                const char *cb = oot_destinations[d].child_banc, *ab = oot_destinations[d].adult_banc;
+                if (cb && ab && !strcmp(cb, ab) && oot_banc_in_folder(oot_link_map, cb)) {
+                    home = cb, index = d;
+                    break;
+                }
+            }
             for (; index < count; index++) {
                 const char *banc = child ? oot_destinations[index].child_banc : oot_destinations[index].adult_banc;
                 if (banc && !strcmp(banc, home)) break;

@@ -161,8 +161,8 @@ constexpr int kTrackerShowRow = 1;    // (the tab's second row: what it lists)
 constexpr int kTrackerHomeRow = 2;
 constexpr int kTrackerFirstArea = 3;  // (the first of the areas' rows, after the whole game's and those two)
 const char kTrackerHomeHelp[] =
-    "Takes Link home: to the Kokiri Forest as a child, to the Market as an adult. For when there is no way back from where "
-    "he is, a warp song played with no other to leave by. Confirm twice.";
+    "Takes Link home: to the Kokiri Forest as a child, to the Market as an adult; in a dungeon, to its entrance. For when "
+    "there is no way back from where he is, a warp song played with no other to leave by. Confirm twice.";
 ULONGLONG tracker_home_asked = 0;         // (when the row was confirmed once; within kTrackerForgetMs the next one goes)
 // The checks one by one: tools/rando/rando_seed.py writes <game folder>\mods\rando-seed\checks.txt beside the tracker's
 // file, a line "<area>|<kind>|<folder>|<ages>|<x> <y> <z>" for each chest and Gold Skulltula of the seed (tracker_load
@@ -346,7 +346,7 @@ std::string tracker_says(int row) {
         if (!row && tracker_forget_asked && GetTickCount64() - tracker_forget_asked < kTrackerForgetMs)
             return "Press again to forget what is collected";
         if (row == kTrackerHomeRow && tracker_check_count)
-            return tracker_home_asked && GetTickCount64() - tracker_home_asked < kTrackerForgetMs ? "Press again to go home" : "Kokiri Forest, or the Market";
+            return tracker_home_asked && GetTickCount64() - tracker_home_asked < kTrackerForgetMs ? "Press again to go home" : "Kokiri Forest, the Market, or the dungeon's entrance";
         int in = 0, known = 0, left = 0, told = 0, all = 0, junk = 0;
         for (int i = 0; i < tracker_check_count; i++) {
             if (row && strcmp(tracker_checks[i].area, tracker_name[row])) continue;
