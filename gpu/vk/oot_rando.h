@@ -104,8 +104,8 @@
       "The Kokiri Sword in its chest and the Deku Shield on the Kokiri shop's shelf. Off: both stay where the game has them. On: the sword's chest takes part with Major items and the shield's shelf with Shops, and the way past Mido asks for both unless Open Deku Tree is on.", \
       "Off", "On") \
     X(OPEN_DOOR, "Open Door of Time", "rando_open_door", \
-      "The Temple of Time's inner door is open from a new game's start, and the Master Sword takes Link forward and back in time whenever he draws it or puts it back. The story's own scene there (the Sage of Light) still comes when the three stones and the Song of Time are done. The seed's logic counts on it a little: places only an adult can reach no longer ask for the Boomerang, nor (with Open forest exit) for the Kokiri Sword and Slingshot; they still ask for bombs.", \
-      "Off", "On") \
+      "The Temple of Time's inner door is open from a new game's start, and the Master Sword takes Link forward and back in time whenever he draws it or puts it back. The story's own scene there (the Sage of Light) still comes when the three stones and the Song of Time are done. The seed's logic counts on it a little: places only an adult can reach no longer ask for the Boomerang, nor (with Open forest exit) for the Kokiri Sword and Slingshot; they still ask for bombs. With the Song of Time: the door stays shut until Link holds the Song of Time and an ocarina; then it is gone the next time he enters the temple, and the sword takes him through time as with On. With the songs shuffled, places only an adult has ask for the Song of Time in place of the three stones.", \
+      "Off", "On", "With the Song of Time") \
     X(AMMO_PICKUPS, "Ammo pick-ups", "rando_ammo_pickups", \
       "Bombs, Deku Nuts, Deku Seeds, Deku Sticks and arrows lying in the world or dropped by grass, pots and enemies. As the game has it: what the pick-up says. 5 each: at least 5. Fill the bag: the bag is filled to what it holds. Not chests or shops.", \
       "As the game has it", "5 each", "Fill the bag") \

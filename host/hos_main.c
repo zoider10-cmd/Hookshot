@@ -1308,12 +1308,28 @@ static int oot_pouch_change(Ctx *c, const char *name, int by);
 /* (the adult's Market has its location, and so its minimap, only once the scene of an adult leaving the temple has
    played, which the plain way through time never reaches: tools/rando/rando_seed.py OPEN_DOOR. Set like the door's) */
 #define OOT_LEFT_TEMPLE_FLAG 0xc1b29b0au   /* HavePlayedEvent.Dm_TimeTemple_0065 */
+/* (the Door of Time by the Song of Time, rando_open_door 2: tools/rando/rando_seed.py DOOR_SONG) Link holds the Song of
+   Time and an ocarina: the door's name is answered with a stand-in as the Market's actors are read (hos_oot_shelf_actor),
+   and the rest of Open Door of Time's work is done from then on. Read each second here, on the game's thread */
+static int oot_door_song_open;
+#define OOT_DOOR_STAND_IN "EftLoc_TimeTemple_Fog_HideOutside_00"   /* (an invisible effect marker of the temple's own) */
 static void oot_time_door(Ctx *c, int64_t now, uint64_t actor) {
     int hos_rando_open_door(void);   /* host/oot_rando.c */
     int hos_pad_a_held(void);        /* host/nn_hid.c */
     static int held;
     static int64_t ask_at, flag_at;
-    if (!hos_rando_open_door()) return;
+    const int mode = hos_rando_open_door();
+    if (!mode) return;
+    if (mode == 2 && !__atomic_load_n(&oot_door_song_open, __ATOMIC_RELAXED)) {
+        if (now < flag_at) return;
+        flag_at = now + 1000000000LL;
+        if (oot_item_count(c, "Item_Melody_TimeSong") > 0 &&   /* (as the Debug tab's inventory reads them: songs too) */
+            (oot_item_count(c, "Item_Ocarina_Fairy") > 0 || oot_item_count(c, "Item_Ocarina_Time") > 0)) {
+            __atomic_store_n(&oot_door_song_open, 1, __ATOMIC_RELEASE);
+            hos_log("rando: Link holds the Song of Time and an ocarina: the Door of Time is open from the next entry into the temple");
+            flag_at = 0;
+        } else return;
+    }
     if (now >= flag_at) {   /* (each second) */
         int open = 1;
         flag_at = now + 1000000000LL;
@@ -3639,6 +3655,25 @@ static int oot_tier_shelf_want(int i) {
 uint64_t hos_oot_shelf_actor(Ctx *c, uint64_t name_at) {
 #if defined(_WIN32) || defined(__linux__)
     static const char head[] = "Shop_Rando_";
+    {   /* (the Door of Time by the Song of Time: its name answered with a stand-in once open, oot_time_door; a test's
+           HOS_OOT_DOOR_AS=<actor> answers it with that actor's whatever the setting) */
+        static const char door[] = "Obj_TimeTemple_Door_A_01";
+        static const char *test = (const char *)1;
+        if (test == (const char *)1) test = getenv("HOS_OOT_DOOR_AS");
+        const char *as = test && *test ? test : __atomic_load_n(&oot_door_song_open, __ATOMIC_ACQUIRE) ? OOT_DOOR_STAND_IN : NULL;
+        if (as && name_at) {
+            int same = 1;
+            for (int i = 0; same && i < (int)sizeof door; i++) same = (char)recomp_load8(c, name_at + i) == door[i];
+            if (same) {
+                static uint64_t slot;
+                if (!slot && (slot = hos_sys_alloc(64, 16)) != 0) snprintf((char *)A64_PTR(slot), 64, "%s", as);
+                if (slot) {
+                    hos_log("rando: the Door of Time's actor read: answered as %s", as);
+                    return slot;
+                }
+            }
+        }
+    }
     if (!name_at || !__atomic_load_n(&oot_tier_shelf_count, __ATOMIC_ACQUIRE)) return name_at;
     for (int i = 0; head[i]; i++)
         if ((char)recomp_load8(c, name_at + i) != head[i]) return name_at;

@@ -186,10 +186,11 @@ DOOR_SONGS = {"ForestTemple": frozenset((_SARIA, _TIME)), "FireTemple": frozense
               "WaterTemple": frozenset((_ZL, _TIME)), "ShadowTemple": frozenset((_TIME,)), "GerudoTrainingGround": frozenset((_TIME,))}
 
 
-def door_away(data):
+def door_away(data, door=True):
     """A map file with the Door of Time put far under the map (DOOR_AWAY) and Sheik to the side of the sword's room
     (DOOR_SHEIK_ASIDE): (the file written anew, or None when it has neither; how many doors; how many Sheiks). Its
-    other fields are as they were."""
+    other fields are as they were. door False: Sheik alone (the door by the Song of Time, DOOR_SONG: the game's side
+    takes the door away)."""
     tree, version = byml_parse(data)
     actors = tree[1].get("Actors")
     actors = actors[1] if actors and actors[0] == "array" else ()
@@ -203,7 +204,7 @@ def door_away(data):
         at = actor[1].get("Translate")
         name = actor[1].get("Gyaml", ("", ""))[1]
         spot = name.startswith(DOOR_SHEIK_SPOT) and actor[1].get("Hash", ("", None))[1] in spots
-        if (not (name in (DOOR_ACTOR, DOOR_SHEIK) or spot) or not at or at[0] != "array" or len(at[1]) != 3 or
+        if (not ((door and name == DOOR_ACTOR) or name == DOOR_SHEIK or spot) or not at or at[0] != "array" or len(at[1]) != 3 or
                 any(not isinstance(v[1], bytes) or len(v[1]) != 4 for v in at[1])):
             continue
         axis, by = (1, -DOOR_AWAY) if name == DOOR_ACTOR else (2, DOOR_SHEIK_ASIDE)
@@ -213,7 +214,7 @@ def door_away(data):
     return (byml_build(tree, version) if doors or sheiks else None), doors, sheiks
 
 
-def door_need(need, adult_only, open_forest=False, area=None):
+def door_need(need, adult_only, open_forest=False, area=None, song=False):
     """what a place asks for with the Door of Time open (see above): `need` as the other settings made it;
     adult_only: only an adult has the place; open_forest: Open forest exit is on too; area: the place's (its Banc
     folder), for the dungeons gone through one by one"""
@@ -228,7 +229,7 @@ def door_need(need, adult_only, open_forest=False, area=None):
         free.update((BB, BR))
     if area in DOOR_SONGS:
         free.update({_ZL, _SARIA, _TIME, _STORMS} - DOOR_SONGS[area])
-    return frozenset(need - free)
+    return frozenset(need - free) | ({_TIME} if song else frozenset())   # (DOOR_SONG: the door opens by the Song of Time)
 FLAG_LIST = "GameData"   # (the folder of the romfs: GameDataList.Product.<n>.byml.zs in it)
 # The clock of Hyrule Field. Until the owl's first cutscene there, the field's sky stays the day's whatever the time is
 # set to: no day turns to night, and the Sun's Song's night is day again at once (seen in play). What ends it is the
@@ -4870,6 +4871,19 @@ def records_moved(folder, was, now):
     return moved
 
 
+# ---- The Door of Time by the Song of Time (rando_open_door 2, asked for 2026-11-16) ----
+# With Open Door of Time off, the door opens once Link holds the Song of Time and an ocarina, no stones. The game opens a
+# map file once a session and keeps it, so the door is not taken out of the map (door_away) but by the game's side: as
+# the Market's actors are read at each entry into the area, it answers the door's name with an invisible effect marker
+# of the temple's own once Link holds them (host/hos_main.c, the door's stand-in; seen without a window 2026-11-19:
+# the doorway open, and Link walked through to x 124.8 where the door stops him at 117.5). It also sets the door's flags
+# and gives the sword's way through time as Open Door of Time does. The seed moves Sheik aside (bug 19) and gives the
+# adult the sword's prompt. Rules: with the songs shuffled (the Song of Time can come before the stones) the places only
+# an adult has ask for the Song of Time in place of what it takes to be an adult (door_need, song); otherwise the song
+# comes after the stones as in the game, and the rules are the game's.
+DOOR_SONG = 2
+
+
 def remove_old(mod):
     """the files a run before this one wrote (its list: rando_manifest.txt), and the folders they leave empty"""
     listing = os.path.join(mod, "rando_manifest.txt")
@@ -5141,7 +5155,8 @@ def main():
     # (the options file's rando_open_deku and rando_open_forest too, so that the launcher's run at Play keeps them)
     a.open_deku = a.open_deku or ini["rando_open_deku"] != 0
     a.open_forest = a.open_forest or ini["rando_open_forest"] != 0
-    a.open_door = a.open_door or ini["rando_open_door"] != 0
+    a.door_song = not a.open_door and ini["rando_open_door"] == 2   # (DOOR_SONG: the door by the Song of Time)
+    a.open_door = a.open_door or ini["rando_open_door"] == 1
     a.skip_intro = a.skip_intro or ini["rando_skip_intro"] != 0
     a.skip_cutscenes = a.skip_cutscenes or ini["rando_skip_cutscenes"] != 0
     a.start_rupees = a.start_rupees or ini["rando_start_rupees"] != 0
@@ -5205,7 +5220,7 @@ def main():
             flags.update(OPEN[name])
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
-                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 7" if a.open_door else "") + (" intro skipped" if a.skip_intro else "") + (" talks skipped" if a.skip_cutscenes else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
+                                                               (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 7" if a.open_door else "") + (" door song 1" if a.door_song else "") + (" intro skipped" if a.skip_intro else "") + (" talks skipped" if a.skip_cutscenes else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
                                                                (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s%s" % (" anywhere 2" if a.songs == 2 else "", " ocarina 1" if a.ocarina else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + (" skulltulas by day" if a.skulltulas_day else "") + (" letter 1" if a.letter else "") + " checks 10" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
@@ -5434,8 +5449,9 @@ def main():
     rng = random.Random("stage2:%d:%d:%d%s%s%s" % (seed, which, min(keys_mode, 1), ":events" if a.event_chests else "", ":logic" if logic else "",
                                                    ":songs2" if a.songs == 2 else ":songs" if a.songs else ""))
     needs = {h: rule(s[0], s[6]) for h, s in spots.items()}
+    door_rules = a.open_door or (a.door_song and _TIME in PROGRESSION)   # (DOOR_SONG with the songs shuffled)
     if placement >= 10:   # (a chest's own rule, CHEST_NEEDS)
-        needs = {h: chest_need(h, n, a.open_door) for h, n in needs.items()}
+        needs = {h: chest_need(h, n, door_rules) for h, n in needs.items()}
     slingshot_room = {h for h in SLINGSHOT_ROOM if h in needs} if placement >= 7 else set()
     needs = {h: n | CHILD if h in slingshot_room else n for h, n in needs.items()}
     if a.quests:   # (the rules with the gifts' two gating items named; a gift asks for what its line of GIFTS says)
@@ -5459,9 +5475,10 @@ def main():
     needs = {h: n if h in story else forest(n, spots[h][0]) for h, n in needs.items()}
     # (Open Door of Time: what it takes to be an adult is not asked of an adult's own places, door_need)
     grown = lambda h, area: area in DOOR_ADULT_AREAS or check_ages(maps[h]) == "A" if h in maps else area in DOOR_ADULT_AREAS
-    if a.open_door:
+    if door_rules:
         needs = {h: each(door_need, n, shelves[h][0].ages == "A" if h in shelves else
-                              GIFT_PLACES.get(gifts[h].key, ("CA",))[0] == "A" if h in gifts else grown(h, spots[h][0]), a.open_forest, spots[h][0])
+                              GIFT_PLACES.get(gifts[h].key, ("CA",))[0] == "A" if h in gifts else grown(h, spots[h][0]), a.open_forest, spots[h][0],
+                         a.door_song)
                  for h, n in needs.items()}
     bolero = LETTER_BOLERO in PROGRESSION and a.songs != 0
     letter_gate = (lambda need, area: letter_need(need, area, bolero)) if a.letter else (lambda need, area: need)
@@ -5469,12 +5486,12 @@ def main():
     needs = {h: gate(n, spots[h][0]) for h, n in needs.items()}
     if a.ocarina:   # (a lesson: its notes are played back on an ocarina)
         needs = {h: ocarina_need(n, True) if h in lessons else n for h, n in needs.items()}
-    door = (lambda need, h, area: gate(each(door_need, forest(need, area), grown(h, area), a.open_forest, area), area)) if a.open_door else (
+    door = (lambda need, h, area: gate(each(door_need, forest(need, area), grown(h, area), a.open_forest, area, a.door_song), area)) if door_rules else (
         lambda need, h, area: gate(forest(need, area), area))   # (with Open forest exit's step: the Gold Skulltulas' and the Pieces of Heart's)
     # (what a Gold Skulltula asks for, by the same settings; from placement 8 without Open forest exit's step: in a
     #  Skulltula's rule CHILD is often a weapon to kill it, or the sword past Mido into the Deku Tree, not the forest's
     #  way out. Found 2026-11-15: a seed put the Kokiri Sword on a Deku Tree Skulltula, with Open Deku Tree off)
-    skull_door = (lambda need, h, area: gate(each(door_need, need, grown(h, area), a.open_forest, area), area)) if a.open_door else (
+    skull_door = (lambda need, h, area: gate(each(door_need, need, grown(h, area), a.open_forest, area, a.door_song), area)) if door_rules else (
         lambda need, h, area: gate(need, area))
     skull_door = skull_door if placement >= 8 else door
     bottles = BOTTLE in PROGRESSION   # (placement BOTTLE_FROM with the bottles shuffled: soil_need)
@@ -6067,8 +6084,8 @@ def main():
             sys.exit("either age's items: %s. Nothing written." % e)
         print("Either age's items: %s usable by both ages (%d marks set)" % ("the swords" if a.ageless == 1 else "the swords and the age-only items", count))
 
-    # ---- Open Door of Time: the door out of the way, in the child's Market and the adult's ----
-    if a.open_door:
+    # ---- Open Door of Time: the door out of the way, in the child's Market and the adult's (DOOR_SONG: Sheik alone) ----
+    if a.open_door or a.door_song:
         doors = sheiks = 0
         folder_map = os.path.join(romfs, "Banc", DOOR_AREA)
         try:
@@ -6079,7 +6096,7 @@ def main():
                 data = changed[rel] if rel in changed else unpack(open(os.path.join(folder_map, n), "rb").read(), zs, dicts)
                 if DOOR_ACTOR.encode() not in data and DOOR_SHEIK.encode() not in data:
                     continue
-                new, count, aside = door_away(data)
+                new, count, aside = door_away(data, door=a.open_door)
                 if new is not None:
                     changed[rel] = new
                     sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
@@ -6087,7 +6104,7 @@ def main():
                     sheiks += aside
         except (OSError, ValueError, struct.error, IndexError) as e:
             sys.exit("the Door of Time: %s. Nothing written." % e)
-        if not doors:
+        if not doors and a.open_door:
             sys.exit("the Door of Time: the Market's map files have no such door. Nothing written.")
         if not sheiks:
             sys.exit("the Door of Time: the Market's map files have no Sheik by the sword. Nothing written.")
@@ -6295,7 +6312,7 @@ def main():
     except (OSError, ValueError, struct.error) as e:
         sys.exit("the cucco lady's game: %s. Nothing written." % e)
     print("the cucco lady's game wants one cucco")
-    if a.open_door:   # (the adult's "A" at the sword from the start, SWORD_PROMPT_LOGIC)
+    if a.open_door or a.door_song:   # (the adult's "A" at the sword from the start, SWORD_PROMPT_LOGIC)
         try:
             flag_files[SWORD_PROMPT_LOGIC] = sword_prompt_open(unpack(open(os.path.join(romfs, *SWORD_PROMPT_LOGIC.split("/")), "rb").read(), zs, dicts))
         except (OSError, ValueError, struct.error) as e:

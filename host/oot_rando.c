@@ -35,8 +35,8 @@ int hos_rando_progressive(void) { return rando_active && rando.v[OOT_RANDO_PROGR
 /* (a test's: HOS_OOT_OPEN_DOOR=1 is the setting on, whatever the options say) */
 int hos_rando_open_door(void) {
     static int test = -1;
-    if (test < 0) { const char *e = getenv("HOS_OOT_OPEN_DOOR"); test = e && *e == '1'; }
-    return rando_active && (test || rando.v[OOT_RANDO_OPEN_DOOR] != 0);
+    if (test < 0) { const char *e = getenv("HOS_OOT_OPEN_DOOR"); test = e && (*e == '1' || *e == '2') ? *e - '0' : 0; }
+    return rando_active ? (test ? test : rando.v[OOT_RANDO_OPEN_DOOR]) : 0;   /* (0 off, 1 open, 2 by the Song of Time) */
 }
 /* Ammo pick-ups (0 as the game has it, 1 five each, 2 the bag filled) and Rupees fill the wallet: on with the randomizer
    (hos_main.c oot_pickup_qol). A test's: HOS_OOT_AMMO=<0-2> and HOS_OOT_RUPEE_FILL=<0|1> over the options */
