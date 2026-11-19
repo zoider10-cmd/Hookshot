@@ -28,7 +28,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # (python -I le
 import kit
 import nso2  # noqa: F401  (DT_RELR)
 import insn
-import fastvec   # (Longshot deb08f36) TBL/EXT, vector loads, DUP and FMUL by element as single vector instructions
 import fastfp   # (hookshot) fast float regions (A64_FASTFP): its emit_function, under lift_fixes' and poll's wrappers
 import dead_flags   # (hookshot) the kit's dead_flags, answered at once for a function that writes no flag
 import walk   # (hookshot) the kit's walk, with one shared entry per plain op's word
@@ -47,7 +46,6 @@ import a64_lift
 import a64_rtgen
 
 insn.install()
-fastvec.install()   # (around the kit's vectorize_fpx, op_text and fpx_header)
 fastfp.install()   # (before lift_fixes and poll wrap emit_function: theirs go around this one)
 dead_flags.install()
 walk.install()
