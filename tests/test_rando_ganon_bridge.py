@@ -124,7 +124,7 @@ def main():
     check('"rando_ganon_bridge", "Ganon\'s Castle bridge", new[] { "As the game has it", "Open", "6 medallions" }, new[] { 0, 1, 2 }'
           in launcher, "the launcher has no row for the bridge's setting")
     seed = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_ganon_bridge": 0}' in seed, "the seed tool does not know the setting's key")
+    check('"rando_ganon_bridge": 0' in seed, "the seed tool does not know the setting's key")
     rando = (ROOT / "host" / "oot_rando.c").read_text(encoding="utf-8")
     check("rando.v[OOT_RANDO_GANON_BRIDGE]" in rando and 'getenv("HOS_OOT_GANON_BRIDGE")' in rando,
           "the game's side does not read the setting")

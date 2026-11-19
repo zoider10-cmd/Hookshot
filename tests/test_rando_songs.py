@@ -236,7 +236,7 @@ def main():
 
     # ---- the script, the menu and the game ----
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
-    check('"rando_songs": 0' in script and '(" songs 2%s" % (" anywhere 2" if a.songs == 2 else "") if a.songs else "")' in script and
+    check('"rando_songs": 0' in script and '(" songs 2%s%s" % (" anywhere 2" if a.songs == 2 else "", " ocarina 1" if a.ocarina else "") if a.songs else "")' in script and
           "logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic" in script and '":songs2" if a.songs == 2 else ":songs" if a.songs else ""' in script,
           "the script does not read the setting, does not name it in the seed's stamp (Song spots' as it was, Anywhere apart), or leaves the logic off with it")
     check("(frozenset(SONG_ITEMS), frozenset(lessons)) if a.songs == 1 else None," in script and "now, found = gift_items(was, words, kinds=(0, 1, 4))" in script and
