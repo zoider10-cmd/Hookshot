@@ -883,6 +883,22 @@ SHELF_FIT_SHOP = {"kmedicine": {"Item_DekuStickBundle_Small": (0.3, 0.4)}}
 # (the Market's Potion Shop has the same cabinet (the owner's pictures, 2026-11-18: the Deku Sticks lying at the back of
 #  their arch, the Kokiri Sword small and on its side, the bomb bag behind its price board, the Hylian Shield large and
 #  over its shelf's edge): the same turns and fits as Kakariko's)
+SHELF_TURN_SHOP["medicine"] = dict(SHELF_TURN_SHOP["kmedicine"])
+SHELF_FIT_SHOP["medicine"] = dict(SHELF_FIT_SHOP["kmedicine"])
+# (bug 74, test pictures 2026-11-19 in "Child Potion Shop at day ...": the Kokiri Sword unturned and 1.3 times its size
+#  shows its whole blade, its usual turn lay edge-on and small; the Hylian Shield at 0.75 and 0.15 m up fits its arch,
+#  as it was it hung over the shelf's edge)
+SHELF_TURN_SHOP["medicine"]["Item_Sword_Kokiri"] = (0.0, 0.0, 0.0)
+SHELF_FIT_SHOP["medicine"].update({"Item_Sword_Kokiri": (0.15, 1.3), "TBox_Shield_Hylian": (0.15, 0.75)})
+# (bug 76, test pictures 2026-11-19 in "Child Bazaar at Day ...": the Hookshot's model has its middle at the handle, and
+#  lying as it does it reached left past its spot; turned half round and at 0.8 it sits on its spot. Every shop: the
+#  others' shelves are no wider)
+SHELF_TURN["Item_Hookshot"] = (0.0, 3.14, 0.0)
+SHELF_SCALE["Item_Hookshot"] = 0.8
+# (bug 80, test pictures 2026-11-19 in "Child Goron Shop ...": the Goron shop's shelves are long boxes; the smallest
+#  arrow bundle turned the other way and 0.25 m up lies on its spot, its usual turn ran off the shelf's left edge)
+SHELF_TURN_SHOP["goron"] = {"TBox_ArrowBundle_Small": (0.0, -1.57, 0.0)}
+SHELF_FIT_SHOP["goron"] = {"TBox_ArrowBundle_Small": (0.25, 0.8)}
 
 
 def shelf_shop(actor):
