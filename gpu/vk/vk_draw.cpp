@@ -10213,6 +10213,9 @@ bool notes_lost_by_driver() {
 }
 
 void precompile_run(void (*progress)(size_t done, size_t total)) {
+    // (the texture pipelines first, into the start's pipeline cache: not compiled inside a frame of play, vk_texture.cpp)
+    { ParLock lk; pcache_init(); }
+    texture_pipelines_warm();
     // (hookshot, RX_VK_LOAD=create: only once every note has been built into the pipeline cache, so that a load from the
     // caches alone never meets a pipeline the prepare should have compiled. The first start after a preparation builds them
     // there and lets each go, precompile_warm: before the game, and never more of them alive than workers)

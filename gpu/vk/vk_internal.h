@@ -503,6 +503,7 @@ bool invalidate_lost_surface(VkResult result);   // (dev.present_mu held)
 bool replay_start();                          // vk_replay.cpp
 bool precompile_wanted();                     // vk_draw.cpp
 void precompile_run(void (*progress)(size_t done, size_t total));
+void texture_pipelines_warm();                 // (vk_texture.cpp: the ASTC decoder, BC encoders and GPU unswizzle made before the game)
 bool prepare_run(void (*progress)(size_t done, size_t total), bool background, bool refresh_states = false);
 bool prepare_is_update();
 void prepare_background();

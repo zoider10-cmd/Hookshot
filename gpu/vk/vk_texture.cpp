@@ -532,7 +532,20 @@ void helper_thread_start() {
 #endif
 }
 
+VkResult shared_compute_pipeline(const VkComputePipelineCreateInfo* ci, VkPipeline* out);   // (vk_draw.cpp: through the pipeline cache kept across runs)
 namespace {
+/// (longshot) A texture pipeline (the ASTC decoder, the BC encoders, the GPU unswizzle) through the pipeline cache kept across
+/// runs, so that a later start finds it there; with none where that one is refused. Each was compiled without a cache the first
+/// time a texture needed it, inside a frame on the render thread: 274 ms for the ASTC decoder's, the whole of a 283 ms frame,
+/// and ~130 ms of a 494 ms one for the BC encoder's (an RTX 3090, 2026-11-18). texture_pipelines_warm makes them before the game.
+/// The caller holds no IntelDriverGate: the shared path takes that lock itself
+VkResult texture_compute_pipeline(const VkComputePipelineCreateInfo& ci, VkPipeline& out) {
+    out = VK_NULL_HANDLE;
+    if (shared_compute_pipeline(&ci, &out) == VK_SUCCESS && out) return VK_SUCCESS;
+    out = VK_NULL_HANDLE;
+    IntelDriverGate gate;
+    return extern_guarded_compute(VK_NULL_HANDLE, &ci, &out);
+}
 Staging staging(uint64_t n, uint64_t align = 256) {
     // Separate slices may already be read by submitted parallel segments. A flush must not share their cache atom.
     align = std::max<uint64_t>(align, dev.props.limits.nonCoherentAtomSize);
@@ -649,15 +662,17 @@ bool astc_ready() {
     mi.codeSize = spv.size;
     mi.pCode = spv.code;
     VkShaderModule m = VK_NULL_HANDLE;
-    IntelDriverGate gate;
-    if (extern_guarded_shader_module(&mi, &m) != VK_SUCCESS) return false;
+    {
+        IntelDriverGate gate;   // (the module's only: texture_compute_pipeline takes the same lock)
+        if (extern_guarded_shader_module(&mi, &m) != VK_SUCCESS) return false;
+    }
     VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     ci.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     ci.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
     ci.stage.module = m;
     ci.stage.pName = "main";
     ci.layout = astc_layout;
-    const VkResult r = extern_guarded_compute(VK_NULL_HANDLE, &ci, &astc_pipe);
+    const VkResult r = texture_compute_pipeline(ci, astc_pipe);
     vkDestroyShaderModule(dev.device, m, nullptr);
     if (r != VK_SUCCESS) return false;
     state = 1;
@@ -857,15 +872,17 @@ bool bc_ready() {
         mi.codeSize = bytes;
         mi.pCode = code;
         VkShaderModule m = VK_NULL_HANDLE;
-        IntelDriverGate gate;
-        if (extern_guarded_shader_module(&mi, &m) != VK_SUCCESS) return false;
+        {
+            IntelDriverGate gate;   // (the module's only: texture_compute_pipeline takes the same lock)
+            if (extern_guarded_shader_module(&mi, &m) != VK_SUCCESS) return false;
+        }
         VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
         ci.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         ci.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
         ci.stage.module = m;
         ci.stage.pName = "main";
         ci.layout = bc_layout;
-        const VkResult r = extern_guarded_compute(VK_NULL_HANDLE, &ci, &pipe);
+        const VkResult r = texture_compute_pipeline(ci, pipe);
         vkDestroyShaderModule(dev.device, m, nullptr);
         return r == VK_SUCCESS;
     };
@@ -1300,21 +1317,34 @@ bool unswizzle_ready() {
     mi.codeSize = spv.size;
     mi.pCode = spv.code;
     VkShaderModule m = VK_NULL_HANDLE;
-    IntelDriverGate gate;
-    if (extern_guarded_shader_module(&mi, &m) != VK_SUCCESS) return false;
+    {
+        IntelDriverGate gate;   // (the module's only: texture_compute_pipeline takes the same lock)
+        if (extern_guarded_shader_module(&mi, &m) != VK_SUCCESS) return false;
+    }
     VkComputePipelineCreateInfo ci{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     ci.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     ci.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
     ci.stage.module = m;
     ci.stage.pName = "main";
     ci.layout = unsw_layout;
-    const VkResult r = extern_guarded_compute(VK_NULL_HANDLE, &ci, &unsw_pipe);
+    const VkResult r = texture_compute_pipeline(ci, unsw_pipe);
     vkDestroyShaderModule(dev.device, m, nullptr);
     if (r != VK_SUCCESS) return false;
     state = 1;
     logf("vk: big block-linear textures are unswizzled on the GPU from their pools (RX_VK_GPU_UNSWIZZLE=0: the CPU)");
     return true;
 }
+}  // namespace
+/// (longshot) The texture pipelines made before the game (precompile_run, vk_draw.cpp), not inside the frame of the first texture
+/// that needs one (texture_compute_pipeline above). Each is made once whoever asks first; before the game nothing else asks
+void texture_pipelines_warm() {
+    const auto t0 = std::chrono::steady_clock::now();
+    const bool astc = astc_ready(), bc = bc_ready(), unswizzle = unswizzle_ready();
+    logf("vk: texture pipelines made before the game in %.0f ms (ASTC decoder %s, BC encoder %s, GPU unswizzle %s)",
+         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(), astc ? "yes" : "no",
+         bc ? "yes" : "no", unswizzle ? "yes" : "no");
+}
+namespace {
 
 /// The whole texture (every level and layer dirty overlaps) unswizzled on the GPU; false: not a texture for it
 bool upload_unswizzle_gpu(Texture& tex, uint64_t total, const Ranges* dirty) {
