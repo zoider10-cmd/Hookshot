@@ -3756,7 +3756,7 @@ def settings(game):
            "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
            "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0, "rando_open_door": 0,
            "rando_ammo_pickups": 0, "rando_rupee_fill": 0, "rando_skulltulas_day": 0,
-           "rando_ganon_bridge": 0, "rando_hints": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
+           "rando_ganon_bridge": 0, "rando_hints": 0, "rando_ageless": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -4611,6 +4611,87 @@ def hint_line(data, label, words):
     return msbt_set(data, label, bytes(old[:at]) + hint_wrap(words).encode("utf-8"))
 
 
+# ---- Either age's items (rando_ageless, asked for 2026-11-18) ----
+# The menu's rule of which age may equip or set an item is the pouch table's (UI/Pouch/PouchTable): each item of its
+# Equipment and Item arrays is marked IsUsableAdult and IsUsableChild (a mark left out is false). 1, the swords: the
+# Kokiri Sword and the Master Sword for both ages (seen by the owner: a sword kept through a Debug age change is drawn and
+# swings as it should). 2, also the age-only items: the shields, the boots, the Biggoron's sword, the Slingshot, the
+# Boomerang, Deku Sticks, the Hammer, the Hookshots, the Bow and its arrows. Moves no item; the logic does not count on
+# it (a child's way to an adult's check is not asked about).
+AGELESS_TABLE = "UI/Pouch/PouchTable/PouchTable.game__ui__PouchTable.bgyml"
+AGELESS_SWORDS = ("Weapon_Sword_Master", "Weapon_Sword_Kokiri")
+AGELESS_ITEMS = AGELESS_SWORDS + (
+    "Weapon_Sword_Biggoron", "Weapon_Sword_Giant", "Weapon_Sword_BrokenGiant", "Weapon_Shield_Mirror", "Weapon_Shield_Deku",
+    "Armor_Adult_HoverBoot", "Armor_Adult_HeavyBoot", "Item_DekuStick", "Weapon_Range_SlingShot", "Item_Boomerang", "Item_Hammer",
+    "Item_Longshot", "Item_Hookshot", "Item_Arrow_Normal", "Weapon_Range_Bow", "Item_Arrow_Fire", "Pouch_Range_BowAndArrow_Fire",
+    "Item_Arrow_Ice", "Pouch_Range_BowAndArrow_Ice", "Item_Arrow_Light", "Pouch_Range_BowAndArrow_Light")
+AGELESS_ARRAYS = ("EquipmentArray", "ItemArray")
+AGELESS_TRUE = (208, b"\x01\x00\x00\x00")
+
+
+def pouch_ageless(data, actors):
+    """the pouch table (AGELESS_TABLE) with these actors usable by both ages: (the new bytes, how many marks were set).
+    Every byte of the game's file is kept: each actor's entry is written again after the file's end with both marks
+    true, and what pointed at the old entry points at the new one. (Written anew whole by byml_build, unchanged even,
+    the game fell as it read the table: seen without a window 2026-11-19; the game's own bytes there load.) ValueError:
+    not the table known, or an actor of `actors` not in it."""
+    if data[:2] != b"YB":
+        raise ValueError("not a little-endian BYML")
+    key_at, str_at, root = struct.unpack_from("<III", data, 4)
+    keys, strings = table(data, key_at), table(data, str_at)
+    key_index = {k: i for i, k in enumerate(keys)}
+    if not all(k in key_index for k in ("ActorShort", "IsUsableAdult", "IsUsableChild")):
+        raise ValueError("not the pouch table: its keys lack the age marks")
+    marks = (key_index["IsUsableAdult"], key_index["IsUsableChild"])
+    out, moved, seen, count = bytearray(data), {}, set(), 0
+    holders = []   # (the place of a value that points at a dict or an array)
+
+    def walk(at, done=set()):
+        nonlocal count
+        if at in done:
+            return
+        done.add(at)
+        kind, n = data[at], int.from_bytes(data[at + 1:at + 4], "little")
+        if kind == 0xC1:
+            rows = [(int.from_bytes(data[at + 4 + 8 * k:at + 7 + 8 * k], "little"), data[at + 7 + 8 * k], bytes(data[at + 8 + 8 * k:at + 12 + 8 * k]))
+                    for k in range(n)]
+            for k, (_, typ, val) in enumerate(rows):
+                if typ in (0xC0, 0xC1):
+                    holders.append(at + 8 + 8 * k)
+                    walk(struct.unpack("<I", val)[0])
+            name = next((strings[struct.unpack("<I", val)[0]] for key, typ, val in rows if key == key_index["ActorShort"] and typ == 0xA0), None)
+            if name in actors:
+                seen.add(name)
+                new = {key: (typ, val) for key, typ, val in rows}
+                for mark in marks:
+                    if new.get(mark) != (0xD0, struct.pack("<I", 1)):
+                        new[mark] = (0xD0, struct.pack("<I", 1))
+                        count += 1
+                out.extend(bytes(-len(out) % 4))
+                moved[at] = len(out)
+                out.extend(bytes([0xC1]) + len(new).to_bytes(3, "little"))
+                for key in sorted(new):
+                    out.extend(key.to_bytes(3, "little") + bytes([new[key][0]]) + new[key][1])
+        elif kind == 0xC0:
+            vals = at + 4 + (n + 3 & ~3)
+            for k in range(n):
+                if data[at + 4 + k] in (0xC0, 0xC1):
+                    holders.append(vals + 4 * k)
+                    walk(struct.unpack_from("<I", data, vals + 4 * k)[0])
+        else:
+            raise ValueError("a BYML node of a type not read here (%#x)" % kind)
+
+    walk(root, set())
+    missing = sorted(set(actors) - seen)
+    if missing:
+        raise ValueError("the pouch table has no %s" % ", ".join(missing))
+    for at in holders:
+        old = struct.unpack_from("<I", data, at)[0]
+        if old in moved:
+            struct.pack_into("<I", out, at, moved[old])
+    return bytes(out), count
+
+
 def remove_old(mod):
     """the files a run before this one wrote (its list: rando_manifest.txt), and the folders they leave empty"""
     listing = os.path.join(mod, "rando_manifest.txt")
@@ -4827,6 +4908,7 @@ def main():
     p.add_argument("--shop-shelves", type=int, choices=(0, 1), help="in place of rando_shop_shelves: with Shops, 0 four shelves of each shop, 1 every shelf (shop_slots)")
     p.add_argument("--sword-shield", type=int, choices=(0, 1), help="in place of rando_sword_shield: 0 the Kokiri Sword stays in its chest and the Deku Shield on "
                                                                      "its shelf, 1 both take part (the chest with Major items, the shelf with Shops)")
+    p.add_argument("--ageless", type=int, choices=(0, 1, 2), help="as rando_ageless: 1 the swords, 2 also the age-only items, for both ages (pouch_ageless)")
     p.add_argument("--hints", action="store_true", help="as rando_hints=1: the Gossip Stones give hints (choose_hints)")
     p.add_argument("--skulltulas-day", action="store_true", help="as rando_skulltulas_day=1: the night-only Gold Skulltulas are out by day too (NOCTURNAL)")
     p.add_argument("--heart-pieces", action="store_true", help="as rando_heart_pieces=1: the Pieces of Heart lying in the world change places with "
@@ -4870,6 +4952,7 @@ def main():
     a.heart_pieces = a.heart_pieces or ini["rando_heart_pieces"] != 0
     a.skulltulas_day = a.skulltulas_day or ini["rando_skulltulas_day"] != 0
     a.hints = a.hints or ini["rando_hints"] != 0
+    a.ageless = a.ageless if a.ageless is not None else ini["rando_ageless"] if ini["rando_ageless"] in (0, 1, 2) else 0
     # (the songs gate the game: with them shuffled the logic places them, whatever Major items says)
     logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic
     # (the options file's rando_open_deku and rando_open_forest too, so that the launcher's run at Play keeps them)
@@ -4958,6 +5041,8 @@ def main():
     stamp = "placement %d%sfixes %d\n" % (placement, rest, FIXES_VERSION)   # (the fixes: the same items, written again)
     if a.hints:   # (the hints move no item: on the fixes' line, so a seed's shuffle stays as it was with them turned on)
         stamp = stamp[:-1] + " hints %d\n" % HINTS_VERSION
+    if a.ageless:   # (moves no item either: the same line)
+        stamp = stamp[:-1] + " ageless %d\n" % a.ageless
     print("randomizer %s, seed %d, chests %s, dungeon keys %s, major items %s" % (
         "on" if on else "off", seed, ("off", "overworld", "dungeons", "all")[which],
         ("off", "own dungeon", "anywhere (as own dungeon for now)")[keys_mode], "on" if a.event_chests else "off"))
@@ -5741,6 +5826,16 @@ def main():
         except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
             sys.exit("the Gossip Stones' hints: %s. Nothing written." % e)
         print("Hints: %d Gossip Stones give %d hints" % (len(hints), len(set(w for _, w in hints))))
+
+    # ---- Either age's items (rando_ageless): the pouch table's age marks ----
+    if a.ageless:
+        try:
+            gift_files[AGELESS_TABLE], count = pouch_ageless(open(os.path.join(romfs, *AGELESS_TABLE.split("/")), "rb").read(),
+                                                              AGELESS_SWORDS if a.ageless == 1 else AGELESS_ITEMS)
+            shop_parts.add(AGELESS_TABLE)   # (its entry raised by PART_GROWTH: the game's is about 3.25 times the file, and 756 bytes more fell without)
+        except (OSError, ValueError, KeyError, struct.error, IndexError) as e:
+            sys.exit("either age's items: %s. Nothing written." % e)
+        print("Either age's items: %s usable by both ages (%d marks set)" % ("the swords" if a.ageless == 1 else "the swords and the age-only items", count))
 
     # ---- Open Door of Time: the door out of the way, in the child's Market and the adult's ----
     if a.open_door:

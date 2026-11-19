@@ -117,7 +117,13 @@
       "Off", "On") \
     X(GANON_BRIDGE, "Ganon's Castle bridge", "rando_ganon_bridge", \
       "The rainbow bridge to Ganon's Castle. As the game has it: after the Shadow and Spirit Temples' sages wake. Open: from the start. 6 medallions: once Link holds all six. Its own scene plays when Link next stands at the castle's edge.", \
-      "As the game has it", "Open", "6 medallions")     X(HINTS, "Gossip Stone hints", "rando_hints",       "Talking to a Gossip Stone gives one of the seed's hints, each said by two stones: where a needed item is, an area on the way of the hero (it holds a needed item), or a foolish one (it holds none). No Mask of Truth needed. Moves no item: it can be turned on for a seed being played.",       "Off", "On")
+      "As the game has it", "Open", "6 medallions") \
+    X(HINTS, "Gossip Stone hints", "rando_hints", \
+      "Talking to a Gossip Stone gives one of the seed's hints, each said by two stones: where a needed item is, an area on the way of the hero (it holds a needed item), or a foolish one (it holds none). No Mask of Truth needed. Moves no item: it can be turned on for a seed being played.", \
+      "Off", "On") \
+    X(AGELESS, "Either age's items", "rando_ageless", \
+      "Swords: the Kokiri Sword and the Master Sword can be equipped by both ages. Swords and items: also the shields, the boots, the Biggoron's Sword, the Slingshot, the Boomerang, Deku Sticks, the Hammer, the Hookshots and the Bow with its arrows (not yet tried in play: an item may look or act wrong on the other age). The logic does not count on it. Moves no item.", \
+      "Off", "Swords", "Swords and items")
 
 enum {
 #define OOT_RANDO_ENUM(NAME, label, key, help, ...) OOT_RANDO_##NAME,
