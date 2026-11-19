@@ -126,6 +126,32 @@ int main() {
     if (same_frame.creations != 1 || repeated.drawn_mode != ur::DLSS) return 11;
     step(repeated, {&same_frame}, ur::DLAA, 1720, 720);
     if (same_frame.creations != 2 || repeated.drawn_mode != ur::DLAA) return 12;
+
+    // FSR 4's and XeSS's native AA entered from their own scaled mode: the queued scaled frames are drawn by the scaled
+    // engine, as DLSS's are for DLAA, not made into a native context at the queued size (#744: FSR 4 made for 1429x804,
+    // the creation failed and FSR 4 stayed off)
+    const int natives[2][2] = {{ur::FSR4, ur::FSR4_AA}, {ur::XESS, ur::XESS_AA}};
+    for (int k = 0; k < 2; ++k) {
+        State entering;
+        TestEngine scaled;
+        step(entering, {&scaled}, natives[k][0], 1720, 720);
+        step(entering, {&scaled}, natives[k][1], 1720, 720);
+        if (scaled.creations != 1 || scaled.feature_ow != 3440 || entering.drawn_mode != natives[k][0]) {
+            std::fprintf(stderr, "%s's queued scaled frame made a native context at its size\n", k ? "XeSS" : "FSR 4");
+            return 13 + 2 * k;
+        }
+        step(entering, {&scaled}, natives[k][1], 3440, 1440);
+        if (scaled.creations != 2 || !scaled.feature_aa || entering.drawn_mode != natives[k][1]) return 14 + 2 * k;
+
+        // (a scene that stays small: the wait ends after three frames and the native AA runs at that size, as DLAA's does)
+        State stays;
+        TestEngine small_scaled;
+        step(stays, {&small_scaled}, natives[k][0], 1720, 720);
+        for (int i = 0; i < 3; ++i) step(stays, {&small_scaled}, natives[k][1], 1720, 720);
+        if (small_scaled.creations != 1 || stays.drawn_mode != natives[k][0]) return 17 + 2 * k;
+        step(stays, {&small_scaled}, natives[k][1], 1720, 720);
+        if (small_scaled.creations != 2 || small_scaled.feature_ow != 1720 || stays.drawn_mode != natives[k][1]) return 18 + 2 * k;
+    }
     std::puts("PASS: queued scenes, bounded native wait, reuse, HDR and engine switch");
 }
 '''

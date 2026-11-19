@@ -1287,16 +1287,21 @@ bool temporal_upscale(VkCommandBuffer cmd, uint64_t key, bool known, Texture* in
     // Give queued small scenes three frames to reach the requested native size.
     // Some games keep a smaller scene even at full scale: then use native AA at that size.
     // Creating DLAA for that queued scene would replace the feature twice in successive frames.
-    const bool entering_dlaa = mode == ur::DLAA && s.drawing == engine.e && s.drawn_mode == ur::DLSS;
-    const bool queued_native = entering_dlaa && (rw != ow || rh != oh);
+    // (longshot) The same for FSR 4's and XeSS's native AA entered from their scaled mode: the queued frames are drawn by the
+    // scaled engine. Made at a queued size, FSR 4's native context failed on an RX 6600 at the VRAM limit (its upscaler was not
+    // made (3) for 1429x804, #744), and the engine then stayed off until the player changed the upscaler
+    const bool entering_native =
+        ur::full_scale(mode) && s.drawing == engine.e && s.drawn_mode == ur::engine(mode) && ur::engine(mode) != mode;
+    const bool queued_native = entering_native && (rw != ow || rh != oh);
     const uint64_t frame = texture_frame_no();
     if (queued_native && !s.dlaa_waiting) s.dlaa_waiting = true, s.dlaa_wait_frame = frame;
     const bool wait_expired = queued_native && (frame < s.dlaa_wait_frame || frame - s.dlaa_wait_frame >= 3);
     if (wait_expired)
-        logf("vk: DLAA native scene still %ux%u after three frames; using it for output %ux%u", rw, rh, ow, oh);
+        logf("vk: %s native scene still %ux%u after three frames; using it for output %ux%u",
+             mode == ur::DLAA ? "DLAA" : mode == ur::FSR4_AA ? "AMD FSR 4 Native AA" : "Intel XeSS Native AA", rw, rh, ow, oh);
     const bool waiting_for_native = queued_native && !wait_expired;
     if (!waiting_for_native) s.dlaa_waiting = false;
-    const int draw_mode = waiting_for_native ? ur::DLSS : mode;
+    const int draw_mode = waiting_for_native ? ur::engine(mode) : mode;
     if (s.drawing != engine.e) {   // (another engine than the one before: that one's state let go, and a new history)
         if (s.drawing) {
             logf("vk: upscaler: %s in place of %s (frame %llu)", engine.e->name, s.drawing->name,
