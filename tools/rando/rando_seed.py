@@ -97,7 +97,7 @@ DAMPE_RACE_CHESTS = frozenset((0x4ccffbd5778b67e2,))
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 43   # (43: before the cucco lady's game wanted one cucco, CUCCO_LOGIC. 42: before Death Mountain Trail's and Goron City's intros were left to play (their arrivals take the Fire quest a step), and an adult's first visit to Goron City went on to the rolling Goron, goron_arrival_fix. 41: before an empty child's sword slot was given the Kokiri Sword on the way back, era_sword_fix. 40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 44   # (44: before the royal tomb's opening, the Sun's Song's lesson and its sunrise were skipped, SCENE_SILENT. 43: before the cucco lady's game wanted one cucco, CUCCO_LOGIC. 42: before Death Mountain Trail's and Goron City's intros were left to play (their arrivals take the Fire quest a step), and an adult's first visit to Goron City went on to the rolling Goron, goron_arrival_fix. 41: before an empty child's sword slot was given the Kokiri Sword on the way back, era_sword_fix. 40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -314,9 +314,11 @@ SCENE_FLOWS = "Event/EventFlow"
 # seen without a window). Seen in the owner's play: the goddesses' story in Zelda's courtyard played whole. Each is
 # started by one step of another flow (an EventTransition naming it) and sets nothing itself (its file is one
 # timeline), so the seed passes over that step (pass_videos). These are the story's; kept: the title's, the credits',
-# the opening narration (Skip opening), the ending's, and the Royal Family's Tomb's (the Sun's Song's lesson).
+# the opening narration (Skip opening) and the ending's. The Royal Family's Tomb's sunrise after the Sun's Song's lesson
+# (Dm_MelodyGet_Sun_01, _04 to _10: one by Link's age, the time of day and the story, GimmickFlow_RoyalFamilyTomb) is left
+# out too (bug 61): the step after each sets the time as the video would have, then the lesson's gift (Dm_MelodyGet_Sun_03).
 SCENE_VIDEOS = ("Dm_HrlCastle_0045", "Dm_Kakariko_0025", "Dm_Kokiri_0095", "Dm_Kokiri_0160", "Dm_LostWood_0021",
-                "Dm_TimeTemple_0095", "Dm_TimeTemple_0115")
+                "Dm_TimeTemple_0095", "Dm_TimeTemple_0115") + tuple("Dm_MelodyGet_Sun_%02d" % n for n in (1, 4, 5, 6, 7, 8, 9, 10))
 SCENE_SHOWS = frozenset((
     "EventTalk", "EventTalkIgnoreSameTalkAS", "EventWait", "EventMoveCameraAnimationInstructionsForFlowchart", "EventMoveToTargetPosCamera",
     "EventPlayAS", "EventPlayASWithClothWarp", "EventPlayASWithRate", "EventPlayerPlayASForFlowchart",
@@ -336,7 +338,12 @@ SCENE_SHOWS_SUB = ("Common_Camera_Pln",)   # (sub-flows of these flows only set 
 # playing (EventPlayerPlayOcarinaFree): the lesson goes to "You learned..." (asked for by the game's owner, 2026-11-15).
 SCENE_LESSON = (("Dm_SY_Ocarina", "LearningOcarinaPlayExample"), ("Dm_SY_Ocarina", "LearningOcarinaFollowExample"),
                 ("Dm_SY_Ocarina", "LearningOcarinaPlayAuto"), ("Dm_SY_Ocarina", "LearningOcarinaPlayAutoForSeek"))
-SCENE_KEEP = ("Dm_MelodyGet_Sun",)
+# (bug 61, 2026-11-18: the Royal Family's Tomb's lesson, Dm_MelodyGet_Sun, kept before, is quieted as the others are: its
+# gift is the scene after it, Dm_MelodyGet_Sun_03, and its auto-play's add of the song was a stray green rupee in play)
+SCENE_KEEP = ()
+# Scenes with no talk and no gift taken all the same (bug 60): the royal tomb's opening after Zelda's Lullaby on the
+# Triforce mark (camera moves and Link's poses; its flag GraveYard_RoyalFamilyTomb_Open and warps stay).
+SCENE_SILENT = ("Dm_Graveyard_0010",)
 # A lesson also calls entry points of the story's flows: Sheik's words before the Requiem and the Prelude are in AllSage
 # (MelodyOfSpirit_01/_02, MelodyOfShine: a switch on the Shadow Temple's quest step, then the talk), the windmill man's
 # after the Song of Storms in his own flow. Seen in play: Sheik's three lines before "You learned...", at the Colossus.
@@ -3176,13 +3183,13 @@ def goron_arrival_fix(data):
     return bytes(out)
 
 
-def quiet_scene(data, entries=None):
+def quiet_scene(data, entries=None, silent=False):
     """A scene (a BFEVFL file of one flowchart: a Dm_ flow the game plays as a flowchart) with what only shows
     something passed over (SCENE_SHOWS, above): the new bytes, of the same size, and how many talks were taken out;
     (None, 0) when nothing is to be taken out. What the scene does to the game is left. entries: the names of entry
     points, and only what they come to is looked at (the story's flows a lesson calls). ValueError: a branch or an
     entry point would be left with nothing and the scene has no step that does nothing (SCENE_NOTHING), or an entry
-    point of `entries` is not the flow's."""
+    point of `entries` is not the flow's. silent: a scene with no talk and no gift taken all the same (SCENE_SILENT)."""
     steps, firsts, _ = scene_steps(data)
     u16 = lambda at: struct.unpack_from("<H", data, at)[0]
     END = 0xFFFF
@@ -3277,7 +3284,7 @@ def quiet_scene(data, entries=None):
             answer[j] = to
             changed = True
     talks = sum(1 for i in passed if steps[i]["what"].startswith("EventTalk"))
-    if not talks and not (entries is None and passed and any(s["kind"] == 4 and s["what"] in SCENE_GIFTS for s in steps)):
+    if not talks and not (entries is None and passed and (silent or any(s["kind"] == 4 and s["what"] in SCENE_GIFTS for s in steps))):
         return None, 0
 
     return lead_past(data, steps, firsts, passed, answer), talks
@@ -5637,12 +5644,12 @@ def main():
                 if struct.unpack_from("<H", was, 0x20)[0] != 1:
                     continue   # (a timeline: the game's side skips it)
                 _, _, used = scene_steps(was)
-                if "EventTalk" not in used and not any(g in used for g in SCENE_GIFTS):
+                if "EventTalk" not in used and not any(g in used for g in SCENE_GIFTS) and stem not in SCENE_SILENT:
                     continue
                 if stem in SCENE_KEEP or any(k in w for k in SCENE_KEEP_IF for w in used | {stem}):
                     kept.append(stem)
                     continue
-                now, taken = quiet_scene(was)
+                now, taken = quiet_scene(was, silent=stem in SCENE_SILENT)
                 if stem.startswith("Dm_MelodyGet_"):
                     for s in scene_steps(was)[0]:
                         if s["kind"] == 4 and s["what"] and s["what"] not in SCENE_LESSON_SKIP_CALLS and not s["what"].startswith("Dm_"):
