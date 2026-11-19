@@ -93,6 +93,9 @@ static int map_floor(uint64_t va) {
 static volatile LONG maps_changed = 1;   /* the mappings changed since hos_gpu_guest_ranges last merged them */
 volatile LONG maps_generation = 1;   /* bumped by every change (hos_gpu_ptr's per-thread cache, the renderer's gpu_read) */
 static void map_add(uint64_t va, uint64_t size, uint64_t guest) {
+    void hos_gpu_pages_set(uint64_t guest, uint64_t size);   /* (mark_bitmap.c: set before the mapping counts. Every mapping's
+                                                                 guest pages: the marks are read over all of them, hos_gpu_guest_ranges) */
+    if (guest) hos_gpu_pages_set(guest, size);
     maps_changed = 1;
     InterlockedIncrement(&maps_generation);
     MAP_LOG("nvdrv: map GPU %#llx..%#llx -> %#llx", (unsigned long long)va, (unsigned long long)(va + size),
