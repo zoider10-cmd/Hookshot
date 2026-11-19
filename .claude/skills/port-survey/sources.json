@@ -16,7 +16,8 @@
    "kind": "fork",
    "license": "GPL-3.0-or-later",
    "base": "squashed history: diff trees",
-   "surveyed": "a7bfee59"
+   "surveyed": "16cba084",
+   "surveyed_on": "2026-11-19"
   },
   {
    "name": "Longshot",
@@ -24,7 +25,8 @@
    "kind": "fork",
    "license": "GPL-3.0-or-later",
    "base": "shares our history up to 1be60eae: compare commit titles",
-   "surveyed": "c9e3e542"
+   "surveyed": "621dae50",
+   "surveyed_on": "2026-11-19"
   },
   {
    "name": "Reborn engine",
