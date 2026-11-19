@@ -1320,15 +1320,19 @@ static void oot_time_door(Ctx *c, int64_t now, uint64_t actor) {
     static int64_t ask_at, flag_at;
     const int mode = hos_rando_open_door();
     if (!mode) return;
-    if (mode == 2 && !__atomic_load_n(&oot_door_song_open, __ATOMIC_RELAXED)) {
-        if (now < flag_at) return;
-        flag_at = now + 1000000000LL;
-        if (oot_item_count(c, "Item_Melody_TimeSong") > 0 &&   /* (as the Debug tab's inventory reads them: songs too) */
-            (oot_item_count(c, "Item_Ocarina_Fairy") > 0 || oot_item_count(c, "Item_Ocarina_Time") > 0)) {
-            __atomic_store_n(&oot_door_song_open, 1, __ATOMIC_RELEASE);
-            hos_log("rando: Link holds the Song of Time and an ocarina: the Door of Time is open from the next entry into the temple");
-            flag_at = 0;
-        } else return;
+    if (mode == 2) {   /* (asked each second: another save loaded in the same run may not have them) */
+        static int64_t song_at;
+        if (now >= song_at) {
+            song_at = now + 1000000000LL;
+            const int open = oot_item_count(c, "Item_Melody_TimeSong") > 0 &&   /* (as the Debug tab's inventory reads them: songs too) */
+                             (oot_item_count(c, "Item_Ocarina_Fairy") > 0 || oot_item_count(c, "Item_Ocarina_Time") > 0);
+            if (open != __atomic_load_n(&oot_door_song_open, __ATOMIC_RELAXED)) {
+                __atomic_store_n(&oot_door_song_open, open, __ATOMIC_RELEASE);
+                hos_log("rando: Link %s the Song of Time and an ocarina: the Door of Time is %s from the next entry into the temple",
+                        open ? "holds" : "no longer holds", open ? "open" : "shut");
+            }
+        }
+        if (!__atomic_load_n(&oot_door_song_open, __ATOMIC_RELAXED)) return;
     }
     if (now >= flag_at) {   /* (each second) */
         int open = 1;

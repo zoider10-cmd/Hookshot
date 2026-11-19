@@ -60,7 +60,7 @@ def main():
     check('#define OOT_DOOR_STAND_IN "EftLoc_TimeTemple_Fog_HideOutside_00"' in host and
           'oot_item_count(c, "Item_Melody_TimeSong") > 0' in host and 'oot_item_count(c, "Item_Ocarina_Fairy") > 0 || oot_item_count(c, "Item_Ocarina_Time") > 0' in host and
           "__atomic_load_n(&oot_door_song_open, __ATOMIC_ACQUIRE) ? OOT_DOOR_STAND_IN : NULL" in host and
-          "if (mode == 2 && !__atomic_load_n(&oot_door_song_open, __ATOMIC_RELAXED)) {" in host,
+          "if (!__atomic_load_n(&oot_door_song_open, __ATOMIC_RELAXED)) return;" in host and "if (open != __atomic_load_n(&oot_door_song_open, __ATOMIC_RELAXED)) {" in host,
           "the game's side does not open the door by the song, or does Open Door of Time's work before it")
     rando_c = (ROOT / "host" / "oot_rando.c").read_text(encoding="utf-8")
     header = (ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
