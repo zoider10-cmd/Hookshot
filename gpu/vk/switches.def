@@ -543,6 +543,7 @@ SW(RX_VK_NETWORK_KEEP, kill, string, "fd029a317a9a4b94,9dc98871eb7fc101: only th
 SW(RX_VK_NOCULL, diag, bool, "off (face culling as the game asks)", "1 draws with no face culling, a debug picture.")
 SW(RX_VK_NODEPTH, diag, bool, "off (depth test and write as the game asks)", "1 draws everything without depth test or depth write, a debug picture.")
 SW(RX_VK_NOOPT, attempt, bool, "off (driver optimizer on, but for AMD task/mesh programs and the mesh fallback)", "1 builds every pipeline in play without the driver's optimizer.")
+SW(RX_VK_NOOPT_RETRY, attempt, bool, "on: a pipeline the driver fails to build is built once more without its optimizer", "0 leaves a pipeline the driver fails on out, as before (from ReLink 3346f72).")
 SW(RX_VK_NO_A2C, kill, bool, "alpha-to-coverage as the game asks", "1 turns alpha-to-coverage off for every draw (the foliage's).")
 SW(RX_VK_NO_CBUF_LOAD_RULE, kill, bool, "off: the rule is on (such an address is left to the run-time search)", "Turns off the rule that leaves a graphics stage's memory-derived address in a non-c0 constant buffer to the run-time search.")
 SW(RX_VK_NO_DISPATCH_ORDER, kill, bool, "off: a dispatch after other work gets a full barrier first", "Leaves out the full barrier that orders a dispatch after the work before it.")

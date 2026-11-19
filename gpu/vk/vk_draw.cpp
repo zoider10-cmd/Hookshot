@@ -1513,13 +1513,42 @@ VkResult note_out_of_memory(VkResult r) {
         st_driver_out_of_memory.fetch_add(1, std::memory_order_relaxed);
     return r;
 }
+/// (from ReLink 3346f72) A pipeline the driver's compiler fails on (AMD's proprietary one returns -13 on some of the game's
+/// programs, the Market's and Kakariko's dogs on an RX 6600, or faults, -77) is built once more without its optimizer, which
+/// it builds: drawn a little slower rather than left out. Not for the memory errors, nor a pipeline asked without the
+/// optimizer already, nor one with no module (INITIALIZATION_FAILED: nothing to compile). RX_VK_NOOPT_RETRY=0: no retry
+bool noopt_retry_wanted(VkResult r, VkPipelineCreateFlags flags) {
+    static const bool on = !getenv("RX_VK_NOOPT_RETRY") || env_on("RX_VK_NOOPT_RETRY");
+    return on && r != VK_SUCCESS && r != VK_ERROR_OUT_OF_HOST_MEMORY && r != VK_ERROR_OUT_OF_DEVICE_MEMORY &&
+           r != VK_ERROR_INITIALIZATION_FAILED && r != VK_PIPELINE_COMPILE_REQUIRED && !(flags & VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT);
+}
+void noopt_retry_note(const char* what, VkResult first, VkResult second) {
+    static std::atomic<int> told{0};
+    if (told.fetch_add(1, std::memory_order_relaxed) < 20)
+        logf("vk: a %s pipeline failed (%d) with the driver's optimizer: %s", what, (int)first,
+             second == VK_SUCCESS ? "made without it" : "not made without it either");
+}
 VkResult guarded_graphics_held(VkPipelineCache cache, const VkGraphicsPipelineCreateInfo* ci, VkPipeline* pl) {
     PcacheUse use(cache);
-    return note_out_of_memory(guarded_graphics(cache, ci, pl));
+    const VkResult r = guarded_graphics(cache, ci, pl);
+    if (!noopt_retry_wanted(r, ci->flags)) return note_out_of_memory(r);
+    VkGraphicsPipelineCreateInfo again = *ci;
+    again.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
+    *pl = VK_NULL_HANDLE;
+    const VkResult second = guarded_graphics(cache, &again, pl);
+    noopt_retry_note("graphics", r, second);
+    return note_out_of_memory(second);
 }
 VkResult guarded_compute_held(VkPipelineCache cache, const VkComputePipelineCreateInfo* ci, VkPipeline* pl) {
     PcacheUse use(cache);
-    return note_out_of_memory(guarded_compute(cache, ci, pl));
+    const VkResult r = guarded_compute(cache, ci, pl);
+    if (!noopt_retry_wanted(r, ci->flags)) return note_out_of_memory(r);
+    VkComputePipelineCreateInfo again = *ci;
+    again.flags |= VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT;
+    *pl = VK_NULL_HANDLE;
+    const VkResult second = guarded_compute(cache, &again, pl);
+    noopt_retry_note("compute", r, second);
+    return note_out_of_memory(second);
 }
 bool compiles_nothing(VkPipelineCreateFlags flags) { return (flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT) != 0; }
 /// (hookshot) Windows Intel: an ask, or a dispatch's module, left to a worker because another thread held Intel's compiler gate
