@@ -57,7 +57,7 @@ def main():
     check(S.skulltulas_by_day(plain) == (None, 0), "a file without night-only Skulltulas is changed")
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
     check('a.skulltulas_day = a.skulltulas_day or ini["rando_skulltulas_day"] != 0' in script and
-          '(" skulltulas by day" if a.skulltulas_day else "")' in script and '"rando_skulltulas_day": 0}' in script,
+          '(" skulltulas by day" if a.skulltulas_day else "")' in script and '"rando_skulltulas_day": 0' in script,
           "the script does not read the setting, or does not name it in the seed's stamp")
     check(script.index("new, count = skulltulas_by_day(data)") < script.index("# ---- the size table ----") and
           script.index("new, count = skulltulas_by_day(data)") < script.index("for rel, held in list(tier_maps.items()):"),

@@ -50,6 +50,13 @@ int hos_rando_rupee_fill(void) {
     if (e && (*e == '0' || *e == '1')) return rando_active && *e == '1';
     return rando_active && rando.v[OOT_RANDO_RUPEE_FILL] != 0;
 }
+/* Ganon's Castle bridge (0 as the game has it, 1 open, 2 six medallions): on with the randomizer (hos_main.c
+   oot_ganon_bridge). A test's: HOS_OOT_GANON_BRIDGE=<0-2> over the options */
+int hos_rando_ganon_bridge(void) {
+    const char *e = getenv("HOS_OOT_GANON_BRIDGE");
+    if (e && *e >= '0' && *e <= '2') return rando_active ? *e - '0' : 0;
+    return rando_active ? rando.v[OOT_RANDO_GANON_BRIDGE] : 0;
+}
 /* Skip cutscenes: on with the randomizer (hos_main.c oot_skip_cutscene) */
 int hos_rando_skip_cutscenes(void) { return rando_active && rando.v[OOT_RANDO_SKIP_CUTSCENES] != 0; }
 

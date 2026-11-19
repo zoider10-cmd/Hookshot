@@ -105,7 +105,19 @@
       "Off", "On") \
     X(OPEN_DOOR, "Open Door of Time", "rando_open_door", \
       "The Temple of Time's inner door is open from a new game's start, and the Master Sword takes Link forward and back in time whenever he draws it or puts it back. The story's own scene there (the Sage of Light) still comes when the three stones and the Song of Time are done. The seed's logic counts on it a little: places only an adult can reach no longer ask for the Boomerang, nor (with Open forest exit) for the Kokiri Sword and Slingshot; they still ask for bombs.", \
-      "Off", "On")     X(AMMO_PICKUPS, "Ammo pick-ups", "rando_ammo_pickups",       "Bombs, Deku Nuts, Deku Seeds, Deku Sticks and arrows lying in the world or dropped by grass, pots and enemies. As the game has it: what the pick-up says. 5 each: at least 5. Fill the bag: the bag is filled to what it holds. Not chests or shops.",       "As the game has it", "5 each", "Fill the bag")     X(RUPEE_FILL, "Rupees fill the wallet", "rando_rupee_fill",       "A rupee lying in the world or dropped by grass, pots and enemies fills the wallet to what it holds. Not chests, shops or prizes.",       "Off", "On")     X(SKULLTULAS_DAY, "Gold Skulltulas by day", "rando_skulltulas_day",       "The 30 Gold Skulltulas that come out only at night are there by day too. Moves no item.",       "Off", "On")
+      "Off", "On") \
+    X(AMMO_PICKUPS, "Ammo pick-ups", "rando_ammo_pickups", \
+      "Bombs, Deku Nuts, Deku Seeds, Deku Sticks and arrows lying in the world or dropped by grass, pots and enemies. As the game has it: what the pick-up says. 5 each: at least 5. Fill the bag: the bag is filled to what it holds. Not chests or shops.", \
+      "As the game has it", "5 each", "Fill the bag") \
+    X(RUPEE_FILL, "Rupees fill the wallet", "rando_rupee_fill", \
+      "A rupee lying in the world or dropped by grass, pots and enemies fills the wallet to what it holds. Not chests, shops or prizes.", \
+      "Off", "On") \
+    X(SKULLTULAS_DAY, "Gold Skulltulas by day", "rando_skulltulas_day", \
+      "The 30 Gold Skulltulas that come out only at night are there by day too. Moves no item.", \
+      "Off", "On") \
+    X(GANON_BRIDGE, "Ganon's Castle bridge", "rando_ganon_bridge", \
+      "The rainbow bridge to Ganon's Castle. As the game has it: after the Shadow and Spirit Temples' sages wake. Open: from the start. 6 medallions: once Link holds all six. Its own scene plays when Link next stands at the castle's edge.", \
+      "As the game has it", "Open", "6 medallions")
 
 enum {
 #define OOT_RANDO_ENUM(NAME, label, key, help, ...) OOT_RANDO_##NAME,

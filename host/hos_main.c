@@ -1533,6 +1533,56 @@ static int oot_gamedata_enum(Ctx *c, uint32_t hash, uint32_t *value, int set) {
     return 0;
 }
 
+/* (the randomizer's fork) Ganon's Castle's bridge (the setting rando_ganon_bridge: 1 open, 2 once Link holds the six
+   medallions). The bridge (Obj_GanonCastle_Bridge_A_01 in GanonCastle_Static) is made once its scene has played
+   (HavePlayedEvent.GanonCastle_Adult_Field_Rainbow), and the castle's field asks for that scene (Defeat_Ganon's flow,
+   GanonCastle_Adult_Field_Rainbow) when the quest Defeat_Ganon is at its Ready step and Link stands at the castle's edge.
+   The game sets Ready only after the Shadow and Spirit sages' scenes (AllSage's SageRoom_AllSage_LastSage, which moves
+   that quest on). So here the quest is set from NotReady to Ready by the setting, and the bridge's own scene then plays
+   and moves the quest on as the game does (its first action, to Step01); the castle's inside reads the later steps.
+   Should the sages' scene later set the quest back to Ready after the bridge's has played, the step it had is put back
+   (Ready with the bridge's scene played is a step the game never has). */
+#define OOT_STEP_DEFEAT_GANON 0x746f47c0u   /* Step_Defeat_Ganon (a Data.Enum: its value the hash of a step's name) */
+#define OOT_STEP_NOTREADY 0x57b849f0u        /* NotReady */
+#define OOT_STEP_READY 0x17bfaa46u           /* Ready */
+#define OOT_STEP_01 0xeb62add9u              /* Step01: what the bridge's scene moves Ready on to */
+#define OOT_RAINBOW_FLAG 0x75022258u         /* HavePlayedEvent.GanonCastle_Adult_Field_Rainbow */
+static const char *const oot_medallions[6] = {"Item_Medal_Forest", "Item_Medal_Fire", "Item_Medal_Water",
+                                              "Item_Medal_Shadow", "Item_Medal_Spirit", "Item_Medal_Light"};
+static void oot_ganon_bridge(Ctx *c, int64_t now) {
+    int hos_rando_ganon_bridge(void);   /* host/oot_rando.c */
+    static int64_t next_at;
+    static uint32_t later;   /* (the quest's last step past Ready seen this session) */
+    const int mode = hos_rando_ganon_bridge();
+    if (!mode || now < next_at) return;
+    next_at = now + 1000000000LL;   /* (each second) */
+    uint32_t step = 0;
+    if (!oot_gamedata_enum(c, OOT_STEP_DEFEAT_GANON, &step, 0)) return;
+    if (step != OOT_STEP_NOTREADY && step != OOT_STEP_READY) {
+        later = step;
+        return;
+    }
+    if (step == OOT_STEP_READY) {
+        int played = 0;
+        if (later || (oot_gamedata_bool(c, OOT_RAINBOW_FLAG, &played) && played)) {
+            uint32_t back = later ? later : OOT_STEP_01;
+            if (oot_gamedata_enum(c, OOT_STEP_DEFEAT_GANON, &back, 1))
+                hos_log("rando: Ganon's quest was set back to Ready after the bridge's scene: its step %08x is put back (Ganon's Castle bridge)",
+                        back);
+        }
+        return;
+    }
+    int held = 0;
+    if (mode == 2)
+        for (int i = 0; i < 6; i++) held += oot_pouch_count(c, oot_medallions[i]) > 0;
+    if (mode == 1 || held == 6) {
+        uint32_t ready = OOT_STEP_READY;
+        if (oot_gamedata_enum(c, OOT_STEP_DEFEAT_GANON, &ready, 1))
+            hos_log("rando: Ganon's quest set to Ready: the bridge's scene plays at the castle's edge (Ganon's Castle bridge, %s)",
+                    mode == 1 ? "Open" : "6 medallions");
+    }
+}
+
 /* A whole number of the list of flags (Data.Int: PlayerStatus.MaxLife, in quarter hearts), read or written directly:
    the Ints are kept as the Enums are, from GameDataMgr+0xc8 (host/oot_state_tap.c state_kind): +0xd0 how many, +0xd8
    the entries of 40 bytes with the value at +0x1c, +0xe0 the (hash, index) table and +0xec its size. 1 when found. */
@@ -2791,6 +2841,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     oot_inventory_refresh(c, now);
     oot_tracker_refresh(c, now, actor);
     oot_time_door(c, now, actor);
+    oot_ganon_bridge(c, now);
     oot_player_speed(c, components);
     oot_map_refresh(c, now);
     if (action >= OOT_CHEAT_ITEM_ACTION && action < OOT_CHEAT_ITEM_ACTION + 256 * (int)OOT_ITEM_COUNT) {

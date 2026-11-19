@@ -2236,6 +2236,8 @@ class LauncherForm : Form {
             "A rupee lying in the world or dropped by grass, pots and enemies fills the wallet to what it holds. Not chests, shops or prizes." },
         new object[] { "rando_skulltulas_day", "Gold Skulltulas by day", new[] { "Off", "On" }, new[] { 0, 1 },
             "The 30 Gold Skulltulas that come out only at night are there by day too. Moves no item." },
+        new object[] { "rando_ganon_bridge", "Ganon's Castle bridge", new[] { "As the game has it", "Open", "6 medallions" }, new[] { 0, 1, 2 },
+            "The rainbow bridge to Ganon's Castle. As the game has it: after the Shadow and Spirit Temples' sages wake. Open: from the start. 6 medallions: once Link holds all six. Its own scene plays when Link next stands at the castle's edge." },
     };
     // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and
