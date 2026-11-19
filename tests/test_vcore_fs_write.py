@@ -55,6 +55,7 @@ static int hos_commit(uint64_t a, uint64_t n) { (void)a, (void)n; return 1; }
 #define R_OUT_OF_MEMORY 0x1234
 static int held, takes, writes, writes_with_core, flushes, flushes_with_core;
 int hos_vcore_away(void) { if (!held) return 0; held = 0; return 1; }
+static void wrote_now(void) {}   /* (host/nn_fs.c: the time of the last write, for a close that waits for a save) */
 void hos_vcore_back(void) { if (!held) held = 1, takes++; }
 static BOOL WriteFile(HANDLE h, const void *p, DWORD n, DWORD *put, OVERLAPPED *ov) {
     (void)h, (void)p, (void)ov;
