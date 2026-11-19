@@ -4209,6 +4209,15 @@ SONG_AREAS = {"ZoraDomain": {ZL}, "ZoraFountain": {ZL}, "InsideJabuJabuBelly": {
               "SpiritTemple": {REQUIEM}, "DesertColossus": {REQUIEM}, "InsideGanonCastle": set(SONG_GATES)}
 SONG_GIFTS = {"darunia": {ZL, SARIA}, "skull_kid_song": {SARIA}, "archery_heart": {EPONA}, "archery_quiver": {EPONA},
               "fairy_din": {ZL}, "fairy_farore": {ZL}, "fairy_nayru": {ZL}}
+# Malon's lesson (child, Epona's Song) is shut for good once the Epona quest has moved past its step
+# ReadyForGetEponaSong: the ranch's logic (LonLonRanch_Child_NoTerrain_Prefab_5286, Area_9a63) clears the lesson's block
+# only at that very step (the other randomizer's finding, OOTRR 856b011, 2026-11-19). With Songs: Anywhere, Epona's Song can
+# come from another check, an adult can then call Epona, win her from Ingo and finish the quest before the child ever
+# learns from Malon: what her lesson holds is then out of reach. So from placement 15 it asks for everything, as the frogs
+# do: it only ever holds what the game can be finished without. (Their fix opens the lesson by a spare flag instead, a
+# logic module edit that adds nodes: not built here.)
+MALON_HARD = ("song_epona",)
+MALON_HARD_FROM = 15
 SONGS_HARD = ("frogs",)   # (the frogs ask for six songs: with the songs shuffled, for everything, so no gating item is theirs)
 SONGS = (
     Gift("song_zelda", "Dm_MelodyGet_Zelda", (ZL,), ZL, "HyruleCastle", "Impa's lesson: Zelda's Lullaby", CHILD, "songs"),
@@ -5547,7 +5556,9 @@ def main():
     elif gifts:    # (the scrubs alone)
         needs = {h: gifts[h].need if h in gifts else n for h, n in needs.items()}
     if a.songs:    # (the songs named: a lesson's line names its own; the frogs ask for everything)
-        needs = {h: n if h in lessons else frozenset(PROGRESSION) if h in gifts and gifts[h].key in SONGS_HARD else
+        malon_hard = a.songs == 2 and placement >= MALON_HARD_FROM   # (Malon's lesson can be shut: MALON_HARD)
+        needs = {h: frozenset(PROGRESSION) if malon_hard and h in lessons and gifts[h].key in MALON_HARD else
+                 n if h in lessons else frozenset(PROGRESSION) if h in gifts and gifts[h].key in SONGS_HARD else
                  song_need(n, spots[h][0], gifts[h].key if h in gifts else None) for h, n in needs.items()}
     if placement >= 5:   # (Zora's Domain by the river or by the lake, zora_ways)
         needs = {h: zora_ways(n, spots[h][0]) for h, n in needs.items()}
