@@ -53,6 +53,11 @@ def main():
           not keys & {"rando_chests", "rando_songs", "rando_letter", "rando_shops", "rando_open_door"} and
           "was.RemoveAll(MovesNoItem); now.RemoveAll(MovesNoItem);" in launcher,
           "the launcher asks about another seed when only a setting that moves no item changed, or skips one that moves items")
+    # (the game's side holds the stamp's whole first line: cut at 200 it never matched a record written with all of it)
+    host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
+    size = int(re.search(r"static char oot_checks_seed\[(\d+)\];", host).group(1))
+    line = int(re.search(r"    char path\[MAX_PATH \+ 48\], line\[(\d+)\];\s*static char kinds", host).group(1))
+    check(size >= 1024 and line >= size + 8, "the game's side cuts a seed's stamp (%d) or its record's first line (%d) short" % (size, line))
     print("PASS: the settings that move no item are on the stamp's second line")
 
 

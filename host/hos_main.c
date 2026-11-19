@@ -1729,7 +1729,8 @@ static struct {
     uint32_t opened;  /* (a chest: the hash of the game's own flag IsTreasureBoxOpen.<key in decimal>, set when it is opened, bug 70; 0: none) */
 } oot_checks[OOT_TRACKER_MAX];
 static int oot_check_count = -1;
-static char oot_checks_seed[200];   /* (the stamp the checks and the record are of) */
+static char oot_checks_seed[1024];   /* (the stamp the checks and the record are of: its whole first line. 200 cut a
+   seed's 243-304 characters short, so a record written with the whole line was never this seed's, 2026-11-19) */
 static float oot_link_place[3];
 static char oot_link_map[80];
 static SRWLOCK oot_checks_lock = SRWLOCK_INIT;
@@ -1794,7 +1795,7 @@ static uint32_t oot_flag_hash(const char *s) {
 
 /* (the lock held) the seed's checks with what each gives, and the record of that seed */
 static void oot_tracker_load(const char *stamp) {
-    char path[MAX_PATH + 48], line[400];
+    char path[MAX_PATH + 48], line[1100];
     static char kinds[OOT_TRACKER_MAX + 1][80];   /* (each check's name, to find the shelves by) */
     oot_check_count = 0;
     snprintf(oot_checks_seed, sizeof oot_checks_seed, "%s", stamp);
