@@ -51,7 +51,7 @@ def main():
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     fn = host[host.index("void hos_oot_get_name(Ctx *c, uint64_t node, int kind) {"):]
     fn = fn[:fn.index("\n}\n")]
-    check("if (kind == 1) {" in fn and '!strncmp(oot_show_as[i][1], "Armor_", 6) && !strcmp(shown, oot_show_as[i][1])' in fn and
+    check("if (kind == 1) {" in fn and "if (!strcmp(shown, oot_show_as[i][1])) {" in fn and
           "give = oot_show_as[i][0];" in fn, "a held-up gauntlet is still shown by its worn piece's spelling")
     print("PASS: the bottle and Kakariko's Potion Shop's shelves")
 

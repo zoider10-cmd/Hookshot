@@ -3445,11 +3445,15 @@ void hos_oot_get_name(Ctx *c, uint64_t node, int kind) {
     /* (bugs 54, 55, 56: the item Link holds up is shown by the Item_ spelling. The Armor_ spellings (oot_show_as) have the
        "You got" words, but are the pieces Link wears: held up, nothing showed (the bracelet from a chest, the Silver
        Gauntlets bought). Both spellings' packs name the same model; the game's own bracelet scene, Dm_Goron_0030, holds
-       up Item_Gauntlet_Goron. The window's words keep the Armor_ spelling) */
+       up Item_Gauntlet_Goron. The window's words keep the Armor_ spelling.
+       The Weapon_ spellings the same (bug 73, the owner's run 2026-11-18): the Potion Shop keeper's gift, the seed's Fairy
+       Slingshot, held up as Weapon_Range_SlingShot made no show item, and the game read the one it had not made: a crash
+       (guest lr 0x829630ac, a null actor's +0x270 read in f_80994de0). Every spelling of oot_show_as is held up by its
+       Item_ one; a chest's Bow held up as the weapon was also upside down and off-centre, bug 71) */
     if (kind == 1) {
         const char *shown = give ? give : name;
         for (size_t i = 0; i < sizeof oot_show_as / sizeof oot_show_as[0]; i++)
-            if (!strncmp(oot_show_as[i][1], "Armor_", 6) && !strcmp(shown, oot_show_as[i][1])) {
+            if (!strcmp(shown, oot_show_as[i][1])) {
                 if (strcmp(give ? give : "", oot_show_as[i][0]))
                     hos_log("rando: progressive: a show item's %s is held up as %s", shown, oot_show_as[i][0]);
                 give = oot_show_as[i][0];
