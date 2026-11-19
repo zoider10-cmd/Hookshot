@@ -70,7 +70,7 @@ FIXTURE = r'''#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "longshot_env.h"   /* (env_on: the switches' one rule) */
+#include "hookshot_env.h"   /* (env_on: the switches' one rule) */
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL:%d %s\n", __LINE__, #x); exit(1); } } while (0)
 typedef struct { int held; } SRWLOCK;
 typedef struct { int x; } CONDITION_VARIABLE;

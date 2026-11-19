@@ -113,7 +113,7 @@ FIXTURE = r'''#define _POSIX_C_SOURCE 200809L
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "longshot_env.h"   /* (env_on: the switches' one rule) */
+#include "hookshot_env.h"   /* (env_on: the switches' one rule) */
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL:%d %s\n", __LINE__, #x); exit(1); } } while (0)
 typedef unsigned DWORD;
 typedef long LONG;
@@ -884,7 +884,7 @@ int main(int argc, char **argv) {
 BURY_FIXTURE = r"""#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "longshot_env.h"
+#include "hookshot_env.h"
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL:%d %s\n", __LINE__, #x); exit(1); } } while (0)
 typedef struct { int x; } SRWLOCK;
 typedef struct { int x; } CONDITION_VARIABLE;
