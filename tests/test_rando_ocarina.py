@@ -38,6 +38,10 @@ def main():
           S.OCARINA_KINDS.get(g.flow) == (0, 4), "the ocarina is not Saria's gift, changed in its pouch add and its call")
     check(S.OCARINA in S.SKULLTULA_NEVER and S.OCARINA in S.PIECE_NEVER and S.CHECK_CODES.get(S.OCARINA) == "FO",
           "the ocarina may be a Skulltula's or a piece's, or has no Tracker letters")
+    z = S.OCARINA_TIME_GIFT
+    check(z.flow == "Dm_MelodyGet_Time" and z.olds == (S.OCARINA_TIME,) and S.OCARINA_KINDS.get(z.flow) == (0, 4) and
+          z.key in S.GIFT_PLACES and S.OCARINA_TIME in S.SKULLTULA_NEVER and S.OCARINA_TIME not in S.CHECK_CODES,
+          "the Ocarina of Time is not Zelda's gift at the moat, or is a gating item")
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
     check("a.ocarina = a.songs == 3 and SONGS_ANYWHERE" in script and "a.songs = 2 if a.songs == 3 else a.songs" in script and
           '" ocarina 1" if a.ocarina else ""' in script and "kinds=OCARINA_KINDS.get(flow, (4,)))" in script and
