@@ -146,7 +146,10 @@ const char kTrackerHelp[] =
     "Link is in comes first, then the areas with something in logic.\n\n"
     "In logic: Link carries all that the seed's rules ask for at that check. The rules ask for more than a check may need, so "
     "one not in logic may still be within reach.\n\n"
-    "Collected is the randomizer's own record of the items given. Starting the seed again? Confirm twice here to forget it.";
+    "Junk: a check stepped to can be marked as not worth going for (Y, or J), and again to count it. It is left out of the "
+    "checks left, and the Show row's Left lists hide it.\n\n"
+    "Collected is the randomizer's own record of the items given. Starting the seed again? Confirm twice here to forget it, "
+    "and the junk marks with it.";
 const char kTrackerShowHelp[] =
     "Which checks the tab lists: all of them, only the ones left to collect, or only the ones left that are in logic now. An "
     "area with nothing to list is left out.";
@@ -197,6 +200,54 @@ int tracker_check_count = 0;
 static_assert(kTrackerChecks == OOT_TRACKER_MAX, "the game side reports as many checks as the menu keeps");
 std::atomic<signed char> tracker_done[kTrackerChecks];
 int tracker_pick[kTrackerRows];
+// (the randomizer's fork) Junk: a check the player marks as not worth going for (asked for 2026-11-18), with Y on a
+// controller (the Switch's Y as bound: menu_keys::extra) or J, on an area's row stepped to the check; again, and it counts
+// again. A junk check is left out of the checks left and of those in logic, and the Show row's Left lists hide it. The
+// marks are the Tracker's own record, <game folder>\rando\junk.txt beside the game's rando\collected.txt and in its form:
+// "seed <the seed's stamp>" (the first line of mods\rando-seed\rando_stamp.txt), then each junk check's place in
+// checks.txt, a line each. Another seed's record is not taken. Read when the seed's checks are (tracker_load), written at
+// each change, and emptied by the first row's Forget with the record of what is collected. tests/test_tracker_junk.py
+bool tracker_junk[kTrackerChecks];
+std::string tracker_junk_stamp;   // (the seed the marks are of, as its stamp file says: "" none)
+constexpr int kTrackerJunkPress = 18;   // (menu_tick's press[]: J, or the controller's button for it)
+std::string tracker_junk_path() { return game_folder_path() + "rando\\junk.txt"; }
+/// The seed's stamp: the first line of its rando_stamp.txt without the line's end ("" none), as host/hos_main.c reads it
+std::string tracker_seed_stamp() {
+    char line[512] = "";
+    if (FILE* f = fopen((game_folder_path() + "mods\\rando-seed\\rando_stamp.txt").c_str(), "r")) {
+        if (!fgets(line, sizeof line, f)) line[0] = 0;
+        fclose(f);
+    }
+    line[strcspn(line, "\r\n")] = 0;
+    return line;
+}
+/// The junk marks from the record at path, if it is of the seed stamp (count: the seed's checks); none otherwise
+void tracker_junk_read(const std::string& path, const std::string& stamp, int count) {
+    for (bool& junk : tracker_junk) junk = false;
+    FILE* f = fopen(path.c_str(), "r");
+    if (!f) return;
+    char line[512];
+    if (fgets(line, sizeof line, f)) {
+        line[strcspn(line, "\r\n")] = 0;
+        if (!strncmp(line, "seed ", 5) && stamp == line + 5)   // (this seed's record)
+            while (fgets(line, sizeof line, f)) {
+                const int i = atoi(line);
+                if (line[0] >= '0' && line[0] <= '9' && i < count && i < kTrackerChecks) tracker_junk[i] = true;
+            }
+    }
+    fclose(f);
+}
+/// The junk marks written whole to the record at path, for the seed stamp: whether it was written
+bool tracker_junk_write(const std::string& path, const std::string& stamp, int count) {
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);   // (rando\: the game makes it too)
+    FILE* f = fopen(path.c_str(), "w");
+    if (!f) return false;
+    fprintf(f, "seed %s\n", stamp.c_str());
+    for (int i = 0; i < count && i < kTrackerChecks; i++)
+        if (tracker_junk[i]) fprintf(f, "%d\n", i);
+    return fclose(f) == 0;
+}
 // What the tab shows (the first row's Left and Right): every check, only the ones left to collect, or only the ones left
 // that are in logic now. A check not shown is stepped over, and an area with none to show has no row.
 enum { kTrackerShowAll, kTrackerShowLeft, kTrackerShowReachable, kTrackerShows };
@@ -256,6 +307,7 @@ std::string tracker_item_name(const char* actor) {
 bool tracker_check_shown(int i) {
     if (tracker_show == kTrackerShowAll) return true;
     if (tracker_done[i].load(std::memory_order_relaxed) == 1) return false;
+    if (tracker_junk[i]) return false;   // (marked junk: not one left to go for)
     return tracker_show != kTrackerShowReachable || tracker_in_logic(tracker_checks[i]) != 0;
 }
 /// How many checks a row's area has to show (every one of the area: any true), and (n from 1) its n-th shown: nullptr past them
@@ -273,6 +325,20 @@ const TrackerCheck* tracker_row_check(int row, int n) {
 bool tracker_row_hidden(int row) {
     return row >= kTrackerFirstArea && tracker_show != kTrackerShowAll && tracker_row_checks(row, true) > 0 && !tracker_row_checks(row);
 }
+/// The check a row is stepped to marked junk, or counted again, and the record written (tracker_junk): whether there was one.
+/// One a Left list hides now leaves the row on the next it shows, or on its own words
+bool tracker_junk_flip(int row) {
+    const TrackerCheck* k = tracker_pick[row] ? tracker_row_check(row, tracker_pick[row]) : nullptr;
+    if (!k) return false;
+    const int i = (int)(k - tracker_checks);
+    tracker_junk[i] = !tracker_junk[i];
+    if (!tracker_junk_write(tracker_junk_path(), tracker_junk_stamp, tracker_check_count))
+        logf("menu: tracker: rando\\junk.txt could not be written");
+    logf("menu: tracker: %s of %s %s", k->kind, k->area, tracker_junk[i] ? "marked junk" : "counted again");
+    const int shown = tracker_row_checks(row);
+    if (tracker_pick[row] > shown) tracker_pick[row] = shown;
+    return true;
+}
 /// What a row says: its own words, or the check it is stepped to ("3 of 10: Chest, child's, at -27 68 65")
 std::string tracker_says(int row) {
     const TrackerCheck* k = tracker_pick[row] ? tracker_row_check(row, tracker_pick[row]) : nullptr;
@@ -281,13 +347,14 @@ std::string tracker_says(int row) {
             return "Press again to forget what is collected";
         if (row == kTrackerHomeRow && tracker_check_count)
             return tracker_home_asked && GetTickCount64() - tracker_home_asked < kTrackerForgetMs ? "Press again to go home" : "Kokiri Forest, or the Market";
-        int in = 0, known = 0, left = 0, told = 0, all = 0;
+        int in = 0, known = 0, left = 0, told = 0, all = 0, junk = 0;
         for (int i = 0; i < tracker_check_count; i++) {
             if (row && strcmp(tracker_checks[i].area, tracker_name[row])) continue;
             all++;
             const int done = tracker_done[i].load(std::memory_order_relaxed);
-            told += done >= 0, left += done != 1;
+            told += done >= 0, left += done != 1 && !tracker_junk[i], junk += done != 1 && tracker_junk[i];
             if (done == 1) continue;   // (a check collected is not one to go for)
+            if (tracker_junk[i]) continue;   // (nor one marked junk: tracker_junk)
             const int state = tracker_in_logic(tracker_checks[i]);
             known += state >= 0, in += state > 0;
         }
@@ -296,24 +363,27 @@ std::string tracker_says(int row) {
         const auto checks = [](int n) { return std::to_string(n) + (n == 1 ? " check" : " checks"); };
         if (row == kTrackerShowRow && tracker_check_count) return kTrackerShowWords[tracker_show];
         if (!row && all && told) {   // (the whole game: how far the seed is, and what can be gone for now)
-            std::string words = std::to_string(all - left) + " of " + std::to_string(all) + " collected";
+            std::string words = std::to_string(all - left - junk) + " of " + std::to_string(all) + " collected";
+            if (junk) words += ", " + std::to_string(junk) + " junk";
             if (known) words += ", " + std::to_string(in) + " in logic now";
             return words;
         }
-        std::string words = all ? checks(told ? left : all) + (told ? " left" : "") : std::string(tracker_value[row]);
+        std::string words = all ? checks(told ? left : all - junk) + (told ? " left" : "") : std::string(tracker_value[row]);
         if (all && told && !left) words = "All collected";
         else if (all && known) words += ", " + std::to_string(in) + " in logic";
+        if (all && junk) words += ", " + std::to_string(junk) + " junk";
         const char* here = row >= kTrackerFirstArea ? tracker_here_area() : nullptr;
         if (here && !strcmp(here, tracker_name[row])) words = "Here: " + words;   // (the area Link is in: the first of them)
         return words;
     }
     const bool collected = tracker_done[k - tracker_checks].load(std::memory_order_relaxed) == 1;
-    const int state = collected ? -1 : tracker_in_logic(*k);
-    char text[224], place[48] = "";   // (a check without a name of its own, from a file made before them: its place tells it from the next)
+    const bool junk = !collected && tracker_junk[k - tracker_checks];
+    const int state = collected || junk ? -1 : tracker_in_logic(*k);
+    char text[232], place[48] = "";   // (a check without a name of its own, from a file made before them: its place tells it from the next)
     if (!strcmp(k->kind, "Chest") || !strcmp(k->kind, "Gold Skulltula")) snprintf(place, sizeof place, " at %.0f %.0f %.0f", k->pos[0], k->pos[1], k->pos[2]);
-    snprintf(text, sizeof text, "%d of %d: %s%s%s%s", tracker_pick[row], tracker_row_checks(row), k->kind,
+    snprintf(text, sizeof text, "%d of %d: %s%s%s%s%s", tracker_pick[row], tracker_row_checks(row), k->kind,
              !strcmp(k->ages, "C") ? ", child's," : !strcmp(k->ages, "A") ? ", adult's," : "", place,
-             collected ? ": done" : state > 0 ? ": in logic" : state == 0 ? ": not in logic" : "");
+             collected ? ": done" : state > 0 ? ": in logic" : state == 0 ? ": not in logic" : "", junk ? ": junk" : "");
     return text;
 }
 /// The help's panel for an area's row: every check of the area that the tab lists, one a line, each with its mark (collected,
@@ -322,12 +392,13 @@ std::string tracker_says(int row) {
 void tracker_panel(ui::Ctx& c, float x0, float x1, float y0, float y_max, int row, const char* hint) {
     const float s = c.s, px = 17 * s, pitch = 26 * s, w = x1 - x0 - 48 * s;
     constexpr ImU32 kIn = ui::rgba(120, 224, 150), kOut = ui::rgba(138, 156, 184), kGot = ui::rgba(110, 126, 152);
-    struct Line { const TrackerCheck* k; int state; };   // (state: 2 collected, 1 in logic, 0 not, -1 not known)
+    constexpr ImU32 kJunk = ui::rgba(92, 102, 120);   // (a junk check: dimmer than one collected, its words struck through)
+    struct Line { const TrackerCheck* k; int state; };   // (state: 3 junk, 2 collected, 1 in logic, 0 not, -1 not known)
     std::vector<Line> lines;
     for (int i = 0; i < tracker_check_count; i++) {
         if (strcmp(tracker_checks[i].area, tracker_name[row]) || !tracker_check_shown(i)) continue;
         const bool got = tracker_done[i].load(std::memory_order_relaxed) == 1;
-        lines.push_back({&tracker_checks[i], got ? 2 : tracker_in_logic(tracker_checks[i])});
+        lines.push_back({&tracker_checks[i], got ? 2 : tracker_junk[i] ? 3 : tracker_in_logic(tracker_checks[i])});
     }
     const int n = (int)lines.size(), pick = tracker_pick[row];
     const float hh = hint ? ui::para(c, c.f.body, 16 * s, ImVec2(), 0, hint, w - 18 * s, false) : 0;
@@ -349,6 +420,9 @@ void tracker_panel(ui::Ctx& c, float x0, float x1, float y0, float y_max, int ro
         if (state == 2) {   // (collected: a tick)
             c.d->AddLine(ImVec2(mx - 5 * s, my), ImVec2(mx - 1.5f * s, my + 4 * s), kGot, 2 * s);
             c.d->AddLine(ImVec2(mx - 1.5f * s, my + 4 * s), ImVec2(mx + 5.5f * s, my - 4.5f * s), kGot, 2 * s);
+        } else if (state == 3) {   // (junk: a cross)
+            c.d->AddLine(ImVec2(mx - 4 * s, my - 4 * s), ImVec2(mx + 4 * s, my + 4 * s), kJunk, 1.8f * s);
+            c.d->AddLine(ImVec2(mx - 4 * s, my + 4 * s), ImVec2(mx + 4 * s, my - 4 * s), kJunk, 1.8f * s);
         } else if (state == 1) c.d->AddCircleFilled(ImVec2(mx, my), 5 * s, kIn);
         else if (state == 0) c.d->AddCircle(ImVec2(mx, my), 4.5f * s, kOut, 0, 1.6f * s);
         else c.d->AddLine(ImVec2(mx - 4 * s, my), ImVec2(mx + 4 * s, my), kOut, 1.6f * s);
@@ -360,10 +434,11 @@ void tracker_panel(ui::Ctx& c, float x0, float x1, float y0, float y_max, int ro
         std::string text = l.k->kind;
         if (!strcmp(l.k->ages, "C")) text += " (child)";
         else if (!strcmp(l.k->ages, "A")) text += " (adult)";
-        const ImU32 col = l.state == 2 ? kGot : l.state == 1 ? ui::kInkBright : ui::kSoft;
+        const ImU32 col = l.state == 3 ? kJunk : l.state == 2 ? kGot : l.state == 1 ? ui::kInkBright : ui::kSoft;
         const float tx = x0 + 48 * s, ty = y + pitch * 0.5f - 3 * s;
         c.d->PushClipRect(ImVec2(tx, y), ImVec2(x1 - 20 * s, y + pitch), true);
         const float end = tx + ui::text_mid(c, c.f.body, px, tx, ty, col, text.c_str());   // (text_mid: the words' width)
+        if (l.state == 3) c.d->AddLine(ImVec2(tx - 2 * s, ty), ImVec2(end + 2 * s, ty), kJunk, 1.5f * s);   // (junk: struck through)
         if (l.state == 2 && l.k->gives[0])   // (what it gave, once it is collected)
             ui::text_mid(c, c.f.body, px, end + 10 * s, ty, ui::kSoft, tracker_item_name(l.k->gives).c_str());
         c.d->PopClipRect();
@@ -371,7 +446,7 @@ void tracker_panel(ui::Ctx& c, float x0, float x1, float y0, float y_max, int ro
     y += 12 * s;
     {   // (what the marks mean)
         float lx = x0 + 32 * s;
-        const struct { int state; const char* says; } legend[] = {{1, "in logic"}, {0, "not yet"}, {2, "collected"}};
+        const struct { int state; const char* says; } legend[] = {{1, "in logic"}, {0, "not yet"}, {2, "collected"}, {3, "junk"}};
         for (const auto& e : legend) {
             mark(lx, y + 8 * s, e.state);
             lx += 12 * s + ui::text_mid(c, c.f.body, 14 * s, lx + 12 * s, y + 8 * s, ui::kDim, e.says) + 26 * s;
@@ -390,6 +465,7 @@ std::string tracker_hint(int row) {
     std::string missing;
     if (k && tracker_done[k - tracker_checks].load(std::memory_order_relaxed) == 1)
         return k->gives[0] ? "Collected: it gave " + tracker_item_name(k->gives) + "." : std::string("Collected: its item was given to Link here.");
+    if (k && tracker_junk[k - tracker_checks]) return "Junk: not counted among the checks left. Mark it again to count it.";
     const int state = k ? tracker_in_logic(*k, &missing) : -1;
     std::string says = state > 0 ? "In logic: Link carries all the seed's rules ask for here." : state == 0 ? "Not in logic. Still asked for: " + missing + "." : "";
     if (k && k->hash[0]) {   // (and the way there, where Ocarina Atlas describes it: tracker_ways)
@@ -1279,6 +1355,7 @@ constexpr float kVersionMinPt = 10;   // (the banner's version at Small and Medi
 bool pad_last = false;   // (a controller was the menu's last input: its buttons in the prompts)
 int pad_confirm = 0, pad_back = 1;   // (the face buttons that confirm and go back, HOS_PAD_*: menu_keys::confirm_back, each tick)
 int pad_paste = 3;   // (hookshot: the one that pastes into a text field while it has the keyboard: menu_keys::paste)
+int pad_junk = 2;    // (the randomizer's fork: the Tracker's Junk, where the Switch's Y is bound: menu_keys::extra)
 const char* tx_menu_size(int v) {
     static const char* t[] = {"Small", "Medium", "Large"};
     return v >= 1 && v <= 3 ? t[v - 1] : t[1];
@@ -2687,6 +2764,17 @@ void tracker_load() {
         fclose(f);
     }
     tracker_check_count = checks;
+    {   // (the junk marks, read again when the seed is another: tracker_junk. Kept as they are in between, written at each change)
+        static std::string junk_seen = "-";
+        const std::string stamp = on && checks ? tracker_seed_stamp() : std::string();
+        const std::string seen = stamp + "|" + std::to_string(checks);
+        if (seen != junk_seen) {
+            junk_seen = seen;
+            tracker_junk_stamp = stamp;
+            if (checks) tracker_junk_read(tracker_junk_path(), stamp, checks);
+            else for (bool& junk : tracker_junk) junk = false;
+        }
+    }
     {   // (the checks' ways, read again when the file changes: a new seed)
         static std::string ways_seen;
         const std::string ways_path = path.substr(0, path.find_last_of("\\/") + 1) + "check_ways.txt";
@@ -2722,7 +2810,7 @@ void tracker_load() {
                 for (int i = 0; i < tracker_check_count; i++) {
                     if (strcmp(tracker_checks[i].area, tracker_name[row])) continue;
                     any++;
-                    if (tracker_done[i].load(std::memory_order_relaxed) == 1) continue;
+                    if (tracker_done[i].load(std::memory_order_relaxed) == 1 || tracker_junk[i]) continue;
                     left++, in += tracker_in_logic(tracker_checks[i]) > 0;
                 }
                 return in ? 1 : left || !any ? 2 : 3;
@@ -3861,6 +3949,7 @@ ui::Ctx ui_ctx(uint32_t w, uint32_t h) {
     ui::Ctx c{ImGui::GetForegroundDrawList(), ui::fonts(), 1, (float)w, (float)h, 0, pad_last};
     c.confirm_dot = menu_keys::dot(pad_confirm), c.back_dot = menu_keys::dot(pad_back);
     c.paste_dot = menu_keys::dot(pad_paste);   // (hookshot: a text field's Paste)
+    c.extra_dot = menu_keys::dot(pad_junk);    // (the Tracker's Junk)
     c.s = ui::unit((float)h, opts.menu_size, &c.safe);
     return c;
 }
@@ -4565,6 +4654,8 @@ void draw_options(ui::Ctx& c) {
         if (selr.tracker == kTrackerShowRow && tracker_check_count) prompt_list[prompts_n++] = {ui::kLeftRight, "Change"};
         if (!selr.tracker && tracker_check_count) prompt_list[prompts_n++] = {ui::kConfirm, "Forget"};   // (the whole game's row: the record forgotten)
         if (selr.tracker == kTrackerHomeRow && tracker_check_count) prompt_list[prompts_n++] = {ui::kConfirm, "Go home"};
+        if (const TrackerCheck* k = tracker_pick[selr.tracker] ? tracker_row_check(selr.tracker, tracker_pick[selr.tracker]) : nullptr)   // (Y or J: tracker_junk)
+            prompt_list[prompts_n++] = {ui::kExtra, tracker_junk[k - tracker_checks] ? "Not junk" : "Junk", "J"};
         if (tracker_pick[selr.tracker] && cheats_on()) prompt_list[prompts_n++] = {ui::kConfirm, "Go there"};
         prompt_list[prompts_n++] = {ui::kTabs, "Tabs"}, prompt_list[prompts_n++] = {ui::kBack, "Close"};
     } else {
@@ -6561,7 +6652,9 @@ void tracker_press(int row, const bool* press, bool& changed) {
             if (tracker_forget_asked && now - tracker_forget_asked < kTrackerForgetMs) {
                 cheat_action.store(kTrackerForgetAction);
                 tracker_forget_asked = 0;
-                logf("menu: tracker: forget what is collected");
+                for (bool& junk : tracker_junk) junk = false;   // (and the junk marks, the menu's own record: tracker_junk)
+                tracker_junk_write(tracker_junk_path(), tracker_junk_stamp, tracker_check_count);
+                logf("menu: tracker: forget what is collected, and the junk marks");
             } else tracker_forget_asked = now;
             changed = true;
         }
@@ -6569,6 +6662,10 @@ void tracker_press(int row, const bool* press, bool& changed) {
     }
     const int n = tracker_row_checks(row);
     if (!n) return;
+    if (press[kTrackerJunkPress]) {   // (Y or J: the check shown marked junk, or counted again)
+        if (tracker_junk_flip(row)) changed = true;
+        return;
+    }
     if (press[3] || press[4]) tracker_pick[row] = (tracker_pick[row] + n + 1 + (press[4] ? 1 : -1)) % (n + 1), changed = true;
     const TrackerCheck* k = press[7] && cheats_on() ? tracker_row_check(row, tracker_pick[row]) : nullptr;
     if (!k) return;
@@ -6720,12 +6817,13 @@ void menu_tick() {
     fullscreen_tick();
     game_lang_tick();
     outputs_follow_screen();
-    enum { K_N = 18 };
+    enum { K_N = 19 };
     static bool held[K_N];
     static const int keys[K_N] = {VK_INSERT, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_ESCAPE, VK_F1,   // (F1: for keyboards without Insert)
                                   VK_RETURN, VK_DELETE, VK_BACK,
                                   'Q', 'E', VK_TAB,   // (the tabs: Q and E, Tab and Shift+Tab)
-                                  VK_PRIOR, VK_NEXT, VK_HOME, VK_END, VK_F10};   // (the long lists: a page, the ends)
+                                  VK_PRIOR, VK_NEXT, VK_HOME, VK_END, VK_F10,   // (the long lists: a page, the ends)
+                                  'J'};   // (the Tracker's Junk: kTrackerJunkPress)
     HWND fg = GetForegroundWindow();
     DWORD pid = 0;
     if (fg) GetWindowThreadProcessId(fg, &pid);
@@ -6786,6 +6884,7 @@ void menu_tick() {
         menu_keys::confirm_back(host->binding(HOS_BIND_PAD, HOS_SW_A, 0), host->binding(HOS_BIND_PAD, HOS_SW_B, 0), &pad_confirm,
                                 &pad_back);
     pad_paste = menu_keys::paste(pad_confirm, pad_back);   // (hookshot: a text field's paste, on a button neither is on)
+    pad_junk = menu_keys::extra(host && host->binding ? host->binding(HOS_BIND_PAD, HOS_SW_Y, 0) : -1, pad_confirm, pad_back);
     if (pad(HOS_PAD_GUIDE) || chord_now) press[0] = true;
     {   // holding an arrow or the D-pad repeats it: after 0.35 s, 12 a second, then 30 a second after 1.5 s held
         static int64_t held_since[5], next_repeat[5];
@@ -6804,6 +6903,7 @@ void menu_tick() {
     if (open_now.load() && listening != 1) {
         press[1] |= pad(HOS_PAD_UP), press[2] |= pad(HOS_PAD_DOWN), press[3] |= pad(HOS_PAD_LEFT);
         press[4] |= pad(HOS_PAD_RIGHT), press[5] |= pad(pad_back), press[7] |= pad(pad_confirm);
+        press[kTrackerJunkPress] |= pad(pad_junk);   // (the Tracker's Junk: the Switch's Y as bound)
     }
     std::vector<uint32_t> scripted;   // (hookshot: RX_VK_MENU_SCRIPT's typing, for the text field that has the keyboard)
     {   // RX_VK_MENU_SCRIPT (test runs, which never have the focus): timed menu keys, "<seconds>:<INS|UP|DOWN|LEFT|RIGHT|ESC|ENTER|TABL|TABR>,...";
@@ -6832,6 +6932,7 @@ void menu_tick() {
             for (int p = 0; p < 4; p++)
                 if (!strcmp(key, pads[p]) && open_now.load() && listening != 1) {
                     press[5] |= p == pad_back, press[7] |= p == pad_confirm;
+                    press[kTrackerJunkPress] |= p == pad_junk;
                     if (editing && (p == pad_back || p == pad_confirm))
                         scripted.push_back(HOS_TEXT_KEY | (uint32_t)(p == pad_confirm ? VK_RETURN : VK_ESCAPE));
                     pad_last = true;

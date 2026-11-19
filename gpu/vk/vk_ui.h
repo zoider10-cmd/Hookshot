@@ -55,6 +55,7 @@ struct Ctx {
     bool pad;     // (a controller was the last input: its buttons in the prompts)
     int confirm_dot = 3, back_dot = 1;   // (the face buttons that confirm and go back: vk_menu_keys.h dot, 3 the bottom, 1 the right)
     int paste_dot = 0;   // (hookshot: the one that pastes into a text field, vk_menu_keys.h paste)
+    int extra_dot = 2;   // (the randomizer's fork: one more action's button, the Tracker's Junk, vk_menu_keys.h extra)
 };
 
 inline ImVec2 size_of(ImFont* font, float px, const char* t, float wrap = 0) {
@@ -187,11 +188,11 @@ inline void gold(Ctx& c, ImVec2 a0, ImVec2 b0) {
 }
 
 // ---- the button prompts: the keys, or a controller's buttons by position (any layout: the dot lit) ----
-enum Glyph { kUpDown, kLeftRight, kTabs, kConfirm, kBack, kKey, kCompact, kPaste, kAddChar, kRemoveChar };
+enum Glyph { kUpDown, kLeftRight, kTabs, kConfirm, kBack, kKey, kCompact, kPaste, kAddChar, kRemoveChar, kExtra };
 struct Prompt {
     Glyph g;
     const char* what;
-    const char* key = nullptr;   // (kKey: a key's name, shown with the keys and with a controller alike)
+    const char* key = nullptr;   // (kKey: a key's name, shown with the keys and with a controller alike; kExtra: its key's)
 };
 /// One glyph at p (its top left; the line px + 10 points high); its width. draw false: measured only
 inline float glyph(Ctx& c, float px, ImVec2 p, const Prompt& pr, bool draw) {
@@ -238,6 +239,7 @@ inline float glyph(Ctx& c, float px, ImVec2 p, const Prompt& pr, bool draw) {
         case kPaste: return key(p.x, "Ctrl+V");
         case kAddChar: return key(p.x, "Ins");
         case kRemoveChar: return key(p.x, "Del");
+        case kExtra: return key(p.x, pr.key);
         default: return key(p.x, "Esc");
         }
     }
@@ -265,7 +267,7 @@ inline float glyph(Ctx& c, float px, ImVec2 p, const Prompt& pr, bool draw) {
         c.d->AddRectFilled(m - ImVec2(len, arm), m + ImVec2(len, arm), v ? dim : ink, arm * 0.5f);
         c.d->AddRectFilled(m - ImVec2(arm, arm), m + ImVec2(arm, arm), ink);
     } else {   // (the face buttons, four dots: the bottom one confirms, the right one goes back)
-        const int lit = pr.g == kConfirm ? c.confirm_dot : pr.g == kPaste ? c.paste_dot : c.back_dot;   // (0 top, 1 right, 2 left, 3 bottom)
+        const int lit = pr.g == kConfirm ? c.confirm_dot : pr.g == kPaste ? c.paste_dot : pr.g == kExtra ? c.extra_dot : c.back_dot;   // (0 top, 1 right, 2 left, 3 bottom)
         const ImVec2 at[4] = {m + ImVec2(0, -r * 0.5f), m + ImVec2(r * 0.5f, 0), m + ImVec2(-r * 0.5f, 0), m + ImVec2(0, r * 0.5f)};
         for (int i = 0; i < 4; i++) {
             if (i == lit) c.d->AddCircleFilled(at[i], r * 0.27f, ink);

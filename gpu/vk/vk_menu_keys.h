@@ -36,4 +36,10 @@ inline int paste(int confirm, int back) {
     return kNorth;
 }
 
+/// (the randomizer's fork) The button for one more of the menu's actions (the Tracker's Junk): position, where a button of
+/// the Switch's is bound (Y), when it is a face button that neither confirms nor goes back; else the paste button
+inline int extra(int position, int confirm, int back) {
+    return position >= kSouth && position <= kNorth && position != confirm && position != back ? position : paste(confirm, back);
+}
+
 } // namespace mkwvk::menu_keys

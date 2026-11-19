@@ -62,7 +62,7 @@ def main():
           "the rows past the file's lines are shown, or the file is not read for the tab")
     check("else if (press[7] && !r.value && r.tracker < 0 && can_bind()) page = 1" in menu and
           "choice_cell(c, va, vb, tracker_says(r.tracker), selected, steps, steps);" in menu and
-          "std::string words = all ? checks(told ? left : all) + (told ? \" left\" : \"\") : std::string(tracker_value[row]);" in menu,
+          "std::string words = all ? checks(told ? left : all - junk) + (told ? \" left\" : \"\") : std::string(tracker_value[row]);" in menu,
           "a Tracker row opens the Controls page on confirm, or does not show the file's value")
     # ---- the checks one by one, and Go there ----
     lines = seed.check_lines([("ZoraRiver", (1.0, 2.0, 3.0), "CA", seed.ADULT), ("KokiriForest", (-27.04, 67.6, 65.2), "C", seed.NONE),
@@ -261,7 +261,7 @@ def main():
           "return in ? 1 : left || !any ? 2 : 3;" in menu and "if (!called || now - called > 1500) sort = true;" in menu and
           'if (here && !strcmp(here, tracker_name[row])) words = "Here: " + words;' in menu,
           "the area Link is in is not first, the areas with a check in logic are not next, or the rows move while the tab is on screen")
-    check('std::string words = std::to_string(all - left) + " of " + std::to_string(all) + " collected";' in menu and
+    check('std::string words = std::to_string(all - left - junk) + " of " + std::to_string(all) + " collected";' in menu and
           'if (known) words += ", " + std::to_string(in) + " in logic now";' in menu and 'if (all && told && !left) words = "All collected";' in menu,
           "the whole game's row does not say how many are collected and how many are in logic now")
     check("if (l.state == 2 && l.k->gives[0])   // (what it gave, once it is collected)" in menu and
