@@ -193,7 +193,7 @@ def sources():
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     check(seed.OPEN_DOOR == {"Market_Child_TimeTempleDoor_Opened": True, "HavePlayedEvent.Dm_TimeTemple_0065": True} and
           "#define OOT_LEFT_TEMPLE_FLAG 0x%08xu" % seed.murmur3(b"HavePlayedEvent.Dm_TimeTemple_0065") in host and '"rando_open_door": 0' in script and
-          'a.open_door = a.open_door or ini["rando_open_door"] != 0' in script and
+          'a.open_door = a.open_door or ini["rando_open_door"] == 1' in script and
           "new = flag_defaults(was, dict(flags, **FIELD_CLOCK, **DPAD_HUD, **MINIMAP, **(OPEN_DOOR if a.open_door else {}), **(LINK_DOOR if a.skip_intro else {}), **(AREA_INTROS if a.skip_cutscenes else {})))" in script and
           'X(OPEN_DOOR, "Open Door of Time", "rando_open_door",' in header,
           "the Door of Time's flag does not start set with the setting, or the setting is not read")
@@ -220,13 +220,13 @@ def sources():
           "is without the Silver Scale, or an overworld place is changed")
     check(S.DOOR_NO_BOMBS <= S.DOOR_ADULT_AREAS and set(S.DOOR_SONGS) == set(S.DOOR_ADULT_AREAS) and
           all(v <= songs for v in S.DOOR_SONGS.values()) and (S._ZL, S._SARIA, S._TIME, S._STORMS) == (S.ZL, S.SARIA, S.TIME, S.STORMS) and
-          "a.open_forest, spots[h][0])" in script and "each(door_need, forest(need, area), grown(h, area), a.open_forest, area)" in script,
+          "a.open_forest, spots[h][0],\n                         a.door_song)" in script and "each(door_need, forest(need, area), grown(h, area), a.open_forest, area, a.door_song)" in script,
           "the dungeons' own rules are not for the dungeons of an adult's alone, name songs that are not an adult's four, or are not asked")
     check(not S.DOOR_ADULT_AREAS & {"SpiritTemple", "DesertColossus", "KokiriForest", "InsideJabuJabuBelly", "DodongoCavern", "InsideTheDekuTree", "BottomOfTheWell"} and
           S.DOOR_ADULT_AREAS <= set(S.RULES),
           "a dungeon a child enters is taken for an adult's alone")
     check("needs = {h: each(door_need, n, shelves[h][0].ages == \"A\" if h in shelves else" in script and
-          "skull_asks = lambda h, at=None: (lambda area: skull_door(step(" in script and "each(door_need, need, grown(h, area), a.open_forest, area)" in script and "heart_asks = lambda h: (skull_door if h in bosses else door)(step(" in script,
+          "skull_asks = lambda h, at=None: (lambda area: skull_door(step(" in script and "each(door_need, need, grown(h, area), a.open_forest, area, a.door_song)" in script and "heart_asks = lambda h: (skull_door if h in bosses else door)(step(" in script,
           "the Door of Time's rules are not the chests', the gifts', the Gold Skulltulas' and the Pieces of Heart's")
     # (the flag alone did not open the door: reported from play. The door's actor is put far under the map)
     def door_file(*actors):
@@ -245,7 +245,7 @@ def sources():
           abs(side(rows[1]) + 34.0) < 0.01 and seed.DOOR_SHEIK == "Npc_Hylia_Sheik_Adult" and seed.DOOR_SHEIK_ASIDE >= 4 and
           "the Door of Time: the Market's map files have no Sheik by the sword. Nothing written." in script,
           "Sheik is not put to the side of the sword's room, is put under the map, or the door is put aside with him")
-    check("new, count, aside = door_away(data)" in script and "the Door of Time: the Market's map files have no such door. Nothing written." in script,
+    check("new, count, aside = door_away(data, door=a.open_door)" in script and "the Door of Time: the Market's map files have no such door. Nothing written." in script,
           "the seed does not put the door out of the way with the setting, or says nothing when it finds none")
     check("#define OOT_DOOR_FLAG 0x%08xu" % seed.murmur3(b"Market_Child_TimeTempleDoor_Opened") in host and
           'const char *event = child ? "Market_Child_Field_ChildToAdult" : "Market_Adult_Field_AdultToChild";' in host and
