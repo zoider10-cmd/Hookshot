@@ -43,7 +43,9 @@ def main():
         raise SystemExit("the textures do not give memory up when the driver refuses a pipeline for want of it (UHD Graphics: "
                          "six refused, then a fault in igvk64.dll)")
     draw = (VK / "vk_draw.cpp").read_text(encoding="utf-8")
-    for held_fn in ("note_out_of_memory(guarded_graphics(cache, ci, pl))", "note_out_of_memory(guarded_compute(cache, ci, pl))"):
+    # (both the first try's result and the retry's without the optimizer, noopt_retry_wanted, are counted)
+    for held_fn in ("const VkResult r = guarded_graphics(cache, ci, pl);", "const VkResult r = guarded_compute(cache, ci, pl);",
+                    "if (!noopt_retry_wanted(r, ci->flags)) return note_out_of_memory(r);", "return note_out_of_memory(second);"):
         if held_fn not in draw:
             raise SystemExit("vk_draw.cpp: a pipeline refused for want of memory is not counted: " + held_fn)
     if "!(kept_only && !squeeze_always)" not in squeeze:
