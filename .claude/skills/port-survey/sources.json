@@ -24,7 +24,7 @@
    "url": "https://git.magicbean.dev/MagicBeanDev/Longshot",
    "kind": "fork",
    "license": "GPL-3.0-or-later",
-   "base": "shares our history up to 1be60eae: compare commit titles",
+   "base": "shares our history up to 1be60eae; its main up to 544229a2 (2026-11-17) is merged here with the rename undone (a62ba9e8), so ancestry hides it: a commit is new here when it is not an ancestor of 544229a2. Picks conflict on the name (longshot/hookshot) and our README",
    "surveyed": "621dae50",
    "surveyed_on": "2026-11-19"
   },
