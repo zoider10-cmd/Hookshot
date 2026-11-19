@@ -329,6 +329,10 @@ SCENE_SHOWS = frozenset((
     "EventPlayerTurnAndLook", "EventPlayerTurnAndLookNow", "EventNPCTurnToTarget", "EventTriggerChangeEmotion",
     "EventTriggerEmitNpcOrPlayerVoice", "EventSoundStartSound", "EventNaviRequestBallonMessage",
     "EventTriggerRequestCameraShake", "EventNodeEffectEmit", "EventCloseMessageDialog", "EventPlayerPlayOcarinaFree"))
+# An animation that moves its character is no show (bug 88, the owner's run 2026-11-19): King Zora given Ruto's Letter
+# moves aside by his animation C10 (Dm_Zora_0010's entry C10, IsAnimeDriven: the animation carries him), and without it
+# he stayed in the way until the map was loaded again. Kept, by (the actor, the animation's name).
+SCENE_MOVES = frozenset((("Npc_Zora_KingZora_child", "C10"),))
 SCENE_SHOWS_SUB = ("Common_Camera_Pln",)   # (sub-flows of these flows only set the camera's focus)
 # A song lesson (Dm_MelodyGet_...): the teacher plays the song, Link plays it back, the ocarina plays it by itself (the
 # ocarina's own flow, these entries), then the lesson's gift step gives what the lesson gives (GetPouchContent, its item
@@ -3149,6 +3153,8 @@ def scene_steps(data):
                 s["choices"] = choices(u64(e + 0x10))
             elif s["what"] == "EventTransition":
                 s["event"] = param(u64(e + 0x10), "EventName") or ""
+            elif s["what"] == "EventPlayAS":   # (who plays it and what: SCENE_MOVES)
+                s["as"] = (text(u64(actor)), param(u64(e + 0x10), "ASName") or "")
         elif kind in (1, 5):   # (5: a switch of another kind, its cases as a switch's: seen in Goto_HyruleCastle)
             cases = u64(e + 0x18)
             s["cases"] = [cases + 8 * c + 4 for c in range(u16(e + 0x0a))]
@@ -3309,7 +3315,7 @@ def quiet_scene(data, entries=None, silent=False):
     # (the steps passed over: what only shows; a fork left with nothing in any branch, to its join; a question, with its
     #  switch, whose answers but one come back to it, or whose answers all come to the same step once what only shows
     #  is passed over (Zelda's "You came from the forest...": "Yes" and "No" each have a line, then the scene goes on))
-    shows = lambda s: (s["kind"] == 0 and s["what"] in SCENE_SHOWS and not s["choices"]) or (
+    shows = lambda s: (s["kind"] == 0 and s["what"] in SCENE_SHOWS and not s["choices"] and s.get("as") not in SCENE_MOVES) or (
         s["kind"] == 4 and (s["what"] in SCENE_SHOWS_SUB or (s["what"], s["entry"]) in SCENE_LESSON))
     passed, answer = set(i for i, s in enumerate(steps) if shows(s)), {}
     if entries is not None:   # (only what these entry points come to: a story's flow a lesson calls, SCENE_LESSON_CALLS)
