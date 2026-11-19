@@ -249,6 +249,11 @@ NV(nvnDeviceSetWindowOriginMode) {
     ((nvn_dev *)P(0))->origin = U32(1);
     hos_log("nvn: window origin %s", U32(1) ? "upper left" : "lower left");
 }
+/* (longshot) what the game set (NVN's default, 0, before it sets one), as the driver answers. Without them a caller got
+   the "not implemented" stub's 0: lower left to a game that set upper left, so code that lays its own drawing over the
+   game's picture by the answer (a mod's overlay) drew it upside down */
+NV(nvnDeviceGetWindowOriginMode) { RET(((const nvn_dev *)P(0))->origin); }
+NV(nvnDeviceGetDepthMode) { RET(((const nvn_dev *)P(0))->depth_mode); }
 NV(nvnDeviceSetDepthMode) {
     ((nvn_dev *)P(0))->depth_mode = U32(1);
     const LONG was = InterlockedExchange(&depth_minus_w, U32(1) == NVN_DEPTH_MODE_NEAR_IS_MINUS_W);
@@ -2800,6 +2805,8 @@ static const nvn_impl impls[] = {
     {"nvnDeviceInstallDebugCallback", n_nvnDeviceInstallDebugCallback},
     {"nvnDeviceSetWindowOriginMode", n_nvnDeviceSetWindowOriginMode},
     {"nvnDeviceSetDepthMode", n_nvnDeviceSetDepthMode},
+    {"nvnDeviceGetWindowOriginMode", n_nvnDeviceGetWindowOriginMode},
+    {"nvnDeviceGetDepthMode", n_nvnDeviceGetDepthMode},
     {"nvnDeviceFinalizeCommandHandle", n_nvnDeviceFinalizeCommandHandle},
     {"nvnDeviceGetCurrentTimestampInNanoseconds", n_nvnDeviceGetCurrentTimestampInNanoseconds},
     {"nvnDeviceGetTimestampInNanoseconds", n_nvnDeviceGetTimestampInNanoseconds},
