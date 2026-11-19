@@ -285,17 +285,23 @@ def patch_drop_name(source):
 # The day's 15:00 cap (the randomizer's fork, bug 58: host/hos_main.c hos_oot_field_clock_free). The world's clock stops at
 # 54000 s (15:00) until the cutscene Dm_HrlField_0020 has played (HavePlayedEvent.Dm_HrlField_0020, its flag 0x53efe6f6:
 # the Door of Time's story, Zelda's escape); f_803edf70 reads it and hands the clock the limit (0 none). A shuffle reaches
-# that scene late or never, so day never turned to night. The host is asked after the flag: with the randomizer on, no
-# limit, as once the scene has played.
+# that scene late or never, so day never turned to night. The host is asked after the flag: with the randomizer on, the
+# clock runs on as once the scene has played.
+# (bug 81, 2026-11-18: the first fix went to L_803ee644, which hands the clock a target of 0, not "none": f_83440da0 moves
+#  the clock toward its target and stops there, so the night stood at midnight (seen without a window: 86026, then 0 for
+#  good). With the scene's flag set the game itself goes, at L_803ee2a0, to L_803ee2c8: the clock plus the step, no
+#  target. That is where the host's answer goes now; its registers are read there anew (the clock in x19))
 CLOCK_CAP = ("c->x[30] = 0x803ee634ULL; f_8022d9c0(c);\n    c->x[8]=recomp_load8(c,c->x[31] + 8);\n"
              "if ((uint32_t)c->x[8] != 0) { goto L_803ee644; }\n")
-CLOCK_FREE = "if (hos_oot_field_clock_free()) { goto L_803ee644; }   /* (nx2/oot_patches.py patch_clock_cap) */\n"
+CLOCK_FREE = "if (hos_oot_field_clock_free()) { goto L_803ee2c8; }   /* (nx2/oot_patches.py patch_clock_cap) */\n"
+CLOCK_FREE_WAS = "if (hos_oot_field_clock_free()) { goto L_803ee644; }   /* (nx2/oot_patches.py patch_clock_cap) */\n"
 
 
 def patch_clock_cap(source):
+    source = source.replace(CLOCK_FREE_WAS, "")   # (a file patched by the first fix: its line goes)
     if CLOCK_FREE in source:   # (made by an earlier run over this file)
         return source
-    if source.count(CLOCK_CAP) != 1:
+    if source.count(CLOCK_CAP) != 1 or "L_803ee2c8:;" not in source:
         return None
     return source.replace(CLOCK_CAP, CLOCK_CAP + CLOCK_FREE, 1).replace(
         '#include "a64.h"\n', '#include "a64.h"\nextern int hos_oot_field_clock_free(void);\n', 1)
@@ -1567,8 +1573,9 @@ def report(paths, counts, protect_hearts=False):
         print("oot_patches: WARNING: the music manager's change flags were found %d times, not once" % total["music manager flags"])
     if total["solver sites"] != len(SOLVER_HEADS):   # (without them, above 60 fps moving platforms can drop Link)
         print("oot_patches: WARNING: the solver step count was found at %d of %d places" % (total["solver sites"], len(SOLVER_HEADS)))
+    expected = {"shelf actor hook": len(SHELF_ACTOR_SITES)}   # (its own warning above; one a site)
     for what, n in done.items():
-        if n != 1:
+        if n != expected.get(what, 1):
             print("oot_patches: WARNING: the %s was found %d times" % (what, n))
     if protect_hearts and speed_hooks != len(SPEED_PLACES):
         print("oot_patches: WARNING: the movement speed's places were found %d times, not %d" % (speed_hooks, len(SPEED_PLACES)))

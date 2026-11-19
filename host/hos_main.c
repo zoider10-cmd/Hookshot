@@ -2844,6 +2844,23 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     oot_ganon_bridge(c, now);
     oot_player_speed(c, components);
     oot_map_refresh(c, now);
+    {   /* (a test's: HOS_OOT_CLOCK_LOG=1 logs the world's clock every 5 seconds: the object at the world manager's +0x510,
+           which ExecuteWmSetTime's set call reads, its words at +0x28 (seconds in the day) and +0x2c (days): bug 81, the
+           night that stood still) */
+        static int on = -1;
+        static int64_t next_at;
+        if (on < 0) { const char *e = getenv("HOS_OOT_CLOCK_LOG"); on = e && *e == '1'; }
+        if (on && now >= next_at) {
+            next_at = now + 5000000000LL;
+            const uint64_t singleton = recomp_load64(c, 0x84c9e898ULL);
+            const uint64_t world = singleton ? recomp_load64(c, singleton) : 0;
+            const uint64_t clock = world ? recomp_load64(c, world + 0x510) : 0;
+            if (clock)
+                hos_log("test: clock +0x20..0x3c: %d %d %d %d %d %d %d %d", (int)recomp_load32(c, clock + 0x20), (int)recomp_load32(c, clock + 0x24),
+                        (int)recomp_load32(c, clock + 0x28), (int)recomp_load32(c, clock + 0x2c), (int)recomp_load32(c, clock + 0x30),
+                        (int)recomp_load32(c, clock + 0x34), (int)recomp_load32(c, clock + 0x38), (int)recomp_load32(c, clock + 0x3c));
+        }
+    }
     if (action >= OOT_CHEAT_ITEM_ACTION && action < OOT_CHEAT_ITEM_ACTION + 256 * (int)OOT_ITEM_COUNT) {
         oot_inventory_edit(c, action);
     } else if (action == OOT_AGE_ACTION) {
