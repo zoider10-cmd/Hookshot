@@ -46,8 +46,10 @@ def main():
           "a bomb flower or another Obj_Bomb... name is taken for the bomb pick-up")
     start = host[host.index("static void oot_fill_start(const char *holds, const char *why) {"):]
     check("oot_fill_bagged[k] = 1;" in start[:start.index("\n}\n")], "a pick-up's fill may give a bag Link has not")
-    check('if (hos_rando_rupee_fill() && !strncmp(name, "Obj_Rupee_", 10)) oot_fill_start(OOT_FILL_RUPEES, name);' in body,
-          "a rupee picked up does not fill the wallet")
+    # (bug 79: the pick-up's own add fills the wallet, so the counter over Link shows the filled count, not later adds)
+    rupee = body[body.index('if (hos_rando_rupee_fill() && !strncmp(name, "Obj_Rupee_", 10)) {'):]
+    check("c->x[3] = OOT_RUPEE_FILL_COUNT;" in rupee and "#define OOT_RUPEE_FILL_COUNT 1000" in host,
+          "a rupee picked up does not fill the wallet by its own add")
     add = host[host.index("int hos_oot_pouch_add(Ctx *c) {"):]
     check(add.index("oot_tracker_item(name);") < add.index("oot_pickup_qol(c, name);") < add.index("if ((int32_t)c->x[3] <= 0) return 0;"),
           "the pick-ups' settings are not applied in the pouch's add")

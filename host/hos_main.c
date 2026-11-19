@@ -2084,6 +2084,7 @@ static void oot_fill_start(const char *holds, const char *why) {
             return;
         }
 }
+#define OOT_RUPEE_FILL_COUNT 1000   /* (a rupee pick-up's count with Rupees fill the wallet: 1000 green ones fill the biggest wallet, 999) */
 int hos_rando_ammo_pickups(void);   /* host/oot_rando.c */
 int hos_rando_rupee_fill(void);
 static void oot_pickup_qol(Ctx *c, const char *name) {
@@ -2100,7 +2101,13 @@ static void oot_pickup_qol(Ctx *c, const char *name) {
         }
         return;
     }
-    if (hos_rando_rupee_fill() && !strncmp(name, "Obj_Rupee_", 10)) oot_fill_start(OOT_FILL_RUPEES, name);
+    /* (Rupees fill the wallet: the pick-up's own add made the fill, bug 79. Filled by later adds, the counter over Link
+       showed the count at this one, "120/200" for a wallet filled to 200 (the owner's picture, 2026-11-18). As many as
+       OOT_RUPEE_FILL_COUNT of the rupee: the pouch keeps what the wallet holds and no more, as it did each fill add) */
+    if (hos_rando_rupee_fill() && !strncmp(name, "Obj_Rupee_", 10)) {
+        hos_log("rando: rupee pick-up %s x%d: x%d, the wallet filled", name, (int)(int32_t)c->x[3], OOT_RUPEE_FILL_COUNT);
+        c->x[3] = OOT_RUPEE_FILL_COUNT;
+    }
 }
 static void oot_fill_note(const char *item) {
     for (int k = 0; k < (int)OOT_FILLS; k++)
