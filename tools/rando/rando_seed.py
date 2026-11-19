@@ -4937,7 +4937,7 @@ def main():
     p.add_argument("--sword-shield", type=int, choices=(0, 1), help="in place of rando_sword_shield: 0 the Kokiri Sword stays in its chest and the Deku Shield on "
                                                                      "its shelf, 1 both take part (the chest with Major items, the shelf with Shops)")
     p.add_argument("--ageless", type=int, choices=(0, 1, 2), help="as rando_ageless: 1 the swords, 2 also the age-only items, for both ages (pouch_ageless)")
-    p.add_argument("--letter", action="store_true", help="as rando_letter=1: Zelda's Letter is shuffled (letter_need)")
+    p.add_argument("--letter", action="store_true", help="as rando_letter=1, Kakariko gate: Letter shuffled (letter_need)")
     p.add_argument("--hints", action="store_true", help="as rando_hints=1: the Gossip Stones give hints (choose_hints)")
     p.add_argument("--skulltulas-day", action="store_true", help="as rando_skulltulas_day=1: the night-only Gold Skulltulas are out by day too (NOCTURNAL)")
     p.add_argument("--heart-pieces", action="store_true", help="as rando_heart_pieces=1: the Pieces of Heart lying in the world change places with "
@@ -4981,7 +4981,8 @@ def main():
     a.heart_pieces = a.heart_pieces or ini["rando_heart_pieces"] != 0
     a.skulltulas_day = a.skulltulas_day or ini["rando_skulltulas_day"] != 0
     a.hints = a.hints or ini["rando_hints"] != 0
-    a.letter = a.letter or ini["rando_letter"] != 0
+    a.letter = a.letter or ini["rando_letter"] == 1   # (Kakariko gate: 1 the letter shuffled, 2 open: the game's side's,
+    #  host/hos_main.c oot_open_death_mountain, and the letter stays Zelda's)
     a.ageless = a.ageless if a.ageless is not None else ini["rando_ageless"] if ini["rando_ageless"] in (0, 1, 2) else 0
     # (the songs gate the game: with them shuffled the logic places them, whatever Major items says)
     logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic

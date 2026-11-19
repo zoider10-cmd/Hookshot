@@ -57,6 +57,13 @@ int hos_rando_ganon_bridge(void) {
     if (e && *e >= '0' && *e <= '2') return rando_active ? *e - '0' : 0;
     return rando_active ? rando.v[OOT_RANDO_GANON_BRIDGE] : 0;
 }
+/* Kakariko gate: Open (rando_letter 2), on with the randomizer (hos_main.c oot_open_death_mountain). A test's: HOS_OOT_OPEN_DM=<0|1> over
+   the options */
+int hos_rando_open_dm(void) {
+    const char *e = getenv("HOS_OOT_OPEN_DM");
+    if (e && (*e == '0' || *e == '1')) return rando_active && *e == '1';
+    return rando_active && rando.v[OOT_RANDO_LETTER] == 2;   /* (Kakariko gate: Open) */
+}
 /* Skip cutscenes: on with the randomizer (hos_main.c oot_skip_cutscene) */
 int hos_rando_skip_cutscenes(void) { return rando_active && rando.v[OOT_RANDO_SKIP_CUTSCENES] != 0; }
 

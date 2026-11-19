@@ -1583,6 +1583,39 @@ static void oot_ganon_bridge(Ctx *c, int64_t now) {
     }
 }
 
+/* (the randomizer's fork) Kakariko gate: Open (the setting rando_letter at 2): Kakariko's gate to Death Mountain
+   (Land_Kakariko_Gate_A_02) opens and closes for a child by the quest Get_StoneOfFire's step (the logic files
+   KakarikoVillage_Child_OpenGate_Prefab_1fcc and _GateClose_Prefab_6b8b: HoldChallengeCurrentStepCheckOrder, bug 83), and
+   showing Zelda's Letter to the guard (Npc_Hylia_Soldier_003) sets his flag Npc_Hylia_Soldier_003_GateOpen and takes the
+   quest to KakarikoVillageLetter. The quest's steps, in the list of flags' order (Data.Enum RawValues): NotReady, Ready,
+   KakarikoVillageNpc, KakarikoVillageLetter, DeathMtTrailIn, ... The open gate's logic file asks for DeathMtTrailIn
+   (and the closed one's for KakarikoVillageLetter): the guard's scene opens it and arriving on the trail takes the quest
+   on. So with the setting the quest, while before DeathMtTrailIn, is set to it (each second: a scene that sets it back,
+   Zelda's meeting among them, is undone), and the guard's flag is set. That is the step an adult's first arrival on the
+   trail leaves the quest at (bug 83: the gate was then open for the child, seen in play). The steps past it are the
+   game's, as it plays. */
+#define OOT_STEP_STONE_FIRE 0x1002b466u    /* Step_Get_StoneOfFire */
+#define OOT_STEP_KAK_NPC 0x4011c4aau       /* KakarikoVillageNpc */
+#define OOT_STEP_KAK_LETTER 0x4d329ec9u    /* KakarikoVillageLetter */
+#define OOT_STEP_TRAIL_IN 0x1d5e4b01u      /* DeathMtTrailIn: what the open gate's logic asks for */
+#define OOT_GATE_OPEN_FLAG 0x19898d14u     /* Npc_Hylia_Soldier_003_GateOpen */
+static void oot_open_death_mountain(Ctx *c, int64_t now) {
+    int hos_rando_open_dm(void);   /* host/oot_rando.c */
+    static int64_t next_at;
+    if (!hos_rando_open_dm() || now < next_at) return;
+    next_at = now + 1000000000LL;   /* (each second) */
+    uint32_t step = 0;
+    if (!oot_gamedata_enum(c, OOT_STEP_STONE_FIRE, &step, 0)) return;
+    if (step == OOT_STEP_NOTREADY || step == OOT_STEP_READY || step == OOT_STEP_KAK_NPC || step == OOT_STEP_KAK_LETTER) {
+        uint32_t in = OOT_STEP_TRAIL_IN;
+        if (oot_gamedata_enum(c, OOT_STEP_STONE_FIRE, &in, 1))
+            hos_log("rando: the Goron's quest set from %08x to DeathMtTrailIn: Kakariko's gate is open (Kakariko gate: Open)", step);
+    }
+    int open = 0;
+    if (oot_gamedata_bool(c, OOT_GATE_OPEN_FLAG, &open) && !open && oot_gamedata_set_bool(c, OOT_GATE_OPEN_FLAG, 1))
+        hos_log("rando: the gate's guard has seen the letter (Kakariko gate: Open)");
+}
+
 /* A whole number of the list of flags (Data.Int: PlayerStatus.MaxLife, in quarter hearts), read or written directly:
    the Ints are kept as the Enums are, from GameDataMgr+0xc8 (host/oot_state_tap.c state_kind): +0xd0 how many, +0xd8
    the entries of 40 bytes with the value at +0x1c, +0xe0 the (hash, index) table and +0xec its size. 1 when found. */
@@ -2849,6 +2882,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
     oot_tracker_refresh(c, now, actor);
     oot_time_door(c, now, actor);
     oot_ganon_bridge(c, now);
+    oot_open_death_mountain(c, now);
     oot_player_speed(c, components);
     oot_map_refresh(c, now);
     {   /* (a test's: HOS_OOT_CLOCK_LOG=1 logs the world's clock every 5 seconds: the object at the world manager's +0x510,
