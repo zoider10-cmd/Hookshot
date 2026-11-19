@@ -170,7 +170,7 @@ ULONGLONG tracker_home_asked = 0;         // (when the row was confirmed once; w
 // row's own words, n its n-th check), and confirm has the game take Link there: the check is written to
 // <game folder>\rando\goto_check.txt and the action kTrackerGoAction sent (host/hos_main.c: the debug teleport to the
 // folder's map when Link is in another, then the place).
-constexpr int kTrackerChecks = 320;
+constexpr int kTrackerChecks = 512;
 constexpr int kTrackerGoAction = 5;
 constexpr int kTrackerForgetAction = 6;   // (the first row, confirmed twice: the record of what is collected is forgotten)
 constexpr int kTrackerHomeAction = 7;     // (the third row, confirmed twice: host/hos_main.c takes Link home)

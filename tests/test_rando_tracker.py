@@ -35,6 +35,10 @@ def main():
                        ["Zora's River", "1 chest, 4 Gold Skulltulas"]],
           "the areas are not by their names, with what each has and none for an area with nothing: %r" % rows[1:])
     check(seed.tracker_lines({}, {})[1:] == ["The whole game|nothing"], "a seed with no check has more than the whole game's row")
+    # (the hearts lying in the world counted apart from the Gold Skulltulas: 122 "Gold Skulltulas" were 100 and 22 hearts)
+    hearts = seed.tracker_lines({"ZoraFountain": 1}, {"ZoraFountain": 4}, {}, {"ZoraFountain": 1, "LakeHylia": 1})
+    check("The whole game|1 chest, 4 Gold Skulltulas, 2 hearts" in hearts and any(l.endswith("|1 chest, 4 Gold Skulltulas, 1 heart") for l in hearts) and
+          any(l.endswith("|1 heart") for l in hearts), "the hearts are not counted apart from the Gold Skulltulas: %r" % hearts)
     # (more areas than the menu has rows: the last row says how many more; a long name and a bar in one do not break a row)
     many = seed.tracker_lines({"Area %02d" % k: k + 1 for k in range(80)}, {})
     check(len(many) == 1 + seed.TRACKER_ROWS and many[-1].startswith("And 34 more areas|"), "more rows are written than the menu has: %d" % (len(many) - 1))
@@ -207,7 +211,7 @@ def main():
           "the tab does not say whether a check is in logic, or says so of a check it knows nothing of")
     check(all(line.split("|")[0] in {t.split("|")[0] for t in seed.tracker_lines({"KokiriForest": 2, "ZoraRiver": 1}, {"KokiriForest": 1})}
               for line in lines[1:]), "a check's area is not the name of its tracker row")
-    check(len(seed.check_lines([("Market", (float(k), 0.0, 0.0), "C", seed.NONE) for k in range(400)], [])) == 1 + seed.CHECK_ROWS,
+    check(len(seed.check_lines([("Market", (float(k), 0.0, 0.0), "C", seed.NONE) for k in range(600)], [])) == 1 + seed.CHECK_ROWS,
           "more checks are written than the menu keeps")
     check(seed.check_ages({"KokiriForest_Child_Static.bcett.byml.zs"}) == "C" and seed.check_ages({"LostWood_Adult_Dynamic.bcett.byml.zs"}) == "A" and
           seed.check_ages({"A_Child_Static", "A_Adult_Static"}) == "CA" and seed.check_ages({"FireTemple_Static.bcett.byml.zs"}) == "CA" and

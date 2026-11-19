@@ -3745,20 +3745,23 @@ AREA_NAMES = {
 }
 
 
-def tracker_lines(chests, skulls, gifts=None):
-    """The tracker file's lines. chests, skulls and gifts: {area (the Banc folder): how many of them take part}. A
-    line for the whole game, then one for each area that has any, by its name; no more than the menu has rows for."""
-    gifts = gifts or {}
+def tracker_lines(chests, skulls, gifts=None, hearts=None):
+    """The tracker file's lines. chests, skulls, gifts and hearts: {area (the Banc folder): how many of them take part}.
+    A line for the whole game, then one for each area that has any, by its name; no more than the menu has rows for.
+    (hearts: the Pieces of Heart lying in the world and the bosses' Heart Containers, counted with the Gold Skulltulas
+    before: 122 "Gold Skulltulas" for 100 and 22 hearts, the owner's question 2026-11-19)"""
+    gifts, hearts = gifts or {}, hearts or {}
 
-    def what(c, k, g):
+    def what(c, k, g, h=0):
         parts = (["%d chest%s" % (c, "" if c == 1 else "s")] if c else []) + (["%d Gold Skulltula%s" % (k, "" if k == 1 else "s")] if k else [])
+        parts += ["%d heart%s" % (h, "" if h == 1 else "s")] if h else []
         parts += ["%d gift%s" % (g, "" if g == 1 else "s")] if g else []
         return ", ".join(parts) or "nothing"
 
-    areas = sorted(set(chests) | set(skulls) | set(gifts), key=lambda a: AREA_NAMES.get(a, a).lower())
-    areas = [a for a in areas if chests.get(a, 0) or skulls.get(a, 0) or gifts.get(a, 0)]
-    rows = [("The whole game", what(sum(chests.values()), sum(skulls.values()), sum(gifts.values())))]
-    rows += [(AREA_NAMES.get(a, a), what(chests.get(a, 0), skulls.get(a, 0), gifts.get(a, 0))) for a in areas]
+    areas = sorted(set(chests) | set(skulls) | set(gifts) | set(hearts), key=lambda a: AREA_NAMES.get(a, a).lower())
+    areas = [a for a in areas if chests.get(a, 0) or skulls.get(a, 0) or gifts.get(a, 0) or hearts.get(a, 0)]
+    rows = [("The whole game", what(sum(chests.values()), sum(skulls.values()), sum(gifts.values()), sum(hearts.values())))]
+    rows += [(AREA_NAMES.get(a, a), what(chests.get(a, 0), skulls.get(a, 0), gifts.get(a, 0), hearts.get(a, 0))) for a in areas]
     if len(rows) > TRACKER_ROWS:   # (more areas than rows: the last row says so)
         rows = rows[:TRACKER_ROWS - 1] + [("And %d more areas" % (len(rows) - TRACKER_ROWS + 1), "see the spoiler")]
     return ["# The checks of this seed in each area, for the menu's Tracker tab: <name>|<what>"] + [
@@ -3809,7 +3812,7 @@ def check_ways(checks_path):
     return out
 
 
-CHECK_ROWS = 320
+CHECK_ROWS = 512   # (was 320: a seed with the shops and every gift on had 337, bug 85, the last areas cut off)
 CHECK_NAME = 79   # (a check's name: as many characters as the menu keeps of it)
 CHECK_CODES = collections.OrderedDict((
     ("Item_Sword_Kokiri", "KS"), ("Item_Range_SlingShot", "SL"), ("Item_BombBag_Small", "BB"), ("Item_Boomerang", "BM"),
@@ -4387,6 +4390,9 @@ def check_lines(chests, skulls, gifts=()):
     if too_long:   # (the menu's and the game's side read a rule of CHECK_NEED letters, commas and slashes at most)
         raise ValueError("a rule of %s is %d letters long, more than the %d the tracker reads" % (too_long[0][1], len(too_long[0][5]), CHECK_NEED))
     rows.sort(key=lambda r: (r[0].lower(), r[6], r[1], r[4]))
+    if len(rows) > CHECK_ROWS:   # (the last areas' checks would be cut off without a word, as Zora's were, bug 85)
+        print("warning: %d checks, more than the %d the Tracker keeps: %s and after are left out of it" % (len(rows), CHECK_ROWS, rows[CHECK_ROWS][0]),
+              file=sys.stderr)
     same = collections.Counter((r[0], r[1]) for r in rows if r[1] not in ("Chest", "Gold Skulltula"))
     count = collections.Counter()
     for r in rows:
@@ -5829,8 +5835,8 @@ def main():
             seed, which, keys_mode) + "\n".join(spoiler) + "\n")
     with open(os.path.join(mod, TRACKER), "w", encoding="utf-8", newline="\n") as f:   # (for the menu's Tracker tab)
         took = [h for h in able] if a.skulltulas else []
-        f.write("\n".join(tracker_lines(collections.Counter(spots[h][0] for h in gives if h not in gifts), collections.Counter([skulls[h][0] for h in took] + [p[0] for p in pieces.values()]),
-                                        collections.Counter(g.area for g in gifts.values()))) + "\n")
+        f.write("\n".join(tracker_lines(collections.Counter(spots[h][0] for h in gives if h not in gifts), collections.Counter(skulls[h][0] for h in took),
+                                        collections.Counter(g.area for g in gifts.values()), collections.Counter(p[0] for p in pieces.values()))) + "\n")
     with open(os.path.join(mod, CHECKS), "w", encoding="utf-8", newline="\n") as f:   # (for the Tracker tab's Go there)
         skull_need = skull_asks
         gift_key = gift_keys([h for h, g in gifts.items() if h in gives and g.key in GIFT_PLACES], list(spots))
