@@ -73,6 +73,17 @@ int main(int argc, char** argv) {
             oot_rando_id_as(&a, other, 0);
             CHECK("a seed without a setting past the sixteenth keeps the ID it had", !std::strcmp(id, other));
         }
+        // (the longest ID of the same seed, 25 characters: read as the same too)
+        char xl[OOT_RANDO_ID_TEXT];
+        OotRando d{};
+        oot_rando_id_as(&a, xl, 2);
+        CHECK("the longest ID is 25 characters in five groups",
+              std::strlen(xl) == 29 && xl[5] == '-' && xl[11] == '-' && xl[17] == '-' && xl[23] == '-');
+        CHECK("the longest ID loads and gives back its seed and settings", oot_rando_from_id(xl, &d) == nullptr && same(a, d));
+        CHECK("an ID of 21 to 24 characters is refused", oot_rando_from_id(std::string(xl).substr(0, 27).c_str(), &d) != nullptr);
+        CHECK("an ID longer than 25 characters is refused", oot_rando_from_id((std::string(xl) + "0").c_str(), &d) != nullptr);
+        if ((int)OOT_RANDO_N <= (int)OOT_RANDO_ID_LONG_SLOTS)
+            CHECK("no seed of this version needs the longest ID", std::strlen(id) <= 23);
     }
 
     // ---- the longer ID: what an ID made before the settings past the sixteenth says, and its own refusals ----

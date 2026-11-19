@@ -26,10 +26,16 @@ using System.Windows.Forms;
 // of the seed's random part and every setting, with a checksum. Bits, low first: the format's version 4, the random part 31,
 // 16 settings of 2 bits in the table's order, the checksum 8. And the longer one, 20 characters, made only when a setting
 // past the sixteenth is set: the version 2, the random part 31, 28 settings of 2 bits, a bit that is 0, the checksum 8.
+// And the longest, 25 characters, made only when a setting past the 28th is set: the version 3, the random part 31, 41
+// settings of 2 bits, the checksum 8.
 static class RandoId {
     const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
     const int Bits = 75, Check = 8, Slots = 16, FormatVersion = 1;
     const int LongBits = 100, LongSlots = 28, LongVersion = 2;
+    const int XlBits = 125, XlSlots = 41, XlVersion = 3;
+    static int FormBits(int form) { return form == 2 ? XlBits : form == 1 ? LongBits : Bits; }
+    static int FormSlots(int form) { return form == 2 ? XlSlots : form == 1 ? LongSlots : Slots; }
+    static int FormVersion(int form) { return form == 2 ? XlVersion : form == 1 ? LongVersion : FormatVersion; }
 
     static void Put(byte[] bits, ref int n, uint value, int width) { for (int i = 0; i < width; i++) bits[n++] = (byte)(value >> i & 1); }
     static uint Get(byte[] bits, ref int n, int width) { uint v = 0; for (int i = 0; i < width; i++) v |= (uint)bits[n++] << i; return v; }
@@ -43,17 +49,22 @@ static class RandoId {
     public static string Make(int seed, int[] choices) {
         bool longer = false;
         for (int i = Slots; i < LongSlots; i++) longer |= Choice(choices, i) != 0;
-        return Make(seed, choices, longer);
+        bool xl = false;
+        for (int i = LongSlots; i < XlSlots; i++) xl |= Choice(choices, i) != 0;
+        return Make(seed, choices, xl ? 2 : longer ? 1 : 0);
     }
 
     // (longer: the 20 characters, which hold the settings past the sixteenth; else the 15)
-    public static string Make(int seed, int[] choices, bool longer) {
-        int total = longer ? LongBits : Bits;
+    public static string Make(int seed, int[] choices, bool longer) { return Make(seed, choices, longer ? 1 : 0); }
+
+    // (form 0: the 15 characters, 1: the 20, 2: the 25, which hold the settings past the 28th)
+    public static string Make(int seed, int[] choices, int form) {
+        int total = FormBits(form);
         var bits = new byte[total];
         int n = 0;
-        Put(bits, ref n, (uint)(longer ? LongVersion : FormatVersion), 4);
+        Put(bits, ref n, (uint)FormVersion(form), 4);
         Put(bits, ref n, (uint)seed & 0x7fffffffu, 31);
-        for (int i = 0; i < (longer ? LongSlots : Slots); i++) Put(bits, ref n, Choice(choices, i), 2);
+        for (int i = 0; i < FormSlots(form); i++) Put(bits, ref n, Choice(choices, i), 2);
         n = total - Check;   // (the longer one's bit before the checksum stays 0)
         Put(bits, ref n, Sum(bits, total), Check);
         var sb = new StringBuilder();
@@ -68,7 +79,7 @@ static class RandoId {
     // (null and the seed and its choices, or what is wrong with the text. counts: how many choices each setting has)
     public static string Read(string text, int[] counts, out int seed, out int[] choices) {
         seed = 0; choices = new int[counts.Length];
-        var bits = new byte[LongBits];
+        var bits = new byte[XlBits];
         int n = 0;
         foreach (char raw in text) {
             char ch = char.ToUpperInvariant(raw);
@@ -77,19 +88,20 @@ static class RandoId {
             if (ch == 'I' || ch == 'L') ch = '1';
             int at = Alphabet.IndexOf(ch);
             if (at < 0) return "it has a character no seed ID has";
-            if (n == LongBits) return "it is too long (a seed ID has 15 or 20 characters)";
+            if (n == XlBits) return "it is too long (a seed ID has 15, 20 or 25 characters)";
             Put(bits, ref n, (uint)at, 5);
         }
-        if (n < Bits) return "it is too short (a seed ID has 15 or 20 characters)";
-        if (n != Bits && n != LongBits) return "it is not as long as a seed ID is (15 or 20 characters)";
+        if (n < Bits) return "it is too short (a seed ID has 15, 20 or 25 characters)";
+        if (n != Bits && n != LongBits && n != XlBits) return "it is not as long as a seed ID is (15, 20 or 25 characters)";
         int total = n;
-        bool longer = n == LongBits;
+        int form = n == XlBits ? 2 : n == LongBits ? 1 : 0;
+        bool longer = form == 1;
         n = total - Check;
         if (Get(bits, ref n, Check) != Sum(bits, total)) return "a typo? Its checksum does not match";
         n = 0;
-        if (Get(bits, ref n, 4) != (uint)(longer ? LongVersion : FormatVersion)) return "it is from another version of the randomizer";
+        if (Get(bits, ref n, 4) != (uint)FormVersion(form)) return "it is from another version of the randomizer";
         seed = (int)Get(bits, ref n, 31);
-        for (int i = 0; i < (longer ? LongSlots : Slots); i++) {
+        for (int i = 0; i < FormSlots(form); i++) {
             int v = (int)Get(bits, ref n, 2);
             if (v >= (i < counts.Length ? counts[i] : 1)) return "it has a setting this version does not have";
             if (i < counts.Length) choices[i] = v;
