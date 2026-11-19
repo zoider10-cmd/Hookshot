@@ -15,5 +15,7 @@ HOOKSHOT_KEEP_BUILD_FILES=1 PATH="$root/llvm-mingw/bin:$PATH" py -I nx2/make_gam
 code=$?
 echo "build exit $code (the log: $WORK/build.log)"
 # (the button prompts' AssertionError is old and harmless: "the button prompts of other controllers were not made")
-grep -E "^oot_patches: |error:|failed|the build took" "$WORK/build.log" | grep -v "WARNING: the model swap guards" | head -40
+# (errors first: the patches' lines are many, and a failed compile's lines were cut off after them, 2026-11-19)
+grep -E "error:|failed|@@error|the build took" "$WORK/build.log" | head -20
+grep -E "^oot_patches: " "$WORK/build.log" | grep -v "WARNING: the model swap guards" | head -40
 exit $code
