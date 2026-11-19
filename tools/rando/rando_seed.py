@@ -60,7 +60,7 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 13  # 13: a bottle is a gating item where the bottles are shuffled (Quest rewards), and a Gold Skulltula in bean soil asks for one, its bugs (BOTTLE, soil_need: bug 84); 12: the Goron and Zora Tunics are gifts of the shuffle, and the rules ask for them (TUNICS); the chests with a substitute take part (SUBSTITUTE_CHESTS); the Gold Skulltulas and the Pieces of Heart lying in the world take part as chests do (SHUFFLED_FROM), and the Skulltula house's rewards, with the 40 tokens' one, ask for their tokens, counted (HOUSE_TOKENS); 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+PLACEMENT = 14  # 14: the Great Fairies of the three spells are gifts of the shuffle with Quest rewards, each holding what a lesson asked about by name may (FAIRY_GIFTS); 13: a bottle is a gating item where the bottles are shuffled (Quest rewards), and a Gold Skulltula in bean soil asks for one, its bugs (BOTTLE, soil_need: bug 84); 12: the Goron and Zora Tunics are gifts of the shuffle, and the rules ask for them (TUNICS); the chests with a substitute take part (SUBSTITUTE_CHESTS); the Gold Skulltulas and the Pieces of Heart lying in the world take part as chests do (SHUFFLED_FROM), and the Skulltula house's rewards, with the 40 tokens' one, ask for their tokens, counted (HOUSE_TOKENS); 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
                 # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
                 # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
                 #    asking for the forest's way out (forest_open)
@@ -435,8 +435,9 @@ RULES = {
 # an adult does. Off, they are where the game has them and the rules are as they were: the seeds made before keep
 # their shuffle.
 # NOT in the shuffle yet, each for a reason found in its flow (they stay as the game has them):
-#   the six Great Fairies            ask "has Link got my item" (IsGet.Item_...): another item would be given at
-#                                    every visit, and theirs found elsewhere would shut the fountain
+#   the Great Fairies of magic and   ask "has Link got my item" (IsGet.Item_...): another item would be given at
+#   defence (three)                  every visit, and theirs found elsewhere would shut the fountain (the three of
+#                                    the spells take part from placement 14 as the lessons do: FAIRY_GIFTS)
 #   Biggoron's Sword, the lake       the same (Weapon_Sword_Giant; Item_Scale_Gold)
 #   scientist's Piece of Heart
 #   the two ocarinas                 put in the pouch by the scene itself, not through the gift's flow
@@ -468,7 +469,8 @@ Gift = collections.namedtuple("Gift", "key flow olds item area name need when en
 # for Quest rewards). entry: None, or the one entry point of the flow whose calls are the gift's (two sales of one
 # flow that name the same item: the Business Scrubs' two Pieces of Heart).
 # (a gift added after seeds were made takes part from the placement that added it: the seeds before keep their shuffle)
-GIFTS_FROM = {"potion_bottle": 9, "goron_tunic": 12, "zora_tunic": 12, "skulltula_house_40": 12}
+GIFTS_FROM = {"potion_bottle": 9, "goron_tunic": 12, "zora_tunic": 12, "skulltula_house_40": 12,
+              "fairy_din": 14, "fairy_farore": 14, "fairy_nayru": 14}
 EVERYTHING = PROGRESSION | QUEST_GATES | TUNICS
 # The Skulltula house's rewards (bug 67, placement 12): each asks for its number of tokens, counted by the logic
 # (tokens), and for what it takes to come to the house in Kakariko, a child's or an adult's: out of the forest
@@ -533,6 +535,14 @@ GIFTS = (
          "the Potion Shop keeper's bottle", CHILD, None),   # (his errand of the bug passed over: potion_errand_skip)
     Gift("light_arrows", "Dm_TimeTemple_0130", ("Item_Arrow_Light",), "Item_Arrow_Light", "Market", "Zelda: the Light Arrows",
          MEDALS3 | DESERT | {LENS, HOVER, SG, BOW, MS} | QUEST_GATES, "light"),
+    # (the Great Fairies of the spells, placement 14: FAIRY_GIFTS. Each behind a wall bombs open, and the Lullaby on
+    #  the mark: the Lullaby is CHILD's without Songs, SONG_GIFTS's with them)
+    Gift("fairy_din", "Dm_FairyFountain_Din", ("Item_DinFire",), "Item_DinFire", "DeathMountainTrail",
+         "the Great Fairy of Death Mountain Trail", CHILD | {BB}, None),
+    Gift("fairy_farore", "Dm_FairyFountain_Frore", ("Item_FaroreWind",), "Item_FaroreWind", "ZoraFountain",
+         "the Great Fairy of Zora's Fountain", GROWN, None),   # (an adult's, as Jabu-Jabu's ending asks for Zora's Fountain)
+    Gift("fairy_nayru", "Dm_FairyFountain_Nayru", ("Item_NayruLove",), "Item_NayruLove", "DesertColossus",
+         "the Great Fairy of the Desert Colossus", DESERT | QUEST_GATES, None),
 )
 # ---- Deku Scrubs: the Business Scrubs' one-time sales ----
 # A Business Scrub's wares are named in its map file (ScrubBusiness_ShopItemActorName0..2), and its flow
@@ -3988,6 +3998,9 @@ GIFT_PLACES = {
     "ocarina_time": ("C", (0.2, 150.2, 56.8)),             # (as the Song of Time's lesson: before the Market's bridge)
     "fairy_ocarina": ("C", (-115.0, 114.5, -38.2)),       # (Npc_Kokiri_Saria_Child, KokiriForest_ArriveLostWood, at x -117.1)
     "zelda_letter": ("C", (5.1, 126.8, -236.4)),           # (as Impa's lesson: the meeting's end, in the courtyard)
+    "fairy_din": ("CA", (-34.0, 211.2, -189.2)),          # (the fountains' marks, Obj_TriForcePoint_A_02, _03, _05:
+    "fairy_farore": ("CA", (62.5, 104.3, 99.2)),          #  where the Lullaby is played)
+    "fairy_nayru": ("A", (-49.1, 101.5, -77.9)),
     "song_zelda": ("C", (5.1, 126.8, -236.4)),             # (DoorOfTime_MeetImpa_StartPos: before Impa, in the castle's courtyard)
     "song_epona": ("C", (-91.9, 150.6, 247.0)),            # (Npc_Hylia_Malon_Child at z 245.4, Lon Lon Ranch)
     "song_saria": ("C", (-6.9, 114.4, -85.2)),             # (Dm_MelodyGet_Saria_Start)
@@ -4149,7 +4162,8 @@ SONG_GROWN = frozenset((ZL, SARIA, TIME, STORMS))   # (what an adult's check ask
 SONG_ADULT = ADULT | {ZL, SARIA, TIME}              # (what an adult's lesson asks for: an adult, without the Song of Storms)
 SONG_AREAS = {"ZoraDomain": {ZL}, "ZoraFountain": {ZL}, "InsideJabuJabuBelly": {ZL}, "BottomOfTheWell": {STORMS}, "ShadowTemple": {NOCTURNE},
               "SpiritTemple": {REQUIEM}, "DesertColossus": {REQUIEM}, "InsideGanonCastle": set(SONG_GATES)}
-SONG_GIFTS = {"darunia": {ZL, SARIA}, "skull_kid_song": {SARIA}, "archery_heart": {EPONA}, "archery_quiver": {EPONA}}
+SONG_GIFTS = {"darunia": {ZL, SARIA}, "skull_kid_song": {SARIA}, "archery_heart": {EPONA}, "archery_quiver": {EPONA},
+              "fairy_din": {ZL}, "fairy_farore": {ZL}, "fairy_nayru": {ZL}}
 SONGS_HARD = ("frogs",)   # (the frogs ask for six songs: with the songs shuffled, for everything, so no gating item is theirs)
 SONGS = (
     Gift("song_zelda", "Dm_MelodyGet_Zelda", (ZL,), ZL, "HyruleCastle", "Impa's lesson: Zelda's Lullaby", CHILD, "songs"),
@@ -4290,6 +4304,33 @@ def lesson_items(counts, progressive, flagged=None, named=None):
     named = LESSON_NAMED_READY if named is None else named
     names = LESSON_ITEMS + (tuple(LESSON_NAMED) if named else ()) + (() if progressive else LESSON_FAMILIES)
     return frozenset(i for i in names if counts.get(i, 0) == 1 and (flagged is None or flagged(lesson_flag(i))))
+
+
+# ---- The Great Fairies of the spells (Quest rewards, placement 14; asked for 2026-11-15, "not in the shuffle yet") ----
+# Six fountains, each a mark (Obj_TriForcePoint_A_01.._06) where Zelda's Lullaby is played; the mark's flow
+# (TriForcePoint) sends Link to its fountain's scene (Dm_FairyFountain_<name>), which gives its item through
+# Dm_SY_GetInEvent's call with ActorName, as Darunia's scene does (gift_items). Read 2026-11-19: Death Mountain Trail's
+# mark (A_02) plays Din's scene (seen without a window, the Lullaby played on the ocarina: D-pad left, then Y X A Y X A),
+# so A_01 Hyrule Castle is the magic's (Power), A_03 Zora's Fountain Farore's, A_04 the crater the double magic's
+# (Wisdom), A_05 the Colossus Nayru's, A_06 Ganon's Castle the double defence's (Courage).
+# A fountain knows it gave its gift by its item's flag: Din's scene asks IsGet.Item_DinFire, and the mark's flow and
+# every fountain's ask each other's (which scene plays, what the fairy says). So a fountain is a lesson asked about by
+# name: it may hold only what a lesson may (lesson_items: got nowhere else, with its own flag; a song with Songs:
+# Anywhere), and the words IsGet.<its item> and HavePlayedGetEvent.<its item> in the six fountains' flows and the
+# mark's are made to name what it gives now (fairy_words), all at once. The other flows that ask whether Link has a
+# spell (the owl and the Gorons on the trail, the Business Scrubs, a Gerudo) still ask for the spell itself: they only
+# choose what is said. The fountains of the magic and of the double defence stay: magic is no item of the rules'.
+# NOT SEEN IN PLAY: a fountain giving another item.
+FAIRY_GIFTS = ("fairy_din", "fairy_farore", "fairy_nayru")
+FAIRY_FLOWS = ("Dm_FairyFountain_Power", "Dm_FairyFountain_Wisdom", "Dm_FairyFountain_Courage", "Dm_FairyFountain_Din",
+               "Dm_FairyFountain_Frore", "Dm_FairyFountain_Nayru", "TriForcePoint")
+FAIRY_WORDS = ("IsGet.", "HavePlayedGetEvent.")
+
+
+def fairy_words(now):
+    """{what a fountain's flow names: what it names now} for the fountains whose item changed: now is {a fountain's own
+    item: the item it gives}. Each item's flag and its scene's flag, by the name its flags have (lesson_flag)."""
+    return {word + old: word + lesson_flag(new) for old, new in now.items() if old != new for word in FAIRY_WORDS}
 
 
 # ---- Dungeon rewards: the Spiritual Stones and the Medallions (rando_dungeon_rewards, --dungeon-rewards) ----
@@ -5504,15 +5545,17 @@ def main():
         (lambda n: quest_need(n, pieces[h][0], placement >= 12) if a.quests else n)(
             boss_need(bosses[h]) if h in bosses else heart_rule(h, pieces[h][0])))), h, pieces[h][0])
     piece_own = lambda h: CONTAINER if h in bosses else HEART   # (what a piece's or a container's spot holds of its own)
-    # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags)
+    # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags; the
+    #  Great Fairies of the spells the same, FAIRY_GIFTS)
     lesson_safe, lesson_only = frozenset(), {}
-    if a.songs == 2:
+    fairies = [h for h, g in gifts.items() if g.key in FAIRY_GIFTS]
+    if a.songs == 2 or fairies:
         try:
             folder = os.path.join(romfs, FLAG_LIST)
             n = sorted(n for n in os.listdir(folder) if n.startswith("GameDataList.") and ".byml" in n.lower())[0]
             flag_list = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
         except (OSError, IndexError, ValueError) as e:
-            sys.exit("Songs: Anywhere: the game's list of flags: %s. Nothing written." % e)
+            sys.exit("Songs: Anywhere (or the Great Fairies): the game's list of flags: %s. Nothing written." % e)
 
         def flagged(item):
             try:
@@ -5522,7 +5565,8 @@ def main():
             return True
 
         lesson_safe = lesson_items(collections.Counter(s[1] for s in spots.values()), a.progressive, flagged)
-        lesson_only = {gift_hash(key): (lesson_safe, frozenset(SONG_ITEMS)) for key in SONG_ASKED}
+        lesson_only = {gift_hash(key): (lesson_safe, frozenset(SONG_ITEMS)) for key in SONG_ASKED} if a.songs == 2 else {}
+        lesson_only.update((h, (lesson_safe, frozenset(SONG_ITEMS) if a.songs == 2 else frozenset())) for h in fairies)
     # (placement 12, SHUFFLED_FROM: the Gold Skulltulas of the setting and the Pieces of Heart lying in the world are
     #  spots of the placement, with their token and their piece in the pool, each holding what it can: holds)
     skull_drops, able, mine = {}, [], []
@@ -5771,6 +5815,30 @@ def main():
                 sys.exit("%s gives no %s (rando\\test_gifts.txt, or the game's flow is not the one the gifts were listed from). Nothing written." % (
                     rel, ", ".join(sorted(str(k) for k in set(change) - found))))
             gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
+    # (the Great Fairies of the spells: who asks whether a fountain gave its gift asks for what it gives now, FAIRY_GIFTS)
+    fairy_now = {gifts[h].item: gives[h] for h in fairies if h in gives}
+    if any(old != new for old, new in fairy_now.items()):
+        stray = sorted(gifts[h].name for h in fairies if h in gives and gives[h] != gifts[h].item and
+                       gives[h] not in lesson_safe and gives[h] not in SONG_ITEMS)
+        if stray:
+            sys.exit("a Great Fairy gives what has no flag of its own: %s. Nothing written." % ", ".join(stray))
+        words = fairy_words(fairy_now)
+        renamed = set()
+        for flow in FAIRY_FLOWS:
+            twin = "%s/%s%s.bfevfl.zs" % (GIFT_FLOWS, flow, FLOW_TWIN)
+            for rel in ["%s/%s.bfevfl.zs" % (GIFT_FLOWS, flow)] + ([twin] if os.path.isfile(os.path.join(romfs, *twin.split("/"))) else []):
+                try:
+                    was = gift_files[rel] if rel in gift_files else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
+                    now, found = gift_items(was, words, kinds=(0, 1))
+                except (OSError, ValueError, struct.error) as e:
+                    sys.exit("a Great Fairy's flow, %s: %s. Nothing written." % (rel, e))
+                renamed |= found
+                if now is not None:
+                    gift_files[rel], gift_sizes[rel[:-3]] = now, len(now)
+        missed = sorted(w for w in words if w.startswith("IsGet.") and w not in renamed)
+        if missed:
+            sys.exit("no Great Fairy's flow asks %s (the game's flows are not the ones the fountains were read from). Nothing written." % ", ".join(missed))
+        print("the Great Fairies: %s" % ", ".join("%s gives %s" % (gifts[h].name, gives[h]) for h in fairies if h in gives))
     # (the Potion Shop keeper's errand: the bug passed over, his gift given at the first talk: potion_errand_skip)
     try:
         was = gift_files[POTION_FLOW] if POTION_FLOW in gift_files else unpack(open(os.path.join(romfs, *POTION_FLOW.split("/")), "rb").read(), zs, dicts)
