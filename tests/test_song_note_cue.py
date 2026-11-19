@@ -62,6 +62,7 @@ LIFTED = '#include "a64.h"\n' + PLAYED + OTHER + UNRELATED
 RUNTIME = r'''#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "oot_high_fps.h"
 typedef struct { uint64_t x[32]; } Ctx;
@@ -73,6 +74,8 @@ static uint8_t *guest(uint64_t a) {
 }
 #define GP(a) ((void *)guest(a))
 #define G64(a) (*(uint64_t *)GP(a))
+#define HOS_HEAP_BASE 0x1000000000ULL   /* (host/hos.h's, for Link's body walk: never reached here) */
+static void *hos_guest_range(uint64_t a, uint64_t n) { (void)a; (void)n; return 0; }
 typedef int SRWLOCK;
 #define SRWLOCK_INIT 0
 static void AcquireSRWLockExclusive(SRWLOCK *l) { (void)l; }
@@ -81,6 +84,8 @@ typedef long long LONG64;
 static LONG64 InterlockedIncrement64(volatile LONG64 *p) { return ++*p; }
 static void hos_log(const char *f, ...) { (void)f; }
 static int env_on(const char *name) { (void)name; return 1; }
+static int env_value_off(const char *v) { (void)v; return 0; }
+volatile uint64_t hos_step_probe;   /* (host/nn_vi.c's, for the cloth clock: 0 here) */
 volatile uint32_t hos_frame_seconds_bits;
 static int unrelated;
 static void next_note(int playback);

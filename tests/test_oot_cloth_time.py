@@ -11,7 +11,7 @@ number, infinite or over 8, the game's time stays. HOS_FPS_CLOTH=0 (or off, fals
 
 The setup is lifted as the game has it (the lines of f_81b3aa48 that make the frame data, and a stand-in for the operator's own
 count), run through patch_file, compiled with stand-ins for guest memory, the repository's switch rule (gpu/vk/compat/
-longshot_env.h) and the host's hos_oot_cloth_seconds (cut from host/oot_high_fps.c), and run with the context's 60th at frame
+hookshot_env.h) and the host's hos_oot_cloth_seconds (cut from host/oot_high_fps.c), and run with the context's 60th at frame
 steps from 0.06 (1000 fps) to 4.0 (15 fps, the longest the host gives) and the bad ones, with instance scales of 1 and 2, each
 setup twice from the same context, for HOS_FPS_CLOTH unset, 1, yes, 0 and off. Each frame data must cover the frame's time over
 1 (else the game's 60th), over the instance's scale, its substeps adding up to it, with the game's counts (no more solves), the
@@ -77,7 +77,7 @@ RUNTIME = r"""
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include "../gpu/vk/compat/longshot_env.h"
+#include "../gpu/vk/compat/hookshot_env.h"
 #include "oot_high_fps.h"
 typedef struct { uint64_t x[32]; uint64_t vreg[32][2]; uint64_t fpcr, fpsr; } Ctx;
 typedef long long LONG64;
@@ -173,7 +173,7 @@ class ClothTimeTests(unittest.TestCase):
         patched = oot_patches.patch_file(LIFTED_CLOTH, "code_cloth.c", False)[0]
         host = (ROOT / "host" / "oot_high_fps.c").read_text(encoding="utf-8")
         program = RUNTIME + hos_cloth(host) + patched.replace('#include "a64.h"\n', "") + FRAMES
-        with tempfile.TemporaryDirectory(prefix="longshot-cloth-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="hookshot-cloth-") as tmp:
             tmp = Path(tmp)
             (tmp / "cloth.c").write_text(program, encoding="utf-8")
             binary = tmp / "cloth.exe"

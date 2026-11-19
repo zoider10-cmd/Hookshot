@@ -12,7 +12,7 @@ frame the gate holds returns from the job at once with the job's own result (0),
 
 The job is lifted as the game has it at its head (its first line, the prologue's first store), then a stand-in for its work that
 counts the solves, run through patch_file, compiled with stand-ins for guest memory, the repository's switch rule (gpu/vk/
-compat/longshot_env.h) and the host's hos_oot_cloth_solve (cut from host/oot_high_fps.c, when there), and run for 240 frames of
+compat/hookshot_env.h) and the host's hos_oot_cloth_solve (cut from host/oot_high_fps.c, when there), and run for 240 frames of
 3 jobs each at frame steps 0.25 (240 fps), 60/144 (144 fps), 0.5 (120 fps), 1 (60 fps) and 2 (30 fps), at a cap of 60 (no frame
 time given), with a step of 0 and NaN, and with the clock going back (a load), for HOS_FPS_CLOTH_60 unset, 1 and 0. Checked: at
 240 fps 60 frames solve, one in four; at 144 and 120, 60 give or take 1; at 60 fps and slower, at a cap of 60, for a bad step
@@ -57,7 +57,7 @@ RUNTIME = r"""
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include "../gpu/vk/compat/longshot_env.h"
+#include "../gpu/vk/compat/hookshot_env.h"
 #include "oot_high_fps.h"
 typedef struct { uint64_t x[32]; uint64_t vreg[32][2]; uint64_t fpcr, fpsr; } Ctx;
 typedef long long LONG64;
@@ -142,7 +142,7 @@ def compiler():
 class ClothSolveTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory(prefix="longshot-cloth60-")
+        cls.tmp = tempfile.TemporaryDirectory(prefix="hookshot-cloth60-")
         cls.binary = None
         if not compiler():
             return

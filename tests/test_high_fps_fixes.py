@@ -251,6 +251,8 @@ static LONG64 InterlockedIncrement64(volatile LONG64 *p) { return ++*p; }
 static void hos_log(const char *f, ...) { (void)f; }
 static int env_on(const char *name) { (void)name; return 0; }
 static int env_value_off(const char *v) { (void)v; return 0; }
+#define HOS_HEAP_BASE 0x1000000000ULL   /* (host/hos.h's, for Link's body walk: never reached here) */
+static void *hos_guest_range(uint64_t a, uint64_t n) { (void)a; (void)n; return 0; }
 volatile uint32_t hos_frame_seconds_bits;
 static uint64_t recomp_load64(Ctx *c, uint64_t a) { (void)c; return G64(a); }
 static uint64_t recomp_load32(Ctx *c, uint64_t a) { uint32_t v; (void)c; memcpy(&v, guest(a), 4); return v; }
