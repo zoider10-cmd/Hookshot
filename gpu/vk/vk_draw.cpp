@@ -4742,6 +4742,47 @@ bool uniform_snapshot_on() {   // (vk_internal.h: ub_snapshot_wanted's answer fo
 VkResult shared_compute_pipeline(const VkComputePipelineCreateInfo* ci, VkPipeline* out) {
     return cached_compute(ci, out);
 }
+/// (hookshot) A pipeline cache of the caller's own in the game folder's cache/ (vk_fsr4.cpp: AMD FSR 4's unrolled layers). Apart
+/// from the translator's files, which pcache_drop_stale drops when the translator changes (most updates): what goes in it is not
+/// the translator's, and the launcher moves the whole cache/ folder into an update's. Its file's data when this device and
+/// driver can take it (pcache_file_read), else empty; *read: the bytes read, *refused: a file there that was not taken. Not read
+/// (nor saved, below) where the pipeline cache's file is not (RX_VK_PCACHE_LOAD=0 or its rule: pcache_no_save, pcache_init)
+VkPipelineCache own_pipeline_cache(const char* name, size_t* read, bool* refused) {
+    PipelineCacheFile data = pcache_no_save ? PipelineCacheFile{} : pcache_file_read(cache_path(name));
+    *read = data.size(), *refused = data.rejected();
+    VkPipelineCacheCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+    ci.initialDataSize = data.size(), ci.pInitialData = data.data();
+    VkPipelineCache cache = VK_NULL_HANDLE;
+    if (vkCreatePipelineCache(dev.device, &ci, nullptr, &cache) == VK_SUCCESS) return cache;
+    *read = 0;   // (data the driver would not take: an empty cache, as for a file of another driver)
+    ci.initialDataSize = 0, ci.pInitialData = nullptr;
+    return vkCreatePipelineCache(dev.device, &ci, nullptr, &cache) == VK_SUCCESS ? cache : VK_NULL_HANDLE;
+}
+/// (hookshot) That cache written whole to its file (through a .tmp moved over it, as the play files are) when its data is not the
+/// size last read or written (*saved, updated): a pipeline the driver put in it since, whether it compiled it or took it from its
+/// own disk cache, which an update's folder (another path) does not share. false: it could not be written
+bool own_pipeline_cache_save(VkPipelineCache cache, const char* name, size_t* saved) {
+    if (!cache || pcache_no_save) return true;
+    size_t n = 0;
+    {
+        PcacheFetch fetch(-1, true);
+        if (!fetch.held() || vkGetPipelineCacheData(dev.device, cache, &n, nullptr) != VK_SUCCESS) return false;
+    }
+    if (!n || n == *saved) return true;
+    const size_t wrote = play_file_write(cache, cache_path(name));
+    if (wrote) *saved = wrote;
+    return wrote != 0;
+}
+/// (hookshot) A compute pipeline built as shared_compute_pipeline's (the same turn and gates), through the caller's own cache
+VkResult own_cache_compute_pipeline(VkPipelineCache cache, const VkComputePipelineCreateInfo* ci, VkPipeline* out) {
+    compute_described = {};
+    const ComputeTurn turn(*ci);
+    if (!turn.ok()) return *out = VK_NULL_HANDLE, VK_ERROR_OUT_OF_HOST_MEMORY;   // (stopped while it waited, or refused: not compiled)
+    IntelDriverGate gate(compiles_nothing(ci->flags));
+    if (gate.busy) return intel_gate_busy();
+    return guarded_compute_held(cache, ci, out);
+}
+/// (hookshot) The driver faults the pipeline compiles caught so far (guarded_graphics, guarded_compute): the preparation's
 /// (hookshot) The driver faults the pipeline compiles caught so far (guarded_graphics, guarded_compute): the preparation's
 /// watchdog says so (vk_main.cpp). Outside the unnamed namespace: vk_main.cpp links to it
 int driver_faults() { return st_driver_faults.load(std::memory_order_relaxed); }

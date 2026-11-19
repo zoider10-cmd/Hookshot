@@ -87,7 +87,7 @@ class PipelineCacheFile {
         const auto digits = [](const std::string& s) {
             return !s.empty() && s.find_first_not_of("0123456789") == std::string::npos;
         };
-        if (stem != "hookshot_vk_pipelines") {
+        if (stem != "hookshot_vk_pipelines" && stem != "hookshot_fsr4_pipelines") {   // (vk_fsr4.cpp's own cache too)
             if (stem.compare(0, play.size(), play)) return false;
             const std::string number = stem.substr(play.size());
             if (number.size() > 9 || !digits(number)) return false;
