@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))   # (tests/srccut.py: p
 from srccut import block   # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
+RUN_ALL_ARGS = ["--cxx", "{cxx}"]   # (tests/run_all.py: the compiler it finds here)
 
 
 def main():
