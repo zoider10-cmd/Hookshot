@@ -103,7 +103,7 @@ def main():
     if "wrote_now();" not in size or size.index("wrote_now();") > size.index("SetEndOfFile("):
         raise SystemExit("SetFileSize does not mark a write")
 
-    with tempfile.TemporaryDirectory(prefix="longshot-close-waits-") as temp:
+    with tempfile.TemporaryDirectory(prefix="hookshot-close-waits-") as temp:
         src, exe = Path(temp) / "close_waits.c", Path(temp) / "close_waits.exe"
         src.write_text(HARNESS.replace("/* NN_FS_WRITES */", between(fs, "static int writes_open;", "/* ---- mounts")),
                        encoding="utf-8")

@@ -130,7 +130,7 @@ class WaterSubstepTests(unittest.TestCase):
         patched, counts, _ = oot_patches.patch_file(lifted, "code_000.c")
         self.assertEqual(counts["whole sites"], 1, patched)
         self.assertNotIn("recomp_fp_to_int(c->vreg[0][0]", patched)
-        with tempfile.TemporaryDirectory(prefix="longshot-water-substeps-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="hookshot-water-substeps-") as tmp:
             tmp = Path(tmp)
             (tmp / "a64.h").write_text(A64_H, encoding="utf-8")
             (tmp / "patched.c").write_text(patched, encoding="utf-8")

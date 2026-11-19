@@ -235,7 +235,7 @@ static void free_handle(uint64_t id) {
     ReleaseSRWLockExclusive(&handle_lock);
 }
 
-/* (longshot, ported from Hookshot 7d22d4fb, pixl27) Whether the game is writing a file now: one is open for writing and
+/* (hookshot, from Longshot, ported there from Hookshot 7d22d4fb, pixl27) Whether the game is writing a file now: one is open for writing and
    was written in the last second. Commit is nothing here, so a save goes straight into its files; every close
    (hos_relaunch.c hos_close_finish) waits up to 3 s for such a write to end before the process exits. The game's threads
    go on meanwhile */
