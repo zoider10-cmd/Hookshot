@@ -68,7 +68,8 @@
    "kind": "upstream",
    "license": "GPL-3.0-or-later",
    "base": "our own line (remote 'upstream'): merge it whole when it moves, then the gate, guard and shop run",
-   "surveyed": ""
+   "surveyed": "f349be5d",
+   "surveyed_on": "2026-11-19"
   },
   {
    "name": "OOTRR (REALAZK)",
