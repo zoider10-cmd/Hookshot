@@ -1,0 +1,3 @@
+| Date | Build | OS / desktop | GPU / driver | CPU / RAM | Settings | Where | Result |
+|---|---|---|---|---|---|---|---|
+| 2026-11-18 | #1615 @ 4a5961e2 (38990574 runtime with the PR state list) | CachyOS Linux, headless | Radeon RX 9070 XT / Mesa RADV 26.2.6-arch3.1 | Ryzen 7 9800X3D / 62 GiB RAM | Most from empty Longshot and Mesa caches, 2560 × 1440, in-game upscaler, SDR, frame generation off | Hyrule Castle drawbridge cutscene with child Link, scripted route and frame trace | Run 01, Most 326.089 s, game cache 9,133,025,407 B, Mesa cache 192,532,732 B, 32,678 graphics/mesh pipelines, 0 skipped draws over 2,901 presents |
