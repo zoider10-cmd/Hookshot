@@ -3738,17 +3738,17 @@ static int oot_bundle_holder(const char *name, const char *const **sizes) {
 /* (a check of the seed not yet collected that gives this, in the map Link is in and near him: the pick-up is a
    Skulltula's drop, not one of the world's own) */
 static int oot_drop_check_near(const char *name) {
-    int near = 0;
+    int found = 0;
     AcquireSRWLockShared(&oot_checks_lock);
-    for (int i = 0; i < oot_check_count && !near; i++) {
+    for (int i = 0; i < oot_check_count && !found; i++) {
         if (oot_checks[i].done == 1 || strcmp(oot_checks[i].item, name) || !oot_banc_in_folder(oot_link_map, oot_checks[i].folder))
             continue;
         const float dx = oot_checks[i].place[0] - oot_link_place[0], dy = oot_checks[i].place[1] - oot_link_place[1],
                     dz = oot_checks[i].place[2] - oot_link_place[2];
-        near = dx * dx + dy * dy + dz * dz <= OOT_CHECK_NEAR * OOT_CHECK_NEAR;
+        found = dx * dx + dy * dy + dz * dz <= OOT_CHECK_NEAR * OOT_CHECK_NEAR;
     }
     ReleaseSRWLockShared(&oot_checks_lock);
-    return near;
+    return found;
 }
 static int oot_holder_giving;   /* (a holder the host gives just now: not a check's item for the tracker's record) */
 #endif
