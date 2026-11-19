@@ -261,8 +261,19 @@ def main():
     check(got["slotdelete"] == "" and got["slotgone"] == "True" and ",Save 3,Save 4,Save 5," in got["slotnames"] and "Zelda" not in got["slotnames"] and
           got["slotagain"] == "4True", "one of the ten slots, deleted, is not that slot, empty and without a name, again: %r" % got)
     check(got["customdelete"] == "" and "Third" not in got["customnames"], "a save made beyond the ten, deleted, is still in the list: %r" % got)
-    check("delete.Click += (o, e) => OnDelete();" in src and 'MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;\n        string error = SaveSlots.Delete(dir, folder, n);' in src.replace("\r\n", "\n"),
-          "the window to choose has no Delete button, or it does not ask first")
+    flat = src.replace("\r\n", "\n")
+    choose = flat[flat.index("class PlayChoiceForm"):]
+    choose = choose[:choose.index("\n}\n")]
+    ask = '"Saves", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;'
+    check("delete.Click += (o, e) => OnDelete();" in choose and ask in choose and
+          choose.index(ask) < choose.index("string moved = SaveSlots.Select(dir, folder, next);") < choose.index("string error = SaveSlots.Delete(dir, folder, n);"),
+          "the window to choose has no Delete button, or it does not ask first, or deletes the save played before another takes over")
+    # (2026-11-18: the save played can be deleted there too, another taking over; and "Use this save" picks one unplayed)
+    check("delete.Enabled = n != null && !(empty.Contains(n)" in choose and "if (moved != null) {" in choose and "Fill(n); return; }" in choose,
+          "the window to choose cannot delete the save played, or deletes it when another could not take over")
+    check('Style(use, "Use this save",' in choose and "use.Click += (o, e) => OnUse();" in choose and
+          "use.Enabled = n != null && n != current;" in choose and "string error = SaveSlots.Select(dir, folder, n);" in choose,
+          "the window to choose has no Use this save, or it does not make the chosen save the one played")
     # (2026-11-17, the owner: the button that makes a save the one played is named for what it does, and the save played
     #  can be deleted, another made the one played first; a Select that fails deletes nothing)
     flat = src.replace("\r\n", "\n")

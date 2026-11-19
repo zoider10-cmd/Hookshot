@@ -809,7 +809,7 @@ class PlayChoiceForm : Form {
     readonly ListBox list = new ListBox();
     readonly TextBox name = new TextBox();
     readonly Button add = new Button(), play = new Button(), cancel = new Button(), copy = new Button(), rename = new Button();
-    readonly Button delete = new Button(), seed = new Button(), up = new Button(), down = new Button();
+    readonly Button delete = new Button(), seed = new Button(), up = new Button(), down = new Button(), use = new Button();
     readonly HashSet<string> empty = new HashSet<string>();   // (the saves that hold nothing)
     string current;
 
@@ -839,12 +839,16 @@ class PlayChoiceForm : Form {
         name.SetBounds(16, 386, 170, 26); name.MaxLength = 80;
         name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         Style(add, "New save", 196, 384, 100); Style(copy, "Copy save", 302, 384, 100); Style(rename, "Rename", 408, 384, 96);
-        Style(play, "Play", 278, 444, 110); Style(cancel, "Cancel", 394, 444, 110); Style(delete, "Delete", 16, 444, 100);
-        Style(seed, "New seed...", 126, 444, 130);   // (the randomizer's saves: the settings chosen and a seed made, RandoSeedForm)
+        Style(play, "Play", 354, 444, 76); Style(cancel, "Cancel", 436, 444, 68); Style(delete, "Delete", 16, 444, 84);
+        Style(seed, "New seed...", 106, 444, 112);
+        // (the chosen save made the one the game plays, without starting it: asked for 2026-11-18, as the main window's
+        //  save list has it)
+        Style(use, "Use this save", 224, 444, 124);   // (the randomizer's saves: the settings chosen and a seed made, RandoSeedForm)
         Style(up, "\u25B2", 472, 118, 32); Style(down, "\u25BC", 472, 152, 32);   // (the chosen save moved up or down in the list)
         play.BackColor = Theme.Blue;
-        Controls.AddRange(new Control[] { mid, list, low, name, add, copy, rename, play, cancel, delete, seed, up, down });
+        Controls.AddRange(new Control[] { mid, list, low, name, add, copy, rename, play, cancel, delete, seed, up, down, use });
         delete.Click += (o, e) => OnDelete();
+        use.Click += (o, e) => OnUse();
         seed.Click += (o, e) => OnSeed();
         up.Click += (o, e) => OnMove(-1);
         down.Click += (o, e) => OnMove(1);
@@ -853,8 +857,10 @@ class PlayChoiceForm : Form {
         list.SelectedIndexChanged += (o, e) => {
             string n = list.SelectedIndex >= 0 ? (string)list.SelectedItem : null;
             copy.Enabled = n != null && !empty.Contains(n);
-            // (not the save in the game, and not a slot that is empty and without a name already)
-            delete.Enabled = n != null && n != current && !(empty.Contains(n) && SaveSlots.Unnamed(n) && SaveSlots.SlotOf(dir, SaveCopies.Folders[Mode], n) > 0);
+            // (not a slot that is empty and without a name already; the save in the game too, asked for 2026-11-18: another
+            //  takes its place, OnDelete)
+            delete.Enabled = n != null && !(empty.Contains(n) && SaveSlots.Unnamed(n) && SaveSlots.SlotOf(dir, SaveCopies.Folders[Mode], n) > 0);
+            use.Enabled = n != null && n != current;
         };
         AcceptButton = play; CancelButton = cancel;
         add.Click += (o, e) => OnNew();
@@ -954,13 +960,40 @@ class PlayChoiceForm : Form {
         if (LauncherForm.GameRunning()) {
             MessageBox.Show(this, "Close the game first: it is using its saves.", "Saves", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
         }
+        // (the save being played can be deleted too, asked for 2026-11-18: another is made the one played first, the first
+        //  other save with progress in the list, else the first empty one; nothing is deleted if that fails)
+        string next = null;
+        if (n == current) {
+            foreach (string o in list.Items) if (o != n && !empty.Contains(o)) { next = o; break; }
+            if (next == null) foreach (string o in list.Items) if (o != n) { next = o; break; }
+            if (next == null) {
+                MessageBox.Show(this, "This is the only save: make a new one first.", "Saves", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
+            }
+        }
         int slot = SaveSlots.SlotOf(dir, folder, n);
         if (MessageBox.Show(this, "Delete the save \"" + n + "\" and all its progress? It cannot be brought back." +
-                            (slot > 0 ? "\n\nSlot " + slot + " is empty again after it." : ""), "Saves",
-                            MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
+                            (slot > 0 ? "\n\nSlot " + slot + " is empty again after it." : "") +
+                            (next != null ? "\n\nIt is the save being played: \"" + SaveSlots.Shown(next, empty.Contains(next)).Trim() + "\" becomes the one played." : ""),
+                            "Saves", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.OK) return;
+        if (next != null) {
+            string moved = SaveSlots.Select(dir, folder, next);
+            if (moved != null) { MessageBox.Show(this, moved, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); Fill(n); return; }
+        }
         string error = SaveSlots.Delete(dir, folder, n);
         if (error != null) MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        Fill(null);
+        Fill(next);
+    }
+
+    void OnUse() {
+        if (list.SelectedIndex < 0 || (string)list.SelectedItem == current) return;
+        string n = (string)list.SelectedItem, folder = SaveCopies.Folders[Mode];
+        if (LauncherForm.GameRunning()) {
+            MessageBox.Show(this, "Close the game first: it is using its saves.", "Saves", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
+        }
+        if (!SaveNameForm.Ask(this, dir, folder, ref n)) return;   // (an empty slot is named before it is played)
+        string error = SaveSlots.Select(dir, folder, n);
+        if (error != null) MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        Fill(n);
     }
 
     void OnPlay() {
