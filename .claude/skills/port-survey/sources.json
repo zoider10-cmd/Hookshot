@@ -74,7 +74,8 @@
    "kind": "randomizer",
    "license": "GPL-3.0-or-later after v0.4.0 (MIT up to it; OoTR logic MIT)",
    "base": "its own Rust project: read for randomizer mechanisms (flags, flows); compared in share/ootrr-azk-comparison.md",
-   "surveyed": "efc5841"
+   "surveyed": "5d6cd5f",
+   "surveyed_on": "2026-11-19"
   }
  ]
 }
