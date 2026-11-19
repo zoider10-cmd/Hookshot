@@ -328,6 +328,56 @@ def patch_wheel_fewest(source):
         '#include "a64.h"\n', '#include "a64.h"\nextern int hos_oot_wheel_fewest(void);\n', 1)
 
 
+# A shelf of a family shows the tier for what Link has now (the randomizer's fork, bug 69: host/hos_main.c
+# hos_oot_shelf_actor). The game opens a map file once a session and keeps it, so the version given at the opening stayed;
+# but it reads the kept map's actors again at each entry into the area, in f_805d7660, which takes each actor's name (Gyaml)
+# from the map and then asks whether it starts with "Work/". The name's place is handed to the host there, and the host
+# answers with the shelf's actor for what Link has now (or the same place).
+# Two readers take the name: f_805d7660 (a whole map's actors, as the area is made ready) and f_83b12ea0 (one actor's
+# record as it is made: the shelves that appear go through it, seen without a window 2026-11-18: the Zora shop's never
+# went through the first). Each: (its head, the text the hook goes after, the register holding the name's place).
+SHELF_ACTOR_SITES = (
+    ("void f_805d7660(Ctx *__restrict A64_NOESC c) {\n",
+     "    { uint64_t _a=c->x[9],_b=((c->x[8]) << 0),_r=_a+_b; c->x[9]=_r; }\n"
+     "    { uint64_t _b=c->x[29]; int64_t _o=-112; recomp_store64_sp(c,(_b+_o),c->x[9]); }\n"
+     "    c->x[8]=recomp_load8(c,c->x[9] + 0);\n"
+     "    { uint64_t _a=c->x[8], _b=87ULL;", 9),
+    ("void f_83b12ea0(Ctx *__restrict A64_NOESC c) {\n",
+     "    { uint64_t _b=c->x[29]; int64_t _o=-8; c->x[8]=recomp_load64(c,(_b+_o)); }\n"
+     "    recomp_store64(c,c->x[19] + 40,c->x[8]);\n"
+     "    c->x[9]=recomp_load8(c,c->x[8] + 0);\n"
+     "    { uint64_t _a=c->x[9], _b=87ULL;", 8),
+)
+SHELF_ACTOR_HOOK = "    c->x[%d] = hos_oot_shelf_actor(c, c->x[%d]);   /* (nx2/oot_patches.py patch_shelf_actor) */\n"
+
+
+def patch_shelf_actor(source):
+    """the hooks above; (the source, how many sites it has hooked), or None when this file has neither function"""
+    found, hooked = False, 0
+    for head, at, reg in SHELF_ACTOR_SITES:
+        start = source.find(head)
+        if start < 0:
+            continue
+        found = True
+        end = source.find("\n}\n", start)
+        body = source[start:end]
+        hook = SHELF_ACTOR_HOOK % (reg, reg)
+        if hook in body:   # (made by an earlier run over this file)
+            hooked += 1
+            continue
+        if body.count(at) != 1:
+            continue
+        first = at.index("\n") + 1
+        body = body.replace(at, at[:first] + hook + at[first:], 1)
+        source = source[:start] + body + source[end:]
+        hooked += 1
+    if not found:
+        return None
+    if hooked and "extern uint64_t hos_oot_shelf_actor(" not in source:
+        source = source.replace('#include "a64.h"\n', '#include "a64.h"\nextern uint64_t hos_oot_shelf_actor(Ctx *c, uint64_t name_at);\n', 1)
+    return source, hooked
+
+
 # Progressive items, what a gift or a shop shows and says (the randomizer's fork: host/hos_main.c hos_oot_get_name). Two
 # nodes of the game's AI ask the host at their start, with the node (x0):
 #  - f_8295a4b0, OneShotSetNonStructGameDataString64's run: a String64 flag set (its name's input at +0x30, its value's at
@@ -1335,6 +1385,12 @@ def patch_file(s, name, protect_hearts=False):
             lines.append("oot_patches: the R item wheel with one item in " + name)
         out = wheel
         counts["item wheel count"] += 1
+    shelf = patch_shelf_actor(out) if protect_hearts else None   # (the randomizer's fork: a shelf's tier for now)
+    if shelf is not None:
+        if shelf[0] != out:
+            lines.append("oot_patches: a shelf's tier as the map is read in " + name)
+        out = shelf[0]
+        counts["shelf actor hook"] += shelf[1]
     get = patch_get_name(out) if protect_hearts else None   # (the randomizer's fork: what a gift shows)
     if get is not None:
         if get != out:
@@ -1475,6 +1531,7 @@ def report(paths, counts, protect_hearts=False):
         done["progressive chest name"] = 0
         done["day clock cap"] = 0
         done["item wheel count"] = 0
+        done["shelf actor hook"] = 0
         done[GET_NAME_COUNTS[0]] = 0
         done[GET_NAME_COUNTS[1]] = 0
         done["model swap guards"] = 0
@@ -1497,6 +1554,9 @@ def report(paths, counts, protect_hearts=False):
     step_sites = total["step sites"]   # (the divides with the hook)
     step_files = [p for p, c in zip(paths, counts) if c["step sites"]]   # (the files that have it)
     whole_sites = total["whole sites"]   # (the counters of WHOLE_SITES with the whole frames: patch_whole_frames)
+    if protect_hearts and total["shelf actor hook"] != len(SHELF_ACTOR_SITES):   # (bug 69: a shelf's tier for what Link has now)
+        print("oot_patches: WARNING: the map actors' name readers were hooked %d times, not %d: a shelf of a family may show "
+              "an old tier" % (total["shelf actor hook"], len(SHELF_ACTOR_SITES)))
     if total["sound jobs"] != 1:   # (without it, above 60 fps sounds and then the music can stop after a few loading zones)
         print("oot_patches: WARNING: the sound job was found %d times, not once" % total["sound jobs"])
     if total["music manager time"] != 1:   # (without it, above 60 fps the music manager's timers run at 60 / fps of real time)

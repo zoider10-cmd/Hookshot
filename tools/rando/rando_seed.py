@@ -5709,9 +5709,11 @@ def main():
         with open(out, "wb") as f:
             f.write(zs.ZstdCompressor(level=9).compress(data))
         written.append(SHELF_TIER_DIR + "/" + rel)
-    if tier_maps:   # (a map's path in the game's files, then the items its shelves of a family sell, in its versions' order)
+    if tier_maps:   # (a map's path in the game's files, then the items its shelves of a family sell, in its versions' order,
+        #  then those shelves' actors: the game's side names a shelf's tier as the map is read, bug 69, hos_oot_shelf_actor)
         with open(os.path.join(mod, SHELF_TIERS), "w", encoding="utf-8", newline="\n") as f:
-            f.write("".join("%s|%s\n" % (rel, ",".join(on_sale[actor][0] for actor in held)) for rel, held in tier_maps.items()))
+            f.write("".join("%s|%s|%s\n" % (rel, ",".join(on_sale[actor][0] for actor in held), ",".join(held))
+                            for rel, held in tier_maps.items()))
         print("Progressive items: %d map file%s of shops with shelves of a family, written for each tier" % (len(tier_maps), "" if len(tier_maps) == 1 else "s"))
     with open(os.path.join(mod, "spoiler.txt"), "w", encoding="utf-8") as f:
         f.write("seed %d, chests setting %d, dungeon keys setting %d\n(area: chest type, position, what it held -> what it holds now)\n" % (

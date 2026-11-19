@@ -3493,6 +3493,92 @@ static void oot_family_levels_refresh(Ctx *c) {
     }
 }
 
+#if defined(_WIN32) || defined(__linux__)
+/* (bug 69) A shelf of a family showed the tier of its map's first opening in a session: the game opens a map file once
+   a session and keeps it, so the version given then (hos_oot_shelf_map) stays (the owner's run, 2026-11-17: the Silver
+   Scale bought in the Zora shop, the Market's shelf still showed it). But the game reads the kept map's actors again at
+   each entry into the area: f_805d7660 reads each actor's name (Gyaml) from it, and asks here with the name's place
+   (nx2/oot_patches.py patch_shelf_actor). A shelf's tiers are its actors (tools/rando/rando_seed.py SHELF_FAMILIES): the
+   shuffled item's is the shelf's own, <shelf>, each other tier k <shelf>_<k>; the seed lists the shelves in
+   shelf_tiers.txt's third field. Any of a shelf's names is answered with the one for what Link has now, a string of the
+   host's own in guest memory that stays. The place on the shelf stays the version's given at the opening (each tier had
+   its own: a model may sit a little off). HOS_OOT_SHELF_TIERS=0 turns it off with the maps' versions. */
+static struct { char actor[48]; int family, own; } oot_tier_shelves[64];
+static int oot_tier_shelf_count;
+static void oot_tier_shelf_add(const char *actor, const char *item) {
+    const int f = oot_family_of(item, NULL);
+    if (f < 0 || oot_tier_shelf_count >= (int)(sizeof oot_tier_shelves / sizeof oot_tier_shelves[0]) ||
+        strlen(actor) + 3 >= sizeof oot_tier_shelves[0].actor)
+        return;
+    int tiers = 0, own = 0;
+    while (tiers < 3 && oot_families[f][tiers][0]) tiers++;
+    for (int t = 0; t < tiers; t++)
+        for (int a = 0; a < 2; a++)
+            if (oot_families[f][t][a] && !strcmp(oot_families[f][t][a], item)) own = t;
+    for (int i = 0; i < oot_tier_shelf_count; i++)   /* (a shelf in two maps' lines: a map's adult and child copies) */
+        if (!strcmp(oot_tier_shelves[i].actor, actor)) return;
+    snprintf(oot_tier_shelves[oot_tier_shelf_count].actor, sizeof oot_tier_shelves[0].actor, "%s", actor);
+    oot_tier_shelves[oot_tier_shelf_count].family = f, oot_tier_shelves[oot_tier_shelf_count].own = own;
+    __atomic_store_n(&oot_tier_shelf_count, oot_tier_shelf_count + 1, __ATOMIC_RELEASE);
+}
+/* which of the shelves `name` is a tier of (-1 none), and that tier in *tier */
+static int oot_tier_shelf_of(const char *name, int *tier) {
+    const int count = __atomic_load_n(&oot_tier_shelf_count, __ATOMIC_ACQUIRE);
+    for (int i = 0; i < count; i++) {
+        const size_t n = strlen(oot_tier_shelves[i].actor);
+        if (strncmp(name, oot_tier_shelves[i].actor, n)) continue;
+        if (!name[n]) { *tier = oot_tier_shelves[i].own; return i; }
+        if (name[n] == '_' && name[n + 1] >= '0' && name[n + 1] <= '2' && !name[n + 2]) { *tier = name[n + 1] - '0'; return i; }
+    }
+    return -1;
+}
+/* the tier a shelf shows for what Link has now (-1: not read yet) */
+static int oot_tier_shelf_want(int i) {
+    const int f = oot_tier_shelves[i].family;
+    const int level = __atomic_load_n(&oot_family_level[f], __ATOMIC_RELAXED);
+    if (level < 0) return -1;
+    int tiers = 0;
+    while (tiers < 3 && oot_families[f][tiers][0]) tiers++;
+    return level < tiers ? level : oot_tier_shelves[i].own;
+}
+#endif
+uint64_t hos_oot_shelf_actor(Ctx *c, uint64_t name_at) {
+#if defined(_WIN32) || defined(__linux__)
+    static const char head[] = "Shop_Rando_";
+    if (!name_at || !__atomic_load_n(&oot_tier_shelf_count, __ATOMIC_ACQUIRE)) return name_at;
+    for (int i = 0; head[i]; i++)
+        if ((char)recomp_load8(c, name_at + i) != head[i]) return name_at;
+    char name[64];
+    size_t n = 0;
+    for (; n + 1 < sizeof name; n++)
+        if (!(name[n] = (char)recomp_load8(c, name_at + n))) break;
+    name[n] = 0;
+    if (n + 1 >= sizeof name) return name_at;
+    int tier = 0;
+    const int i = oot_tier_shelf_of(name, &tier);
+    const int want = i >= 0 ? oot_tier_shelf_want(i) : -1;
+    static int trace = -1;   /* (a test's: HOS_OOT_SHELF_TRACE=1 logs every shop shelf's name read, and its tier) */
+    if (trace < 0) { const char *e = getenv("HOS_OOT_SHELF_TRACE"); trace = e && *e == '1'; }
+    if (trace) hos_log("rando: progressive: map actor %s: shelf %d, tier %d, wanted %d", name, i, tier, want);
+    if (want < 0 || want == tier) return name_at;
+    static uint64_t names;   /* (a slot of 64 bytes for each shelf's tier: written once, then the same each time) */
+    if (!names) names = hos_sys_alloc(sizeof oot_tier_shelves / sizeof oot_tier_shelves[0] * 3 * 64, 16);
+    if (!names) return name_at;
+    const uint64_t at = names + ((uint64_t)i * 3 + (uint64_t)want) * 64;
+    char *slot = (char *)A64_PTR(at);
+    if (!slot[0]) {
+        if (want == oot_tier_shelves[i].own) snprintf(slot, 64, "%s", oot_tier_shelves[i].actor);
+        else snprintf(slot, 64, "%s_%d", oot_tier_shelves[i].actor, want);
+    }
+    static char told[64][4];
+    if (!told[i][want]) told[i][want] = 1, hos_log("rando: progressive: shelf %s shows tier %d now (was %s)", oot_tier_shelves[i].actor, want, name);
+    return at;
+#else
+    (void)c;
+    return name_at;
+#endif
+}
+
 int hos_oot_shelf_map(const char *rel, char *out, size_t cap) {
 #if defined(_WIN32) || defined(__linux__)
     static SRWLOCK lock = SRWLOCK_INIT;
@@ -3511,10 +3597,15 @@ int hos_oot_shelf_map(const char *rel, char *out, size_t cap) {
             if (!bar || bar - line >= (int)sizeof maps[0].rel) continue;
             *bar = 0;
             snprintf(maps[count].rel, sizeof maps[count].rel, "%s", line);
+            char *actors = strchr(bar + 1, '|');   /* (the shelves' actors: a seed from bug 69's fix on) */
+            if (actors) *actors++ = 0;
             int n = 0;
             for (char *item = strtok(bar + 1, ","); item && n < 3; item = strtok(NULL, ","))
                 snprintf(maps[count].items[n++], sizeof maps[count].items[0], "%s", item);
             maps[count].n = n;
+            int k = 0;
+            for (char *actor = actors ? strtok(actors, ",") : NULL; actor && k < n; actor = strtok(NULL, ","), k++)
+                oot_tier_shelf_add(actor, maps[count].items[k]);
             /* (a map named twice is left as the seed's own: a seed made before fixes 39 listed the Market once for each
                of its two shops, whose versions had overwritten each other, and the game stayed black entering it) */
             int twice = 0;
