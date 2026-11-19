@@ -187,13 +187,20 @@ public static class SaveSlots {
     }
     public static bool SeedKept(string dir, string name) { return File.Exists(Path.Combine(SeedRoot(dir), name) + ".txt"); }
 
-    // (the seed there is now is not the one that save was last played on)
+    // (the randomizer's settings that move no item: changed on a save being played, its seed is written again as it was,
+    // tools/rando/rando_seed.py QOL_STAMP and the stamp's second line; the others are the game's side's alone)
+    static readonly HashSet<string> NoItemKeys = new HashSet<string> { "rando_skip_intro", "rando_skip_cutscenes", "rando_start_rupees",
+        "rando_skulltulas_day", "rando_hints", "rando_ageless", "rando_ammo_pickups", "rando_rupee_fill", "rando_ganon_bridge" };
+    static bool MovesNoItem(string line) { int eq = line.IndexOf('='); return eq > 0 && NoItemKeys.Contains(line.Substring(0, eq).Trim()); }
+
+    // (the seed there is now is not the one that save was last played on: settings that move no item aside)
     public static bool SeedDiffers(string dir, string name) {
         try {
             if (!SeedKept(dir, name)) return false;
             var was = new List<string>();
             foreach (string l in File.ReadAllLines(Path.Combine(SeedRoot(dir), name) + ".txt")) if (l.Trim().Length > 0) was.Add(l.Trim());
             var now = SeedLines(dir);
+            was.RemoveAll(MovesNoItem); now.RemoveAll(MovesNoItem);   // (a setting that moves no item may change on a save being played)
             was.Sort(StringComparer.Ordinal); now.Sort(StringComparer.Ordinal);
             return string.Join("\n", was.ToArray()) != string.Join("\n", now.ToArray());
         } catch { return false; }

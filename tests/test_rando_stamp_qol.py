@@ -10,6 +10,7 @@ records_moved; asked for 2026-11-17: QoL settings changed on a save being played
 """
 import importlib.util
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -46,6 +47,12 @@ def main():
     check("rest = stamp_settings(rest)" in script and "was = stamp_settings(was_first) + \"\\n\"" in script and
           "stamp = stamp[:-1] + qol + \"\\n\"" in script and "records_moved(os.path.join(game, \"rando\"), was_first, stamp.split(\"\\n\")[0])" in script,
           "the main does not write those settings on the second line, compare without them, or move the records")
+    launcher = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
+    keys = set(re.findall(r'"(rando_\w+)"', launcher[launcher.index("NoItemKeys = new HashSet<string> {"):launcher.index("static bool MovesNoItem")]))
+    check({"rando_skip_intro", "rando_skip_cutscenes", "rando_start_rupees", "rando_skulltulas_day", "rando_hints", "rando_ageless"} <= keys and
+          not keys & {"rando_chests", "rando_songs", "rando_letter", "rando_shops", "rando_open_door"} and
+          "was.RemoveAll(MovesNoItem); now.RemoveAll(MovesNoItem);" in launcher,
+          "the launcher asks about another seed when only a setting that moves no item changed, or skips one that moves items")
     print("PASS: the settings that move no item are on the stamp's second line")
 
 
