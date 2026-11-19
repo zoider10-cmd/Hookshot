@@ -3286,6 +3286,16 @@ int hos_oot_field_clock_free(void) {
     return !keep && hos_rando_on();
 }
 
+/* (the randomizer's fork) The R item wheel, bug 57: the game opens it only with more than one item the age can use
+   (f_8331efa0, SeqQueryIsOpenableShortCut's calculate: nx2/oot_patches.py patch_wheel_fewest asks this for the count
+   compared with). A shuffle can leave a child one (the owner's run: the Hookshot on ZR, R did nothing). With the
+   randomizer on, more than 0. HOS_OOT_WHEEL_TWO=1 keeps the game's two. */
+int hos_oot_wheel_fewest(void) {
+    static int keep = -1;
+    if (keep < 0) { const char *e = getenv("HOS_OOT_WHEEL_TWO"); keep = e && *e == '1'; }
+    return keep || !hos_rando_on() ? 1 : 0;
+}
+
 void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made) {
 #if defined(_WIN32) || defined(__linux__)
     static int on = -1;

@@ -301,6 +301,33 @@ def patch_clock_cap(source):
         '#include "a64.h"\n', '#include "a64.h"\nextern int hos_oot_field_clock_free(void);\n', 1)
 
 
+# The R item wheel (the randomizer's fork, bug 57: host/hos_main.c hos_oot_wheel_fewest). The game's "ShortCut" screen opens
+# only when the AINB query SeqQueryIsOpenableShortCut says so; its calculate function, f_8331efa0, answers true when the
+# shortcut manager (*0x84c9e0d0) counts more than 1 item at +0x498 (two the age can use). In the original order a child
+# has the Slingshot and more by then; a shuffle can leave him one (the Hookshot of the owner's run). The 1 compared with is
+# asked of the host: 0 with the randomizer on, so one item opens the wheel.
+WHEEL_HEAD = "void f_8331efa0(Ctx *__restrict A64_NOESC c) {\n"
+WHEEL_CMP = ("    c->x[8]=recomp_load32(c,c->x[8] + 1176);\n"
+             "    { uint64_t _a=c->x[8], _b=1ULL; uint64_t _r=_a-_b;")
+WHEEL_NEW = ("    c->x[8]=recomp_load32(c,c->x[8] + 1176);\n"
+             "    { uint64_t _a=c->x[8], _b=(uint64_t)hos_oot_wheel_fewest(); uint64_t _r=_a-_b;")
+
+
+def patch_wheel_fewest(source):
+    """the wheel's count above; None when this file has not the function"""
+    start = source.find(WHEEL_HEAD)
+    if start < 0:
+        return None
+    end = source.find("\n}\n", start)
+    body = source[start:end]
+    if WHEEL_NEW in body:   # (made by an earlier run over this file)
+        return source
+    if body.count(WHEEL_CMP) != 1:
+        return None
+    return (source[:start] + body.replace(WHEEL_CMP, WHEEL_NEW, 1) + source[end:]).replace(
+        '#include "a64.h"\n', '#include "a64.h"\nextern int hos_oot_wheel_fewest(void);\n', 1)
+
+
 # Progressive items, what a gift or a shop shows and says (the randomizer's fork: host/hos_main.c hos_oot_get_name). Two
 # nodes of the game's AI ask the host at their start, with the node (x0):
 #  - f_8295a4b0, OneShotSetNonStructGameDataString64's run: a String64 flag set (its name's input at +0x30, its value's at
@@ -1302,6 +1329,12 @@ def patch_file(s, name, protect_hearts=False):
             lines.append("oot_patches: the day's 15:00 cap in " + name)
         out = clock
         counts["day clock cap"] += 1
+    wheel = patch_wheel_fewest(out) if protect_hearts else None   # (the randomizer's fork: the R item wheel with one item)
+    if wheel is not None:
+        if wheel != out:
+            lines.append("oot_patches: the R item wheel with one item in " + name)
+        out = wheel
+        counts["item wheel count"] += 1
     get = patch_get_name(out) if protect_hearts else None   # (the randomizer's fork: what a gift shows)
     if get is not None:
         if get != out:
@@ -1441,6 +1474,7 @@ def report(paths, counts, protect_hearts=False):
         done["progressive items"] = 0
         done["progressive chest name"] = 0
         done["day clock cap"] = 0
+        done["item wheel count"] = 0
         done[GET_NAME_COUNTS[0]] = 0
         done[GET_NAME_COUNTS[1]] = 0
         done["model swap guards"] = 0
