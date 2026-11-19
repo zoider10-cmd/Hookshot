@@ -4794,6 +4794,45 @@ def ocarina_need(need, lesson=False):
     return each(way, need)
 
 
+# ---- The settings that move no item, on the stamp's second line (asked for 2026-11-17: QoL settings changed on a save
+# being played) ----
+# The stamp's first line is a seed's settings: a seed whose first line is another's is made anew with today's rules
+# (placement), which moves its items. Skip opening, Skip cutscenes, Starting rupees and Gold Skulltulas by day change
+# no rule and draw nothing from the shuffle's random: their words (QOL_STAMP) are on the second line, the fixes', so
+# turning one on or off for a seed being played writes it again as it was. A stamp written before has them on its
+# first line: they are taken out of it to compare (stamp_settings), and the Tracker's records of that seed
+# (rando/collected.txt, rando/junk.txt: their first line is "seed " and the stamp's first line) are moved to the new
+# first line, so the marks are kept (records_moved).
+QOL_STAMP = (" intro skipped", " talks skipped", " rupees %d" % START_RUPEES, " skulltulas by day")
+RECORDS = ("collected.txt", "junk.txt")
+
+
+def stamp_settings(line):
+    """a stamp's first line without the words of the settings that move no item (QOL_STAMP)"""
+    for word in QOL_STAMP:
+        line = line.replace(word, "")
+    return line
+
+
+def records_moved(folder, was, now):
+    """the Tracker's records in folder (RECORDS) of the stamp's first line `was` moved to `now`: how many were"""
+    moved = 0
+    for name in RECORDS:
+        path = os.path.join(folder, name)
+        try:
+            with open(path, encoding="utf-8", newline="") as f:
+                text = f.read()
+        except OSError:
+            continue
+        first, sep, body = text.partition("\n")
+        if first.rstrip("\r") != "seed " + was:
+            continue
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            f.write("seed " + now + ("\r" if first.endswith("\r") else "") + sep + body)
+        moved += 1
+    return moved
+
+
 def remove_old(mod):
     """the files a run before this one wrote (its list: rando_manifest.txt), and the folders they leave empty"""
     listing = os.path.join(mod, "rando_manifest.txt")
@@ -5135,17 +5174,28 @@ def main():
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
                                                                (" test gifts %08x" % (zlib.crc32(repr(sorted(test_gifts)).encode()) & 0xffffffff) if test_gifts else ""))
+    # (the settings that move no item: on the second line, QOL_STAMP)
+    qol = "".join(word for word in QOL_STAMP if word + " " in rest or word + "\n" in rest)
+    rest = stamp_settings(rest)
     # (the seed in the game folder, made by an earlier version of the rules: made again as it was, not another one
     # under its save. A new seed, or other settings, take the rules of today)
     placement = PLACEMENT
+    was_first = None
     try:
         was = open(stamp_path, encoding="utf-8").read()
-        was = was.split("\n")[0] + "\n"   # (the first line: the settings. The second, later: the fixes)
+        was_first = was.split("\n")[0]
+        was = stamp_settings(was_first) + "\n"   # (the first line: the settings. The second, later: the fixes)
         if was.startswith("placement ") and was.split(" ", 2)[2:] == [rest[1:]] and 1 <= int(was.split()[1]) < PLACEMENT:
             placement = int(was.split()[1])
     except (OSError, ValueError):
         pass
     stamp = "placement %d%sfixes %d\n" % (placement, rest, FIXES_VERSION)   # (the fixes: the same items, written again)
+    if qol:
+        stamp = stamp[:-1] + qol + "\n"
+    if was_first is not None and was_first != stamp.split("\n")[0] and stamp_settings(was_first) == stamp.split("\n")[0] and not a.dry_run:
+        moved = records_moved(os.path.join(game, "rando"), was_first, stamp.split("\n")[0])
+        if moved:
+            print("the Tracker's records of this seed kept: %d moved to its stamp without the settings that move no item" % moved)
     if a.hints:   # (the hints move no item: on the fixes' line, so a seed's shuffle stays as it was with them turned on)
         stamp = stamp[:-1] + " hints %d\n" % HINTS_VERSION
     if a.ageless:   # (moves no item either: the same line)
