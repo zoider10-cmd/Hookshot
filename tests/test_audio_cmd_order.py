@@ -48,14 +48,14 @@ int main() {
     grow_fails = 1;
     Cmd k = {4};
     submit(&k);
-    CHECK(norder == 4);   /* the waiting ones and the new one, all applied */
-    for (int i = 0; i < 4; i++) CHECK(order[i] == i + 1);
-    CHECK(ncmds == 0);    /* nothing applied twice at the next update */
+    CHECK(norder == 3);   /* the waiting ones applied, in order */
+    for (int i = 0; i < 3; i++) CHECK(order[i] == i + 1);
+    CHECK(ncmds == 1 && cmds[0].op == 4);   /* the new one waits for the update, after them */
     /* a store that can grow keeps waiting */
     grow_fails = 0;
     Cmd m = {5};
     submit(&m);
-    CHECK(ncmds == 1 && norder == 4);
+    CHECK(ncmds == 2 && norder == 3);
     std::printf("PASS: the audio changes keep their order when the store is full\n");
 }
 '''

@@ -1376,7 +1376,12 @@ static void submit(const Cmd *k) {   /* (with the lock held) */
         Cmd *grown = (Cmd *)realloc(cmds, (size_t)cap * sizeof *grown);
         if (grown) cmds = grown, cmds_cap = cap;
     }
-    if (immediate || ncmds == cmds_cap) apply(k);
+    if (ncmds == cmds_cap && !immediate) {   /* (full and not grown: the waiting ones first, so a queued Stop cannot
+                                                 come after the next sound's buffers. tests/test_audio_cmd_order.py) */
+        for (int i = 0; i < ncmds; i++) apply(&cmds[i]);
+        ncmds = 0;
+    }
+    if (immediate || cmds_cap == 0) apply(k);
     else cmds[ncmds++] = *k;
 }
 static void commit(void) {   /* (with the lock held) */
