@@ -54,7 +54,10 @@ def main():
     check("if (kind == 1) {" in fn and "if (!strcmp(shown, oot_show_as[i][1])) {" in fn and
           "give = oot_show_as[i][0];" in fn, "a held-up gauntlet is still shown by its worn piece's spelling")
     # (bug 55: the Silver and Golden Gauntlets show the bracelet's model on a shelf, their own name)
-    check("SHELF_MODEL_AS = {\"Item_Gauntlet_Silver\": \"Item_Gauntlet_Goron\", \"Item_Gauntlet_Gold\": \"Item_Gauntlet_Goron\"}" in src and
+    check("SHELF_MODEL_AS = {\"Item_Gauntlet_Silver\": \"Item_Gauntlet_Goron\", \"Item_Gauntlet_Gold\": \"Item_Gauntlet_Goron\"," in src and
+          '"TBox_Shield_Deku": "Shop_Weapon_Shield_Deku", "TBox_Shield_Hylian": "Shop_Weapon_Shield_Hylian"}' in src and
+          'SHELF_POSE_AS = frozenset(("TBox_Shield_Deku", "TBox_Shield_Hylian"))' in src and
+          "    if item in SHELF_POSE_AS:   # (the game's own shelf's model and pose: no turn of ours, bug 77)" in src and
           'SHELF_MODEL_FIELDS = ("FmdbName", "ModelProjectName", "ModelAabbMin", "ModelAabbMax", "AnimationResources")' in src and
           "row[1].update((k, v) for k, v in by[SHELF_MODEL_AS[item]][1].items() if k in SHELF_MODEL_FIELDS)" in src and
           "pack(SHELF_MODEL_AS[item]) if item in SHELF_MODEL_AS else None)" in src,

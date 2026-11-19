@@ -908,6 +908,8 @@ def shelf_shop(actor):
 
 def shelf_turn(actor, item):
     """an item's turn on a shelf of a shop actor: the shop's own, else SHELF_TURN's, else None"""
+    if item in SHELF_POSE_AS:   # (the game's own shelf's model and pose: no turn of ours, bug 77)
+        return None
     return SHELF_TURN_SHOP.get(shelf_shop(actor), {}).get(item) or SHELF_TURN.get(item)
 
 
@@ -920,7 +922,11 @@ SHELF_MORE = {"Item_Gauntlet_Goron": 0.15}
 # (bug 55: the Silver and Golden Gauntlets' only model is the pair Link wears, which shows on no shelf, with its pose
 #  or without (seen without a window 2026-11-18 and 19, eight shelves of the Kokiri shop empty). Their shelves show
 #  the Goron's Bracelet's model, its row of the list of actors and its box; the name, words and item are their own)
-SHELF_MODEL_AS = {"Item_Gauntlet_Silver": "Item_Gauntlet_Goron", "Item_Gauntlet_Gold": "Item_Gauntlet_Goron"}
+SHELF_MODEL_AS = {"Item_Gauntlet_Silver": "Item_Gauntlet_Goron", "Item_Gauntlet_Gold": "Item_Gauntlet_Goron",
+                  "TBox_Shield_Deku": "Shop_Weapon_Shield_Deku", "TBox_Shield_Hylian": "Shop_Weapon_Shield_Hylian"}
+# (bug 77: a shield bought lay flat in its "You got" scene. The game's own shield shelves (Shop_Weapon_Shield_*) show the
+#  worn model with the shop's pose files: a shield's shelf takes those too (SHELF_POSE_AS), and no turn of its own)
+SHELF_POSE_AS = frozenset(("TBox_Shield_Deku", "TBox_Shield_Hylian"))
 SHELF_MORE.update({"Item_Gauntlet_Silver": 0.15, "Item_Gauntlet_Gold": 0.15})
 # (the fields of the list of actors' row that are the model's; ActorName is the item's: it names the shelf, seen
 #  2026-11-19 as "Goron Bracelet" with the whole row taken)
@@ -1160,6 +1166,15 @@ def shop_pack(item, item_pack, base_pack, sample_pack, price, pouch=None, name=N
             raise ValueError("%s: the model of %s is not in its pack" % (item, SHELF_MODEL_AS[item]))
         files[MODEL_INFO_FILE % name] = source
         comps["ModelInfoRef"] = ("string", "?" + MODEL_INFO_FILE % name)
+        if item in SHELF_POSE_AS:   # (the game's own shelf's pose files, SHELF_POSE_AS)
+            parts_of = sarc_read(model_pack)
+            for key in ("ASInfoRef", "ASRef", "AnimationRef"):
+                ref = next((tree[1].get("Components", ("dict", {}))[1].get(key) for _, tree, _ in other
+                            if tree[1].get("Components", ("dict", {}))[1].get(key)), None)
+                if ref and ref[0] == "string":
+                    comps[key] = ref
+                    if ref_file(ref[1]) in parts_of:
+                        files.setdefault(ref_file(ref[1]), parts_of[ref_file(ref[1])])
     # (a shield's model file is the shelf's own, under the shelf's name: SHELF_OWN_MODEL)
     model_file = ref_file(comps["ModelInfoRef"][1])
     if model_file.split("/")[-1].split(".")[0] in SHELF_OWN_MODEL and model_file in files:
