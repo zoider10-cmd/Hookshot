@@ -927,6 +927,10 @@ SHELF_MODEL_AS = {"Item_Gauntlet_Silver": "Item_Gauntlet_Goron", "Item_Gauntlet_
 # (bug 77: a shield bought lay flat in its "You got" scene. The game's own shield shelves (Shop_Weapon_Shield_*) show the
 #  worn model with the shop's pose files: a shield's shelf takes those too (SHELF_POSE_AS), and no turn of its own)
 SHELF_POSE_AS = frozenset(("TBox_Shield_Deku", "TBox_Shield_Hylian"))
+# (bug 56: the Hookshot bought was held up to Link's left. A shop's purchase holds the shelf actor's item by its pouch
+#  param's GetDemoOffsetPos (seen without a window: X 0.6 put it to his right, 0.3 over his head), so the Hookshots'
+#  shelves have that param's own copy with these X, Y, Z; their chests' scene is the item's own, unchanged)
+SHELF_HOLD_OFFSET = {"Item_Hookshot": (0.3, 0.2, 0.0), "Item_Longshot": (0.3, 0.2, 0.0)}
 SHELF_MORE.update({"Item_Gauntlet_Silver": 0.15, "Item_Gauntlet_Gold": 0.15})
 # (the fields of the list of actors' row that are the model's; ActorName is the item's: it names the shelf, seen
 #  2026-11-19 as "Goron Bracelet" with the whole row taken)
@@ -1181,6 +1185,16 @@ def shop_pack(item, item_pack, base_pack, sample_pack, price, pouch=None, name=N
         own_model = MODEL_INFO_FILE % name
         files[own_model] = files.pop(model_file)
         comps["ModelInfoRef"] = ("string", "?" + own_model)
+    if item in SHELF_HOLD_OFFSET:   # (bug 56: the get scene's offset of the item held up, its pouch param's own copy)
+        pouch_file = ref_file(comps["PouchContentRef"][1])
+        if pouch_file in files:
+            tree, ver = byml_parse(files[pouch_file])
+            offset = tree[1].setdefault("GetDemoOffsetPos", ("dict", collections.OrderedDict()))[1]
+            for axis, value in zip("XYZ", SHELF_HOLD_OFFSET[item]):
+                offset[axis] = (0xD2, struct.pack("<f", value))
+            own_pouch = "Component/PouchContentParam/%s.game__component__PouchContentParam.bgyml" % name
+            files[own_pouch] = byml_build(tree, ver)
+            comps["PouchContentRef"] = ("string", "?" + own_pouch)
     comps["GameParameterTableRef"] = ("string", "?" + table_name)
     files[actor_name] = byml_build(("dict", collections.OrderedDict((("$parent", ("string", ACTOR_REF % SHOP_BASE)),
                                                                      ("Components", ("dict", collections.OrderedDict(sorted(comps.items()))))))), version)

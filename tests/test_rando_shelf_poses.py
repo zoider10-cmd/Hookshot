@@ -58,6 +58,8 @@ def main():
           '"TBox_Shield_Deku": "Shop_Weapon_Shield_Deku", "TBox_Shield_Hylian": "Shop_Weapon_Shield_Hylian"}' in src and
           'SHELF_POSE_AS = frozenset(("TBox_Shield_Deku", "TBox_Shield_Hylian"))' in src and
           "    if item in SHELF_POSE_AS:   # (the game's own shelf's model and pose: no turn of ours, bug 77)" in src and
+          'SHELF_HOLD_OFFSET = {"Item_Hookshot": (0.3, 0.2, 0.0), "Item_Longshot": (0.3, 0.2, 0.0)}' in src and
+          'comps["PouchContentRef"] = ("string", "?" + own_pouch)' in src and
           'SHELF_MODEL_FIELDS = ("FmdbName", "ModelProjectName", "ModelAabbMin", "ModelAabbMax", "AnimationResources")' in src and
           "row[1].update((k, v) for k, v in by[SHELF_MODEL_AS[item]][1].items() if k in SHELF_MODEL_FIELDS)" in src and
           "pack(SHELF_MODEL_AS[item]) if item in SHELF_MODEL_AS else None)" in src,
