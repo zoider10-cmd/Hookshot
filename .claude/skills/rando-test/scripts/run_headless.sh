@@ -34,6 +34,10 @@ fi
 total=0; for s in "$@"; do total=$((total + ${s%%:*})); done
 secs=$((100 + total + 12))
 rm -f "$WORK"/shots/*.png; : > "$WORK/live.txt"
+# (the Tracker's record of what is collected and the junk marks are the game folder's (rando/collected.txt, junk.txt),
+#  not the save's: a run's game writes them. Kept here and put back after the run, so the player's are as they were
+#  (2026-11-19: test runs on a test seed left the owner's record another seed's))
+mkdir -p "$WORK/keep"; for f in collected.txt junk.txt; do rm -f "$WORK/keep/$f"; [ -f "$GAME/rando/$f" ] && cp "$GAME/rando/$f" "$WORK/keep/$f"; done
 (
   sleep 100
   for s in "$@"; do
@@ -50,6 +54,7 @@ cd "$GAME" && HOS_OOT_SETFLAG="${SETFLAG:-}" HOS_HEADLESS=1 HOS_AUDIO=0 HOOKSHOT
   timeout "$secs" ./hookshot.exe --user "$(cygpath -w "$WORK/user")" > "$WORK/stdout.txt" 2>&1
 echo "exit $?" >> "$WORK/stdout.txt"
 wait
+for f in collected.txt junk.txt; do if [ -f "$WORK/keep/$f" ]; then cp "$WORK/keep/$f" "$GAME/rando/$f"; else rm -f "$GAME/rando/$f"; fi; done
 cp "$WORK/stdout.txt" "$WORK/stdout_$label.txt"
 echo "run $label: $(ls "$WORK/shots" | wc -l) pictures in $WORK/shots, the log in $WORK/stdout_$label.txt"
 grep -n "pouch add\|go to a check\|tracker: .* got\|CRASH: exception\|CRASH: guest\|exit " "$WORK/stdout.txt" | sed 's/\[hos [A-Za-z0-9:]*\] //' | cut -c1-200 | tail -30

@@ -29,6 +29,12 @@ zstandard and Pillow). Their files go to `$WORK` (default `$TEMP/rando-test`); t
 
 The build's "button prompts of other controllers were not made" (an AssertionError) is old and harmless.
 
+**Test files reshuffle the owner's seed.** `rando/test_drops.txt`, `test_chests.txt`, `test_gifts.txt` and
+`test_pickups.txt` go into the seed's stamp, so a rewrite with one is "other settings": it takes today's `PLACEMENT`, and
+so does the rewrite after it (2026-11-19: the owner's placement-12 seed came back as 13, other items everywhere). Before
+using one, copy `mods/rando-seed/rando_stamp.txt`; after removing it, put that copy back and rewrite, then compare
+`checks.txt`'s items with a copy kept before. `RANDO_TEST_SHOPS`/`_TURNS`/`_SCALES`/`_LIFTS` are not in the stamp.
+
 **A change to the seed tool's placement: write whole seeds into a scratch game folder** before installing. `--dry-run`
 returns before the files and `checks.txt` are written, so a crash there is missed (seen 2026-11-18). The owner's seed is
 not touched:
