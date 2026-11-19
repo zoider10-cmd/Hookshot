@@ -1923,7 +1923,9 @@ static const char *const oot_show_as[][2] = {
     {"Item_Gauntlet_Goron", "Armor_Child_Gauntlet_Goron"}, {"Item_Gauntlet_Silver", "Armor_Adult_Gauntlet_Silver"},
     {"Item_Gauntlet_Gold", "Armor_Adult_Gauntlet_Gold"},
 };
-static const char *const oot_no_show[] = {"Item_StickBag_Small", "Item_NutBag_Small"};
+/* (bug 48: the first Stick and Nut bags had no "You got" words in the game; every seed adds them from fixes 49,
+   tools/rando/rando_seed.py FIRST_BAG_WORDS, so they are shown as they are. The list is kept for an item that has none) */
+static const char *const oot_no_show[] = {"(none)"};
 
 /* the family a content is of (its index), and which spelling it was given by; -1 for none */
 static int oot_family_of(const char *name, int *spelling) {
