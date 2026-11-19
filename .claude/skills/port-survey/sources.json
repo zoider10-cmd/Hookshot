@@ -34,7 +34,8 @@
    "kind": "fork",
    "license": "GPL-3.0-or-later",
    "base": "engine/ = Hookshot v2.2.0-rc.1 plus patches",
-   "surveyed": "5b4f6200"
+   "surveyed": "6babdc22",
+   "surveyed_on": "2026-11-19"
   },
   {
    "name": "Triforce",
@@ -42,7 +43,8 @@
    "kind": "fork",
    "license": "GPL-3.0-or-later",
    "base": "one squashed commit per release: diff trees",
-   "surveyed": "93eeb714"
+   "surveyed": "fb264954",
+   "surveyed_on": "2026-11-19"
   },
   {
    "name": "Fritchii",
