@@ -257,10 +257,12 @@ def main():
           "an area's row does not show its checks in the help's place, or not the ones the tab lists, or not the one stepped to")
     check("#define OOT_TRACKER_HERE 8190" in items and "rx_option_set(OOT_TRACKER_HERE, here);" in host and
           "if (oot_banc_in_folder(oot_link_map, oot_checks[i].folder)) here = i;" in host and
-          "if (id == OOT_TRACKER_HERE) {" in menu and "if (here && !strcmp(here, tracker_name[row])) return 0;" in menu and
-          "return in ? 1 : left || !any ? 2 : 3;" in menu and "if (!called || now - called > 1500) sort = true;" in menu and
+          "if (id == OOT_TRACKER_HERE) {" in menu and
+          "std::stable_sort(rows_now.begin(), rows_now.end(), [&](int a, int b) { return _stricmp(tracker_name[a], tracker_name[b]) < 0; });" in menu and
+          "if (!called || now - called > 1500) sort = true;" in menu and
           'if (here && !strcmp(here, tracker_name[row])) words = "Here: " + words;' in menu,
-          "the area Link is in is not first, the areas with a check in logic are not next, or the rows move while the tab is on screen")
+          "the areas are not in alphabetical order (2026-11-18), the area Link is in is not marked Here, or the rows move while "
+          "the tab is on screen")
     check('std::string words = std::to_string(all - left - junk) + " of " + std::to_string(all) + " collected";' in menu and
           'if (known) words += ", " + std::to_string(in) + " in logic now";' in menu and 'if (all && told && !left) words = "All collected";' in menu,
           "the whole game's row does not say how many are collected and how many are in logic now")

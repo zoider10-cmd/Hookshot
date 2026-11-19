@@ -67,8 +67,10 @@ def main():
           'vk_menu.cpp: draw_tune_bar must label Motion tab as "Motion"')
 
     # 6. Option A (toggle via key release or pad West alone)
-    check("const bool tune_toggle = tune_release || pad(HOS_PAD_WEST);" in menu_cpp,
-          "vk_menu.cpp: menu_tick must detect tune_toggle from tune_release or gamepad West alone")
+    # (the randomizer's fork: on the Tracker tab West is the Tracker's Junk when the Switch's Y is bound there)
+    check("const bool tune_toggle = tune_release || (pad(HOS_PAD_WEST) && !west_is_junk);" in menu_cpp and
+          "const bool west_is_junk = cur_tab == TAB_TRACKER && pad_junk == HOS_PAD_WEST;" in menu_cpp,
+          "vk_menu.cpp: menu_tick must detect tune_toggle from tune_release or gamepad West alone (but for the Tracker's Junk)")
     check("HOS_PAD_NORTH" not in menu_cpp[menu_cpp.index("tune_toggle ="):menu_cpp.index("if (tune_toggle")],
           "vk_menu.cpp: tune_toggle must not include HOS_PAD_NORTH")
 

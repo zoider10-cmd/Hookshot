@@ -2803,23 +2803,12 @@ void tracker_load() {
         // the rest; within each as the file has them (by name). Made when the tab comes on screen and kept while it is.
         const auto name_at = [](int i) { return std::string(tracker_name[i]); };
         if (sort) {
-            const char* here = tracker_here_area();
-            const auto rank = [&](int row) {
-                if (here && !strcmp(here, tracker_name[row])) return 0;
-                int left = 0, in = 0, any = 0;
-                for (int i = 0; i < tracker_check_count; i++) {
-                    if (strcmp(tracker_checks[i].area, tracker_name[row])) continue;
-                    any++;
-                    if (tracker_done[i].load(std::memory_order_relaxed) == 1 || tracker_junk[i]) continue;
-                    left++, in += tracker_in_logic(tracker_checks[i]) > 0;
-                }
-                return in ? 1 : left || !any ? 2 : 3;
-            };
+            // (the areas in alphabetical order, asked for 2026-11-18: before, the area Link was in came first, then those
+            //  with a check in logic, then those with checks left, each group alphabetical, and the owner found the order
+            //  hard to follow. A row's own words still say how many are left and in logic)
             std::vector<int> rows_now;
             for (int i = kTrackerFirstArea; i < n; i++) rows_now.push_back(i);
-            std::vector<int> ranks(n);
-            for (int i : rows_now) ranks[i] = rank(i);
-            std::stable_sort(rows_now.begin(), rows_now.end(), [&](int a, int b) { return ranks[a] < ranks[b]; });
+            std::stable_sort(rows_now.begin(), rows_now.end(), [&](int a, int b) { return _stricmp(tracker_name[a], tracker_name[b]) < 0; });
             std::vector<std::string> next;
             for (int i : rows_now) next.push_back(name_at(i));
             if (next != order) {   // (rows changed places: each row's own words again)
@@ -7306,7 +7295,11 @@ void menu_tick() {
         }
         if (tune_down && (press[12] || tab_left || tab_right || press[1] || press[2] || press[3] || press[4] || press[5] || press[7] || ptr.pressed))
             tune_cancelled = true;
-        const bool tune_toggle = tune_release || pad(HOS_PAD_WEST);
+        // (the randomizer's fork: on the Tracker tab the left face button is the Tracker's Junk when the Switch's Y is bound
+        //  there, as on an Xbox controller: pressed, it marked the check and also switched to the compact bar, seen in play
+        //  2026-11-18. There it is Junk's alone; the compact menu key still switches)
+        const bool west_is_junk = cur_tab == TAB_TRACKER && pad_junk == HOS_PAD_WEST;
+        const bool tune_toggle = tune_release || (pad(HOS_PAD_WEST) && !west_is_junk);
         if (tune_toggle && listening == 0) tune_mode = !tune_mode, changed = true;
         if (press[5] && cur_tab == TAB_MOTION) cur_tab = TAB_CONTROLS, press[5] = false, changed = true;   // (back)
         if (press[5] && cur_tab == TAB_FPS_DEV) cur_tab = TAB_GAMEPLAY, press[5] = false, changed = true;   // (back)
