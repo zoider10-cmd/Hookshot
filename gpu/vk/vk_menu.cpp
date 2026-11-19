@@ -163,6 +163,9 @@ constexpr int kTrackerFirstArea = 3;  // (the first of the areas' rows, after th
 const char kTrackerHomeHelp[] =
     "Takes Link home: to the Kokiri Forest as a child, to the Market as an adult; in a dungeon, to its entrance. For when "
     "there is no way back from where he is, a warp song played with no other to leave by. Confirm twice.";
+// (the Gossip Stones' hints, rando_hints: the seed writes each once to rando_hints.txt beside the tracker's file. The
+// whole game's row shows them above its words, read with the tracker's file. Empty: no hints in the seed)
+std::string tracker_hints_help;
 ULONGLONG tracker_home_asked = 0;         // (when the row was confirmed once; within kTrackerForgetMs the next one goes)
 // The checks one by one: tools/rando/rando_seed.py writes <game folder>\mods\rando-seed\checks.txt beside the tracker's
 // file, a line "<area>|<kind>|<folder>|<ages>|<x> <y> <z>" for each chest and Gold Skulltula of the seed (tracker_load
@@ -2744,6 +2747,19 @@ void tracker_load() {
         tracker_value[kTrackerHomeRow][0] = 0;
     }
     tracker_count = n;
+    {   // (the hints: above the whole game's words when the seed has them)
+        std::string hints;
+        const std::string hints_path = path.substr(0, path.find_last_of("\\/") + 1) + "rando_hints.txt";
+        if (FILE* f = on ? fopen(hints_path.c_str(), "r") : nullptr) {
+            char line[256];
+            while (fgets(line, sizeof line, f)) {
+                line[strcspn(line, "\r\n")] = 0;
+                if (line[0] && line[0] != '#') hints += std::string(hints.empty() ? "" : "\n") + "- " + line;
+            }
+            fclose(f);
+        }
+        tracker_hints_help = hints.empty() ? std::string() : "The Gossip Stones' hints:\n" + hints + "\n\n" + kTrackerHelp;
+    }
     int checks = 0;
     path = path.substr(0, path.find_last_of("\\/") + 1) + "checks.txt";
     if (FILE* f = on ? fopen(path.c_str(), "r") : nullptr) {
@@ -4673,7 +4689,8 @@ void draw_options(ui::Ctx& c) {
     // (the Tracker tab: an area's row shows its checks where the help is; the tab's second row has words of its own)
     const bool area_panel = selr.tracker >= kTrackerFirstArea && tracker_check_count > 0 && tracker_row_checks(selr.tracker, true) > 0;
     const char* row_help = selr.tracker == kTrackerShowRow && tracker_check_count ? kTrackerShowHelp :
-                           selr.tracker == kTrackerHomeRow && tracker_check_count ? kTrackerHomeHelp : selr.help;
+                           selr.tracker == kTrackerHomeRow && tracker_check_count ? kTrackerHomeHelp :
+                           selr.tracker == 0 && !tracker_hints_help.empty() ? tracker_hints_help.c_str() : selr.help;
     if (narrow) {   // (help over the column's foot: normally half the room, up to 65% for the mic meter and its explanation)
         const float help_h = std::min(22 * s + 32 * s + help_tall + (after ? 30 * s : 0) + (pending_line.empty() ? 0 : 52 * s) + 22 * s,
                                       (bottom - hh) * (mic_help ? 0.65f : 0.5f));

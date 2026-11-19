@@ -3756,7 +3756,7 @@ def settings(game):
            "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
            "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0, "rando_open_door": 0,
            "rando_ammo_pickups": 0, "rando_rupee_fill": 0, "rando_skulltulas_day": 0,
-           "rando_ganon_bridge": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
+           "rando_ganon_bridge": 0, "rando_hints": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -4466,6 +4466,151 @@ def check_lines(chests, skulls, gifts=()):
         for name, kind, area, ages, pos, need, _, key, given, stand in rows[:CHECK_ROWS]]
 
 
+# ---- Hints from the Gossip Stones (rando_hints, asked for 2026-11-18) ----
+# A stone says the line of its own name (GossipStone's flow: EventTalkWithInstanceNameLabel), GOSSIP_<AREA>_<N> of
+# EventFlowMsg/GossipStone.msbt; 40 such names stand in the maps (the Lost Woods' second is in Kokiri Forest too, and a
+# few stand in the area next to their name's: Lake Hylia's three are in Hyrule Field). No Mask of Truth is asked for:
+# without it worn the stone's talk goes to its line. Each hint is said by HINT_STONES stones. Three kinds (the owner's
+# list): where a gating item is; an area "on the way of the hero" (it holds an item the seed's logic gates the game
+# with); an area that is "foolish" (it holds none, nor a Skulltula token). HINT_FOOLISH and HINT_WAY of those two, the
+# rest of the item kind. Chosen by a random of their own (HINT_RANDOM): the items' places are not touched, and a seed
+# made before the hints keeps its shuffle (the hints are on the stamp's second line, the fixes').
+HINT_TEXT = "EventFlowMsg/GossipStone.msbt"
+HINT_PREFIX = "GOSSIP_"
+HINT_NOT = ("GOSSIP_RumorCommon_",)   # (the closing words every stone says after its line)
+HINT_STONES, HINT_FOOLISH, HINT_WAY = 2, 4, 5
+HINT_WIDTH = 56          # (characters a line of the stone's box holds, as its own lines: about 60)
+HINT_RANDOM = "hints:%d"
+HINTS_FILE = "rando_hints.txt"
+HINTS_VERSION = 1   # (on the stamp: a change of what the hints say writes a seed's stones again)
+HINT_WORDS = {
+    "Item_Melody_ZeldaLullaby": "Zelda's Lullaby", "Item_Melody_EponaSong": "Epona's Song", "Item_Melody_SariaSong": "Saria's Song",
+    "Item_Melody_SunSong": "the Sun's Song", "Item_Melody_TimeSong": "the Song of Time", "Item_Melody_StormSong": "the Song of Storms",
+    "Item_Melody_ForestMinuet": "the Minuet of Forest", "Item_Melody_FireBolero": "the Bolero of Fire",
+    "Item_Melody_WaterSerenade": "the Serenade of Water", "Item_Melody_SpiritRequiem": "the Requiem of Spirit",
+    "Item_Melody_ShadowNocturne": "the Nocturne of Shadow", "Item_Melody_LightPrelude": "the Prelude of Light",
+    "Obj_Armor_Goron": "the Goron Tunic", "Obj_Armor_Zora": "the Zora Tunic", "Item_Bottle": "a bottle",
+    "Item_Scale_Silver": "the Silver Scale", "Item_Scale_Gold": "the Golden Scale", "Item_Wallet_Medium": "the Adult's Wallet",
+    "Item_Wallet_Large": "the Giant's Wallet", "Item_Gauntlet_Goron": "the Goron's Bracelet",
+    "Item_BombBag_Small": "a Bomb Bag", "Item_Range_Bow": "the Fairy Bow", "Item_Range_SlingShot": "the Fairy Slingshot",
+}
+
+
+def msbt_labels(data):
+    """the labels of a text file (MSBT), in no order"""
+    out, at = [], 0x20
+    for _ in range(struct.unpack_from("<H", data, 0x0e)[0]):
+        kind, size = data[at:at + 4], struct.unpack_from("<I", data, at + 4)[0]
+        body = at + 0x10
+        if kind == b"LBL1":
+            for g in range(struct.unpack_from("<I", data, body)[0]):
+                n, off = struct.unpack_from("<II", data, body + 4 + 8 * g)
+                p = body + off
+                for _k in range(n):
+                    ln = data[p]
+                    out.append(bytes(data[p + 1:p + 1 + ln]).decode("utf-8", "replace"))
+                    p += 1 + ln + 4
+        at = body + (size + 15 & ~15)
+    return out
+
+
+def hint_item(item):
+    """an item's name in a hint"""
+    if item in HINT_WORDS:
+        return HINT_WORDS[item]
+    if item in ITEM_WORDS:
+        words = ITEM_WORDS[item]
+        return words if words[:1].islower() else "the " + words
+    return "the " + spaced(item)
+
+
+HINT_THE = frozenset(("LostWood", "Market", "Graveyard", "HountedWasteland", "InsideTheDekuTree", "BottomOfTheWell", "ForestTemple",
+                      "FireTemple", "IceCavern", "WaterTemple", "ShadowTemple", "SpiritTemple", "GerudoTrainingGround", "DesertColossus"))
+HINT_NEVER = frozenset(("DreamWorld",))   # (the boss-rematch area: nothing there is kept, the owner, 2026-11-12)
+
+
+def hint_area(area):
+    """an area's name in a hint, with "the" where it is said so"""
+    return ("the " if area in HINT_THE else "") + AREA_NAMES.get(area, spaced(area))
+
+
+def hint_wrap(words, width=HINT_WIDTH):
+    """the words broken into lines of at most `width` characters (a word longer stays whole)"""
+    lines = [""]
+    for w in words.split():
+        if lines[-1] and len(lines[-1]) + 1 + len(w) > width:
+            lines.append(w)
+        else:
+            lines[-1] = (lines[-1] + " " + w).strip()
+    return "\n".join(lines)
+
+
+def choose_hints(rng, held, gating, labels, foolish=HINT_FOOLISH, way=HINT_WAY, each=HINT_STONES):
+    """[(label, words)]: each hint said by `each` of the stones' labels. held: [(area, item, moved)] of every check of
+    the seed (moved: the shuffle put the item there); gating: the items the logic gates the game with. The item hints
+    name a moved gating item, each once; way areas hold a gating item; foolish areas hold none and no token."""
+    labels = sorted(labels)
+    count = len(labels) // each
+    held = [(area, item, moved) for area, item, moved in held if area not in HINT_NEVER]
+    areas = sorted({area for area, _, _ in held})
+    gated = sorted({area for area, item, _ in held if item in gating})
+    empty = [area for area in areas if area not in gated and not any(a == area and item == TOKEN for a, item, _ in held)]
+    ways = rng.sample(gated, min(way, len(gated), count))
+    fools = rng.sample(empty, min(foolish, len(empty), count - len(ways)))
+    items = sorted({(item, area) for area, item, moved in held if moved and item in gating})
+    rng.shuffle(items)
+    named, picked = set(), []
+    for item, area in items:
+        if item not in named and len(picked) < count - len(ways) - len(fools):
+            named.add(item)
+            picked.append((item, area))
+    hints = (["They say that %s can be found in %s." % (hint_item(i), hint_area(area)) for i, area in picked] +
+             ["They say that %s is on the way of the hero." % hint_area(area) for area in ways] +
+             ["They say that it is foolish to look in %s." % hint_area(area) for area in fools])
+    rng.shuffle(labels)
+    return [(label, hints[k // each]) for k, label in enumerate(labels[:len(hints) * each])]
+
+
+HINT_FLOW = "Event/EventFlow/GossipStone.bfevfl.zs"
+HINT_TALK, HINT_RUMOR = "Talk", "InitTalk_GossipStone"
+
+
+def stone_talk_open(data):
+    """GossipStone's flow (HINT_FLOW) with its Talk's first question, the Mask of Truth in the pouch (worn or not), made
+    to lead to the stone's line whatever the answer: every case of that switch to the subflow HINT_RUMOR, the way to
+    the line said by the stone's name. Without it a stone talked to without the mask has only Navi's words (seen
+    without a window, 2026-11-19). The new bytes, of the same size; ValueError: not the flow known."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+    if data[:6] != b"BFEVFL" or u16(0x20) != 1:
+        raise ValueError("not an event flow file of one flowchart")
+    chart = u64(u64(0x28))
+    count, events, nent = u16(chart + 0x16), u64(chart + 0x30), u16(chart + 0x18)
+    names, entries = u64(chart + 0x38), u64(chart + 0x40)
+    text = lambda ptr: bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if 0 < ptr < len(data) - 2 else ""
+    start = next((u16(entries + 0x20 * k + 0x1C) for k in range(nent) if text(u64(names + 8 + 16 * (k + 1) + 8)) == HINT_TALK), None)
+    rumor = [i for i in range(count) if data[events + 0x30 * i + 8] == 4 and text(u64(events + 0x30 * i + 0x20)) == HINT_RUMOR]
+    if start is None or len(rumor) != 1:
+        raise ValueError("no entry %s, or not one subflow %s" % (HINT_TALK, HINT_RUMOR))
+    e = events + 0x30 * start
+    if data[e + 8] not in (1, 5):
+        raise ValueError("the entry %s does not start with a question" % HINT_TALK)
+    out, cases = bytearray(data), u64(e + 0x18)
+    for c in range(u16(e + 0x0A)):
+        struct.pack_into("<H", out, cases + 8 * c + 4, rumor[0])
+    return bytes(out)
+
+
+def hint_line(data, label, words):
+    """the text file with the stone's line `label` saying `words`: its opening tags (the box, the voice, the colour)
+    kept, the rest of the line made the words (msbt_set)"""
+    start, end = msbt_text(data, label)
+    old, at = data[start:end], 0
+    while at + 7 <= len(old) and old[at] == 0x0e:
+        at += 7 + struct.unpack_from("<H", old, at + 5)[0]
+    return msbt_set(data, label, bytes(old[:at]) + hint_wrap(words).encode("utf-8"))
+
+
 def remove_old(mod):
     """the files a run before this one wrote (its list: rando_manifest.txt), and the folders they leave empty"""
     listing = os.path.join(mod, "rando_manifest.txt")
@@ -4682,6 +4827,7 @@ def main():
     p.add_argument("--shop-shelves", type=int, choices=(0, 1), help="in place of rando_shop_shelves: with Shops, 0 four shelves of each shop, 1 every shelf (shop_slots)")
     p.add_argument("--sword-shield", type=int, choices=(0, 1), help="in place of rando_sword_shield: 0 the Kokiri Sword stays in its chest and the Deku Shield on "
                                                                      "its shelf, 1 both take part (the chest with Major items, the shelf with Shops)")
+    p.add_argument("--hints", action="store_true", help="as rando_hints=1: the Gossip Stones give hints (choose_hints)")
     p.add_argument("--skulltulas-day", action="store_true", help="as rando_skulltulas_day=1: the night-only Gold Skulltulas are out by day too (NOCTURNAL)")
     p.add_argument("--heart-pieces", action="store_true", help="as rando_heart_pieces=1: the Pieces of Heart lying in the world change places with "
                                                                 "the chests' items a pick-up can be, and may hold a gating item (from placement 12: take "
@@ -4723,6 +4869,7 @@ def main():
     a.dungeon_rewards = 1 if a.dungeon_rewards in (1, 2) and REWARDS_READY else 0
     a.heart_pieces = a.heart_pieces or ini["rando_heart_pieces"] != 0
     a.skulltulas_day = a.skulltulas_day or ini["rando_skulltulas_day"] != 0
+    a.hints = a.hints or ini["rando_hints"] != 0
     # (the songs gate the game: with them shuffled the logic places them, whatever Major items says)
     logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic
     # (the options file's rando_open_deku and rando_open_forest too, so that the launcher's run at Play keeps them)
@@ -4809,6 +4956,8 @@ def main():
     except (OSError, ValueError):
         pass
     stamp = "placement %d%sfixes %d\n" % (placement, rest, FIXES_VERSION)   # (the fixes: the same items, written again)
+    if a.hints:   # (the hints move no item: on the fixes' line, so a seed's shuffle stays as it was with them turned on)
+        stamp = stamp[:-1] + " hints %d\n" % HINTS_VERSION
     print("randomizer %s, seed %d, chests %s, dungeon keys %s, major items %s" % (
         "on" if on else "off", seed, ("off", "overworld", "dungeons", "all")[which],
         ("off", "own dungeon", "anywhere (as own dungeon for now)")[keys_mode], "on" if a.event_chests else "off"))
@@ -5564,6 +5713,35 @@ def main():
             "any price" if a.shops == 2 else "every shelf 10 rupees" if a.shops == 3 else "most prices low", len(shelves), len(shops(placement)),
             *(sum(1 for p in shelf_prices.values() if wallet_need(p) == need) for _, need in WALLETS)))
 
+    # ---- Hints from the Gossip Stones (rando_hints): every stone's line, in every language's archive ----
+    hints = []
+    if a.hints:
+        held = [(spots[h][0], gives.get(h, spots[h][1]), h in gives) for h in spots]
+        held += [(skulls[h][0], skull_drops.get(h) or TOKEN, True) for h in able]
+        held += [(pieces[h][0], heart_drops[h], True) for h in heart_drops]
+        folder = os.path.join(romfs, "Mals")
+        try:
+            for n in sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if n.endswith(".sarc.zs")):
+                rel = "Mals/" + n
+                parts = sarc_read(gift_files[rel] if rel in gift_files else unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts))
+                text = parts.get(HINT_TEXT)
+                if text is None:
+                    continue
+                if not hints:
+                    labels = [l for l in msbt_labels(text) if l.startswith(HINT_PREFIX) and not l.startswith(HINT_NOT)]
+                    hints = choose_hints(random.Random(HINT_RANDOM % seed), held, PROGRESSION, labels)
+                for label, words in hints:
+                    text = hint_line(text, label, words)
+                parts[HINT_TEXT] = text
+                gift_files[rel] = sarc_write(parts)
+                shop_sizes[rel[:-3]] = len(gift_files[rel])
+            was = gift_files[HINT_FLOW] if HINT_FLOW in gift_files else unpack(open(os.path.join(romfs, HINT_FLOW), "rb").read(), zs, dicts)
+            gift_files[HINT_FLOW] = stone_talk_open(was)
+            gift_sizes[HINT_FLOW[:-3]] = len(gift_files[HINT_FLOW])
+        except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
+            sys.exit("the Gossip Stones' hints: %s. Nothing written." % e)
+        print("Hints: %d Gossip Stones give %d hints" % (len(hints), len(set(w for _, w in hints))))
+
     # ---- Open Door of Time: the door out of the way, in the child's Market and the adult's ----
     if a.open_door:
         doors = sheiks = 0
@@ -5893,6 +6071,10 @@ def main():
             f.write("".join("%s|%s|%s\n" % (rel, ",".join(on_sale[actor][0] for actor in held), ",".join(held))
                             for rel, held in tier_maps.items()))
         print("Progressive items: %d map file%s of shops with shelves of a family, written for each tier" % (len(tier_maps), "" if len(tier_maps) == 1 else "s"))
+    if hints:
+        spoiler += ["", "the Gossip Stones' hints (the stone's name -> what it says)"] + ["  %-34s %s" % h for h in sorted(hints)]
+    with open(os.path.join(mod, HINTS_FILE), "w", encoding="utf-8", newline="\n") as f:   # (the Tracker's: each hint once)
+        f.write("".join("%s\n" % w for w in sorted(set(w for _, w in hints))))
     with open(os.path.join(mod, "spoiler.txt"), "w", encoding="utf-8") as f:
         f.write("seed %d, chests setting %d, dungeon keys setting %d\n(area: chest type, position, what it held -> what it holds now)\n" % (
             seed, which, keys_mode) + "\n".join(spoiler) + "\n")
