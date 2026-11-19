@@ -529,6 +529,7 @@ SW(RX_VK_TEX_CAPTURE_OFF_FILE, diag, string, "not set: uploads read the captured
 SW(RX_VK_TEX_MAX_DIM, hw, int, "2048; 1024 on Minimum settings when the driver allows 4.5 GB or less (or an iGPU with 16 GB RAM or less)", "Width above which a big decoded ASTC texture leaves out its top mip levels.")
 SW(RX_VK_TEX_MAX_MB, tune, int, "1536 MB", "Size in MB down to which any texture leaves out top mip levels, whatever its width.")
 SW(RX_VK_TEX_SKIP_MB, hw, int, "64 MB; 8 on Minimum settings when the driver allows 4.5 GB or less (or an iGPU with 16 GB RAM or less)", "Size as RGBA8, in MB, from which a decoded ASTC texture wider than the max width loses top levels.")
+SW(RX_VK_TILE_ROWS, kill, bool, "on: complete GOBs of a 2D level converted eight rows at a time (texture_tiles.h, Longshot 09a20cd6)", "0 converts every texture with the reference decoder alone, as before.")
 SW(RX_VK_TIMELINE, diag, int, "off: no timeline lines", "Logs one frame's jobs every 240 presents (hand-over, wait, duration, draws); 2 and up adds the late variant.")
 SW(RX_VK_TRACE_TEX, diag, string, "no tracing", "A list of <w>x<h> sizes: draws sampling textures of all those sizes are logged with their state.")
 SW(RX_VK_TRANSLATE_WAIT_MS, attempt, float, "off: shaders still translating are waited out", "Bounds, in ms a frame per recording thread, the wait for translating shaders before their draws are left out.")

@@ -42,6 +42,7 @@
 #include "vk_dump.h"
 #include "vk_jobs.h"
 #include "texture_budget.h"
+#include "texture_tiles.h"
 
 #include <span>
 
@@ -1788,6 +1789,16 @@ bool upload_all_zero(Texture& tex, uint64_t total, const Ranges* dirty, bool wid
              tex.nvn_format, (unsigned long long)(total >> 20), ms, what);
     return true;
 }
+// (Longshot 09a20cd6) complete GOBs converted eight rows at a time, texture_tiles.h; the rest as before. Only a 2D level
+// whose pitch is whole GOBs takes the fast path, where the reference's stride alignment (the last argument) changes
+// nothing: the bytes are the same either way (tests/test_texture_tile_upload.py)
+void unswizzle_upload(std::span<uint8_t> dest, std::span<const uint8_t> src, uint32_t bpb, uint32_t width, uint32_t height,
+                      uint32_t depth, uint32_t tile_h, uint32_t tile_d) {
+    static const bool off = [] { const char* e = getenv("RX_VK_TILE_ROWS"); return e && *e == '0'; }();
+    if (!off && depth == 1 && !tile_d && texture_tiles::unswizzle(dest, src, uint64_t(width) * bpb, height, tile_h)) return;
+    Tegra::Texture::UnswizzleTexture(dest, src, bpb, width, height, depth, tile_h, tile_d, 1);
+}
+
 bool upload_inner(Texture& tex, const Ranges* dirty) {
     PROF(PROF_UPLOAD);
     if (!tex.gpu || tex.samples != VK_SAMPLE_COUNT_1_BIT) return false;
@@ -1941,9 +1952,9 @@ bool upload_inner(Texture& tex, const Ranges* dirty) {
                                 } else {
                                     rows = src + (uint64_t)a * row_bytes, rows_n = need - (uint64_t)a * row_bytes;
                                 }
-                                Tegra::Texture::UnswizzleTexture(
+                                unswizzle_upload(
                                     std::span<uint8_t>(blocks + a * out_row, (uint64_t)g.tw * h * src_bpb),
-                                    std::span<const uint8_t>(rows, rows_n), (u32)src_bpb, g.tw, h, 1, g.tile_h, 0, 1);
+                                    std::span<const uint8_t>(rows, rows_n), (u32)src_bpb, g.tw, h, 1, g.tile_h, 0);
                             }
                         };
                         std::vector<std::thread> pool;
@@ -1961,9 +1972,8 @@ bool upload_inner(Texture& tex, const Ranges* dirty) {
                                  level, row0, nrow, same ? "same" : "DIFFERENT");
                         }
                     } else {
-                        Tegra::Texture::UnswizzleTexture(std::span<uint8_t>(blocks, block_bytes),
-                                                         std::span<const uint8_t>(src, need), (u32)src_bpb, g.tw, th,
-                                                         g.td, g.tile_h, g.tile_d, 1);
+                        unswizzle_upload(std::span<uint8_t>(blocks, block_bytes), std::span<const uint8_t>(src, need),
+                                         (u32)src_bpb, g.tw, th, g.td, g.tile_h, g.tile_d);
                     }
                     st_unswizzle_bytes += (int64_t)block_bytes;
                     st_unswizzle_ns +=
