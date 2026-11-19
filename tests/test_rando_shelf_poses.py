@@ -45,6 +45,8 @@ def main():
           "turns = {actor: shelf_turn(actor, item) for actor, (item, _) in on_sale.items() if shelf_turn(actor, item)}" in src,
           "the shop's own turns and fits are not used where the shelves are made")
     check(R.FIXES_VERSION >= 45, "FIXES_VERSION did not move on: a seed made before keeps the old poses")
+    # (bug 72: a boss's Heart Container on a shelf is made a Piece of Heart's size)
+    check(R.SHELF_SCALE.get(R.CONTAINER) == 0.55 and R.FIXES_VERSION >= 46, "a Heart Container on a shelf is not made smaller")
     # (bugs 54, 56: the item held up in "You got" is shown by the Item_ spelling, the Armor_ one being a worn piece)
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     fn = host[host.index("void hos_oot_get_name(Ctx *c, uint64_t node, int kind) {"):]
