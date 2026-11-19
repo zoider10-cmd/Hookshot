@@ -24,6 +24,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+RUN_ALL_ARGS = ["--cc", "clang", "--cxx", "{cxx}"]   # (tests/run_all.py: skipped where there is no clang)
 sys.path.insert(0, str(ROOT / "nx2"))
 log_redact = importlib.import_module("log_redact")
 
