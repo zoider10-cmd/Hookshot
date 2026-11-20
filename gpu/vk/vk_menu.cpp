@@ -3208,7 +3208,7 @@ namespace ps = pipeline_share;
 std::string share_said;    // (the help box's line after a save: where the zip went and what to do, or why there is none)
 std::string share_value;   // (the row's value after a save: Saved, or Not saved)
 constexpr const char* kShareSaidLongest = "Saved hookshot-pipelines-2026-12-31.zip (123456 pipelines) in Downloads. The report "
-    "is in the zip. Open github.com/zoider10-cmd/LostWoods/issues and attach the zip to a comment, then paste the report and say "
+    "is in the zip. Open github.com/zoider10-cmd/WillowWoods/issues and attach the zip to a comment, then paste the report and say "
     "where you played.";   // (measure_help: the help box's room)
 std::string share_saved;   // (the first sentence: the zip's name, its pipelines and its folder)
 std::atomic<bool> share_busy{false};   // (the worker is copying and opening: presses wait for it)
@@ -3218,7 +3218,7 @@ void share_finish() {
     const int r = share_result.exchange(-1);
     if (r < 0) return;
     share_said = share_saved + ((r & 1) ? "The report is copied. " : "The report is in the zip. ") +
-                 ((r & 2) ? "Issue 14 is open in your browser: attach" : "Open github.com/zoider10-cmd/LostWoods/issues and attach") +
+                 ((r & 2) ? "Issue 14 is open in your browser: attach" : "Open github.com/zoider10-cmd/WillowWoods/issues and attach") +
                  " the zip to a comment, then paste the report and say where you played.";
     share_busy.store(false);
     menu_refresh = true;
@@ -4519,7 +4519,7 @@ const char* bug_report_cell() {
 /// Under its help once saved: where the report is and what to do with it (the game opens nothing: no browser or file manager is
 /// sure to be there, as on a Steam Deck in Game Mode)
 std::string bug_report_saved_text(const std::string& folder) {
-    return "Saved in the game folder as " + folder + ". To send it, open github.com/zoider10-cmd/LostWoods/issues, choose New issue and "
+    return "Saved in the game folder as " + folder + ". To send it, open github.com/zoider10-cmd/WillowWoods/issues, choose New issue and "
            "Game problem, copy report.txt's answers into the form and drag the folder's files into it: on Windows from File "
            "Explorer, on Linux from a file manager (on a Steam Deck, in Desktop Mode).";
 }
@@ -4616,8 +4616,8 @@ void draw_options(ui::Ctx& c) {
     }
     {   // (which build, at the banner's left, so a report can say it without opening the log; the release alone when the whole
         // line would run into the tabs)
-        std::string ver = HOOKSHOT_VERSION;   // (Mako: "mako-3.3 (source ...)" shown as "Lost Woods 3.3 (source ...)")
-        ver = ver.rfind("mako-", 0) == 0 ? "Lost Woods " + ver.substr(5) : "Lost Woods " + ver;
+        std::string ver = HOOKSHOT_VERSION;   // (Mako: "mako-3.3 (source ...)" shown as "Willow Woods 3.3 (source ...)")
+        ver = ver.rfind("mako-", 0) == 0 ? "Willow Woods " + ver.substr(5) : "Willow Woods " + ver;
         const float room = (c.w - total) * 0.5f - 60 * s - c.safe, px = 15 * s;
         const auto width = [&](float p) { return ui::size_of(c.f.body, p, ver.c_str()).x; };
         // (still too long, as a source build's "v2.0.11-821-g7b81752-dirty" since the Audio tab: at Small and Medium smaller
@@ -5259,7 +5259,7 @@ void back_to_launcher() {   // (Mako Launcher.exe beside the game, then the wind
     if (n > 1 && n + 20 < MAX_PATH) {
         path[n - 1] = 0;   // (the game's folder)
         char cmd[MAX_PATH + 24];
-        snprintf(cmd, sizeof cmd, "\"%s\\Lost Woods Launcher.exe\"", path);
+        snprintf(cmd, sizeof cmd, "\"%s\\Willow Woods Launcher.exe\"", path);
         STARTUPINFOA si{};
         si.cb = sizeof si;
         PROCESS_INFORMATION pi{};

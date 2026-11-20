@@ -437,7 +437,7 @@ static const char *saves_dir(const char *beside) {
         const char *sep = strrchr(beside, SEP);
         snprintf(note, sizeof note, "%.*s" SEP_S "saves-moved.txt", sep ? (int)(sep - beside) : 0, beside);
         char text[MAX_PATH + 160];
-        const int n = snprintf(text, sizeof text, "Lost Woods's saves are now in\n%s\n\nThey moved there from the user folder that was here.\n", dir);
+        const int n = snprintf(text, sizeof text, "Willow Woods's saves are now in\n%s\n\nThey moved there from the user folder that was here.\n", dir);
         if (n > 0 && (size_t)n < sizeof text) hos_atomic_write(note, text, (size_t)n);
         hos_log("saves: moved from %s to %s", beside, dir);
     }
@@ -523,7 +523,7 @@ static void save_folder_import(const char *game_dir, const char *user_dir) {
         FILE *f = fopen(note, "w");
         if (f) {
             fprintf(f,
-                "=== SAVE FOLDER (Lost Woods) ===\n\n"
+                "=== SAVE FOLDER (Willow Woods) ===\n\n"
                 "FRANCAIS\n"
                 "Pour jouer avec ta sauvegarde, glisse-la dans ce dossier puis lance le jeu.\n"
                 "Ca marche avec une sauvegarde d'Eden, Lichii, Ryujinx, d'une Switch ou d'un autre Hookshot :\n"

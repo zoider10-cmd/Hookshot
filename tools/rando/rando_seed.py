@@ -3955,7 +3955,7 @@ def settings(game):
            "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
            "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0, "rando_open_door": 0,
            "rando_ammo_pickups": 0, "rando_rupee_fill": 0, "rando_skulltulas_day": 0,
-           "rando_ganon_bridge": 0, "rando_hints": 0, "rando_ageless": 0, "rando_letter": 0, "rando_magic": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
+           "rando_ganon_bridge": 0, "rando_hints": 0, "rando_ageless": 0, "rando_letter": 0, "rando_magic": 0, "rando_ageless_items": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -4873,6 +4873,11 @@ AGELESS_ITEMS = AGELESS_SWORDS + (
     "Item_Longshot", "Item_Hookshot", "Item_Arrow_Normal", "Weapon_Range_Bow", "Item_Arrow_Fire", "Pouch_Range_BowAndArrow_Fire",
     "Item_Arrow_Ice", "Pouch_Range_BowAndArrow_Ice", "Item_Arrow_Light", "Pouch_Range_BowAndArrow_Light")
 AGELESS_ARRAYS = ("EquipmentArray", "ItemArray")
+
+
+def ageless_actors(which):
+    """the actors made usable by both ages: which's bit 1 the swords, bit 2 the age-only items (AGELESS_ITEMS but the swords)"""
+    return (AGELESS_SWORDS if which & 1 else ()) + (tuple(x for x in AGELESS_ITEMS if x not in AGELESS_SWORDS) if which & 2 else ())
 AGELESS_TRUE = (208, b"\x01\x00\x00\x00")
 
 
@@ -5293,7 +5298,7 @@ def main():
     p.add_argument("--shop-shelves", type=int, choices=(0, 1), help="in place of rando_shop_shelves: with Shops, 0 four shelves of each shop, 1 every shelf (shop_slots)")
     p.add_argument("--sword-shield", type=int, choices=(0, 1), help="in place of rando_sword_shield: 0 the Kokiri Sword stays in its chest and the Deku Shield on "
                                                                      "its shelf, 1 both take part (the chest with Major items, the shelf with Shops)")
-    p.add_argument("--ageless", type=int, choices=(0, 1, 2), help="as rando_ageless: 1 the swords, 2 also the age-only items, for both ages (pouch_ageless)")
+    p.add_argument("--ageless", type=int, choices=(0, 1, 2, 3), help="1 the swords for both ages, 2 the age-only items, 3 both (as rando_ageless and rando_ageless_items)")
     p.add_argument("--letter", action="store_true", help="as rando_letter=1, Kakariko gate: Letter shuffled (letter_need)")
     p.add_argument("--hints", action="store_true", help="as rando_hints=1: the Gossip Stones give hints (choose_hints)")
     p.add_argument("--skulltulas-day", action="store_true", help="as rando_skulltulas_day=1: the night-only Gold Skulltulas are out by day too (NOCTURNAL)")
@@ -5342,7 +5347,10 @@ def main():
     a.hints = a.hints or ini["rando_hints"] != 0
     a.letter = a.letter or ini["rando_letter"] == 1   # (Kakariko gate: 1 the letter shuffled, 2 open: the game's side's,
     #  host/hos_main.c oot_open_death_mountain, and the letter stays Zelda's)
-    a.ageless = a.ageless if a.ageless is not None else ini["rando_ageless"] if ini["rando_ageless"] in (0, 1, 2) else 0
+    # (two settings since 2026-11-19: rando_ageless the swords, rando_ageless_items the age-only items; an older seed's
+    #  rando_ageless=2 was both. a.ageless: 1 the swords, 2 the items, 3 both)
+    if a.ageless is None:
+        a.ageless = (1 if ini["rando_ageless"] in (1, 2) else 0) | (2 if ini["rando_ageless"] == 2 or ini["rando_ageless_items"] == 1 else 0)
     # (the songs gate the game: with them shuffled the logic places them, whatever Major items says)
     logic_now = (a.event_chests or bool(a.songs)) and not a.no_logic
     # (the options file's rando_open_deku and rando_open_forest too, so that the launcher's run at Play keeps them)
@@ -6336,11 +6344,11 @@ def main():
     if a.ageless:
         try:
             gift_files[AGELESS_TABLE], count = pouch_ageless(open(os.path.join(romfs, *AGELESS_TABLE.split("/")), "rb").read(),
-                                                              AGELESS_SWORDS if a.ageless == 1 else AGELESS_ITEMS)
+                                                              ageless_actors(a.ageless))
             shop_parts.add(AGELESS_TABLE)   # (its entry raised by PART_GROWTH: the game's is about 3.25 times the file, and 756 bytes more fell without)
         except (OSError, ValueError, KeyError, struct.error, IndexError) as e:
             sys.exit("either age's items: %s. Nothing written." % e)
-        print("Either age's items: %s usable by both ages (%d marks set)" % ("the swords" if a.ageless == 1 else "the swords and the age-only items", count))
+        print("Either age's items: %s usable by both ages (%d marks set)" % (("", "the swords", "the age-only items", "the swords and the age-only items")[a.ageless], count))
 
     # ---- Magic and the fairies' gifts: the first magic as an item of our own, no free magic (MAGIC_ITEM, magic_free) ----
     if a.magic:

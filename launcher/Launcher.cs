@@ -17,8 +17,8 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 
-[assembly: System.Reflection.AssemblyTitle("Lost Woods Launcher")]
-[assembly: System.Reflection.AssemblyProduct("Lost Woods")]
+[assembly: System.Reflection.AssemblyTitle("Willow Woods Launcher")]
+[assembly: System.Reflection.AssemblyProduct("Willow Woods")]
 [assembly: System.Reflection.AssemblyCompany("sharkiix")]
 [assembly: System.Reflection.AssemblyVersion("3.3.0.0")]
 
@@ -202,7 +202,7 @@ public static class SaveSlots {
     // (the randomizer's settings that move no item: changed on a save being played, its seed is written again as it was,
     // tools/rando/rando_seed.py QOL_STAMP and the stamp's second line; the others are the game's side's alone)
     static readonly HashSet<string> NoItemKeys = new HashSet<string> { "rando_skip_intro", "rando_skip_cutscenes", "rando_start_rupees",
-        "rando_skulltulas_day", "rando_hints", "rando_ageless", "rando_ammo_pickups", "rando_rupee_fill", "rando_ganon_bridge" };
+        "rando_skulltulas_day", "rando_hints", "rando_ageless", "rando_ageless_items", "rando_ammo_pickups", "rando_rupee_fill", "rando_ganon_bridge" };
     static bool MovesNoItem(string line) { int eq = line.IndexOf('='); return eq > 0 && NoItemKeys.Contains(line.Substring(0, eq).Trim()); }
 
     // (the seed there is now is not the one that save was last played on: settings that move no item aside)
@@ -764,7 +764,7 @@ class RandoSeedForm : Form {
     bool presetting;
 
     // (the sections the settings are shown in, by key; a key not named here goes to the last, "Other")
-    // (Lost Woods: the Randomizer page's sections, by how far each setting is tested, merged rows opened up)
+    // (Willow Woods: the Randomizer page's sections, by how far each setting is tested, merged rows opened up)
     internal static readonly string[][] Sections = RandoLayout.KeySections();
     // (the presets: each a setting's choice by its place in the row's choices, clamped to the choices available. A key
     // not named keeps its first choice, Off)
@@ -1575,7 +1575,7 @@ static class ReportSummary {
         L(problem);
         L("");
         L("== PC");
-        L("Lost Woods        " + ver + (Fork.Label.Length > 0 ? "  (launcher " + Fork.Label + ")" : ""));
+        L("Willow Woods        " + ver + (Fork.Label.Length > 0 ? "  (launcher " + Fork.Label + ")" : ""));
         L("Windows     " + WindowsVersion());
         L("GPU         " + (pc.Gpu.Length > 0 ? pc.Gpu : "?") + (pc.VramMB > 0 ? "  " + pc.VramMB + " MB" : "") + (pc.Integrated ? "  (integrated)" : ""));
         L("Driver      " + (pc.Driver.Length > 0 ? pc.Driver : "?") + (pc.DriverDate.Length > 0 ? "  (" + pc.DriverDate + ")" : ""));
@@ -1709,7 +1709,7 @@ static class ReportSummary {
               .Append(", over 250 ms: ").Append(over250).Append("\r\n  Video memory at its highest: ").Append(vramHi.ToString("0.0", Ci)).Append(" of ")
               .Append(vramOf.ToString("0.0", Ci)).Append(" GB").Append(vramOf > 0 && vramHi >= vramOf * 0.95 ? "  (FULL)" : "").Append("\r\n");
         if (wsPeak > 0) sb.Append("  Game's RAM at its highest: ").Append(wsPeak.ToString("0", Ci)).Append(" MB\r\n");
-        if (statusN > 0) sb.Append("  Stutters: ").Append(stut40).Append(" frames over 40 ms, ").Append(stut100).Append(" over 100 ms (Lost Woods 4.1.1 and later)\r\n");
+        if (statusN > 0) sb.Append("  Stutters: ").Append(stut40).Append(" frames over 40 ms, ").Append(stut100).Append(" over 100 ms (Mako 4.1.1 and later)\r\n");
         sb.Append("  Slow submits: ").Append(slowSubmits).Append(" · slow texture uploads: ").Append(slowUploads).Append("\r\n");
         if (problems.Count > 0) {
             sb.Append("  Problems (the first of each kind):\r\n");
@@ -1768,22 +1768,22 @@ class RecRow {
 }
 
 static class Fork {
-    public const string Name = "Lost Woods";
+    public const string Name = "Willow Woods";
     // (the update check compares the first number of the tags: the first Mako release must be numbered above amd-fix-2.1, or the
     // 2.x launchers players have would think it older and never offer it)
     public const string Base = "v0.1.0";       // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
     public const string Version = "v0.1.0";    // (HOOKSHOT_FORK_VERSION)
     public const int Api = 30;                  // (gpu/vk/vk_api.h MKWVK_API_VERSION)
-    public const string Api_Url = "https://api.github.com/repos/zoider10-cmd/LostWoods/releases/latest";
-    public const string Page = "https://github.com/zoider10-cmd/LostWoods/releases/latest";
-    public const string Home = "https://github.com/zoider10-cmd/LostWoods";
+    public const string Api_Url = "https://api.github.com/repos/zoider10-cmd/WillowWoods/releases/latest";
+    public const string Page = "https://github.com/zoider10-cmd/WillowWoods/releases/latest";
+    public const string Home = "https://github.com/zoider10-cmd/WillowWoods";
     public const string GameExe = "hookshot.exe";
     public const string Label = "";                  // (a test build's own name, e.g. "v4.1 TEST": shown instead of the version)
     public static string Me(string installed) { return Label.Length > 0 ? Label : Shown(installed); }
     public static string Shown(string v) { var m = Regex.Match(v ?? "", @"\d+(\.\d+)*"); return m.Success ? "v" + m.Value : v; }
 }
 
-// (Lost Woods) the Randomizer page's layout: sections by how far each setting has been tested, and related settings
+// (Willow Woods) the Randomizer page's layout: sections by how far each setting has been tested, and related settings
 // merged into one row (RandoCombo). The settings themselves, their order and values stay RandoRows' (a seed's ID); a merged
 // row only sets several at once. As a setting is tested in play it moves up a section here.
 class RandoCombo {
@@ -1817,11 +1817,12 @@ static class RandoLayout {
     public static readonly RandoSection[] Sections = {
         new RandoSection { Title = "TESTED IN PLAY", Sub = "played and confirmed", Accent = Tested,
             Rows = new[] { "rando_on", "rando_chests", "rando_skulltulas", "rando_skulltulas_day", "+quests", "rando_songs", "rando_heart_pieces",
-                           "+shops", "rando_scrubs", "rando_major", "rando_progressive", "+forest", "+skips", "+rupees", "rando_ammo_pickups" } },
+                           "+shops", "rando_scrubs", "rando_major", "rando_progressive", "rando_sword_shield", "+forest", "rando_open_door",
+                           "+skips", "+rupees", "rando_ammo_pickups" } },
         new RandoSection { Title = "SHOULD WORK", Sub = "made and checked, not yet played through", Accent = ShouldWork,
-            Rows = new[] { "rando_sword_shield", "rando_open_door", "rando_letter", "rando_ganon_bridge", "rando_hints", "rando_magic", "rando_keys" } },
+            Rows = new[] { "rando_ageless", "rando_letter", "rando_ganon_bridge", "rando_hints", "rando_magic" } },
         new RandoSection { Title = "EXPERIMENTAL", Sub = "not finished: may not work, or may break a seed", Accent = Experimental,
-            Rows = new[] { "rando_dungeon_rewards", "rando_ageless" } },
+            Rows = new[] { "rando_keys", "rando_dungeon_rewards", "rando_ageless_items" } },
     };
     public static RandoCombo Combo(string entry) {
         if (!entry.StartsWith("+")) return null;
@@ -1843,7 +1844,7 @@ static class RandoLayout {
     }
 }
 
-// (Lost Woods) a heading over a group of rows in a scrolling list: its name in its colour, a few words after, a line
+// (Willow Woods) a heading over a group of rows in a scrolling list: its name in its colour, a few words after, a line
 class Heading : Widget {
     public string Text, Sub; public Color Accent;
     public override bool Hit(PointF p) { return false; }
@@ -1858,7 +1859,7 @@ class Heading : Widget {
 }
 
 static class Theme {
-    // (Lost Woods: the forest's colours, dark moss and bark, leaf greens for the accents. The names stay Mako's)
+    // (Willow Woods: the forest's colours, dark moss and bark, leaf greens for the accents. The names stay Mako's)
     public static readonly Color Bg0 = Color.FromArgb(7, 10, 6);
     public static readonly Color Bg1 = Color.FromArgb(13, 19, 11);
     public static readonly Color Card = Color.FromArgb(19, 27, 16);
@@ -1905,6 +1906,7 @@ static class Theme {
     public static readonly Font Strong = Pick(15f, FontStyle.Regular, "Segoe UI Semibold", "Segoe UI");
     public static readonly Font Tab = Pick(15f, FontStyle.Regular, "Segoe UI Semibold", "Segoe UI");
     public static readonly Font Mark = Pick(52f, FontStyle.Bold, "Bahnschrift", "Segoe UI Black", "Segoe UI");
+    public static readonly Font MarkSmall = Pick(44f, FontStyle.Bold, "Bahnschrift", "Segoe UI Black", "Segoe UI");   // (Willow Woods: the longer name, to fit the left panel)
     public static readonly Font Play = Pick(24f, FontStyle.Bold, "Bahnschrift", "Segoe UI Black", "Segoe UI");
     public static readonly Font Caps = Pick(11f, FontStyle.Regular, "Bahnschrift", "Segoe UI");
 
@@ -2306,7 +2308,7 @@ class LauncherForm : Form {
     Selector langSel;
     Btn updateButton, playButton, fsrButton, benchButton;
     const bool UpdatesOn = false;
-    // (Lost Woods: Master Quest and the Mods tab are Mako's and untested here: hidden, their code kept)
+    // (Willow Woods: Master Quest and the Mods tab are Mako's and untested here: hidden, their code kept)
     internal const bool MasterQuestOn = false, ModsOn = false;   // (the Update button and the check at start; see where updateButton is made)
     Bench bench; bool benchBusy;   // (Mako 4.0: Test my PC, its last result)
     string fsrLine = ""; Color fsrLineColor = Theme.Dim; bool fsrBusy;
@@ -2353,7 +2355,7 @@ class LauncherForm : Form {
         new object[] { "sharpness", "Sharpness", new[] { "0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" }, new[] { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 },
             "Sharpens the picture on its way to the screen. Too much shows halos around edges." },
         new object[] { "frame_generation", "Frame generation", new[] { "Off", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "AMD Redstone 2x" }, new[] { 0, 2, 3, 4, 5, 6, 7, 8, 2 },
-            "Shows extra in-between frames for smoother motion. AMD Redstone 2x: AMD's AI frame generation instead of Lost Woods's, for RX 9000 cards with AMD's files (More > AMD FSR) and FSR 4. Best with 12 GB+." },
+            "Shows extra in-between frames for smoother motion. AMD Redstone 2x: AMD's AI frame generation instead of Willow Woods's, for RX 9000 cards with AMD's files (More > AMD FSR) and FSR 4. Best with 12 GB+." },
         new object[] { "frame_rate_cap", "Frame rate cap", new[] { "60 (the console's)", "90", "120", "144", "165", "240" }, new[] { 0, 1, 2, 3, 4, 5 },
             "The most frames per second the game runs at. Above 60 needs a screen that shows them." },
         new object[] { "amd_anti-lag_2", "AMD Anti-Lag 2", new[] { "Off", "On" }, new[] { 0, 1 },
@@ -2453,12 +2455,14 @@ class LauncherForm : Form {
             "The rainbow bridge to Ganon's Castle. As the game has it: after the Shadow and Spirit Temples' sages wake. Open: from the start. 6 medallions: once Link holds all six. Its own scene plays when Link next stands at the castle's edge." },
         new object[] { "rando_hints", "Gossip Stone hints", new[] { "Off", "On" }, new[] { 0, 1 },
             "Talking to a Gossip Stone gives one of the seed's hints, each said by two stones: where a needed item is, an area on the way of the hero (it holds a needed item), or a foolish one (it holds none). No Mask of Truth needed. Moves no item: it can be turned on for a seed being played." },
-        new object[] { "rando_ageless", "Either age's items", new[] { "Off", "Swords", "Swords and items" }, new[] { 0, 1, 2 },
-            "Swords: the Kokiri Sword and the Master Sword can be equipped by both ages. Swords and items: also the shields, the boots, the Biggoron's Sword, the Slingshot, the Boomerang, Deku Sticks, the Hammer, the Hookshots and the Bow with its arrows (not working yet: the other age can set them to a button but the game does not let him use them, seen with the Bow and the Hammer for young Link; the shields and boots not tried). The logic does not count on it. Moves no item." },
+        new object[] { "rando_ageless", "Either age's swords", new[] { "Off", "On" }, new[] { 0, 1 },
+            "The Kokiri Sword and the Master Sword can be equipped by both ages: young Link with the Master Sword, adult Link with the Kokiri Sword. The logic does not count on it. Moves no item." },
         new object[] { "rando_letter", "Kakariko gate", new[] { "As the game has it", "Letter shuffled", "Open" }, new[] { 0, 1, 2 },
             "Kakariko's gate to Death Mountain. Letter shuffled: the letter Zelda gives at the end of her meeting is an item of the shuffle, and the meeting gives what the seed put there; a child's check up the mountain then asks for the letter, or bombs (the Lost Woods' way to Goron City), or the Bolero of Fire when the songs are shuffled. Open: the gate is open for a child from the start (and in a save being played), as if the letter had been shown to its guard." },
         new object[] { "rando_magic", "Magic and the fairies' gifts", new[] { "Off", "On" }, new[] { 0, 1 },
             "The Great Fairies of the improved spin attack, doubled magic and halved damage join the shuffle (as the spell fairies do with Quest rewards), and magic becomes two items of the shuffle: the first gives the magic meter, the second doubles it. The Lens of Truth, the spells and the magic arrows no longer give magic by themselves. Needs Quest rewards." },
+        new object[] { "rando_ageless_items", "Either age's items", new[] { "Off", "On" }, new[] { 0, 1 },
+            "The age-only items can be set by both ages: the shields, the boots, the Biggoron's Sword, the Slingshot, the Boomerang, Deku Sticks, the Hammer, the Hookshots and the Bow with its arrows. Experimental: the other age can set them to a button but the game does not let him use them yet (seen with the Bow and the Hammer for young Link; the shields and boots not tried). The logic does not count on it. Moves no item." },
     };
     // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and
@@ -2565,8 +2569,8 @@ class LauncherForm : Form {
         new[] { "Saves", "Your saves (user\\save). Copy this folder to keep them safe." },
         new[] { "Import saves", "Bring in saves from another copy of the game or an emulator." },
         new[] { "Master Quest saves", "Master Quest keeps its own saves, apart (user\\save_mq)." },
-        new[] { "Game folder", "Where Lost Woods, its settings and its logs are." },
-        new[] { "Send logs", "Something went wrong? Send the game's last logs and a few words to the Lost Woods team." },
+        new[] { "Game folder", "Where Willow Woods, its settings and its logs are." },
+        new[] { "Send logs", "Something went wrong? Send the game's last logs and a few words to the Willow Woods team." },
         new[] { "Report on GitHub", "Open the project's issue page, to report a bug with screenshots." },
         new[] { "Save copies", "Kept copies of your saves: more than the game's one save of your own." },
     };
@@ -2581,7 +2585,7 @@ class LauncherForm : Form {
         // (Mako) Ducky's controller workaround: HOS_NO_SDL=1 leaves SDL out (host/pad_sdl.c), pads only through XInput
         new[] { "HOS_NO_SDL", "1", "Basic controller mode (tip by Ducky)", "Controller not detected, double inputs or wrong buttons? Reads only Xbox-style (XInput) pads: a PlayStation pad then needs Steam or DS4Windows. No motion aiming.", "" },
         // (Mako) the predicted pipelines behind the game (gpu/vk/vk_draw.cpp predict_background); off: all before the title
-        new[] { "RX_VK_PREDICT_BG", "1", "Quick first start", "Off (recommended): effects are prepared the first time they appear, as in Lost Woods 3.3 (short hitches the first time only). On: they are also prepared behind the game while you play, which costs some fps for a while.", "" },
+        new[] { "RX_VK_PREDICT_BG", "1", "Quick first start", "Off (recommended): effects are prepared the first time they appear, as in Mako 3.3 (short hitches the first time only). On: they are also prepared behind the game while you play, which costs some fps for a while.", "" },
         // (Mako) AMD FSR Redstone frame generation (gpu/vk/vk_redstone.h), off unless switched on: it takes video memory
     };
 
@@ -2600,7 +2604,7 @@ class LauncherForm : Form {
         envPath = Path.Combine(dir, "hookshot_env.txt");
         langPath = Path.Combine(dir, "language.txt");
 
-        Text = "Lost Woods";
+        Text = "Willow Woods";
         FormBorderStyle = FormBorderStyle.None;
         ClientSize = new Size(W, H);
         StartPosition = FormStartPosition.CenterScreen;
@@ -2609,7 +2613,7 @@ class LauncherForm : Form {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
         try {
-            using (var s = typeof(LauncherForm).Assembly.GetManifestResourceStream("lostwoods_logo.png"))
+            using (var s = typeof(LauncherForm).Assembly.GetManifestResourceStream("willowwoods_logo.png"))
                 if (s != null) logo = Image.FromStream(s);
         } catch { }
 
@@ -2645,7 +2649,7 @@ class LauncherForm : Form {
         } catch { }
         try { mqMode = MasterQuestOn && File.ReadAllText(ModeFile).Trim() == "mq"; } catch { }
         SyncPlay();
-        widgets.Add(new Btn { Text = "Lost Woods  ·  built on Mako by sharkiix", Style = Btn.Kind.Link, R = new RectangleF(32, 648, 300, 24),
+        widgets.Add(new Btn { Text = "Willow Woods  ·  built on Mako by sharkiix", Style = Btn.Kind.Link, R = new RectangleF(32, 648, 300, 24),
                               Click = () => OpenUrl(Fork.Home) });
 
         // (tabs)
@@ -2693,11 +2697,11 @@ class LauncherForm : Form {
         }
         AddSelectors(GameRows, 2, cx, colW);
         // (more of them than fit over the seed's buttons: closer lines, and the list scrolls by the wheel inside RandoView)
-        // (Lost Woods: in sections by how far each is tested, related settings merged into one row: RandoLayout)
+        // (Willow Woods: in sections by how far each is tested, related settings merged into one row: RandoLayout)
         BuildRandoPage(cx, colW);
         // (fourteen of them: the closer lines of the Randomizer page. The shields' looks follow the colours)
         // (the colours, the shields' looks and the characters' looks: a list that scrolls in RandoView, as the Randomizer page's)
-        // (Lost Woods: colours, shields, then the characters' looks under an experimental switch)
+        // (Willow Woods: colours, shields, then the characters' looks under an experimental switch)
         BuildCosmeticPage(cx, colW);
         // (under the list, over the page's note)
         widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx, 542, 160, 36), Page = CosmeticPage, Click = OnRandomCosmetics });
@@ -2834,7 +2838,7 @@ class LauncherForm : Form {
         }
     }
 
-    // (Lost Woods) the Randomizer page. Every setting's own selector is made, as before (settings[key]: what is saved and
+    // (Willow Woods) the Randomizer page. Every setting's own selector is made, as before (settings[key]: what is saved and
     // what a seed's ID holds), but the page shows RandoLayout's sections: a heading, then rows, a row being a setting's own
     // selector or a merged one (RandoCombo) that sets several settings at once.
     readonly Dictionary<Selector, RandoCombo> combos = new Dictionary<Selector, RandoCombo>();
@@ -2896,7 +2900,7 @@ class LauncherForm : Form {
         }
     }
 
-    // (Lost Woods) the Cosmetics page: colours, shields' looks, and the characters' looks, which mostly do not work yet,
+    // (Willow Woods) the Cosmetics page: colours, shields' looks, and the characters' looks, which mostly do not work yet,
     // behind a switch of their own. Off sets them all back to their own looks; the switch is the launcher's only (on at
     // start when any of them is set).
     Selector modelsSwitch;
@@ -3020,7 +3024,7 @@ class LauncherForm : Form {
 
         PaintLeft(g);
         // (title)
-        using (var b = new SolidBrush(Theme.A(Theme.Dim, 160))) Theme.Spaced(g, "LOST WOODS LAUNCHER", Theme.Caps, b, LeftW + (W - LeftW) / 2f, 13, 4);
+        using (var b = new SolidBrush(Theme.A(Theme.Dim, 160))) Theme.Spaced(g, "WILLOW WOODS LAUNCHER", Theme.Caps, b, LeftW + (W - LeftW) / 2f, 13, 4);
 
         // (tabs underline and the page)
         if (PageNow == 6) PaintMqScene(g);
@@ -3100,7 +3104,7 @@ class LauncherForm : Form {
         }
         g.Restore(clip0);
         // (the logo with a soft glow behind it, breathing)
-        var lr = new RectangleF(40, 56, 320, 320f * 400 / 680);   // (Lost Woods: the tree, launcher/make_tree_logo.py)
+        var lr = new RectangleF(40, 56, 320, 320f * 400 / 680);   // (Willow Woods: the tree, launcher/make_tree_logo.py)
         if (logo != null) lr.Height = lr.Width * logo.Height / logo.Width;
         float pulse = 0.5f + 0.5f * (float)Math.Sin(t * 1.4);
         using (var p = new GraphicsPath()) {
@@ -3115,8 +3119,9 @@ class LauncherForm : Form {
         }
         // (wordmark)
         float my = lr.Bottom + 16;
+        var MarkFont = Fork.Name.Length > 10 ? Theme.MarkSmall : Theme.Mark;
         using (var b = new LinearGradientBrush(new RectangleF(0, my, LeftW, 60), Color.White, Color.FromArgb(204, 240, 185), LinearGradientMode.Vertical))
-            Theme.Spaced(g, "LOST WOODS", Theme.Mark, b, LeftW / 2f, my, 3);
+            Theme.Spaced(g, Fork.Name.ToUpperInvariant(), MarkFont, b, LeftW / 2f, my + (52f - MarkFont.Size) / 2, 3);
         using (var b = new SolidBrush(Theme.Dim)) Theme.Spaced(g, "OCARINA OF TIME  ·  PC", Theme.Caps, b, LeftW / 2f, my + 66, 3.5f);
         // (version pill)
         string v = Fork.Me(Installed());
@@ -3148,7 +3153,7 @@ class LauncherForm : Form {
         }
     }
 
-    // (Lost Woods) under the Randomizer and Cosmetics pages: a new seed or a changed look makes the next start longer
+    // (Willow Woods) under the Randomizer and Cosmetics pages: a new seed or a changed look makes the next start longer
     void PaintSlowStart(Graphics g, float x) {
         var r = new RectangleF(x, 610, W - LeftW - 72, 50);
         using (var p = Theme.Round(r, 12)) {
@@ -3196,23 +3201,26 @@ class LauncherForm : Form {
                 using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, p);
                 using (var pen = new Pen(Theme.Line)) g.DrawPath(pen, p);
             }
-            Theme.Text_(g, "Lost Woods", Theme.Pick(26f, FontStyle.Bold, "Bahnschrift", "Segoe UI"), Color.White, new RectangleF(r.X + 24, r.Y + 20, 400, 34), StringAlignment.Near, StringAlignment.Near);
-            Theme.Text_(g, Fork.Me(Installed()) + "  ·  made by sharkiix", Theme.Body, Theme.Cyan, new RectangleF(r.X + 24, r.Y + 58, 500, 22), StringAlignment.Near, StringAlignment.Near);
+            Theme.Text_(g, "Willow Woods", Theme.Pick(26f, FontStyle.Bold, "Bahnschrift", "Segoe UI"), Color.White, new RectangleF(r.X + 24, r.Y + 20, 400, 34), StringAlignment.Near, StringAlignment.Near);
+            Theme.Text_(g, Fork.Me(Installed()) + "  ·  a randomizer built on Mako by sharkiix", Theme.Body, Theme.Cyan, new RectangleF(r.X + 24, r.Y + 58, 500, 22), StringAlignment.Near, StringAlignment.Near);
             Theme.Text_(g,
-                "A native PC version of The Legend of Zelda: Ocarina of Time, tuned for AMD graphics cards: steadier frame times, " +
-                "fixed lighting and textures, and its own launcher.\n\n" +
-                "Lost Woods is based on Hookshot, the open-source recompilation project, and is free software under the GNU GPL version 3. " +
-                "It contains no game data: you need your own copy of the game.\n\n" +
-                "Thanks to the Hookshot authors and everyone who tests and reports.",
+                "A randomizer for the native PC version of The Legend of Zelda: Ocarina of Time: every seed shuffles where the items " +
+                "are, with logic that keeps the game beatable, and a Tracker in the game's menu.\n\n" +
+                "Willow Woods is built on Mako by sharkiix, itself based on Hookshot, the open-source recompilation project, and is " +
+                "free software under the GNU GPL version 3. It contains no game data: you need your own copy of the game.\n\n" +
+                "Thanks to the Mako and Hookshot authors, the other ports whose fixes it takes, and everyone who tests and reports.",
                 Theme.Body, Theme.Text, new RectangleF(r.X + 24, r.Y + 96, r.Width - 48, r.Height - 110), StringAlignment.Near, StringAlignment.Near);
         }
     }
 
     void PaintFiles(Graphics g, float x) {
         float cw = W - LeftW - 72, fw = (cw - 14) / 2;
-        for (int i = 0; i < FileRows.Length; i++)
-            Theme.Text_(g, FileRows[i][1], Theme.Small, Theme.Dim, new RectangleF(x + i % 2 * (fw + 14) + 4, 150 + i / 2 * 112 + 50, fw - 8, 54),
+        for (int i = 0, at = 0; i < FileRows.Length; i++) {
+            if (i == 2 && !MasterQuestOn) continue;   // (Master Quest saves: no button)
+            Theme.Text_(g, FileRows[i][1], Theme.Small, Theme.Dim, new RectangleF(x + at % 2 * (fw + 14) + 4, 150 + at / 2 * 112 + 50, fw - 8, 54),
                         StringAlignment.Near, StringAlignment.Near);
+            at++;
+        }
     }
 
     // (Mako) the Master Quest page's backdrop: dark, a little warm light behind the logo. Still, drawn once
@@ -3714,7 +3722,7 @@ class LauncherForm : Form {
 
     static WebClient Client() {
         var c = new WebClient();
-        c.Headers[HttpRequestHeader.UserAgent] = "LostWoods-launcher";
+        c.Headers[HttpRequestHeader.UserAgent] = "WillowWoods-launcher";
         c.Headers[HttpRequestHeader.Accept] = "application/vnd.github+json";
         return c;
     }
@@ -3745,7 +3753,7 @@ class LauncherForm : Form {
                         // (Mako 3.3: the new names first; the old ones are what releases up to 3.0.2 have)
                         if (u.EndsWith("/mako_vk_update.txt") || (manifest == null && u.EndsWith("/hookshot_vk_update.txt"))) manifest = u;
                         if (u.EndsWith("/mako_vk.dll") || (dll == null && u.EndsWith("/hookshot_vk.dll"))) dll = u;
-                        if (u.EndsWith("/LostWoodsBuilder.zip") || (zip == null && u.EndsWith("/HookshotBuilder.zip"))) zip = u;
+                        if (u.EndsWith("/WillowWoodsBuilder.zip") || (zip == null && u.EndsWith("/HookshotBuilder.zip"))) zip = u;
                     }
                     if (zip != null) {
                         var zm = Regex.Match(json, "\"size\"\\s*:\\s*(\\d+)[^{}]*?\"browser_download_url\"\\s*:\\s*\"" + Regex.Escape(zip) + "\"");
@@ -3815,14 +3823,14 @@ class LauncherForm : Form {
         } catch { }
         if (!Directory.Exists(Path.Combine(dir, ".hookshot_exefs"))) {
             MessageBox.Show(this, "This game folder has no copy of the game files to update from (it was built before updates came in).\n\n" +
-                            "Open the Lost Woods builder, choose your game files and build into this same folder once: your saves are kept.",
+                            "Open the Willow Woods builder, choose your game files and build into this same folder once: your saves are kept.",
                             Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
             OpenUrl(Fork.Page);
             return;
         }
         if (builder.Length > 0 && File.Exists(builder)) { RunBuilder(builder, tag); return; }
         if (builderZip == null) { OpenUrl(Fork.Page); return; }
-        SetUpdate(Theme.Blue, "Getting the Lost Woods builder…", "", "Update", true, false);
+        SetUpdate(Theme.Blue, "Getting the Willow Woods builder…", "", "Update", true, false);
         updProgress = 0;
         string url = builderZip; long size = builderZipSize;
         var t = new Thread(() => {
@@ -3841,7 +3849,7 @@ class LauncherForm : Form {
     }
 
     string FetchBuilder(string url, string tag, long size) {
-        string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lost Woods", "builders");
+        string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Willow Woods", "builders");
         string safe = Regex.Replace(tag, "[^A-Za-z0-9._-]", "_");
         string target = Path.Combine(root, safe);
         string exe = Path.Combine(target, "HookshotBuilder", "HookshotBuilder.exe");
@@ -3964,13 +3972,13 @@ class LauncherForm : Form {
         string card = pc.Gpu.Length > 0 ? pc.Gpu : "your graphics card";
 
         // (the verdict)
-        if (pc.Integrated) recVerdict = "A graphics chip built into the processor: Lost Woods runs, at the lightest settings. Expect around 30 fps.";
+        if (pc.Integrated) recVerdict = "A graphics chip built into the processor: Willow Woods runs, at the lightest settings. Expect around 30 fps.";
         else if (!knownVram) recVerdict = "The graphics card's memory could not be read: these are middle settings. Lower the Quality preset if it stutters.";
-        else if (v >= 14) recVerdict = "A strong PC for Lost Woods: high settings, with room for AMD FSR 4 and frame generation.";
-        else if (v >= 13) recVerdict = "A good PC for Lost Woods: high settings at your screen's resolution.";
-        else if (v >= 10) recVerdict = "A good PC for Lost Woods. With " + v + " GB of video memory the settings stay one step lighter: the game's textures fill it during long sessions.";
-        else if (v >= 7) recVerdict = "A solid PC for Lost Woods: balanced settings. 8 GB of video memory is the limit to watch.";
-        else recVerdict = "A light PC for Lost Woods: low settings keep it smooth. Video memory is the limit here.";
+        else if (v >= 14) recVerdict = "A strong PC for Willow Woods: high settings, with room for AMD FSR 4 and frame generation.";
+        else if (v >= 13) recVerdict = "A good PC for Willow Woods: high settings at your screen's resolution.";
+        else if (v >= 10) recVerdict = "A good PC for Willow Woods. With " + v + " GB of video memory the settings stay one step lighter: the game's textures fill it during long sessions.";
+        else if (v >= 7) recVerdict = "A solid PC for Willow Woods: balanced settings. 8 GB of video memory is the limit to watch.";
+        else recVerdict = "A light PC for Willow Woods: low settings keep it smooth. Video memory is the limit here.";
 
         // (Quality preset: from the video memory, as its own names say)
         int preset = low ? 1 : !knownVram ? 3 : v < 7 ? 2 : v <= 12 ? 3 : v < 14 ? 4 : 5;   // (12 GB or less: Balanced, a step lighter)
@@ -4049,7 +4057,7 @@ class LauncherForm : Form {
         else if (pc.RamMB > 0) recNotes.Add(new[] { "Memory: " + pc.RamGB + " GB", "Plenty: nothing to do." });
         if (pc.Threads > 0 && pc.Threads < 8) recNotes.Add(new[] { "Processor: " + pc.Threads + " threads", "The first start after each update takes longer here: let it finish once, the next starts are quick." });
         if (pc.Integrated) recNotes.Add(new[] { "Laptop or built-in graphics", "Keep it plugged in. If the PC also has a graphics card, in Windows Settings > System > Display > Graphics set hookshot.exe to High performance." });
-        if (pc.Nvidia) recNotes.Add(new[] { "NVIDIA card", "Lost Woods is tuned and tested on AMD cards first. NVIDIA works; tell us on GitHub if something looks wrong." });
+        if (pc.Nvidia) recNotes.Add(new[] { "NVIDIA card", "Willow Woods is tuned and tested on AMD cards first. NVIDIA works; tell us on GitHub if something looks wrong." });
         if (knownVram && v <= 12) recNotes.Add(new[] { "Video memory: " + v + " GB", "The limit to watch: the settings here are a step lighter for it. If the game starts to stutter after a while, lower the Quality preset one more step. Leave Native AA and Redstone off." });
         recNotes.Add(new[] { "After every update", "The first start prepares the game's effects (up to about 40 minutes on AMD cards, once). Let it finish: the following starts are quick." });
         recNotes.Add(new[] { "Graphics driver", "Keep it up to date: AMD Software: Adrenalin Edition, the NVIDIA App or Intel Graphics Software." });
@@ -4433,7 +4441,7 @@ class LauncherForm : Form {
                     string part = Path.Combine(dir, f[0] + ".download");
                     tmp.Add(part);
                     using (var c = new WebClient()) {
-                        c.Headers[HttpRequestHeader.UserAgent] = "LostWoods-launcher";
+                        c.Headers[HttpRequestHeader.UserAgent] = "WillowWoods-launcher";
                         long before = got;
                         var ev = new ManualResetEvent(false); Exception err = null;
                         c.DownloadProgressChanged += (s, e) => {
@@ -4491,7 +4499,7 @@ class LauncherForm : Form {
     void OnSendLogs() {
         string hook = ReportHook();
         if (hook.Length == 0) {
-            MessageBox.Show(this, "Sending logs is not set up in this build. Open the game folder and send logs\\hookshot_log.txt on the Lost Woods Discord.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, "Sending logs is not set up in this build. Open the game folder and send logs\\hookshot_log.txt on the Willow Woods Discord.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         string stamp = Path.Combine(dir, "user", "report_last.txt");
@@ -4521,8 +4529,8 @@ class LauncherForm : Form {
             var box = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 1500, Bounds = new Rectangle(16, 40, 488, 150),
                                     BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
             var what = new Label { AutoSize = false, Bounds = new Rectangle(16, 198, 488, 74), ForeColor = Theme.Dim,
-                                   Text = "Sent to the Lost Woods team's private channel: your text, the game's last logs (" + string.Join(", ", logs) + "), " +
-                                          "your graphics card, processor, memory, Windows and driver versions, Lost Woods version and settings. Your Windows account name is removed from the logs. " +
+                                   Text = "Sent to the Willow Woods team's private channel: your text, the game's last logs (" + string.Join(", ", logs) + "), " +
+                                          "your graphics card, processor, memory, Windows and driver versions, Willow Woods version and settings. Your Windows account name is removed from the logs. " +
                                           "Nothing else: no saves, no game files." };
             var send = new Button { Text = "Send", Bounds = new Rectangle(300, 284, 100, 32), FlatStyle = FlatStyle.Flat, BackColor = Theme.Blue, ForeColor = Color.White };
             var cancel = new Button { Text = "Cancel", Bounds = new Rectangle(404, 284, 100, 32), FlatStyle = FlatStyle.Flat, BackColor = Theme.Card, ForeColor = Theme.Text, DialogResult = DialogResult.Cancel };
@@ -4537,9 +4545,9 @@ class LauncherForm : Form {
             string err = SendReport(hook, problem, logs);
             if (err == null) {
                 try { Directory.CreateDirectory(Path.Combine(dir, "user")); File.WriteAllText(stamp, DateTime.UtcNow.ToString("o")); } catch { }
-                MessageBox.Show(this, "Sent. Thank you: the Lost Woods team will read it.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, "Sent. Thank you: the Willow Woods team will read it.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
             } else
-                MessageBox.Show(this, "The report could not be sent:\n" + err + "\n\nYou can send logs\\hookshot_log.txt (game folder) on the Lost Woods Discord instead.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "The report could not be sent:\n" + err + "\n\nYou can send logs\\hookshot_log.txt (game folder) on the Willow Woods Discord instead.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -4567,7 +4575,7 @@ class LauncherForm : Form {
                 zip = ms.ToArray();
             }
             string clean = Scrub(problem).Replace("```", "` ` `");
-            string content = "**Report** · Lost Woods " + ver + (Fork.Label.Length > 0 ? " (launcher " + Fork.Label + ")" : "") + "\n" +
+            string content = "**Report** · Willow Woods " + ver + (Fork.Label.Length > 0 ? " (launcher " + Fork.Label + ")" : "") + "\n" +
                              "GPU: " + (pc.Gpu.Length > 0 ? pc.Gpu : "?") + (pc.VramMB > 0 ? " (" + pc.VramGB + " GB)" : "") +
                              " · CPU: " + (pc.Cpu.Length > 0 ? pc.Cpu : "?") + " (" + pc.Threads + " threads) · RAM: " + pc.RamGB + " GB · Screen: " +
                              pc.ScreenW + "x" + pc.ScreenH + " " + pc.Hz + " Hz\n```\n" + clean + "\n```";
@@ -4584,7 +4592,7 @@ class LauncherForm : Form {
                 body = ms.ToArray();
             }
             var req = (HttpWebRequest)WebRequest.Create(hook);
-            req.Method = "POST"; req.ContentType = "multipart/form-data; boundary=" + boundary; req.UserAgent = "LostWoods-launcher"; req.Timeout = 30000;
+            req.Method = "POST"; req.ContentType = "multipart/form-data; boundary=" + boundary; req.UserAgent = "WillowWoods-launcher"; req.Timeout = 30000;
             req.ContentLength = body.Length;
             using (var rs = req.GetRequestStream()) rs.Write(body, 0, body.Length);
             using (var resp = (HttpWebResponse)req.GetResponse()) { }
@@ -4727,7 +4735,7 @@ class LauncherForm : Form {
         // the Saves and Save copies buttons showing the normal game's folder, its list of copies empty. A second start
         // brings the first one's window to the front and ends)
         bool first;
-        var once = new Mutex(true, "LostWoodsLauncher_" + OnceName(dir), out first);
+        var once = new Mutex(true, "WillowWoodsLauncher_" + OnceName(dir), out first);
         if (!first) {
             try {
                 int me = Process.GetCurrentProcess().Id;

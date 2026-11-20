@@ -3236,11 +3236,11 @@ def main(a=None):
     seed_pipelines(out)
     # (Mako: the launcher, tools/launcher/Mako Launcher.exe, beside the game; the builder's shortcuts open it. The Hookshot-named
     # launcher of the amd-fix 2.x folders goes: an update from one of them leaves only Mako's)
-    # (Lost Woods: its launcher, Lost Woods Launcher.exe; the Mako-named one of a folder built before goes)
-    launcher = os.path.join(ROOT, "launcher", "Lost Woods Launcher.exe")
+    # (Willow Woods: its launcher, Willow Woods Launcher.exe; the Mako-named one of a folder built before goes)
+    launcher = os.path.join(ROOT, "launcher", "Willow Woods Launcher.exe")
     if os.path.isfile(launcher):
         try:
-            shutil.copy2(launcher, os.path.join(out, "Lost Woods Launcher.exe"))
+            shutil.copy2(launcher, os.path.join(out, "Willow Woods Launcher.exe"))
             for old in ("Hookshot Launcher.exe", "Mako Launcher.exe"):
                 old_launcher = os.path.join(out, old)
                 if os.path.isfile(old_launcher):

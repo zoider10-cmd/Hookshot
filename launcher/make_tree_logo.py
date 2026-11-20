@@ -1,5 +1,5 @@
-"""Lost Woods: the launcher's logo, an old world tree, drawn from code (no outside picture): launcher/lostwoods_logo.png
-(transparent, 680x400) and launcher/lostwoods.ico. Run: py -I launcher/make_tree_logo.py (needs Pillow)."""
+"""Willow Woods: the launcher's logo, an old world tree, drawn from code (no outside picture): launcher/willowwoods_logo.png
+(transparent, 680x400) and launcher/willowwoods.ico. Run: py -I launcher/make_tree_logo.py (needs Pillow)."""
 import math
 import os
 import random
@@ -93,11 +93,11 @@ def icon(logo):
     sq = Image.new("RGBA", (400, 400), (0, 0, 0, 0))
     part = logo.crop((140, 0, 540, 400))
     sq.alpha_composite(part)
-    sq.save(os.path.join(HERE, "lostwoods.ico"), sizes=[(256, 256), (64, 64), (48, 48), (32, 32), (16, 16)])
+    sq.save(os.path.join(HERE, "willowwoods.ico"), sizes=[(256, 256), (64, 64), (48, 48), (32, 32), (16, 16)])
 
 
 if __name__ == "__main__":
     logo = tree()
-    logo.save(os.path.join(HERE, "lostwoods_logo.png"))
+    logo.save(os.path.join(HERE, "willowwoods_logo.png"))
     icon(logo)
-    print("wrote lostwoods_logo.png and lostwoods.ico")
+    print("wrote willowwoods_logo.png and willowwoods.ico")

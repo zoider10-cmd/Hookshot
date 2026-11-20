@@ -5,7 +5,7 @@
 # rate uncapped, from one pinned options file (bench_options.ini), after a warm-up run of each side (WARMUP=0: none). STEPS="<s>:<what>;..." another route ("GO x y z Folder ages" teleports as the Tracker's Go there). A variant is a folder under F:/Games/perf-ab/variants/ holding hookshot.exe and/or hookshot_vk.dll
 # (a missing file is the base's) and/or env.txt (switches for the run, one NAME=value a line). Frame times go to runs/<name>_<variant>_<rep>/frames.csv; gate.py reads them.
 P=/f/Games/perf-ab; G=$P/game; V=$P/variants; name=$1; A=$2; B=$3; reps=${4:-5}; secs=${5:-150}
-if tasklist | grep -qi "hookshot.exe\|Mako Launcher\|Lost Woods Launcher"; then echo "the game or the launcher is running: not now"; exit 1; fi
+if tasklist | grep -qi "hookshot.exe\|Mako Launcher\|Willow Woods Launcher"; then echo "the game or the launcher is running: not now"; exit 1; fi
 VS=${VARIANTS:-"$A $B"}
 for v in $VS; do [ -d "$V/$v" ] || { echo "no variant $V/$v"; exit 1; }; done
 [ -d "$V/base" ] || { echo "no $V/base (the installed build's hookshot.exe and hookshot_vk.dll)"; exit 1; }

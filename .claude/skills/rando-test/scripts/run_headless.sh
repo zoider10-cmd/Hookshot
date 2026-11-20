@@ -21,7 +21,7 @@ label="$1"; shift
 GAME="${GAME:-/f/Games/OOT Remake Rando}"
 WORK="${WORK:-${TEMP:-/tmp}/rando-test}"
 WORK="$(cygpath -u "$WORK" 2>/dev/null || echo "$WORK")"
-if tasklist 2>/dev/null | grep -qi "hookshot.exe\|Mako Launcher\|Lost Woods Launcher"; then echo "the game or the launcher is running: not started"; exit 1; fi
+if tasklist 2>/dev/null | grep -qi "hookshot.exe\|Mako Launcher\|Willow Woods Launcher"; then echo "the game or the launcher is running: not started"; exit 1; fi
 mkdir -p "$WORK/shots" "$WORK/user"
 rm -rf "$WORK/user/save_rando"
 if [ -n "${SAVE:-}" ]; then

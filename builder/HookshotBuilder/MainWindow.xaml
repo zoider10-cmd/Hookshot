@@ -1,7 +1,7 @@
 <Window x:Class="HookshotBuilder.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Lost Woods Builder" Width="960" Height="600" ResizeMode="CanMinimize"
+        Title="Willow Woods Builder" Width="960" Height="600" ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen" Background="Transparent" AllowDrop="True"
         UseLayoutRounding="True" SnapsToDevicePixels="True" FontFamily="{StaticResource Ui}">
 
@@ -106,7 +106,7 @@
           </Grid.RowDefinitions>
           <StackPanel>
             <TextBlock x:Name="FilesTitle" Style="{StaticResource Heading}" Text="Build your game"/>
-            <TextBlock x:Name="FilesSub" Style="{StaticResource Sub}" Text="Pick your game files and where the game goes. Lost Woods does the rest, once."/>
+            <TextBlock x:Name="FilesSub" Style="{StaticResource Sub}" Text="Pick your game files and where the game goes. Willow Woods does the rest, once."/>
           </StackPanel>
 
           <StackPanel Grid.Row="1">

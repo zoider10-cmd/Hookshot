@@ -79,7 +79,7 @@ def sources(rows):
           "if (!hidden) place++;" in launcher and "section.Value.FindAll(r => !LauncherForm.RandoHidden.Contains((string)r[0]))" in launcher and
           "the frogs of Zora's River among them" in launcher,
           "the Frogs row is still shown on the page or in the New seed window, or Quest rewards does not name the frogs")
-    # (Lost Woods: the Randomizer page and the New seed window show RandoLayout's sections, a merged row (a combo, "+id")
+    # (Willow Woods: the Randomizer page and the New seed window show RandoLayout's sections, a merged row (a combo, "+id")
     #  standing for its settings. The page shows nothing else: every row but the hidden frogs is named once, and only rows)
     layout = launcher[launcher.index("static class RandoLayout {"):launcher.index("public static RandoCombo Combo(string entry)")]
     combos = dict((cid, re.findall(r'"(rando_\w+)"', keys)) for cid, keys in

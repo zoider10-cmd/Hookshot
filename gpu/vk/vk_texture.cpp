@@ -2964,7 +2964,7 @@ Texture* texture_touch(Texture* tex, bool for_sampling) {
     // was unswizzled from that memory: 55 MB for the 3072 x 3072 x 3 shadow map, frame after frame. Not "storage
     // the write watch never saw written": the game fills memory before it makes a pool of it.)
     static const bool upload_all = env_on("RX_VK_UPLOAD_ALL");   // (A/B: such storage uploaded too)
-    // (from zoider10-cmd/LostWoods ff479e988d) never for a block-compressed texture (ASTC, BC, ETC): the GPU cannot render into one, so
+    // (from zoider10-cmd/WillowWoods ff479e988d) never for a block-compressed texture (ASTC, BC, ETC): the GPU cannot render into one, so
     // its texels come from memory whatever render targets used that storage before. Skipped, a boss or a new enemy met for
     // the first time (its textures loaded into the transient heaps' memory) was drawn with an empty texture, all blue, for
     // the whole cutscene. RX_VK_SKIP_COMPRESSED_OVER_RT=1: as before

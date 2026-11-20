@@ -9,7 +9,7 @@
     <AssemblyName>HookshotBuilder</AssemblyName>
     <RootNamespace>HookshotBuilder</RootNamespace>
     <Version>0.1.0</Version>
-    <Product>Lost Woods Builder</Product>
+    <Product>Willow Woods Builder</Product>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <ApplicationIcon>Images\mako.ico</ApplicationIcon>

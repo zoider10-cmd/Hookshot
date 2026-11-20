@@ -426,7 +426,7 @@ def shields():
         check(abs(colorsys.rgb_to_hsv(*(c / 255.0 for c in got))[0] * 360.0 - 172.0) < 3.0 and
               change(tuple(c * 255.0 for c in far)) == tuple(c * 255.0 for c in far),
               "%s: its own colour is not changed, or one opposite it is" % row[2])
-    # (Lost Woods: colours, then shields, then the characters' looks behind their experimental switch)
+    # (Willow Woods: colours, then shields, then the characters' looks behind their experimental switch)
     at = [launcher.find(s) for s in ('CosmeticSection(x0, colW, y, "COLOURS", ', 'CosmeticSection(x0, colW, y, "SHIELDS", ', 'modelsSwitch = new Selector')]
     check(all(i > 0 for i in at) and at == sorted(at) and "foreach (var s in modelRows) s.Page = on ? CosmeticPage : NoPage;" in launcher and
           "foreach (var m in modelRows) m.Set(0, false); SaveCosmetics();" in launcher,

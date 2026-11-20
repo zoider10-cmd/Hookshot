@@ -1,4 +1,4 @@
-<h1 align="center">LOST WOODS</h1>
+<h1 align="center">WILLOW WOODS</h1>
 
 <p align="center">
   <b>A randomizer for the Ocarina of Time remake on PC, built on your own copy of the game.</b><br>
@@ -9,7 +9,7 @@
   <a href="#credits">Credits</a>
 </p>
 
-Lost Woods is a randomizer for the native PC build of Ocarina of Time (Nintendo Switch 2): every new seed shuffles where
+Willow Woods is a randomizer for the native PC build of Ocarina of Time (Nintendo Switch 2): every new seed shuffles where
 the items are, with logic that keeps the game beatable, and a Tracker in the game's menu that knows where everything is.
 It is built on [Mako](https://github.com/Shakoquo/Mako) (a fork of Hookshot), and takes the engine's fixes and speed-ups
 from the other ports of the game as they come.
@@ -21,12 +21,12 @@ from the other ports of the game as they come.
 
 ## Install
 
-1. Download **`LostWoodsBuilder.zip`** from the [latest release](https://github.com/zoider10-cmd/LostWoods/releases/latest),
-   unzip it (right-click > Extract All) and run **`HookshotBuilder.exe`** inside (the Lost Woods Builder).
+1. Download **`WillowWoodsBuilder.zip`** from the [latest release](https://github.com/zoider10-cmd/WillowWoods/releases/latest),
+   unzip it (right-click > Extract All) and run **`HookshotBuilder.exe`** inside (the Willow Woods Builder).
 2. Pick your game file (the builder lists the `.nup` files it finds; or **Browse…**), choose where the game goes and its
    language.
 3. Press **Build the game**: around 45 minutes, depending on your CPU. You can use your PC meanwhile.
-4. Start the game from the **Lost Woods** shortcut on your desktop. In the launcher, open **Randomizer**, press **New
+4. Start the game from the **Willow Woods** shortcut on your desktop. In the launcher, open **Randomizer**, press **New
    seed**, pick the settings (or a preset) and press **Play**.
 
 Updates: the launcher and the builder check this repository's releases.
@@ -55,7 +55,7 @@ Open an issue on this repository with what happened, where, and the seed's ID. T
 
 ## Credits
 
-Lost Woods is built on [Mako](https://github.com/Shakoquo/Mako) by sharkiix, itself a fork of Hookshot, the static
+Willow Woods is built on [Mako](https://github.com/Shakoquo/Mako) by sharkiix, itself a fork of Hookshot, the static
 recompilation of Ocarina of Time; engine fixes come from Longshot, ProjectReLink, HeyListen, Triforce and Reborn. The
 randomizer's Tracker directions come from Ocarina-Atlas (MIT). License: GPL-3.0 (see LICENSE).
 
@@ -63,7 +63,7 @@ randomizer's Tracker directions come from Ocarina-Atlas (MIT). License: GPL-3.0 
 
 # The engine: Mako
 
-What follows is Mako's own README, the engine Lost Woods is built on.
+What follows is Mako's own README, the engine Willow Woods is built on.
 
 <p align="center">
   <img src="launcher/mako_logo.png" alt="Mako" width="420">

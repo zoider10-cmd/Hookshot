@@ -10,7 +10,7 @@
 set -u
 out=$1; P=/f/Games/perf-ab; G=$P/game; V=$P/variants; W=$P/runs/pgo; tours=${TOURS:-2}
 SAVES="/f/Games/OOT Remake Rando/user/save_copies/save_rando/All Items unlocked"
-if tasklist | grep -qi "hookshot.exe\|Mako Launcher\|Lost Woods Launcher"; then echo "the game or the launcher is running: not now"; exit 1; fi
+if tasklist | grep -qi "hookshot.exe\|Mako Launcher\|Willow Woods Launcher"; then echo "the game or the launcher is running: not now"; exit 1; fi
 [ -f "$V/pgogen/hookshot.exe" ] || { echo "no $V/pgogen/hookshot.exe"; exit 1; }
 PROFDATA=/c/Users/beerc/Hookshot/llvm-mingw/bin/llvm-profdata.exe
 cp "$V/pgogen/hookshot.exe" "$G/hookshot.exe"; [ -f "$V/pgogen/hookshot_vk.dll" ] && cp "$V/pgogen/hookshot_vk.dll" "$G/"

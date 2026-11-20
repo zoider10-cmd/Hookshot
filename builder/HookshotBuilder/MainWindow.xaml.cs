@@ -47,7 +47,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        OutPath.Text = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Games", "Lost Woods");
+        OutPath.Text = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Games", "Willow Woods");
         LanguageBox.ItemsSource = Strings.All;
         LanguageBox.SelectedItem = lang;
         WorkerBox.ItemsSource = BuildWorkers.Choices(Environment.ProcessorCount);
@@ -70,8 +70,8 @@ public partial class MainWindow : Window
         Loaded += (_, _) => Start();
         var tools = Tools.Find();
         ToolsNote.Text = tools != null
-            ? "Nothing else to install: Lost Woods's own build tools are here, downloaded and checked by its setup."
-            : "Lost Woods's build tools are missing from its folder. Press Build and Lost Woods offers to download them again.";
+            ? "Nothing else to install: Willow Woods's own build tools are here, downloaded and checked by its setup."
+            : "Willow Woods's build tools are missing from its folder. Press Build and Willow Woods offers to download them again.";
         SetStep(0);
         Refresh();
     }
@@ -101,7 +101,7 @@ public partial class MainWindow : Window
         }
         if (LaunchArg() is { } launchFolder)   // (Hookshot Launcher.exe in the game folder)
         {
-            SplashText.Text = "Starting Lost Woods…";
+            SplashText.Text = "Starting Willow Woods…";
             await Task.Delay(700);
             ShowMain();
             ShowLauncher(launchFolder);
@@ -187,7 +187,7 @@ public partial class MainWindow : Window
         {
             case Mode.UpdateGame:
                 FilesTitle.Text = "Update available";
-                FilesSub.Text = $"Lost Woods {updateTarget} is available. Your game is {game}: Update builds it again from the game files kept in " +
+                FilesSub.Text = $"Willow Woods {updateTarget} is available. Your game is {game}: Update builds it again from the game files kept in " +
                                 "its folder, compiling only what changed.";
                 BuildButton.Content = "Update";
                 break;
@@ -200,12 +200,12 @@ public partial class MainWindow : Window
                 break;
             case Mode.UpdateBuilder:
                 FilesTitle.Text = "Build your game";
-                FilesSub.Text = $"Lost Woods Builder {updateTarget} is available (this one is {builder}): update it first, then build.";
+                FilesSub.Text = $"Willow Woods Builder {updateTarget} is available (this one is {builder}): update it first, then build.";
                 BuildButton.Content = "Update builder";
                 break;
             default:
                 FilesTitle.Text = "Build your game";
-                FilesSub.Text = "Pick your game files and where the game goes. Lost Woods does the rest, once.";
+                FilesSub.Text = "Pick your game files and where the game goes. Willow Woods does the rest, once.";
                 BuildButton.Content = "Build the game";
                 break;
         }
@@ -229,7 +229,7 @@ public partial class MainWindow : Window
         OutPath.Text = folder;
         StepPill.Visibility = Visibility.Collapsed;
         var game = GameVersion(folder) ?? ReadVersion(folder);
-        LaunchVersion.Text = (game != null ? $"Lost Woods {game}" : "Lost Woods") + " · " + folder;
+        LaunchVersion.Text = (game != null ? $"Willow Woods {game}" : "Willow Woods") + " · " + folder;
         LaunchPlay.IsEnabled = File.Exists(GameExe(folder));
         ShowPage(LaunchPage);
         latestTag = Environment.GetEnvironmentVariable("HOOKSHOT_LATEST_TAG") is { Length: > 0 } fake ? (fake == "none" ? null : fake) : await Updater.LatestTag(Track);
@@ -243,7 +243,7 @@ public partial class MainWindow : Window
             LaunchUpdate.Visibility = Visibility.Visible;
         }
         else if (game != null && game != updateTarget)
-            LaunchStatus.Text = $"{updateTarget} is out: build this folder again with the Lost Woods Builder to get it";
+            LaunchStatus.Text = $"{updateTarget} is out: build this folder again with the Willow Woods Builder to get it";
         else LaunchStatus.Text = latestTag == null ? "Up to date with this builder (GitHub did not answer)" : "Up to date";
     }
 
@@ -772,7 +772,7 @@ public partial class MainWindow : Window
     {
         if (!File.Exists(System.IO.Path.Combine(x, "main")))
         {
-            MessageBox.Show(this, "That exefs folder has no file named main.", "Lost Woods");
+            MessageBox.Show(this, "That exefs folder has no file named main.", "Willow Woods");
             return;
         }
         sourcePicked = true;
@@ -794,7 +794,7 @@ public partial class MainWindow : Window
 
     void BrowseWork(object sender, RoutedEventArgs e)
     {
-        if (PickFolder("Choose where Lost Woods keeps its build files") is not { } picked) return;
+        if (PickFolder("Choose where Willow Woods keeps its build files") is not { } picked) return;
         ChangeWork(picked);
     }
 
@@ -805,7 +805,7 @@ public partial class MainWindow : Window
         try { Storage.MoveWork(picked); }
         catch (Exception x) when (x is IOException or UnauthorizedAccessException)
         {
-            MessageBox.Show(this, $"Lost Woods cannot keep its build files there: {x.Message}", "Lost Woods");
+            MessageBox.Show(this, $"Willow Woods cannot keep its build files there: {x.Message}", "Willow Woods");
         }
         Refresh();
     }
@@ -867,7 +867,7 @@ public partial class MainWindow : Window
                 try { await Updater.RunLatestSetup(this, Array.Empty<string>(), updateTarget, Switching); }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(this, ex.Message + " You can also download HookshotBuilder.exe from the releases page.", "Lost Woods");
+                    MessageBox.Show(this, ex.Message + " You can also download HookshotBuilder.exe from the releases page.", "Willow Woods");
                     RefreshMode();
                 }
                 return;
@@ -876,7 +876,7 @@ public partial class MainWindow : Window
         var tools = Tools.Find();
         if (tools == null)
         {
-            ShowProblem("The build tools are not in Lost Woods's folder.", tools: true);
+            ShowProblem("The build tools are not in Willow Woods's folder.", tools: true);
             return;
         }
         var args = new List<string>();
@@ -997,7 +997,7 @@ public partial class MainWindow : Window
         }
         catch (ArgumentException e)
         {
-            MessageBox.Show(this, e.Message, "Lost Woods");
+            MessageBox.Show(this, e.Message, "Willow Woods");
             return;
         }
         if (!keepRows)
@@ -1243,9 +1243,9 @@ public partial class MainWindow : Window
         // (both places when the build files are in a folder the player chose: the total counts both)
         var where = Storage.WorkChosen ? $"{Storage.Base} and {Storage.Work}" : Storage.Base;
         StorageNote.Text = freeable >= 100L << 20
-            ? $"Lost Woods Builder keeps {Storage.Gb(total)} on this PC ({where}). {Storage.Gb(freeable)} of it only makes the next " +
+            ? $"Willow Woods Builder keeps {Storage.Gb(total)} on this PC ({where}). {Storage.Gb(freeable)} of it only makes the next " +
               "update quicker and can be freed: your game keeps playing, and the next update then takes about as long as this build."
-            : $"Lost Woods Builder keeps {Storage.Gb(total)} on this PC ({where}): the builder itself.";
+            : $"Willow Woods Builder keeps {Storage.Gb(total)} on this PC ({where}): the builder itself.";
         FreeButton.Visibility = freeable >= 100L << 20 ? Visibility.Visible : Visibility.Collapsed;
         FreeButton.IsEnabled = true;
         FreeButton.Content = "Free up space";
@@ -1357,7 +1357,7 @@ public partial class MainWindow : Window
     void CopyForReport(object sender, RoutedEventArgs e)
     {
         var lines = log.ToString().Split('\n');
-        var text = $"Lost Woods Builder {Tools.Find()?.Version ?? "(source)"} on Windows {Environment.OSVersion.Version}\n" +
+        var text = $"Willow Woods Builder {Tools.Find()?.Version ?? "(source)"} on Windows {Environment.OSVersion.Version}\n" +
                    $"{ProblemTitle.Text}: {lastFailure}\n\n" + string.Join("\n", lines.Skip(Math.Max(0, lines.Length - 200)));
         try { Clipboard.SetText(text); CopyReport.Content = "Copied"; } catch (Exception) { }
     }
@@ -1374,7 +1374,7 @@ public partial class MainWindow : Window
             Application.Current.Shutdown();
             return;
         }
-        Process.Start(new ProcessStartInfo("https://github.com/zoider10-cmd/LostWoods/releases/latest") { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo("https://github.com/zoider10-cmd/WillowWoods/releases/latest") { UseShellExecute = true });
     }
 
     // ================= the update (Updater.cs): the game started this app with --update <folder> =================
@@ -1462,7 +1462,7 @@ public partial class MainWindow : Window
 
     void CloseWindow(object sender, RoutedEventArgs e)
     {
-        if (runner != null && MessageBox.Show(this, T(S.CloseQuestion), "Lost Woods", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+        if (runner != null && MessageBox.Show(this, T(S.CloseQuestion), "Willow Woods", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
         runner?.Cancel();
         Close();
     }

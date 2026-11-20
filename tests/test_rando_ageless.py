@@ -78,13 +78,20 @@ def main():
           "the two choices are not the swords, and the swords with the age-only items")
     script = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
     check("shop_parts.add(AGELESS_TABLE)" in script and 'stamp = stamp[:-1] + " ageless %d\\n" % a.ageless' in script and
-          '"rando_ageless": 0' in script and "AGELESS_SWORDS if a.ageless == 1 else AGELESS_ITEMS" in script,
+          '"rando_ageless": 0' in script and '"rando_ageless_items": 0' in script and "ageless_actors(a.ageless))" in script,
           "the table's size entry is not raised, the setting is not read, or it is not on the stamp's second line")
     header = (ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
     launcher = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
-    check('X(AGELESS, "Either age\'s items", "rando_ageless",' in header and
-          'new object[] { "rando_ageless", "Either age\'s items", new[] { "Off", "Swords", "Swords and items" }' in launcher,
-          "the setting is not a row of the game's table or the launcher's")
+    check('X(AGELESS, "Either age\'s swords", "rando_ageless",' in header and 'X(AGELESS_ITEMS, "Either age\'s items", "rando_ageless_items",' in header and
+          'new object[] { "rando_ageless", "Either age\'s swords", new[] { "Off", "On" }' in launcher and
+          'new object[] { "rando_ageless_items", "Either age\'s items", new[] { "Off", "On" }' in launcher,
+          "the two settings are not rows of the game's table or the launcher's")
+    # (the swords alone, the items alone, both; an older seed's 2 is both)
+    check(S.ageless_actors(1) == S.AGELESS_SWORDS and not set(S.ageless_actors(2)) & set(S.AGELESS_SWORDS) and
+          set(S.ageless_actors(3)) == set(S.AGELESS_ITEMS) and S.ageless_actors(0) == (),
+          "the swords and the age-only items are not chosen apart")
+    check('(1 if ini["rando_ageless"] in (1, 2) else 0) | (2 if ini["rando_ageless"] == 2 or ini["rando_ageless_items"] == 1 else 0)' in script,
+          "an older seed's swords and items is not read as both, or the two settings are not read apart")
     print("PASS: either age's items")
 
 

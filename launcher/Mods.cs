@@ -154,7 +154,7 @@ static class Mods {
                 return "No mod found in " + archiveName + ": it has no romfs folder (the game's files a mod replaces).";
             var usable = found.Where(f => f.Romfs != null).ToList();
             if (usable.Count == 0)
-                return archiveName + " changes the game's code (exefs or cheats). Lost Woods's code is already built for PC: mods like this can't work, nothing was installed.";
+                return archiveName + " changes the game's code (exefs or cheats). Willow Woods's code is already built for PC: mods like this can't work, nothing was installed.";
             bool codeLeft = found.Any(f => f.Code);
 
             // (names: the folder's own, unless it says nothing (a title id, "contents", the archive's root): then the archive's)
@@ -217,10 +217,10 @@ static class Mods {
             string names = string.Join(", ", usable.Select(f => f.Label).ToArray());
             string line = (replaced > 0 ? "Updated: " : "Installed: ") + names + ".";
             if (variants) line = "Installed " + archiveName + ": it comes in " + usable.Count + " versions. The first is on; switch on the one you want in the list.";
-            if (codeLeft) line += " Its code part (exefs or cheats) is left out: Lost Woods doesn't use those.";
+            if (codeLeft) line += " Its code part (exefs or cheats) is left out: Willow Woods doesn't use those.";
             return line;
         } catch (PathTooLongException) {
-            return "Could not install " + archiveName + ": its folders are too deep for this game folder's place. Move the game folder somewhere shorter (for example C:\\Lost Woods) and try again.";
+            return "Could not install " + archiveName + ": its folders are too deep for this game folder's place. Move the game folder somewhere shorter (for example C:\\Willow Woods) and try again.";
         } catch (Exception e) {
             return "Could not install " + archiveName + ": " + e.Message;
         } finally {
@@ -398,7 +398,7 @@ class ModListW : Widget {
         if (list.Count == 0) {
             Theme.Text_(g, "No mods yet.", Theme.Strong, Theme.Dim, new RectangleF(R.X, R.Y + 40, R.Width, 24), StringAlignment.Center, StringAlignment.Near);
             Theme.Text_(g, "Mods made for emulators work as they are: their romfs part (the game's files they replace). " +
-                           "Code mods (exefs, cheats, fps patches) can't work: Lost Woods is already built for PC.", Theme.Small, Theme.Faint,
+                           "Code mods (exefs, cheats, fps patches) can't work: Willow Woods is already built for PC.", Theme.Small, Theme.Faint,
                         new RectangleF(R.X + 40, R.Y + 72, R.Width - 80, 44), StringAlignment.Center, StringAlignment.Near);
             return;
         }
@@ -425,7 +425,7 @@ class ModListW : Widget {
             Theme.Text_(g, (i + 1) + ".", Theme.Label, Theme.Faint, new RectangleF(tx, r.Y + 9, 26, 22), StringAlignment.Near, StringAlignment.Near);
             Theme.Text_(g, m.Name, Theme.Strong, m.On ? Theme.Text : Theme.Dim, new RectangleF(tx + 24, r.Y + 7, tw - 24, 24), StringAlignment.Near, StringAlignment.Near);
             string line; Color c = Theme.Dim;
-            if (m.Files == 0) { line = m.HasCode ? "Code only (exefs or cheats): Lost Woods can't use it." : "No files the game reads."; c = Theme.Amber; }
+            if (m.Files == 0) { line = m.HasCode ? "Code only (exefs or cheats): Willow Woods can't use it." : "No files the game reads."; c = Theme.Amber; }
             else if (!m.On) { line = "Off · " + m.Files + " file" + (m.Files > 1 ? "s" : ""); c = Theme.Faint; }
             else if (m.Lost > 0) {
                 line = (m.Lost == m.Files ? "Fully replaced by " : m.Lost + " of its " + m.Files + " files replaced by ") + string.Join(", ", m.BeatenBy.ToArray());
