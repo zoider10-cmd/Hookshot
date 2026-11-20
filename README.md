@@ -26,8 +26,11 @@ from the other ports of the game as they come.
 2. Pick your game file (the builder lists the `.nup` files it finds; or **Browse…**), choose where the game goes and its
    language.
 3. Press **Build the game**: around 45 minutes, depending on your CPU. You can use your PC meanwhile.
-4. Start the game from the **Willow Woods** shortcut on your desktop. In the launcher, open **Randomizer**, press **New
-   seed**, pick the settings (or a preset) and press **Play**.
+4. Start the game from the **Willow Woods** shortcut on your desktop. In the launcher, open the **Randomizer** tab, set
+   **Randomizer** to On, pick the settings and press **Continue**.
+
+Keeping your saves: choose the game folder Mako (or an earlier build) made, and the build keeps its saves (`user\`); or
+copy the old folder's `user\` folder into the new one.
 
 Updates: the launcher and the builder check this repository's releases.
 
