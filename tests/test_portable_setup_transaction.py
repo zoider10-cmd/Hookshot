@@ -1,10 +1,8 @@
 """Execute production portable part copying and repair publication over authored directories."""
 import argparse
-import os
 from pathlib import Path
 import subprocess
 import tempfile
-import time
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_ALL_ARGS = ["--cc", "gcc"]
@@ -33,7 +31,6 @@ def main():
 #include <stdarg.h>
 #include <stdlib.h>
 #include "portable_home.h"
-#include "long_path.h"
 static HbHome g_home;
 static void fail(const wchar_t *format, ...) { (void)format; exit(90); }
 static const wchar_t *failed_stage;
@@ -42,13 +39,11 @@ static BOOL move_fixture(LPCWSTR from, LPCWSTR to) {
     return MoveFileW(from,to);
 }
 #define MoveFileW move_fixture
-#define Sleep(ms) ((void)(ms))
 '''
     part_end = source.index("} Part;") + len("} Part;")
     code += source[source.rfind("typedef struct", 0, part_end):part_end] + "\n"
-    for marker in ("static int home_path(", "static void rmtree_at(", "static void rmtree(", "static void mkdirs(", "static void read_small(",
-                   "static int part_folder(", "static int copy_tree_at(", "static int copy_part_tree(", "static BOOL move_retry(", "static int publish_install(",
-                   "static int reuse_part("):
+    for marker in ("static int home_path(", "static void rmtree(", "static void mkdirs(", "static void read_small(", "static int part_folder(",
+                   "static int copy_part_tree(", "static int publish_install(", "static int reuse_part("):
         code += function(source, marker) + "\n"
     code += r'''
 int wmain(int argc, wchar_t **argv) {
@@ -56,12 +51,11 @@ int wmain(int argc, wchar_t **argv) {
     int mode = _wtoi(argv[1]);
     if (mode == 4 || mode == 5) {
         Part part = {0};
-        strcpy(part.sha,"authored-checksum"); strcpy(part.dest,"HookshotBuilder/tools/python"); strcpy(part.from,"python");
-        strcpy(part.url,"https://invalid.example/python-authored.zip");
+        strcpy(part.sha,"authored-checksum"); strcpy(part.dest,"."); strcpy(part.from,"-"); strcpy(part.to,"-");
+        strcpy(part.url,"https://invalid.example/HookshotBuilder-python-authored.zip");
         g_home.portable = mode == 4;
         return reuse_part(argv[2],"v-new",&part,argv[3]) == _wtoi(argv[4]) ? 0 : 22;
     }
-    if (mode == 6) { rmtree(argv[2]); return 0; }
     if (mode == 2) failed_stage = argv[2];
     int ok = mode == 3 ? copy_part_tree(argv[2],argv[3]) : publish_install(argv[2],argv[3],mode != 0);
     return ok == _wtoi(argv[4]) ? 0 : 21;
@@ -121,43 +115,7 @@ int wmain(int argc, wchar_t **argv) {
         standard_candidate = versions / "standard.part"
         run(5, versions, standard_candidate, 1)
         assert not old.exists() and (standard_candidate / "HookshotBuilder/tools/python/keep").read_text() == "original reusable part"
-        # (a folder copied into itself or under itself, as --portable's home once was the zip's own HookshotBuilder: refused
-        # before anything is written, whatever the case or a trailing \; a sibling that only starts with its name is copied)
-        builder = root / "zip" / "HookshotBuilder"
-        (builder / "tools").mkdir(parents=True)
-        (builder / "HookshotBuilder.exe").write_text("builder")
-        inside = builder / "versions" / "v-new.part" / "HookshotBuilder"
-        started = time.monotonic()
-        run(3, builder, inside, 0)
-        run(3, builder, builder, 0)
-        run(3, str(builder) + "\\", str(inside).upper(), 0)
-        run(3, "\\\\?\\" + str(builder), str(builder).lower() + "\\x", 0)
-        assert time.monotonic() - started < 30 and not (builder / "versions").exists() and not (builder / "x").exists()
-        sibling = root / "zip" / "HookshotBuilder2"
-        run(3, builder, sibling, 1)
-        assert (sibling / "HookshotBuilder.exe").read_text() == "builder" and (sibling / "tools").is_dir()
-        # (a tree deeper than MAX_PATH, as the builder zip unpacked a little deep is: copied whole, and removed whole)
-        deep = root / "deep source"
-        deep_dir = deep
-        while len(str(deep_dir)) < 300:
-            deep_dir = deep_dir / ("folder %02d" % len(deep_dir.parts))
-        long = lambda path: "\\\\?\\" + str(path)
-        os.makedirs(long(deep_dir))
-        with open(long(deep_dir / "deepest file.txt"), "w", encoding="utf-8") as f:
-            f.write("past MAX_PATH")
-        (deep / "top.txt").write_text("top")
-        deep_copy = root / "deep copy"
-        run(3, deep, deep_copy, 1)
-        copied_deep = deep_copy / deep_dir.relative_to(deep) / "deepest file.txt"
-        assert len(str(copied_deep)) > 260
-        with open(long(copied_deep), encoding="utf-8") as f:
-            assert f.read() == "past MAX_PATH"
-        assert (deep_copy / "top.txt").read_text() == "top"
-        run(6, deep_copy, "-", 0)
-        run(6, deep, "-", 0)
-        assert not os.path.exists(long(deep_copy)) and not os.path.exists(long(deep))
-        print("portable setup transaction: 17 native scenarios passed; actual part reuse, source preservation, repair rollback, "
-              "no copy into itself, paths past MAX_PATH")
+        print("portable setup transaction: 9 native scenarios passed; actual part reuse, source preservation, repair rollback")
 
 
 if __name__ == "__main__":

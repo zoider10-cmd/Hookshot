@@ -20,6 +20,9 @@ static class BuilderHome
 
     public static string Base => Current.Value.Root;
     public static bool Portable => Current.Value.Portable;
+    public static string DefaultGame => Portable
+        ? Path.Combine(Directory.GetParent(Base)!.FullName, "Hookshot")
+        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Games", "Hookshot");
 
     internal static Home Resolve(string? requested, string appDirectory, string standard, bool portableRequested = false)
     {
@@ -34,7 +37,7 @@ static class BuilderHome
         if (portableRequested)
             throw new IOException("The portable Builder home was not passed to this process.");
 
-        // (the setup installs the builder as versions/<tag>/HookshotBuilder: its home is up to three folders above it)
+        // Setup versions/<tag>/HookshotBuilder and ZIP fallback builders/<tag>/HookshotBuilder have the same depth.
         DirectoryInfo? directory = new(Path.GetFullPath(appDirectory));
         for (var depth = 0; depth <= 3 && directory != null; depth++, directory = directory.Parent)
             if (IsMarked(directory.FullName)) return new(Absolute(directory.FullName), true);
@@ -78,5 +81,27 @@ static class BuilderHome
         child.Environment[RootVariable] = Base;
         if (Portable) child.Environment[PortableVariable] = "1";
         else child.Environment.Remove(PortableVariable);
+    }
+
+    /// Paths on this portable volume travel with its drive letter; external volumes keep their explicit absolute path.
+    public static string? SavePath(string? path) => SavePath(Current.Value, path);
+
+    internal static string? SavePath(Home home, string? path)
+    {
+        if (!home.Portable || string.IsNullOrEmpty(path)) return path;
+        if (Path.IsPathRooted(path) && !Path.IsPathFullyQualified(path))
+            throw new IOException("A portable path must be relative or fully qualified: " + path);
+        var full = Path.GetFullPath(path, home.Root);
+        return string.Equals(Path.GetPathRoot(full), Path.GetPathRoot(home.Root), StringComparison.OrdinalIgnoreCase)
+            ? Path.GetRelativePath(home.Root, full) : full;
+    }
+
+    public static string? LoadPath(string? path) => LoadPath(Current.Value, path);
+
+    internal static string? LoadPath(Home home, string? path)
+    {
+        if (!home.Portable || string.IsNullOrEmpty(path) || Path.IsPathFullyQualified(path)) return path;
+        if (Path.IsPathRooted(path)) throw new IOException("A portable path must be relative or fully qualified: " + path);
+        return Path.GetFullPath(path, home.Root);
     }
 }

@@ -9,8 +9,8 @@ BEGIN
     BLOCK "040904b0"
     BEGIN
       VALUE "CompanyName", "Hookshot"
-      VALUE "FileDescription", "Hookshot Builder setup"
-      VALUE "ProductName", "Hookshot Builder"
+      VALUE "FileDescription", "Lost Woods Builder setup"
+      VALUE "ProductName", "Lost Woods Builder"
       VALUE "FileVersion", "1.0.0"
       VALUE "OriginalFilename", "HookshotBuilder-Setup.exe"
     END
