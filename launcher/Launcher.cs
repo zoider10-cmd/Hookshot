@@ -455,6 +455,39 @@ public static class SaveSlots {
         }
     }
 
+    // (Willow Woods) A save emptied for a new seed, its name kept: what it held is kept first as a copy (SaveCopies, named
+    // "<name> before a new seed <date>"), with its record of the checks collected; its seed goes (the new one is set after).
+    public static string StartOver(string dir, string saveFolder, string name) {
+        string current;
+        var names = Names(dir, saveFolder, out current);
+        int at = names.FindIndex(n => Same(n, name));
+        if (at < 0) return "That save is not there any more.";
+        bool played = Same(current, names[at]);
+        string from = played ? Path.Combine(dir, "user", saveFolder) : Path.Combine(Root(dir, saveFolder), names[at]);
+        string copy = SaveCopies.Clean(names[at] + " before a new seed " + DateTime.Now.ToString("yyyy-MM-dd HH.mm"));
+        string to = Path.Combine(SaveCopies.Root(dir, saveFolder), copy);
+        try {
+            if (HasFiles(from)) {
+                if (Directory.Exists(to)) return "A copy named \"" + copy + "\" is there already: try again in a minute.";
+                SaveCopies.CopyTree(from, to + ".part");
+                Directory.Move(to + ".part", to);
+            }
+            string record = played ? (saveFolder == Rando ? Path.Combine(dir, "rando", "collected.txt") : null) : from + ".collected.txt";
+            if (record != null && File.Exists(record)) { File.Copy(record, to + ".collected.txt", true); File.Delete(record); }
+            if (played) { foreach (string f in Directory.GetFiles(from)) File.Delete(f); foreach (string d in Directory.GetDirectories(from)) Directory.Delete(d, true); }
+            else if (Directory.Exists(from)) Directory.Delete(from, true);
+            if (saveFolder == Rando) {
+                string seed = Path.Combine(SeedRoot(dir), names[at]);
+                if (File.Exists(seed + ".txt")) File.Delete(seed + ".txt");
+                if (Directory.Exists(seed)) Directory.Delete(seed, true);
+            }
+            return null;
+        } catch (Exception ex) {
+            try { if (Directory.Exists(to + ".part")) Directory.Delete(to + ".part", true); } catch { }
+            return ex.Message;
+        }
+    }
+
     // A save that is not being played, and what it held, gone for good. One of the ten slots there are to begin with is
     // not taken from the list: it is that slot, empty and without a name, again ("Slot 3: empty").
     public static string Delete(string dir, string saveFolder, string name) {
@@ -790,7 +823,7 @@ class RandoSeedForm : Form {
     // settings used)
     internal static string LastFile(string dir) { return Path.Combine(dir, "rando_last_settings.txt"); }
 
-    public RandoSeedForm(string dir, string save, string shown) {
+    public RandoSeedForm(string dir, string save, string shown, Dictionary<string, int> initial = null) {
         this.dir = dir; this.save = save;
         Text = "New seed: " + shown;
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
@@ -812,6 +845,11 @@ class RandoSeedForm : Form {
         foreach (string line in start) {
             int eq = line.IndexOf('='), v;
             if (eq > 0 && int.TryParse(line.Substring(eq + 1).Trim(), out v)) has[line.Substring(0, eq).Trim()] = v;
+        }
+        if (initial != null) {   // (Willow Woods: from the Randomizer page's New seed: the page's settings, to confirm)
+            has = new Dictionary<string, int>(initial);
+            top.Text = "The settings from the Randomizer page. Change any here, then press Create seed.";
+            preset.Items[0] = "The Randomizer page's";
         }
         // (the rows by section, in the sections' order, then any other)
         var byKey = new Dictionary<string, object[]>();
@@ -914,10 +952,16 @@ class PlayChoiceForm : Form {
     readonly Button delete = new Button(), seed = new Button(), up = new Button(), down = new Button(), use = new Button();
     readonly HashSet<string> empty = new HashSet<string>();   // (the saves that hold nothing)
     string current;
+    // (Willow Woods: opened by the Randomizer page's New seed: the randomizer's saves only, and the save chosen gets the
+    //  new seed, its settings first confirmed in RandoSeedForm, filled with the page's (seedSettings))
+    readonly bool forSeed;
+    readonly Dictionary<string, int> seedSettings;
 
-    public PlayChoiceForm(string dir, int mode) {
+    public PlayChoiceForm(string dir, int mode, Dictionary<string, int> seedSettings = null) {
         this.dir = dir; Mode = LauncherForm.MasterQuestOn ? mode : Math.Min(mode, 1);
-        Text = "Choose the game and the save";
+        this.seedSettings = seedSettings; forSeed = seedSettings != null;
+        if (forSeed) Mode = 1;
+        Text = forSeed ? "New seed: choose its save" : "Choose the game and the save";
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(520, 492);
@@ -933,6 +977,15 @@ class PlayChoiceForm : Form {
             Controls.Add(modes[i]);
         }
         var mid = new Label { Text = "Its save. Each keeps its own progress:", AutoSize = true, Location = new Point(16, 92) };
+        if (forSeed) {
+            top.Text = "Which save gets the new seed?";
+            top.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
+            foreach (var m in modes) m.Visible = false;
+            var how = new Label { Text = "Pick an empty slot, or a save to start over (its progress is kept as a copy first),\nor make a new save below. Then the seed's settings are shown to confirm.",
+                                  AutoSize = false, Size = new Size(490, 44), Location = new Point(16, 40), ForeColor = Theme.Dim };
+            Controls.Add(how);
+            mid.Text = "The randomizer's saves:";
+        }
         list.SetBounds(16, 118, 450, 230); list.IntegralHeight = false;
         list.BackColor = Color.FromArgb(40, 60, 32); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
@@ -949,6 +1002,7 @@ class PlayChoiceForm : Form {
         Style(use, "Use this save", 224, 444, 124);   // (the randomizer's saves: the settings chosen and a seed made, RandoSeedForm)
         Style(up, "\u25B2", 472, 118, 32); Style(down, "\u25BC", 472, 152, 32);   // (the chosen save moved up or down in the list)
         play.BackColor = Theme.Blue;
+        if (forSeed) { play.Text = "Next"; use.Visible = false; }
         Controls.AddRange(new Control[] { mid, list, low, name, add, copy, rename, play, cancel, delete, seed, up, down, use });
         delete.Click += (o, e) => OnDelete();
         use.Click += (o, e) => OnUse();
@@ -984,7 +1038,7 @@ class PlayChoiceForm : Form {
             modes[i].BackColor = on ? (i == 2 ? Color.FromArgb(150, 110, 46) : Theme.Blue) : Color.FromArgb(52, 78, 41);
             modes[i].FlatAppearance.BorderColor = on ? Color.White : Color.FromArgb(101, 150, 80);
         }
-        seed.Visible = Mode == 1;
+        seed.Visible = Mode == 1 && !forSeed;
         list.Items.Clear(); empty.Clear();
         foreach (string n in SaveSlots.Names(dir, SaveCopies.Folders[Mode], out current)) {
             list.Items.Add(n);
@@ -1087,6 +1141,32 @@ class PlayChoiceForm : Form {
         Fill(next);
     }
 
+    // (Willow Woods) the save chosen for the new seed: started over when it has progress (a copy kept first, after asking),
+    // named when it is an empty slot, the seed's settings confirmed (the page's), and made the save played next
+    void OnSeedSave() {
+        if (list.SelectedIndex < 0) return;
+        string n = (string)list.SelectedItem, folder = SaveCopies.Folders[1];
+        if (LauncherForm.GameRunning()) {
+            MessageBox.Show(this, "Close the game first.", "Saves", MessageBoxButtons.OK, MessageBoxIcon.Information); return;
+        }
+        if (!empty.Contains(n)) {
+            int answer;
+            using (var ask = new AskForm("New seed", "\"" + n + "\" has progress.\n\nStart it over on the new seed? Its progress is kept as a copy first " +
+                                         "(More > Files and help > Save copies brings it back).", "Pick another save", "Start it over")) {
+                ask.ShowDialog(this);
+                answer = ask.Answer;
+            }
+            if (answer != 1) return;
+            string error = SaveSlots.StartOver(dir, folder, n);
+            if (error != null) { MessageBox.Show(this, error, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); Fill(n); return; }
+        } else if (!SaveNameForm.Ask(this, dir, folder, ref n)) return;   // (an empty slot is named first)
+        using (var f = new RandoSeedForm(dir, n, n, seedSettings)) if (f.ShowDialog(this) != DialogResult.OK) { Fill(n); return; }
+        string chosen = SaveSlots.Select(dir, folder, n);
+        if (chosen != null) { MessageBox.Show(this, chosen, "Saves", MessageBoxButtons.OK, MessageBoxIcon.Warning); Fill(n); return; }
+        Save = n;
+        DialogResult = DialogResult.OK; Close();
+    }
+
     void OnUse() {
         if (list.SelectedIndex < 0 || (string)list.SelectedItem == current) return;
         string n = (string)list.SelectedItem, folder = SaveCopies.Folders[Mode];
@@ -1100,6 +1180,7 @@ class PlayChoiceForm : Form {
     }
 
     void OnPlay() {
+        if (forSeed) { OnSeedSave(); return; }
         if (list.SelectedIndex < 0) return;
         Save = (string)list.SelectedItem;
         if (!SaveNameForm.Ask(this, dir, SaveCopies.Folders[Mode], ref Save)) return;   // (an empty slot is named before it is played)
@@ -2051,8 +2132,9 @@ class Btn : Widget {
             using (var b = new SolidBrush(Theme.A(Gold ? Theme.Amber : Theme.Blue, (int)((5 + 6 * pulse + 8 * h) * (Enabled ? 1 : 0.2f))))) g.FillPath(b, p);
         }
         using (var path = Theme.Round(R, 16)) {
-            Color top0 = Gold ? Color.FromArgb(232, 168, 52) : Color.FromArgb(117, 204, 78), top1 = Gold ? Color.FromArgb(255, 214, 120) : Theme.Cyan;
-            Color bot0 = Gold ? Color.FromArgb(150, 92, 18) : Color.FromArgb(99, 200, 61), bot1 = Gold ? Theme.Amber : Theme.Blue;
+            // (Willow Woods: a deep forest green, lighter under the mouse: white words on the bright green were hard to read)
+            Color top0 = Gold ? Color.FromArgb(232, 168, 52) : Color.FromArgb(62, 118, 44), top1 = Gold ? Color.FromArgb(255, 214, 120) : Color.FromArgb(82, 146, 58);
+            Color bot0 = Gold ? Color.FromArgb(150, 92, 18) : Color.FromArgb(30, 70, 24), bot1 = Gold ? Theme.Amber : Color.FromArgb(44, 94, 34);
             using (var br = new LinearGradientBrush(R, Theme.Mix(top0, top1, h * 0.4f), Theme.Mix(bot0, bot1, h),
                                                     LinearGradientMode.Vertical)) g.FillPath(br, path);
             // (a shine sweeping across now and then)
@@ -2071,16 +2153,18 @@ class Btn : Widget {
                 }
                 g.Restore(state);
             }
-            using (var top = new LinearGradientBrush(new RectangleF(R.X, R.Y, R.Width, R.Height / 2 + 1), Color.FromArgb(50, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), LinearGradientMode.Vertical)) {
+            using (var top = new LinearGradientBrush(new RectangleF(R.X, R.Y, R.Width, R.Height / 2 + 1), Color.FromArgb(22, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), LinearGradientMode.Vertical)) {
                 var state = g.Save(); g.SetClip(path); g.FillRectangle(top, R.X, R.Y, R.Width, R.Height / 2); g.Restore(state);
             }
             using (var pen = new Pen(Color.FromArgb(90, 255, 255, 255), 1.2f)) g.DrawPath(pen, path);
         }
         string sub = Sub != null ? Sub() : null;
+        using (var b = new SolidBrush(Color.FromArgb(Enabled ? 110 : 40, 0, 0, 0)))   // (a soft shadow under the words)
+            Theme.Spaced(g, Text, Theme.Play, b, R.X + R.Width / 2 + 1, R.Y + R.Height / 2 - Theme.Play.Size * 0.62f - (sub != null ? 8 : 0) + 2, 6);
         using (var b = new SolidBrush(Enabled ? Color.White : Theme.A(Color.White, 120)))
             Theme.Spaced(g, Text, Theme.Play, b, R.X + R.Width / 2, R.Y + R.Height / 2 - Theme.Play.Size * 0.62f - (sub != null ? 8 : 0), 6);
         if (sub != null)
-            Theme.Text_(g, sub, Theme.Small, Color.FromArgb(235, 255, 255, 255), new RectangleF(R.X, R.Bottom - 22, R.Width, 18),
+            Theme.Text_(g, sub, Theme.Small, Color.FromArgb(255, 232, 196, 110), new RectangleF(R.X, R.Bottom - 22, R.Width, 18),
                         StringAlignment.Center, StringAlignment.Center);
     }
     public override bool Animating { get { return Style == Kind.Play && !Gold; } }
@@ -3745,10 +3829,21 @@ class LauncherForm : Form {
         Invalidate();
     }
 
+    // (Willow Woods: New seed asks which save gets it (PlayChoiceForm's seed mode), confirms the page's settings there, and
+    // makes that save the one played next)
     void OnNewSeed() {
-        randoSeed = NewSeed();
-        randoDropImport = true;
-        SaveOptions();
+        if (GameRunning()) { MessageBox.Show(this, "Close the game first.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        var now = new Dictionary<string, int>();
+        foreach (var row in RandoRows) now[(string)row[0]] = settings[(string)row[0]].Value;
+        using (var f = new PlayChoiceForm(dir, 1, now)) {
+            if (f.ShowDialog(this) != DialogResult.OK) return;
+        }
+        mqMode = false;
+        try { Directory.CreateDirectory(Path.Combine(dir, "user")); File.WriteAllText(ModeFile, "game"); } catch { }
+        if (settings["rando_on"].Value == 0) settings["rando_on"].Set(1, true);
+        LoadAll();   // (the save chosen brings its new seed and settings: SaveSlots.Select)
+        SlotsChanged = true; Refresh(); SlotsChanged = false;
+        Invalidate();
     }
 
     // (the settings' choices in the table's order, without the on / off selector: what a seed ID holds)
