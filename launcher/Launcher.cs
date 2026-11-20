@@ -903,13 +903,13 @@ class RandoSeedForm : Form {
         }
         preset.SelectedIndex = 0;
         preset.SelectedIndexChanged += (o, e) => ApplyPreset(preset.SelectedIndex);
-        var ok = new Button { Text = "Create seed" };
+        var ok = new Button { Text = "Create and start" };   // (Willow Woods: the game starts with the new seed after it)
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
         foreach (var b in new[] { ok, cancel }) {
             b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(52, 78, 41); b.ForeColor = Color.White;
             b.FlatAppearance.BorderColor = Color.FromArgb(101, 150, 80);
         }
-        ok.SetBounds(338, 616, 130, 30); cancel.SetBounds(474, 616, 110, 30); ok.BackColor = Theme.Blue;
+        ok.SetBounds(318, 616, 150, 30); cancel.SetBounds(474, 616, 110, 30); ok.BackColor = Theme.Blue;
         var foot = new Label { Text = "A preset sets every row; change any row after.", AutoSize = false, ForeColor = Theme.Dim,
                                Location = new Point(16, 620), Size = new Size(310, 24), Font = small };
         Controls.AddRange(new Control[] { top, pl, preset, panel, foot, ok, cancel });
@@ -1107,8 +1107,10 @@ class PlayChoiceForm : Form {
                 n = made;
             }
         }
-        using (var f = new RandoSeedForm(dir, n, SaveSlots.Shown(n, empty.Contains(n)).Replace(":  empty", ""))) f.ShowDialog(this);
-        Fill(n);
+        using (var f = new RandoSeedForm(dir, n, SaveSlots.Shown(n, empty.Contains(n)).Replace(":  empty", "")))
+            if (f.ShowDialog(this) != DialogResult.OK) { Fill(n); return; }
+        Save = n;   // (Create and start: the window closes as Play does, and the launcher plays this save)
+        DialogResult = DialogResult.OK; Close();
     }
 
     void OnDelete() {
@@ -3845,6 +3847,7 @@ class LauncherForm : Form {
         LoadAll();   // (the save chosen brings its new seed and settings: SaveSlots.Select)
         SlotsChanged = true; Refresh(); SlotsChanged = false;
         Invalidate();
+        OnPlay(false);   // (Create and start: the seed is written and the game started, as Continue does)
     }
 
     // (the settings' choices in the table's order, without the on / off selector: what a seed ID holds)
