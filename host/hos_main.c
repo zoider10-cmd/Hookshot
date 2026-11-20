@@ -1229,6 +1229,45 @@ static int oot_gamedata_string(Ctx *c, uint32_t hash, char *buf, size_t size) {
     return 1;
 }
 
+/* (Willow Woods, a test's) The labels of the functions a build traced (nx2/oot_patches.py patch_trace, HOOKSHOT_TRACE_FNS)
+   counted, and every 3 s those that ran logged with how many times since: "trace f_<fn>: start 60, 80a99904 60, ...". */
+#define HOS_TRACE_SLOTS 2048
+static struct { unsigned long long fn, at; long long count, shown; } hos_trace_tab[HOS_TRACE_SLOTS];
+void hos_trace_label(Ctx *c, unsigned long long fn, unsigned long long at) {
+    /* (at a function's start, also its first argument's low byte, counted as "a<n>": which kind of call it was) */
+    if (!at && c) hos_trace_label(NULL, fn, 0xa00 + (c->x[1] & 0xff));
+    if (!at && c) hos_trace_label(NULL, fn, 0x100000000ULL | (c->x[30] & 0xffffffffULL));   /* (and who called it: "1<lr>") */
+    const unsigned key = (unsigned)((fn * 31 + at) % HOS_TRACE_SLOTS);
+    for (unsigned i = 0, k = key; i < HOS_TRACE_SLOTS; i++, k = (k + 1) % HOS_TRACE_SLOTS) {
+        if (!hos_trace_tab[k].fn) { hos_trace_tab[k].fn = fn; hos_trace_tab[k].at = at; }
+        if (hos_trace_tab[k].fn == fn && hos_trace_tab[k].at == at) { __atomic_add_fetch(&hos_trace_tab[k].count, 1, __ATOMIC_RELAXED); break; }
+    }
+    static long long next;
+    const long long now = hos_now_ns();
+    if (now < next) return;
+    next = now + 3000000000LL;
+    static char line[8192];
+    unsigned long long fns[16]; int nf = 0;
+    for (unsigned k = 0; k < HOS_TRACE_SLOTS; k++) {
+        if (!hos_trace_tab[k].fn) continue;
+        int seen = 0;
+        for (int j = 0; j < nf; j++) seen |= fns[j] == hos_trace_tab[k].fn;
+        if (!seen && nf < 16) fns[nf++] = hos_trace_tab[k].fn;
+    }
+    for (int j = 0; j < nf; j++) {
+        size_t n = (size_t)snprintf(line, sizeof line, "trace f_%llx:", fns[j]);
+        for (unsigned k = 0; k < HOS_TRACE_SLOTS && n + 40 < sizeof line; k++) {
+            if (hos_trace_tab[k].fn != fns[j]) continue;
+            const long long now_count = __atomic_load_n(&hos_trace_tab[k].count, __ATOMIC_RELAXED), d = now_count - hos_trace_tab[k].shown;
+            if (!d) continue;
+            hos_trace_tab[k].shown = now_count;
+            if (hos_trace_tab[k].at) n += (size_t)snprintf(line + n, sizeof line - n, " %llx %lld", hos_trace_tab[k].at, d);
+            else n += (size_t)snprintf(line + n, sizeof line - n, " start %lld", d);
+        }
+        hos_log("%s", line);
+    }
+}
+
 /* (Willow Woods) Where a game-data string's text lives (its getter's answer, f_80cd0ea0): 0 when it is not there. */
 static uint64_t oot_gamedata_string_at(Ctx *c, uint32_t hash) {
     const uint64_t mgr = oot_singleton(c, OOT_GAMEDATA_SLOT);

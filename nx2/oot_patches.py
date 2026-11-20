@@ -1605,6 +1605,64 @@ def patch_ocarina_wait(s):
     return s
 
 
+# (Willow Woods, a test's) HOOKSHOT_TRACE_FNS="f_80a98d40,f_804d6eb0" at build time: each of those functions counts its
+# start and every label it comes to (hos_trace_label, host/hos_main.c), logged every few seconds, to see which way a function
+# of the game's goes (young Link's boots, 2026-11-20). Without the variable nothing changes.
+TRACE_LABEL = re.compile(r"^L_([0-9a-f]+):;$", re.M)
+
+
+def patch_trace(source):
+    """the functions HOOKSHOT_TRACE_FNS names, each label counted; (the source, how many functions), or None"""
+    names = [n.strip() for n in os.environ.get("HOOKSHOT_TRACE_FNS", "").split(",") if n.strip()]
+    hooked = 0
+    for name in names:
+        head = "void %s(Ctx *__restrict A64_NOESC c) {\n" % name
+        start = source.find(head)
+        if start < 0:
+            continue
+        end = source.find("\n}\n", start)
+        body = source[start:end]
+        if "hos_trace_label(" in body:
+            continue
+        fn = int(name[2:], 16)
+        body = body.replace(head, head + "    hos_trace_label(c, 0x%xULL, 0);\n" % fn, 1)
+        body = TRACE_LABEL.sub(lambda m: m.group(0) + " hos_trace_label(c, 0x%xULL, 0x%sULL);" % (fn, m.group(1)), body)
+        source = source[:start] + body + source[end:]
+        hooked += 1
+    if not hooked:
+        return None
+    return source.replace('#include "a64.h"\n', '#include "a64.h"\nextern void hos_trace_label(Ctx *c, unsigned long long fn, unsigned long long at);\n', 1), hooked
+
+
+# (the randomizer's fork, Either age's items) Young Link's boots: the game asks IsChild (the player's PlayerGameParam, f_804d6db0)
+# where it puts the saved boots (EquipBoot) in his boots slot (f_82e16c80, kinds 8 to 10 of its requests skipped for a child: 9
+# is the boots') and each frame where it gives their effect (f_804d6eb0), and a child stops there: his boots slot stayed empty
+# and the d-pad did nothing (traced 2026-11-20 on the owner's saves "Adult Boots Test" and "Child Boots Test"). The answers at
+# those calls go through hos_oot_boots_child (host/oot_rando.c): no child with the setting on, at the first for the boots' kind
+# only (x20, the request's kind; 8 and 10 are other adult things, left). (Kind 14 of f_82e16c80 also asks, and is the child's
+# own: left.) Each: (the call as lifted, the hook after it).
+BOOTS_CHILD_HOOK = " c->x[0] = hos_oot_boots_child(c->x[0], %s);   /* (nx2/oot_patches.py patch_boots_child) */"
+BOOTS_CHILD_CALLS = (("c->x[30] = 0x82e16d88ULL; f_804d6db0(c);", BOOTS_CHILD_HOOK % "c->x[20]"),
+                     ("c->x[30] = 0x804d6ed8ULL; f_804d6db0(c);", BOOTS_CHILD_HOOK % "9"))
+
+
+def patch_boots_child(source):
+    """the IsChild answers above; (the source, how many hooked), or None when this file has neither call"""
+    hooked = 0
+    for call, hook in BOOTS_CHILD_CALLS:
+        if call + hook in source:
+            hooked += 1
+            continue
+        if source.count(call) == 1:
+            source = source.replace(call, call + hook)
+            hooked += 1
+    if not hooked:
+        return None
+    if "extern unsigned long long hos_oot_boots_child(" not in source:
+        source = source.replace('#include "a64.h"\n', '#include "a64.h"\nextern unsigned long long hos_oot_boots_child(unsigned long long is_child, unsigned long long kind);\n', 1)
+    return source, hooked
+
+
 def patch_file(s, name, protect_hearts=False):
     """One lifted file's patches (apply(), and nx2/chunks.py edit_c, a process per file): (its text, the places counted in it, the
     lines to print). The counts add up over the files; report() decides from the sums"""
@@ -1731,6 +1789,17 @@ def patch_file(s, name, protect_hearts=False):
             lines.append("oot_patches: the day's 15:00 cap in " + name)
         out = clock
         counts["day clock cap"] += 1
+    boots = patch_boots_child(out) if protect_hearts else None   # (the randomizer's fork: young Link's boots)
+    if boots is not None:
+        if boots[0] != out:
+            lines.append("oot_patches: young Link's boots (%d IsChild answers) in %s" % (boots[1], name))
+        out = boots[0]
+        counts["boots child answers"] += boots[1]
+    traced = patch_trace(out)   # (a test's: HOOKSHOT_TRACE_FNS)
+    if traced is not None:
+        out = traced[0]
+        counts["traced functions"] += traced[1]
+        lines.append("oot_patches: %d function(s) traced (HOOKSHOT_TRACE_FNS) in %s" % (traced[1], name))
     wheel = patch_wheel_fewest(out) if protect_hearts else None   # (the randomizer's fork: the R item wheel with one item)
     if wheel is not None:
         if wheel != out:
@@ -1940,6 +2009,9 @@ def report(paths, counts, protect_hearts=False):
     if protect_hearts and total["shelf actor hook"] != len(SHELF_ACTOR_SITES):   # (bug 69: a shelf's tier for what Link has now)
         print("oot_patches: WARNING: the map actors' name readers were hooked %d times, not %d: a shelf of a family may show "
               "an old tier" % (total["shelf actor hook"], len(SHELF_ACTOR_SITES)))
+    if protect_hearts and total["boots child answers"] != len(BOOTS_CHILD_CALLS):   # (Either age's items: young Link's boots)
+        print("oot_patches: WARNING: the boots' IsChild answers were hooked %d times, not %d: young Link's boots do nothing"
+              % (total["boots child answers"], len(BOOTS_CHILD_CALLS)))
     if total["sound jobs"] != 1:   # (without it, above 60 fps sounds and then the music can stop after a few loading zones)
         print("oot_patches: WARNING: the sound job was found %d times, not once" % total["sound jobs"])
     if total["music manager time"] != 1:   # (without it, above 60 fps the music manager's timers run at 60 / fps of real time)
