@@ -1977,9 +1977,9 @@ static class RandoLayout {
                            "+shops", "rando_scrubs", "rando_major", "rando_progressive", "rando_sword_shield", "+forest", "rando_open_door", "rando_ageless", "rando_letter",
                            "+skips", "+rupees", "rando_ammo_pickups" } },
         new RandoSection { Title = "SHOULD WORK", Sub = "made and checked, not yet played through", Accent = ShouldWork,
-            Rows = new[] { "rando_ganon_bridge", "rando_hints", "rando_magic" } },
+            Rows = new[] { "rando_ganon_bridge", "rando_hints", "rando_magic", "rando_ageless_items" } },
         new RandoSection { Title = "DOES NOT WORK YET", Sub = "not made yet: leave these off, they can break a seed", Accent = Experimental,
-            Rows = new[] { "rando_keys", "rando_dungeon_rewards", "rando_ageless_items" } },
+            Rows = new[] { "rando_keys", "rando_dungeon_rewards" } },
     };
     public static RandoCombo Combo(string entry) {
         if (!entry.StartsWith("+")) return null;
