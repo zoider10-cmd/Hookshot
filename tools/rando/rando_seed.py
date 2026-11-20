@@ -4996,6 +4996,38 @@ AGELESS_ITEMS = AGELESS_SWORDS + (
 AGELESS_ARRAYS = ("EquipmentArray", "ItemArray")
 
 
+# Each Link's moves are clips of his own animation files (Model/Player_<age>_NN_Animation): the child's hold no Bow, Hammer,
+# Hookshot, two-handed sword or boots clips, the adult's no Slingshot, Boomerang or Deku Stick ones (counted 2026-11-20;
+# the owner saw it too: young Link holds the Biggoron's Sword and the attack button does nothing). Both Links play one
+# animation graph (AS/Player_*.root.asb: the same) on skeletons of the same bone names, so with the age-only items each is
+# lent the other's files that hold those clips, after his own (his own clips found first): Adult 01 the Bow, 02_H the
+# Hammer, the Hookshots and the boots; Child 01 the Boomerang and Deku Sticks, 03 the Slingshot.
+AGELESS_ANIMS = {
+    "Player_Child": ("Component/AnimationParam/Player_Child.engine__component__AnimationParam.bgyml",
+                     ("Player_Adult_01_Animation", "Player_Adult_02_H_Animation")),
+    "Player_Adult": ("Component/AnimationParam/Player.engine__component__AnimationParam.bgyml",
+                     ("Player_Child_01_Animation", "Player_Child_03_Animation")),
+}
+
+
+def ageless_anims(pack, param, lent):
+    """a Link's pack (bytes) with `lent` animation files listed after his own in his AnimationParam `param`: (the new pack,
+    how many were added). ValueError: the file is not the list known."""
+    parts = sarc_read(pack)
+    tree, version = byml_parse(parts[param])
+    if tree[0] != "dict" or tree[1].get("AnimationResources", ("",))[0] != "array":
+        raise ValueError("%s has no AnimationResources list" % param)
+    rows = tree[1]["AnimationResources"][1]
+    have = {r[1]["ModelProjectName"][1] for r in rows if r[0] == "dict" and "ModelProjectName" in r[1]}
+    added = 0
+    for name in lent:
+        if name not in have:
+            rows.append(("dict", collections.OrderedDict([("ModelProjectName", ("string", name))])))
+            added += 1
+    parts[param] = byml_build(tree, version)
+    return sarc_write(parts), added
+
+
 def ageless_actors(which):
     """the actors made usable by both ages: which's bit 1 the swords, bit 2 the age-only items (AGELESS_ITEMS but the swords)"""
     return (AGELESS_SWORDS if which & 1 else ()) + (tuple(x for x in AGELESS_ITEMS if x not in AGELESS_SWORDS) if which & 2 else ())
@@ -6504,6 +6536,20 @@ def main():
         except (OSError, ValueError, KeyError, struct.error, IndexError) as e:
             sys.exit("either age's items: %s. Nothing written." % e)
         print("Either age's items: %s usable by both ages (%d marks set)" % (("", "the swords", "the age-only items", "the swords and the age-only items")[a.ageless], count))
+    if a.ageless & 2:   # (the age-only items: each Link lent the other's clips, AGELESS_ANIMS)
+        try:
+            lent = 0
+            for who, (param, files) in AGELESS_ANIMS.items():
+                rel = "Pack/Actor/%s.pack.zs" % who
+                was = pack_files[rel] if rel in pack_files else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
+                new, added = ageless_anims(was, param, files)
+                pack_files[rel] = new
+                pack_sizes["Pack/Actor/%s.pack" % who] = len(new)
+                pack_parts.add(param)
+                lent += added
+        except (OSError, ValueError, KeyError, struct.error, IndexError) as e:
+            sys.exit("either age's items' moves: %s. Nothing written." % e)
+        print("Either age's items: each Link lent the other's moves (%d animation files)" % lent)
 
     # ---- Magic and the fairies' gifts: the first magic as an item of our own, no free magic (MAGIC_ITEM, magic_free) ----
     if a.magic:
