@@ -176,7 +176,7 @@ def sources(rows):
     check("rando_seed.py" in side and "not placed yet" in side, "the log no longer says what places the chests and that the other settings do nothing yet")
     check((ROOT / "tools" / "rando" / "rando_seed.py").is_file(), "tools/rando/rando_seed.py, which the log names, is gone")
     # ---- a seed's ID: made and read in the launcher as the header does (the menu's tab did it before) ----
-    check("static class RandoId {" in launcher and 'Text = "Copy seed ID"' in launcher and 'Text = "Paste seed ID"' in launcher and
+    check("static class RandoId {" in launcher and 'new SeedIdBtn {' in launcher and 'Click = OnCopySeedId' in launcher and 'Text = "Paste seed ID"' in launcher and
           'const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";' in launcher and "const int Bits = 75, Check = 8, Slots = 16, FormatVersion = 1;" in launcher and
           "const int LongBits = 100, LongSlots = 28, LongVersion = 2;" in launcher and
           "for (int i = Slots; i < LongSlots; i++) longer |= Choice(choices, i) != 0;" in launcher and
