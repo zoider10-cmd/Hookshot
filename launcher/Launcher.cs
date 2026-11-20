@@ -769,7 +769,7 @@ class RandoSeedForm : Form {
     // (the presets: each a setting's choice by its place in the row's choices, clamped to the choices available. A key
     // not named keeps its first choice, Off)
     internal static readonly string[] PresetNames = { "Last used", "Beginner", "Standard", "Everything shuffled" };
-    static readonly Dictionary<string, int>[] Presets = {
+    internal static readonly Dictionary<string, int>[] Presets = {
         null,
         new Dictionary<string, int> { { "rando_chests", 3 }, { "rando_quests", 1 }, { "rando_shops", 3 }, { "rando_major", 1 },
             { "rando_progressive", 1 }, { "rando_open_deku", 1 }, { "rando_open_forest", 1 }, { "rando_open_door", 1 },
@@ -903,7 +903,7 @@ class RandoSeedForm : Form {
 // (the window of the second button of the left panel: the game to play and its save, chosen, then played. Continue
 // plays the last ones without asking)
 class PlayChoiceForm : Form {
-    public static readonly string[] Modes = { "Normal", "Randomizer", "Master Quest" };
+    public static readonly string[] Modes = { "Vanilla", "Randomizer", "Master Quest" };   // (Willow Woods: "Vanilla", the game as it is)
     public int Mode;       // (0 the normal game, 1 the randomizer, 2 Master Quest)
     public string Save;    // (the save chosen, of that game)
     readonly string dir;
@@ -1844,6 +1844,72 @@ static class RandoLayout {
     }
 }
 
+// (Willow Woods) the seed's ID on the Randomizer page: big, and a click copies it
+class SeedIdBtn : Widget {
+    public Func<string> Id; public Action Click;
+    float copied = -10;
+    public override void Down(PointF p, LauncherForm ui) { if (Click != null) { Click(); copied = ui.Time; } }
+    public override void Paint(Graphics g, LauncherForm ui) {
+        float h = Hover;
+        string id = Id();
+        using (var path = Theme.Round(R, 10)) {
+            using (var br = new SolidBrush(Theme.Mix(Theme.Card, Theme.CardHi, h))) g.FillPath(br, path);
+            using (var pen = new Pen(Theme.Mix(Theme.Line, Theme.Blue, h), 1f)) g.DrawPath(pen, path);
+        }
+        // (the copy mark: two sheets)
+        float ix = R.Right - 30, iy = R.Y + R.Height / 2 - 8;
+        using (var pen = new Pen(Theme.Mix(Theme.Dim, Theme.Cyan, h), 1.5f)) {
+            g.DrawRectangle(pen, ix + 4, iy, 10, 12);
+            g.DrawRectangle(pen, ix, iy + 4, 10, 12);
+        }
+        bool justCopied = ui.Time - copied < 1.6f;
+        string text = justCopied ? "Copied: share it to play the same seed" : id ?? "No seed yet";
+        Theme.Text_(g, text, justCopied ? Theme.Body : Theme.Strong, justCopied ? Theme.Cyan : id == null ? Theme.Faint : Color.White,
+                    new RectangleF(R.X + 12, R.Y, R.Width - 48, R.Height), StringAlignment.Near, StringAlignment.Center);
+    }
+    public override bool Animating { get { return true; } }
+    public override string Help { get { return "Click to copy the seed's ID. It holds the seed and every setting: a friend who pastes it plays the same seed."; } }
+}
+
+// (Willow Woods) the first start's guide: three steps
+class WelcomeForm : Form {
+    public WelcomeForm() {
+        Text = "Welcome to " + Fork.Name;
+        FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+        StartPosition = FormStartPosition.CenterParent;
+        ClientSize = new Size(520, 360);
+        BackColor = Theme.Bg1; ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        var title = new Label { Text = "Welcome to " + Fork.Name, AutoSize = true, Location = new Point(24, 20),
+                                Font = new Font("Segoe UI", 16f, FontStyle.Bold), ForeColor = Theme.Cyan };
+        string[] steps = {
+            "1.  Randomizer tab: pick a preset (Beginner is a good start) or set each setting. They are sorted by how tested they are: the experimental ones may not work yet.",
+            "2.  Cosmetics tab, if you like: colours for the tunics, the hearts, the shields and more.",
+            "3.  Press Continue. A new seed makes the first start take a few minutes: let it finish.",
+            "Tip: click the seed's ID to copy it. A friend who pastes it plays the very same seed.",
+        };
+        int y = 70;
+        var controls = new List<Control> { title };
+        foreach (string s in steps) {
+            int need = TextRenderer.MeasureText(s, Font, new Size(472, 0), TextFormatFlags.WordBreak).Height;
+            var l = new Label { Text = s, AutoSize = false, Location = new Point(24, y), Size = new Size(472, need + 4),
+                                ForeColor = s.StartsWith("Tip") ? Theme.Dim : Theme.Text };
+            controls.Add(l);
+            y += l.Height + 10;
+        }
+        var go = new Button { Text = "Set up a randomizer", DialogResult = DialogResult.OK };
+        var later = new Button { Text = "Later", DialogResult = DialogResult.Cancel };
+        foreach (var b in new[] { go, later }) {
+            b.FlatStyle = FlatStyle.Flat; b.BackColor = Theme.Card; b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Theme.Line;
+        }
+        go.BackColor = Theme.Blue;
+        go.SetBounds(276, y + 10, 150, 32); later.SetBounds(432, y + 10, 70, 32);
+        ClientSize = new Size(520, y + 58);
+        controls.Add(go); controls.Add(later);
+        Controls.AddRange(controls.ToArray());
+        AcceptButton = go; CancelButton = later;
+    }
+}
+
 // (Willow Woods) a heading over a group of rows in a scrolling list: its name in its colour, a few words after, a line
 class Heading : Widget {
     public string Text, Sub; public Color Accent;
@@ -1951,6 +2017,7 @@ class Btn : Widget {
     public enum Kind { Ghost, Primary, Play, Link }
     public string Text; public Kind Style; public Action Click; public Font Font = Theme.Strong;
     public bool Gold;   // (Mako: the Master Quest Play button)
+    public Func<string> Sub;   // (Willow Woods: a line under a Play button's word, when there is one)
     public Image Logo;  // (Mako: the left panel's Master Quest button: its logo on a dark button)
     public override void Down(PointF p, LauncherForm ui) { if (Click != null) Click(); }
     public override void Paint(Graphics g, LauncherForm ui) {
@@ -2009,8 +2076,12 @@ class Btn : Widget {
             }
             using (var pen = new Pen(Color.FromArgb(90, 255, 255, 255), 1.2f)) g.DrawPath(pen, path);
         }
+        string sub = Sub != null ? Sub() : null;
         using (var b = new SolidBrush(Enabled ? Color.White : Theme.A(Color.White, 120)))
-            Theme.Spaced(g, Text, Theme.Play, b, R.X + R.Width / 2, R.Y + R.Height / 2 - Theme.Play.Size * 0.62f, 6);
+            Theme.Spaced(g, Text, Theme.Play, b, R.X + R.Width / 2, R.Y + R.Height / 2 - Theme.Play.Size * 0.62f - (sub != null ? 8 : 0), 6);
+        if (sub != null)
+            Theme.Text_(g, sub, Theme.Small, Color.FromArgb(235, 255, 255, 255), new RectangleF(R.X, R.Bottom - 22, R.Width, 18),
+                        StringAlignment.Center, StringAlignment.Center);
     }
     public override bool Animating { get { return Style == Kind.Play && !Gold; } }
     // (Mako: the Master Quest Play button, plain: a deep gold, lighter under the mouse)
@@ -2044,6 +2115,7 @@ class Btn : Widget {
 class Selector : Widget {
     public string Key, Label, HelpText; public string[] Items; public int[] Values; public int Index;
     public Action<Selector> Changed;
+    public Color[] Swatches;   // (Willow Woods: a colour beside each choice's name, Color.Empty for none)
     // (how many of its choices can be picked, from the first; 0: all of them. The randomizer's settings that are not
     // made yet, LauncherForm.RandoNotYet: with one choice left the row says so and does nothing)
     public int Limit;
@@ -2080,6 +2152,12 @@ class Selector : Widget {
         Theme.Text_(g, Label.ToUpperInvariant(), Theme.Label, Theme.Dim, new RectangleF(R.X + 16, R.Y + 9, R.Width - 90, 18), StringAlignment.Near, StringAlignment.Near);
         Theme.Text_(g, Last == 0 ? NotYet : Index >= 0 ? Items[Index] : "", Theme.Value, Last == 0 ? Theme.Faint : Theme.Mix(Theme.Text, Color.White, flash),
                     new RectangleF(R.X + 16, R.Y + 27, R.Width - 92, 24), StringAlignment.Near, StringAlignment.Near);
+        if (Swatches != null && Index >= 0 && Index < Swatches.Length && Swatches[Index] != Color.Empty) {
+            float tw = g.MeasureString(Items[Index], Theme.Value).Width;
+            var sw = new RectangleF(R.X + 16 + tw + 4, R.Y + 31, 14, 14);
+            using (var b = new SolidBrush(Swatches[Index])) g.FillEllipse(b, sw);
+            using (var pen = new Pen(Theme.A(Color.White, 90))) g.DrawEllipse(pen, sw);
+        }
         Arrow(g, Left, true, Index > 0, ui.MouseIn(Left));
         Arrow(g, Right, false, Index < Last, ui.MouseIn(Right));
     }
@@ -2468,6 +2546,10 @@ class LauncherForm : Form {
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and
     // the colours of its COLOURS in the same order (tests/test_rando_cosmetics.py))
     static readonly string[] TunicColours = { "The game's", "Green", "Red", "Blue", "Purple", "Pink", "Orange", "Yellow", "Teal", "White", "Black" };
+    // (Willow Woods: a swatch beside each colour's name, in TunicColours' order; the game's own has none)
+    internal static readonly Color[] TunicSwatches = { Color.Empty, Color.FromArgb(64, 168, 60), Color.FromArgb(206, 44, 44), Color.FromArgb(48, 92, 222),
+        Color.FromArgb(132, 64, 204), Color.FromArgb(238, 128, 176), Color.FromArgb(240, 132, 34), Color.FromArgb(238, 208, 52),
+        Color.FromArgb(32, 178, 160), Color.FromArgb(242, 242, 238), Color.FromArgb(28, 28, 30) };
     static readonly int[] TunicValues = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
     static readonly object[][] CosmeticRows = {
         new object[] { "cosmetic_tunic_kokiri", "Kokiri Tunic", TunicColours, TunicValues,
@@ -2632,10 +2714,14 @@ class LauncherForm : Form {
         if (UpdatesOn) widgets.Add(updateButton);
         // (Continue plays the game and the save played last, without asking; the button under it opens the window to choose
         // the game (the normal one, the randomizer, Master Quest) and its save, and plays those. PlayMode, SaveSlots)
-        playButton = new Btn { Text = "CONTINUE", Style = Btn.Kind.Play, R = new RectangleF(32, 504, 336, 62), Click = OnPlay };
+        playButton = new Btn { Text = "CONTINUE", Style = Btn.Kind.Play, R = new RectangleF(32, 504, 336, 62), Click = OnPlay,
+                               Sub = () => PlayStamp() != PlayedStamp() ? "new seed or changes: the start takes longer" : null };
         widgets.Add(playButton);
         widgets.Add(new ChoiceBtn { Text = "CHOOSE GAME AND SAVE", R = new RectangleF(32, 576, 336, 64), Click = OnChoose,
-                                    Now = () => PlayChoiceForm.Modes[PlayMode()] + "  ·  " + SaveSlots.Current(dir, SaveFolder()) });
+                                    Now = () => {
+                                        string save = SaveSlots.Current(dir, SaveFolder()), tag = PlayMode() == 1 ? SaveSlots.SeedTag(dir, save) : "";
+                                        return PlayChoiceForm.Modes[PlayMode()] + "  ·  " + save + (tag.Length > 0 ? "  ·  seed " + tag : "");
+                                    } });
         // (the randomizer's save in the game keeps the seed there is as its own from the start, when it has none kept yet: a
         //  new seed made before its next Play is then not taken for its own)
         try {
@@ -2655,9 +2741,10 @@ class LauncherForm : Form {
         // (tabs)
         // (Mako 4.1: five tabs, the rarely used pages under More with their own row: fewer buttons on every page. The
         //  randomizer's two pages are tabs of their own between Game and Mods, with page numbers of their own)
-        string[] names = ModsOn ? new[] { "Home", "Graphics", "Game", "Randomizer", "Cosmetics", "Mods", "More" }
-                                : new[] { "Home", "Graphics", "Game", "Randomizer", "Cosmetics", "More" };
-        int[] firstPage = ModsOn ? new[] { 0, 1, 2, RandoPage, CosmeticPage, 7, 3 } : new[] { 0, 1, 2, RandoPage, CosmeticPage, 3 };
+        // (Willow Woods: the randomizer's two pages first; Mako's Home, the PC check, is under More)
+        string[] names = ModsOn ? new[] { "Randomizer", "Cosmetics", "Graphics", "Game", "Mods", "More" }
+                                : new[] { "Randomizer", "Cosmetics", "Graphics", "Game", "More" };
+        int[] firstPage = ModsOn ? new[] { RandoPage, CosmeticPage, 1, 2, 7, 3 } : new[] { RandoPage, CosmeticPage, 1, 2, 3 };
         float tx = LeftW + 36;
         using (var g = CreateGraphics()) {
             // (nine tabs with the randomizer's two and Master Quest: the room around each name is made smaller until they fit the page's width)
@@ -2674,8 +2761,8 @@ class LauncherForm : Form {
                 tx += w + gap;
             }
         }
-        string[] subNames = { "Fixes", "AMD FSR", "Files & help", "About" };
-        int[] subPages = { 3, 4, 8, 5 };
+        string[] subNames = { "Fixes", "AMD FSR", "Files & help", "PC check", "About" };
+        int[] subPages = { 3, 4, 8, 0, 5 };
         float sx = LeftW + 36;
         using (var g = CreateGraphics())
             for (int i = 0; i < subNames.Length; i++) {
@@ -2707,8 +2794,10 @@ class LauncherForm : Form {
         widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx, 542, 160, 36), Page = CosmeticPage, Click = OnRandomCosmetics });
         // (under the selectors: the seed's three buttons, and its ID beside them)
         widgets.Add(new Btn { Text = "New seed", R = new RectangleF(cx, 542, 116, 36), Page = RandoPage, Click = OnNewSeed });
-        widgets.Add(new Btn { Text = "Copy seed ID", R = new RectangleF(cx + 126, 542, 136, 36), Page = RandoPage, Click = OnCopySeedId });
-        widgets.Add(new Btn { Text = "Paste seed ID", R = new RectangleF(cx + 272, 542, 136, 36), Page = RandoPage, Click = OnPasteSeedId });
+        widgets.Add(new Btn { Text = "Paste seed ID", R = new RectangleF(cx + 126, 542, 136, 36), Page = RandoPage, Click = OnPasteSeedId });
+        // (Willow Woods: the seed's ID, big, copied by a click on it)
+        widgets.Add(new SeedIdBtn { R = new RectangleF(cx + 272, 542, cw - 272, 36), Page = RandoPage,
+                                    Id = () => randoSeed != 0 ? SeedId() : null, Click = OnCopySeedId });
         var langItems = new string[Languages.Length]; var langValues = new int[Languages.Length];
         for (int i = 0; i < Languages.Length; i++) { langItems[i] = Languages[i][1]; langValues[i] = i; }
         langSel = new Selector { Key = "language", Label = "Language", Items = langItems, Values = langValues, Page = 2, Index = 0,
@@ -2779,7 +2868,7 @@ class LauncherForm : Form {
         if (vramTooHigh) { vramTooHigh = false; SaveEnv(); }
         int first;
         string[] cmd = Environment.GetCommandLineArgs();
-        ShowPage(cmd.Length > 2 && int.TryParse(cmd[2], out first) && first >= 0 && first <= CosmeticPage ? first : 0);
+        ShowPage(cmd.Length > 2 && int.TryParse(cmd[2], out first) && first >= 0 && first <= CosmeticPage ? first : RandoPage);
         { var t0 = tabs.Find(x => x.Index == TabPage(PageNow)).R; tabX = t0.X; tabW = t0.Width; }
         float scroll0;   // (a third argument: the Recommended tab scrolled, for screenshots)
         if (cmd.Length > 3 && float.TryParse(cmd[3], out scroll0)) {
@@ -2794,6 +2883,18 @@ class LauncherForm : Form {
         if (!string.IsNullOrEmpty(testMod)) Shown += (s, e) => ModsInstall(testMod.Split('|'));
         if (Environment.GetEnvironmentVariable("MAKO_TEST_BENCH") == "1") Shown += (s, e) => { if (!GameRunning()) StartBench(); };
 
+        // (Willow Woods: the first time a game folder's launcher opens, three steps; user\launcher_welcome.txt once seen)
+        Shown += (s, e) => {
+            string seen = Path.Combine(dir, "user", "launcher_welcome.txt");
+            if (File.Exists(seen) || Environment.GetEnvironmentVariable("WILLOW_NO_WELCOME") == "1") return;
+            try { Directory.CreateDirectory(Path.Combine(dir, "user")); File.WriteAllText(seen, "seen\n"); } catch { }
+            using (var f = new WelcomeForm()) {
+                if (f.ShowDialog(this) == DialogResult.OK) {
+                    ShowPage(RandoPage);
+                    if (settings["rando_on"].Value == 0) settings["rando_on"].Set(1, true);
+                }
+            }
+        };
         timer = new System.Windows.Forms.Timer { Interval = 16 };
         timer.Tick += (s, e) => Step();
         timer.Start();
@@ -2808,7 +2909,10 @@ class LauncherForm : Form {
 
     // The Randomizer page's list of settings: what of it shows (down to the seed's buttons), how far it is scrolled, its
     // whole height. A row is shown, lit and pressed only inside the view.
-    static readonly RectangleF RandoView = new RectangleF(LeftW + 1, 104, W - LeftW - 2, 430);
+    // (Willow Woods: on the Randomizer page the list starts under its bar, the search box and the presets)
+    const float RandoTop = 150;
+    RectangleF RandoView { get { return PageNow == RandoPage ? new RectangleF(LeftW + 1, RandoTop, W - LeftW - 2, 534 - RandoTop)
+                                                             : new RectangleF(LeftW + 1, 104, W - LeftW - 2, 430); } }
     float randoScroll, randoHeight;
     float cosmeticScroll, cosmeticHeight;   // (the Cosmetics page's list, the same way)
     bool InView(Widget w, PointF p) { return !w.Scrolls || RandoView.Contains(p); }
@@ -2842,19 +2946,22 @@ class LauncherForm : Form {
     // what a seed's ID holds), but the page shows RandoLayout's sections: a heading, then rows, a row being a setting's own
     // selector or a merged one (RandoCombo) that sets several settings at once.
     readonly Dictionary<Selector, RandoCombo> combos = new Dictionary<Selector, RandoCombo>();
+    // (the page's sections as made: each heading and its rows, in order; LayoutRando places the ones the search leaves)
+    readonly List<KeyValuePair<Heading, List<Selector>>> randoSections = new List<KeyValuePair<Heading, List<Selector>>>();
+    float randoX0, randoColW;
+    TextBox randoSearch;
     void BuildRandoPage(float x0, float colW) {
+        randoX0 = x0; randoColW = colW;
         foreach (var row in RandoRows) {
             var s = new Selector { Key = (string)row[0], Label = (string)row[1], Items = (string[])row[2], Values = (int[])row[3],
                                    HelpText = (string)row[4], Page = NoPage };
             if (RandoNotYet.ContainsKey(s.Key)) s.Limit = RandoNotYet[s.Key];
             s.Changed = OnSetting; settings[s.Key] = s; widgets.Add(s);
         }
-        float y = 112;
         foreach (var section in RandoLayout.Sections) {
-            widgets.Add(new Heading { Text = section.Title, Sub = section.Sub, Accent = section.Accent, Page = RandoPage, Scrolls = true,
-                                      R = new RectangleF(x0, y, colW * 2 + 14, 28), HomeY = y });
-            y += 34;
-            int place = 0;
+            var head = new Heading { Text = section.Title, Sub = section.Sub, Accent = section.Accent, Page = RandoPage, Scrolls = true };
+            widgets.Add(head);
+            var rows = new List<Selector>();
             foreach (string entry in section.Rows) {
                 Selector s;
                 var combo = RandoLayout.Combo(entry);
@@ -2864,15 +2971,92 @@ class LauncherForm : Form {
                     s = new Selector { Key = "combo_" + combo.Id, Label = combo.Label, Items = combo.Items, Values = vals, HelpText = combo.Help };
                     s.Changed = OnCombo; combos[s] = combo; widgets.Add(s);
                 } else s = settings[entry];
-                float ry = y + place / 2 * 47;
-                s.Page = RandoPage; s.Scrolls = true; s.HomeY = ry;
-                s.R = new RectangleF(x0 + place % 2 * (colW + 14), ry, colW, 45);
-                place++;
+                s.Scrolls = true;
+                rows.Add(s);
             }
-            y += (place + 1) / 2 * 47 + 12;
+            randoSections.Add(new KeyValuePair<Heading, List<Selector>>(head, rows));
         }
-        randoHeight = y - 14 - RandoView.Y;
+        // (the bar over the list: a search box, and the presets)
+        randoSearch = new TextBox { Location = new Point((int)x0, 110), Size = new Size(236, 26), BorderStyle = BorderStyle.FixedSingle,
+                                    BackColor = Theme.Card, ForeColor = Theme.Text, Font = new Font("Segoe UI", 10.5f), Visible = false };
+        randoSearch.TextChanged += (o, e) => { LayoutRando(); Invalidate(); };
+        Controls.Add(randoSearch);
+        randoSearch.HandleCreated += (o, e) => SendMessage(randoSearch.Handle, 0x1501, (IntPtr)1, "Search settings...");   // (EM_SETCUEBANNER)
+        string[] presetNames = { "Beginner", "Standard", "Everything" };
+        float px = x0 + 2 * colW + 14;
+        for (int i = presetNames.Length - 1; i >= 0; i--) {
+            float w = i == 2 ? 112 : 100;
+            px -= w;
+            int at = i + 1;
+            widgets.Add(new Btn { Text = presetNames[i], R = new RectangleF(px, 106, w, 34), Page = RandoPage, Font = Theme.Label, Click = () => ApplyRandoPreset(at) });
+            px -= 8;
+        }
+        randoPresetsX = px;
+        LayoutRando();
     }
+    float randoPresetsX;
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, string l);
+
+    // (a row the search finds: its name or its choices; with none of those found anywhere, its words too (loose))
+    static bool Matches(Selector s, string q, bool loose) {
+        if (q.Length == 0) return true;
+        var c = StringComparison.OrdinalIgnoreCase;
+        if (s.Label.IndexOf(q, c) >= 0 || (loose && (s.HelpText ?? "").IndexOf(q, c) >= 0)) return true;
+        foreach (string item in s.Items) if (item.IndexOf(q, c) >= 0) return true;
+        return false;
+    }
+    int randoShown;   // (how many rows the search leaves: none, and the page says so)
+    void LayoutRando() {
+        string q = randoSearch != null ? randoSearch.Text.Trim() : "";
+        float y = RandoTop + 8;
+        randoShown = 0;
+        bool loose = !randoSections.Exists(sec => sec.Value.Exists(s => Matches(s, q, false)));
+        foreach (var section in randoSections) {
+            var shown = section.Value.FindAll(s => Matches(s, q, loose));
+            foreach (var s in section.Value) s.Page = NoPage;
+            var head = section.Key;
+            head.Page = shown.Count > 0 ? RandoPage : NoPage;
+            if (shown.Count == 0) continue;
+            head.R = new RectangleF(randoX0, y, randoColW * 2 + 14, 28); head.HomeY = y;
+            y += 34;
+            for (int place = 0; place < shown.Count; place++) {
+                var s = shown[place];
+                float ry = y + place / 2 * 47;
+                s.Page = RandoPage; s.HomeY = ry;
+                s.R = new RectangleF(randoX0 + place % 2 * (randoColW + 14), ry, randoColW, 45);
+            }
+            randoShown += shown.Count;
+            y += (shown.Count + 1) / 2 * 47 + 12;
+        }
+        randoHeight = y - 14 - RandoTop;
+        randoScroll = 0;
+        ScrollRando(0);
+    }
+
+    // (a preset: every setting to its choice in RandoSeedForm's presets, clamped to what the row offers; the experimental
+    //  settings stay off; the randomizer on)
+    void ApplyRandoPreset(int p) {
+        string[] names = { "", "Beginner", "Standard", "Everything" };
+        if (MessageBox.Show(this, "Set every randomizer setting to the " + names[p] + " preset?\n\nYour current choices on this page are replaced; " +
+                            "the experimental settings are left off. You can change any of them after.", Fork.Name,
+                            MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        var experimental = new HashSet<string>(RandoLayout.Sections[RandoLayout.Sections.Length - 1].Rows);
+        loading = true;
+        foreach (var row in RandoRows) {
+            string key = (string)row[0];
+            if (key == "rando_on") continue;
+            int want;
+            if (experimental.Contains(key) || !RandoSeedForm.Presets[p].TryGetValue(key, out want)) want = 0;
+            settings[key].Set(want, false);
+        }
+        settings["rando_on"].Set(1, false);
+        loading = false;
+        SyncCombos();
+        OnSetting(settings["rando_on"]);
+        Invalidate();
+    }
+
     // (a merged row chosen: each setting under it set, then saved as a row of its own would be)
     void OnCombo(Selector c) {
         if (loading) return;
@@ -2904,6 +3088,7 @@ class LauncherForm : Form {
     // behind a switch of their own. Off sets them all back to their own looks; the switch is the launcher's only (on at
     // start when any of them is set).
     Selector modelsSwitch;
+    readonly HashSet<string> pendingSwatches = new HashSet<string>();
     readonly List<Selector> modelRows = new List<Selector>();
     float cosmeticsBase;   // (the list's height without the characters' rows)
     void BuildCosmeticPage(float x0, float colW) {
@@ -2930,12 +3115,14 @@ class LauncherForm : Form {
         ShowModels();
     }
     float CosmeticSection(float x0, float colW, float y, string title, string sub, Color accent, object[][] rows) {
+        foreach (var row in rows) if (row[2] == (object)TunicColours) pendingSwatches.Add((string)row[0]);
         widgets.Add(new Heading { Text = title, Sub = sub, Accent = accent, Page = CosmeticPage, Scrolls = true,
                                   R = new RectangleF(x0, y, colW * 2 + 14, 28), HomeY = y });
         y += 34;
         AddSelectors(rows, CosmeticPage, x0, colW, cosmetics, 47, 45, true);
         for (int i = 0; i < rows.Length; i++) {
             var s = cosmetics[(string)rows[i][0]];
+            if (pendingSwatches.Contains(s.Key)) s.Swatches = TunicSwatches;
             float ry = y + i / 2 * 47;
             s.HomeY = ry; s.R = new RectangleF(x0 + i % 2 * (colW + 14), ry, colW, 45);
         }
@@ -2956,12 +3143,13 @@ class LauncherForm : Form {
     public bool MouseIn(RectangleF r) { return r.Contains(mouse); }
 
     // (Mako 4.1) the tab a page belongs to: More's pages light More (3)
-    public int TabPage(int page) { return page == 4 || page == 5 || page == 8 ? 3 : page == 6 ? 0 : page; }
+    public int TabPage(int page) { return page == 0 || page == 4 || page == 5 || page == 6 || page == 8 ? 3 : page; }
     public void ShowPage(int k) {
         if (k == 6) k = 0;   // (the old Master Quest page)
         if (k == PageNow && pageFade >= 1 && tabW > 0) return;
         if (k == 7 && k != PageNow && !ModBusy) RefreshMods();
         PageNow = k; pageFade = 0;
+        if (randoSearch != null) randoSearch.Visible = k == RandoPage;
     }
 
     // ---- animation ----
@@ -3178,9 +3366,11 @@ class LauncherForm : Form {
         if (PageNow == 2)
             Theme.Text_(g, "Controls are set in game: press Insert or F1 for the menu.", Theme.Small, Theme.Faint, new RectangleF(x, 112 + (GameRows.Length + 3) / 2 * 70 + 6, 500, 20),
                         StringAlignment.Near, StringAlignment.Near);
-        if (PageNow == RandoPage) {   // (the randomizer: the seed beside its button, and what the page does not do yet)
-            string seed = randoSeed != 0 ? SeedId() : "No seed yet";
-            Theme.Text_(g, seed, Theme.Small, Theme.Dim, new RectangleF(x + 420, 542, W - LeftW - 72 - 420, 36), StringAlignment.Near, StringAlignment.Center);
+        if (PageNow == RandoPage) {   // (the randomizer: the search's result, and what the page does not do yet)
+            Theme.Text_(g, "PRESETS", Theme.Label, Theme.Dim, new RectangleF(randoPresetsX - 70, 106, 64, 34), StringAlignment.Far, StringAlignment.Center);
+            if (randoShown == 0)
+                Theme.Text_(g, "No setting matches \"" + randoSearch.Text.Trim() + "\".", Theme.Body, Theme.Dim, new RectangleF(x, RandoTop + 20, 500, 24),
+                            StringAlignment.Near, StringAlignment.Near);
             Theme.Text_(g, "Placed when Play is pressed. The seed's ID holds the seed and every setting above: the same ID is the same seed.",
                         Theme.Small, Theme.Faint, new RectangleF(x, 584, W - LeftW - 72, 18), StringAlignment.Near, StringAlignment.Near);
         }
@@ -3568,6 +3758,28 @@ class LauncherForm : Form {
         return v;
     }
     string SeedId() { return RandoId.Make(randoSeed, RandoChoices()); }
+
+    // (Willow Woods) what the next Play writes for the game: the randomizer's settings and seed when it is on, and the
+    // colours. Different from the last Play's (rando\launcher_played.txt): Continue says the start will take longer
+    string PlayedFile { get { return Path.Combine(dir, "rando", "launcher_played.txt"); } }
+    string playedRead; DateTime playedAt;
+    string PlayedStamp() {
+        try {
+            var at = File.Exists(PlayedFile) ? File.GetLastWriteTimeUtc(PlayedFile) : DateTime.MinValue;
+            if (playedRead == null || at != playedAt) { playedAt = at; playedRead = at == DateTime.MinValue ? "" : File.ReadAllText(PlayedFile); }
+        } catch { playedRead = ""; }
+        return playedRead;
+    }
+    string PlayStamp() {
+        var sb = new StringBuilder();
+        bool on = settings.ContainsKey("rando_on") && settings["rando_on"].Value != 0 && !mqMode;
+        if (on) {
+            sb.Append("seed=").Append(randoSeed);
+            foreach (var row in RandoRows) sb.Append(';').Append(settings[(string)row[0]].Value);
+        }
+        foreach (var kv in cosmetics) sb.Append('|').Append(kv.Key).Append('=').Append(kv.Value.Value);
+        return sb.ToString();
+    }
 
     void OnCopySeedId() {
         if (randoSeed == 0) { randoSeed = NewSeed(); randoDropImport = true; SaveOptions(); }
@@ -4325,7 +4537,7 @@ class LauncherForm : Form {
 
     void PaintRecommended(Graphics g, float x) {
         float w = W - LeftW - 72;
-        var area = new RectangleF(x, 104, w + 14, 496);
+        var area = new RectangleF(x, 150, w + 14, 450);   // (Willow Woods: under More's row of pages)
         if (recPage == null) {
             using (var probe = new Bitmap(1, 1)) using (var pg = Graphics.FromImage(probe)) {
                 pg.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
@@ -4360,7 +4572,7 @@ class LauncherForm : Form {
             float total = ModItems.Count * (ModListW.RowH + ModListW.Gap) - ModListW.Gap;
             ModScroll = Math.Max(0, Math.Min(ModScroll - e.Delta * 0.5f, Math.Max(0, total - 370)));
         }
-        if (PageNow == 0) recScroll = Math.Max(0, Math.Min(recScroll - e.Delta * 0.6f, Math.Max(0, recHeight - 488)));
+        if (PageNow == 0) recScroll = Math.Max(0, Math.Min(recScroll - e.Delta * 0.6f, Math.Max(0, recHeight - 442)));
         if (PageNow == RandoPage) ScrollRando(-e.Delta * 47f / 120);   // (a notch of the wheel: a line of the list)
         if (PageNow == CosmeticPage) ScrollCosmetics(-e.Delta * 47f / 120);
     }
@@ -4641,6 +4853,7 @@ class LauncherForm : Form {
         if (!RunRandomizer()) return;
         if (rando) SaveSlots.SeedKeep(dir, played);   // (the seed this save is played on, from now: SaveSlots)
         if (!RunCosmetics()) return;
+        try { Directory.CreateDirectory(Path.GetDirectoryName(PlayedFile)); File.WriteAllText(PlayedFile, PlayStamp()); } catch { }   // (what Continue compares with: PlayStamp)
         try {
             var psi = new ProcessStartInfo(exe) { WorkingDirectory = dir, UseShellExecute = false };
             psi.EnvironmentVariables["HOOKSHOT_NO_UPDATE_CHECK"] = "1";   // (the launcher did it)

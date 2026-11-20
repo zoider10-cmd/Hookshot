@@ -178,7 +178,8 @@ Say "copyleft" ((Test-Path (Join-Path $dir "user\save_slots\save_rando\Third.par
 def main():
     src = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
     # (the save played is named under the left panel's second button; the row's own Save button said the same and is gone)
-    check('Now = () => PlayChoiceForm.Modes[PlayMode()] + "  ·  " + SaveSlots.Current(dir, SaveFolder())' in src and
+    check('return PlayChoiceForm.Modes[PlayMode()] + "  ·  " + save + (tag.Length > 0 ? "  ·  seed " + tag : "");' in src and
+          'string save = SaveSlots.Current(dir, SaveFolder()), tag = PlayMode() == 1 ? SaveSlots.SeedTag(dir, save) : "";' in src and
           "new SaveSlotsForm(dir, saveFolder)" in src and "Saves = SaveFolder," not in src,
           "the launcher does not name the save played under its second button, or the row's Save button is back")
     # (Master Quest's page had a button for its saves; Mako 4.1 has no such page: its saves are chosen in the window of

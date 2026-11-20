@@ -117,7 +117,8 @@ def sources(rows):
     check("a.songs = (a.songs if SONGS_ANYWHERE else 1) if a.songs in (1, 2) else 0" in rando_seed,
           "the script makes Songs' Anywhere though it is held off, or no longer reads the setting")
     check("BuildRandoPage(cx, colW);" in launcher and "s.Changed = OnSetting; settings[s.Key] = s; widgets.Add(s);" in launcher and
-          '"Home", "Graphics", "Game", "Randomizer", "Cosmetics", "More"' in launcher and "new[] { 0, 1, 2, RandoPage, CosmeticPage, 3 }" in launcher and
+          '"Randomizer", "Cosmetics", "Graphics", "Game", "More"' in launcher and "new[] { RandoPage, CosmeticPage, 1, 2, 3 }" in launcher and
+          "first <= CosmeticPage ? first : RandoPage);" in launcher and "randoSearch.TextChanged += (o, e) => { LayoutRando(); Invalidate(); };" in launcher and
           "public const int RandoPage = 9, CosmeticPage = 10;" in launcher and
           # (Mako 4.1's Mods tab renames every mod's folder: the seed's and the colours' are the launcher's own, and not in its list)
           'public static readonly string[] Own = { "rando-seed", "cosmetics" };' in (ROOT / "launcher" / "Mods.cs").read_text(encoding="utf-8"),
