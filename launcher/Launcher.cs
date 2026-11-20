@@ -1928,7 +1928,10 @@ static class Fork {
     public const string Base = "v0.1.1";       // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
     public const string Version = "v0.1.1";    // (HOOKSHOT_FORK_VERSION)
     public const int Api = 30;                  // (gpu/vk/vk_api.h MKWVK_API_VERSION)
-    public const string Api_Url = "https://api.github.com/repos/zoider10-cmd/WillowWoods/releases/latest";
+    // (every release, newest first: GitHub's releases/latest leaves out pre-releases, and Willow Woods' are pre-releases.
+    //  CheckUpdate reads the first)
+    public const string Api_Url = "https://api.github.com/repos/zoider10-cmd/WillowWoods/releases?per_page=5";
+    public const string TagPage = "https://github.com/zoider10-cmd/WillowWoods/releases/tag/";
     public const string Page = "https://github.com/zoider10-cmd/WillowWoods/releases/latest";
     public const string Home = "https://github.com/zoider10-cmd/WillowWoods";
     public const string GameExe = "hookshot.exe";
@@ -2542,7 +2545,7 @@ class LauncherForm : Form {
     readonly List<TabW> tabs = new List<TabW>();
     Selector langSel;
     Btn updateButton, playButton, fsrButton, benchButton;
-    const bool UpdatesOn = false;   // (the Update button and the check at start; see where updateButton is made)
+    const bool UpdatesOn = true;   // (the Update button and the check at start; see where updateButton is made)
     // (Willow Woods: Master Quest and the Mods tab are Mako's and untested here: hidden, their code kept)
     internal const bool MasterQuestOn = false, ModsOn = false;
     const int SendLogsRow = 4;   // (FileRows' Send logs: Mako's report to its own Discord; left out, the owner's choice 2026-11-20)
@@ -2866,9 +2869,8 @@ class LauncherForm : Form {
         // (left panel: update card button and PLAY)
         updateButton = new Btn { Text = "Check again", R = new RectangleF(236, 448, 116, 30), Font = Theme.Label, Enabled = false };
         updateButton.Click = OnUpdateButton;
-        // (no Update button, no check at start: asked for by the owner, 2026-11-15. Upstream's releases are Mako's
-        //  without the randomizer, and an update from them would replace it; upstream's changes are merged by hand.
-        //  The card shows the version installed. OnUpdateButton and CheckUpdate stay for a later release of our own)
+        // (the Update button and the check at start: Willow Woods' own releases (Fork.Api_Url), never upstream Mako's, whose
+        //  releases have no randomizer. Off from 2026-11-15, on again 2026-11-20: the owner's wish, for their releases)
         if (UpdatesOn) widgets.Add(updateButton);
         // (Continue plays the game and the save played last, without asking; the button under it opens the window to choose
         // the game (the normal one, the randomizer, Master Quest) and its save, and plays those. PlayMode, SaveSlots)
@@ -4126,6 +4128,12 @@ class LauncherForm : Form {
             try {
                 string json;
                 using (var c = Client()) json = c.DownloadString(Fork.Api_Url);
+                // (the newest release alone: from its tag to the end of its assets, before the next release's)
+                int first = json.IndexOf("\"tag_name\"");
+                if (first >= 0) {
+                    int end = json.IndexOf("\"tarball_url\"", first);
+                    json = end > first ? json.Substring(first, end - first) : json.Substring(first);
+                }
                 var m = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
                 tag = m.Success ? m.Groups[1].Value : "";
                 if (tag.Length == 0 || tag == have || Older(tag, have)) status = "current";
@@ -4175,7 +4183,20 @@ class LauncherForm : Form {
     void OnUpdateButton() {
         if (updateButton.Text != "Update" || (patchDll == null && rebuildTag == null)) { CheckUpdate(); return; }
         if (GameRunning()) { MessageBox.Show(this, "Close the game first.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        if (patchDll == null) { StartRebuild(); return; }
+        if (patchDll == null) {
+            // (asked first: the whole builder is downloaded, about 300 MB, and the launcher closes while it rebuilds the folder)
+            string mb = builderZipSize > 0 ? " (" + (builderZipSize >> 20) + " MB)" : "";
+            int answer;
+            using (var ask = new AskForm("Update " + Fork.Name, "Update to " + Fork.Shown(rebuildTag) + "?\n\nThe new version is downloaded" + mb +
+                                         " and your game folder is rebuilt with it. Your saves, settings and seeds are kept. The launcher closes " +
+                                         "while it works, and the first start after takes longer.", "Update now", "See what's new")) {
+                ask.ShowDialog(this); answer = ask.Answer;
+            }
+            if (answer == 1) { OpenUrl(Fork.TagPage + rebuildTag); return; }
+            if (answer != 0) return;
+            StartRebuild();
+            return;
+        }
         SetUpdate(Theme.Blue, "Downloading " + Fork.Shown(patchTag) + "…", "", "Update", true, false);
         updProgress = 0;
         string url = patchDll, tag = patchTag; long size = patchSize;
