@@ -2412,6 +2412,8 @@ constexpr LogicItem kLogicItems[] = {
     {"BO", "a bottle", {"Empty Bottle"}},
     {"LE", "Zelda's Letter", {"Zelda's Letter"}},
     {"FO", "an ocarina", {"Fairy Ocarina", "Ocarina of Time"}},
+    // (Magic and the fairies' gifts: magic, the first or both. tools/rando/rando_seed.py MAGIC_DOUBLE)
+    {"MG", "magic", {"Magic Power", "Double Magic"}},
 };
 // (a rule's "T<N>": N Gold Skulltula tokens, by the Inventory page's count of them. tools/rando/rando_seed.py token_codes,
 // placement 12: the Skulltula house's rewards)

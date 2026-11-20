@@ -868,6 +868,7 @@ static const unsigned char oot_item_kinds[] = {OOT_CHEAT_ITEMS(OOT_NO_SECTION, O
 #define OOT_ITEM_COUNT (sizeof oot_item_names / sizeof oot_item_names[0])
 
 static int oot_item_count(Ctx *c, const char *name);
+static int oot_gamedata_int(Ctx *c, uint32_t hash, int32_t *value, int set);
 static int oot_gamedata_bool(Ctx *c, uint32_t hash, int *value);
 static int oot_gamedata_set_bool(Ctx *c, uint32_t hash, int value);
 static int oot_gamedata_string(Ctx *c, uint32_t hash, char *buf, size_t size);
@@ -957,6 +958,10 @@ static int oot_mask_alias(const char *name, char *alias, size_t size) {
 }
 
 static int oot_item_count(Ctx *c, const char *name) {
+    if (!strcmp(name, "Item_MagicMeter")) {   /* (rando_magic's first magic: kept in no pouch, read from the meter) */
+        int32_t most = 0;
+        return oot_gamedata_int(c, 0x12d63a97u, &most, 0) ? most >= 240 : -1;   /* PlayerStatus.MPMax, in tenths: 240 the first meter */
+    }
     const uint32_t song = oot_song_flag(name);
     if (song) {
         int learned = 0;
@@ -3260,7 +3265,40 @@ static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {
 #if defined(_WIN32) || defined(__linux__)
 /* With Progressive items: what a content of a family gives Link now, the next of the family he has not (by the
    spelling it was named by); NULL when it is of no family, or he has the family whole (it is given as it is). */
+/* (the randomizer's fork) Magic and the fairies' gifts (rando_magic, tools/rando/rando_seed.py MAGIC_ITEM): magic is two
+   items of the shuffle, the Gift of Doubled Magic twice. Found while Link has no magic meter (PlayerStatus.MPMax under
+   24), it is given as Item_MagicMeter, an item of the seed's own (the gift's model and its own words) that the pouch keeps
+   nothing of: its add sets the meter to 24 (oot_magic_meter). Found with the meter, it is the gift itself: 48. The spin
+   attack's gift (Item_FairyBless_MP) is no tier of magic then: it is given as it is. Whatever Progressive items says */
+#define OOT_MAGIC_ITEM "Item_MagicMeter"
+#define OOT_MAGIC_DOUBLE "Item_FairyBless_MPDouble"
+#define OOT_MAGIC_SPIN "Item_FairyBless_MP"
+#define OOT_MPMAX_HASH 0x12d63a97u   /* PlayerStatus.MPMax */
+#define OOT_MAGIC_FIRST 240   /* (the first meter, in tenths: the list of pouch actors' MPMax 24) */
+static int oot_magic_family(const char *name) {
+    int hos_rando_magic(void);   /* host/oot_rando.c */
+    return hos_rando_magic() && (!strcmp(name, OOT_MAGIC_DOUBLE) || !strcmp(name, OOT_MAGIC_SPIN) || !strcmp(name, OOT_MAGIC_ITEM));
+}
+static const char *oot_magic_give(Ctx *c, const char *name) {   /* (what is given for `name`: NULL for itself) */
+    if (strcmp(name, OOT_MAGIC_DOUBLE)) return NULL;
+    int32_t most = 0;
+    if (!oot_gamedata_int(c, OOT_MPMAX_HASH, &most, 0)) return NULL;
+    return most < OOT_MAGIC_FIRST ? OOT_MAGIC_ITEM : NULL;
+}
+static void oot_magic_meter(Ctx *c) {   /* (Item_MagicMeter added: the meter to 24 at least) */
+    int32_t most = 0;
+    if (!oot_gamedata_int(c, OOT_MPMAX_HASH, &most, 0)) {
+        hos_log("rando: magic: PlayerStatus.MPMax not found: no meter given");
+        return;
+    }
+    if (most >= OOT_MAGIC_FIRST) return;
+    int32_t want = OOT_MAGIC_FIRST;
+    oot_gamedata_int(c, OOT_MPMAX_HASH, &want, 1);
+    hos_log("rando: magic: the magic meter given (PlayerStatus.MPMax %d -> %d)", (int)most, (int)want);
+}
+
 static const char *oot_progressive_give(Ctx *c, const char *name) {
+    if (oot_magic_family(name)) return oot_magic_give(c, name);   /* (rando_magic: the magic's own tiers) */
     int spelling = 0;
     const int f = oot_family_of(name, &spelling);
     if (f < 0) return NULL;
@@ -3391,7 +3429,8 @@ void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made) {
 #if defined(_WIN32) || defined(__linux__)
     static int on = -1;
     if (on < 0) { const char *e = getenv("HOS_OOT_DROP_NAME"); on = !(e && *e == '0'); }
-    if (!on || !self || !made || !hos_rando_on() || !hos_rando_progressive()) return;
+    int hos_rando_magic(void);   /* host/oot_rando.c (rando_magic: its tiers whatever Progressive items says) */
+    if (!on || !self || !made || !hos_rando_on() || (!hos_rando_progressive() && !hos_rando_magic())) return;
     /* (the list, as f_80bf1c00 finds it) */
     uint64_t list = recomp_load64(c, made + 0x40);
     if (list) list = recomp_load64(c, list + 0x270);
@@ -3420,7 +3459,7 @@ void hos_oot_drop_name(Ctx *c, uint64_t self, uint64_t made) {
         if (!name[length]) break;
     }
     name[length] = 0;
-    if (oot_family_of(name, NULL) < 0) return;
+    if (oot_family_of(name, NULL) < 0 || (!hos_rando_progressive() && !oot_magic_family(name))) return;
     uint64_t saved[31];
     memcpy(saved, c->x, sizeof saved);   /* (oot_pouch_count calls the game: the registers are given back as they were) */
     const char *give = oot_progressive_give(c, name);
@@ -3507,7 +3546,7 @@ void hos_oot_get_name(Ctx *c, uint64_t node, int kind) {
         slot = recomp_load64(c, node + 0x38) & ~3ULL;
         if (!slot || !oot_guest_string(c, recomp_load64(c, slot), name, sizeof name)) return;
     }
-    if (!hos_rando_progressive()) return;
+    if (!hos_rando_progressive() && !oot_magic_family(name)) return;   /* (rando_magic's tiers whatever Progressive items says) */
     int spelling = 0;
     const int family = oot_family_of(name, &spelling);
     if (family < 0) return;
@@ -3961,6 +4000,19 @@ int hos_oot_pouch_add(Ctx *c) {
     }
     oot_pickup_qol(c, name);   /* (Ammo pick-ups, Rupees fill the wallet) */
     if ((int32_t)c->x[3] <= 0) return 0;
+    if (oot_magic_family(name)) {   /* (rando_magic: the first magic found is the meter, oot_magic_give) */
+        if (!strcmp(name, OOT_MAGIC_ITEM)) {
+            oot_magic_meter(c);
+            return 0;
+        }
+        const char *give = oot_magic_give(c, name);
+        if (give) {
+            hos_log("rando: magic: %s found: %s given", name, give);
+            oot_magic_meter(c);
+            oot_pouch_name(c, view, give);
+        }
+        return 0;
+    }
     if (!hos_rando_progressive()) {
         oot_fill_note(name);   /* (a bag found is a full bag) */
         return 0;

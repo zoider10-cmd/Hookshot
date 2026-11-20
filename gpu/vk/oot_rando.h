@@ -122,11 +122,14 @@
       "Talking to a Gossip Stone gives one of the seed's hints, each said by two stones: where a needed item is, an area on the way of the hero (it holds a needed item), or a foolish one (it holds none). No Mask of Truth needed. Moves no item: it can be turned on for a seed being played.", \
       "Off", "On") \
     X(AGELESS, "Either age's items", "rando_ageless", \
-      "Swords: the Kokiri Sword and the Master Sword can be equipped by both ages. Swords and items: also the shields, the boots, the Biggoron's Sword, the Slingshot, the Boomerang, Deku Sticks, the Hammer, the Hookshots and the Bow with its arrows (not yet tried in play: an item may look or act wrong on the other age). The logic does not count on it. Moves no item.", \
+      "Swords: the Kokiri Sword and the Master Sword can be equipped by both ages. Swords and items: also the shields, the boots, the Biggoron's Sword, the Slingshot, the Boomerang, Deku Sticks, the Hammer, the Hookshots and the Bow with its arrows (not working yet: the other age can set them to a button but the game does not let him use them, seen with the Bow and the Hammer for young Link; the shields and boots not tried). The logic does not count on it. Moves no item.", \
       "Off", "Swords", "Swords and items") \
     X(LETTER, "Kakariko gate", "rando_letter", \
       "Kakariko's gate to Death Mountain. Letter shuffled: the letter Zelda gives at the end of her meeting is an item of the shuffle, and the meeting gives what the seed put there; a child's check up the mountain then asks for the letter, or bombs (the Lost Woods' way to Goron City), or the Bolero of Fire when the songs are shuffled. Open: the gate is open for a child from the start (and in a save being played), as if the letter had been shown to its guard.", \
-      "As the game has it", "Letter shuffled", "Open")
+      "As the game has it", "Letter shuffled", "Open") \
+    X(MAGIC, "Magic and the fairies' gifts", "rando_magic", \
+      "The Great Fairies of the improved spin attack, doubled magic and halved damage join the shuffle (as the spell fairies do with Quest rewards), and magic becomes two items of the shuffle: the first gives the magic meter, the second doubles it. The Lens of Truth, the spells and the magic arrows no longer give magic by themselves. Needs Quest rewards.", \
+      "Off", "On")
 
 enum {
 #define OOT_RANDO_ENUM(NAME, label, key, help, ...) OOT_RANDO_##NAME,

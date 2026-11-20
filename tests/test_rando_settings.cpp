@@ -54,9 +54,12 @@ int main(int argc, char** argv) {
             a.v[i] = (int)((roll >> 16) % (uint32_t)oot_rando_settings[i].count);
         }
         oot_rando_id(&a, id);
-        bool past = false;   // (a setting past the sixteenth is set: the ID is the longer one)
+        bool past = false, past28 = false;   // (a setting past the sixteenth is set: the longer ID; past the 28th: the longest)
         for (int i = OOT_RANDO_ID_SLOTS; i < OOT_RANDO_N; i++) past = past || a.v[i] != 0;
-        if (past) CHECK("an ID with a setting past the sixteenth is 20 characters in four groups",
+        for (int i = OOT_RANDO_ID_LONG_SLOTS; i < OOT_RANDO_N; i++) past28 = past28 || a.v[i] != 0;
+        if (past28) CHECK("an ID with a setting past the 28th is 25 characters in five groups",
+                      std::strlen(id) == 29 && id[5] == '-' && id[11] == '-' && id[17] == '-' && id[23] == '-');
+        else if (past) CHECK("an ID with a setting past the sixteenth is 20 characters in four groups",
                         std::strlen(id) == 23 && id[5] == '-' && id[11] == '-' && id[17] == '-');
         else CHECK("an ID is 15 characters in three groups", std::strlen(id) == 17 && id[5] == '-' && id[11] == '-');
         CHECK("an ID loads", oot_rando_from_id(id, &b) == nullptr);
@@ -68,7 +71,8 @@ int main(int argc, char** argv) {
         OotRando c{};
         oot_rando_id_as(&a, longer, 1);
         CHECK("the longer ID is 20 characters in four groups", std::strlen(longer) == 23 && longer[5] == '-' && longer[11] == '-' && longer[17] == '-');
-        CHECK("the longer ID loads and gives back its seed and settings", oot_rando_from_id(longer, &c) == nullptr && same(a, c));
+        CHECK("the longer ID loads and gives back its seed and settings (all of them without one past the 28th)",
+              oot_rando_from_id(longer, &c) == nullptr && (past28 || same(a, c)));
         if (!past) {
             oot_rando_id_as(&a, other, 0);
             CHECK("a seed without a setting past the sixteenth keeps the ID it had", !std::strcmp(id, other));

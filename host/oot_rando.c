@@ -31,6 +31,8 @@ int hos_rando_on(void) { return rando_active; }
 
 /* Progressive items: on with the randomizer (hos_main.c hos_oot_pouch_add) */
 int hos_rando_progressive(void) { return rando_active && rando.v[OOT_RANDO_PROGRESSIVE] != 0; }
+/* Magic and the fairies' gifts (rando_magic): magic is two items of the shuffle (hos_main.c oot_magic_give) */
+int hos_rando_magic(void) { return rando_active && rando.v[OOT_RANDO_MAGIC] != 0; }
 /* Open Door of Time: on with the randomizer (hos_main.c oot_time_door) */
 /* (a test's: HOS_OOT_OPEN_DOOR=1 is the setting on, whatever the options say) */
 int hos_rando_open_door(void) {

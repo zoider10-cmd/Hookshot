@@ -159,7 +159,7 @@ def main():
     get = host[host.index("void hos_oot_get_name(Ctx *c, uint64_t node, int kind) {"):host.index("static volatile int oot_family_level[")]
     check('!strcmp(key, "UI_MessageTargetActorName")' in get and "recomp_load64(c, node + 0x40) & ~3ULL" in get and
           "recomp_load64(c, node + 0x38) & ~3ULL" in get and "chosen[i].event == event && chosen[i].family == family" in get and
-          "if (!hos_rando_progressive()) return;" in get and "recomp_store64(c, slot, kept);" in get,
+          "if (!hos_rando_progressive() && !oot_magic_family(name)) return;" in get and "recomp_store64(c, slot, kept);" in get,
           "a gift's window or show item is not given the family's next, once an event")
     mods = (ROOT / "host" / "mods.c").read_text(encoding="utf-8")
     shelf = host[host.index("int hos_oot_shelf_map(const char *rel, char *out, size_t cap) {"):host.index("int hos_oot_pouch_add(Ctx *c) {")]

@@ -78,7 +78,7 @@ def main():
         "Kokiri Forest|Gold Skulltula|KokiriForest|CA|5.0 6.0 7.0|KS", "Zora's River|Chest|ZoraRiver|CA|1.0 2.0 3.0|KS,SL,BB,BM"],
         "the checks' lines are not the area's name, the kind, the folder, the ages, the place and what the rules ask for, by area: %r" % lines[1:])
     # ---- the gifts and the scrubs' sales among them ----
-    check(set(seed.GIFT_PLACES) == {g.key for g in seed.GIFTS + seed.SCRUBS + seed.SONGS + (seed.LETTER_GIFT, seed.OCARINA_GIFT, seed.OCARINA_TIME_GIFT)}, "a gift or a scrub's sale has no place for the tracker, or a place is of no gift: %r" % sorted(
+    check(set(seed.GIFT_PLACES) == {g.key for g in seed.GIFTS + seed.SCRUBS + seed.SONGS + seed.MAGIC_GIFTS + (seed.LETTER_GIFT, seed.OCARINA_GIFT, seed.OCARINA_TIME_GIFT)}, "a gift or a scrub's sale has no place for the tracker, or a place is of no gift: %r" % sorted(
         set(seed.GIFT_PLACES) ^ {g.key for g in seed.GIFTS + seed.SCRUBS}))
     check(all(ages in ("C", "A", "CA") and len(pos) == 3 and g.area in seed.AREA_NAMES and len(g.name) <= 55
               for g in seed.GIFTS + seed.SCRUBS for ages, pos in [seed.GIFT_PLACES[g.key]]), "a gift's place is not ages and three numbers, or its name is too long for a row")
@@ -197,7 +197,7 @@ def main():
     check("named = lambda kind, h, area, pos, item=\"\": check_name(kind, item, about.get(h, {}), pos, exits[area], sub_areas[area])" in script and
           "for h, gyaml, pos, scale, words in marks(data):" in script and "%79[^|]" in block,
           "the checks are not written with their names, or the menu does not read a name whole")
-    check(set(seed.CHECK_CODES) == set(seed.PROGRESSION | seed.QUEST_GATES | seed.SHOP_GATES | seed.SONG_GATES | seed.TUNICS | {seed.BOTTLE, seed.LETTER, seed.OCARINA}) and len(set(seed.CHECK_CODES.values())) == len(seed.CHECK_CODES),
+    check(set(seed.CHECK_CODES) == set(seed.PROGRESSION | seed.QUEST_GATES | seed.SHOP_GATES | seed.SONG_GATES | seed.TUNICS | {seed.BOTTLE, seed.LETTER, seed.OCARINA, seed.MAGIC_DOUBLE}) and len(set(seed.CHECK_CODES.values())) == len(seed.CHECK_CODES),
           "a gating item of the rules has no letters for the tracker, or two have the same")
     codes = re.findall(r'^    \{"([A-Z]{2})", "[^"]+", \{[^}]+\}\},$', menu, re.M)
     check(codes == list(seed.CHECK_CODES.values()), "the menu's gating items are not the script's letters: %r" % codes)

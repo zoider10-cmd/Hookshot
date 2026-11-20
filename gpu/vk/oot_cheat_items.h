@@ -67,7 +67,7 @@
     OOT_ITEM("Biggest Bullet Bag", "Item_BulletBag_Large", 0) \
     OOT_ITEM("Adult's Wallet", "Item_Wallet_Medium", 0) \
     OOT_ITEM("Giant's Wallet", "Item_Wallet_Large", 0) \
-    OOT_ITEM("Magic Meter", "Item_FairyBless_MP", 0) \
+    OOT_ITEM("Improved Spin", "Item_FairyBless_MP", 0) \
     OOT_ITEM("Double Magic", "Item_FairyBless_MPDouble", 0) \
     OOT_ITEM("Double Defense", "Item_FairyBless_DefenseDouble", 0) \
     OOT_SECTION("Quest") \
@@ -95,7 +95,8 @@
     OOT_ITEM("Stone of Agony", "Item_AgonyStone", 0) \
     OOT_ITEM("Gerudo's Card", "Item_Token_Gerudo", 0) \
     OOT_ITEM("Gold Skulltula Tokens", "Item_Token_Gold", 1) \
-    OOT_ITEM("Zelda's Letter", "Item_ZeldaLetter", 0)
+    OOT_ITEM("Zelda's Letter", "Item_ZeldaLetter", 0) \
+    OOT_ITEM("Magic Power", "Item_MagicMeter", 0)
 #endif
 
 /* (other spellings the game might use for the same item: logged once by the game side for checking) */

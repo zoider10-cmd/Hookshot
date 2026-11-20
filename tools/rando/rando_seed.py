@@ -3212,6 +3212,99 @@ def scrub_prices(data, sales, price=SCRUB_CHEAP):
     return bytes(out), found
 
 
+# ---- Items of our own (custom items), first the magic meter (asked for 2026-11-19) ----
+# A new item is an actor of its own name whose actor file has an item of the game's as its parent ($parent: every part
+# inherited) and names only what differs, as the shops' shelf actors are made (shop_pack): a copy of a whole actor file
+# under another name stopped the game as it was made (the Pieces of Heart's try, 2026-11-19). Its pack is its parent's
+# pack with that file added; it has a row in each of the game's three lists of actors (custom_rows), its parent's with
+# its own name and the fields given; and its words (CUSTOM_WORDS' labels in ActorMsg/PouchContent).
+def custom_pack(name, parent, parent_pack, components=None):
+    """The pack of an item of our own: (its bytes, the files no other pack has). parent: the game's item it is made
+    from (its pack: parent_pack's bytes); components: {a part's name: its file reference} that differ from the parent's."""
+    files = collections.OrderedDict(sarc_read(parent_pack))
+    if ACTOR_FILE % parent not in files:
+        raise ValueError("%s: its pack has no actor of that name" % parent)
+    _, version = byml_parse(files[ACTOR_FILE % parent])
+    comps = collections.OrderedDict(sorted((k, ("string", v)) for k, v in (components or {}).items()))
+    files[ACTOR_FILE % name] = byml_build(("dict", collections.OrderedDict((("$parent", ("string", ACTOR_REF % parent)),
+                                                                           ("Components", ("dict", comps))))), version)
+    return sarc_write(files), [ACTOR_FILE % name]
+
+
+def custom_rows(data, kind, name, parent, fields=None):
+    """One of the game's three lists of actors (kind: SHOP_TABLES) with a row for an item of our own: its parent's,
+    its id its own name, and `fields` ({field: a BYML value}, None to take one out) changed"""
+    tree, version = byml_parse(data)
+    by = {r[1]["__RowId"][1]: r for r in tree[1]}
+    if parent not in by:
+        raise ValueError("the game's %s has no row of %s" % (kind, parent))
+    row = collections.OrderedDict(by[parent][1])
+    for k, v in (fields or {}).items():
+        if v is None:
+            row.pop(k, None)
+        else:
+            row[k] = v
+    row["__RowId"] = ("string", name)
+    row = ("dict", collections.OrderedDict(sorted(row.items())))
+    rows = [r for r in tree[1] if r[1]["__RowId"][1] != name] + [row]
+    rows.sort(key=lambda r: r[1]["__RowId"][1])
+    return byml_build((tree[0], rows), version)
+
+
+CUSTOM_WORDS = ("_Name", "_Caption", "_GetMessage", "_GetCaption")
+CUSTOM_TEXT = SHOP_TEXT   # (in each language's archive, Mals/*.sarc.zs: SHOP_TEXT)
+MAGIC_ITEM = "Item_MagicMeter"   # (the first magic meter: the doubled magic's gift as its parent, 24 magic)
+MAGIC_PARENT = "Item_FairyBless_MPDouble"
+MAGIC_WORDS = {"_Name": "Magic Power", "_Caption": "Proof of a Great Fairy's blessing, this gift grants you magic power.",
+               "_GetMessage": "You got magic power!", "_GetCaption": "You can now use magic!"}
+
+
+# ---- Magic and the fairies' gifts (rando_magic, asked for 2026-11-19) ----
+# In the remake the magic meter is no fairy's: every item that uses magic (the Lens of Truth, the spells, the magic arrows,
+# even the Bow with its arrows) and the spin attack's gift raise PlayerStatus.MPMax to 24 as they are got (the list of
+# pouch actors' ExpansionAvility MPMaxUP, MPMax 24), the doubled magic's gift to 48. With the setting:
+# - those marks are taken out of every row but the doubled magic's (MAGIC_FREE): no item gives magic by itself;
+# - magic is the doubled magic's gift twice in the pool (a blue rupee's chest the second's): found with no meter, the
+#   game's side gives it as MAGIC_ITEM, an item of our own (custom_pack: its parent the doubled magic's gift, its own
+#   words), and sets the meter to 24 (host/hos_main.c oot_magic_give); found with the meter, it is the gift: 48;
+# - the Great Fairies of the improved spin (Hyrule Castle, A_01), the doubled magic (the crater, A_04) and the halved
+#   damage (outside Ganon's Castle, A_06) are gifts of the shuffle as the spells' are (MAGIC_GIFTS, FAIRY_GIFTS' way);
+# - the rules ask for magic wherever they ask for the Lens of Truth, and Ganon's Castle asks for everything.
+# Needs Quest rewards (the fairies' way). NOT SEEN IN PLAY as a whole.
+MAGIC_DOUBLE, MAGIC_SPIN, MAGIC_DEFENSE = "Item_FairyBless_MPDouble", "Item_FairyBless_MP", "Item_FairyBless_DefenseDouble"
+MAGIC_KEEP = ("Item_FairyBless_MPDouble", "Pouch_FairyBless_MPDouble")
+MAGIC_JUNK = "TBox_Rupee_Blue"   # (the chest item the second magic takes the place of)
+MAGIC_GIFTS = (
+    Gift("fairy_power", "Dm_FairyFountain_Power", (MAGIC_SPIN,), MAGIC_SPIN, "HyruleCastle",
+         "the Great Fairy of Hyrule Castle", CHILD | {BB}, "magic"),
+    Gift("fairy_wisdom", "Dm_FairyFountain_Wisdom", (MAGIC_DOUBLE,), MAGIC_DOUBLE, "DeathMountainCrater",
+         "the Great Fairy of Death Mountain Crater", GROWN | {HAM}, "magic"),
+    Gift("fairy_courage", "Dm_FairyFountain_Courage", (MAGIC_DEFENSE,), MAGIC_DEFENSE, "GanonCastle",
+         "the Great Fairy outside Ganon's Castle", EVERYTHING, "magic"),
+)
+
+
+def magic_free(data):
+    """The list of pouch actors (PouchActorInfo) with the magic mark (ExpansionAvility MPMaxUP, MPMax) taken out of
+    every row but MAGIC_KEEP's: (the new bytes, how many rows were changed)"""
+    tree, version = byml_parse(data)
+    done = 0
+    for row in tree[1]:
+        fields = row[1]
+        if fields["__RowId"][1] in MAGIC_KEEP:
+            continue
+        if fields.get("ExpansionAvility", ("", ""))[1] == "MPMaxUP" or "MPMax" in fields:
+            fields.pop("ExpansionAvility", None)
+            fields.pop("MPMax", None)
+            done += 1
+    return byml_build(tree, version), done
+
+
+def magic_need(need):
+    """a rule with magic named where it names the Lens of Truth (rando_magic)"""
+    return frozenset(need | {MAGIC_DOUBLE}) if LENS in need else need
+
+
 def cucco_flow_one(data, want=CUCCOS):
     """The cucco lady's flow (CUCCO_FLOW) with its count of 7 cuccos made `want` (the set and the question of
     CUCCO_COUNT): the new bytes, of the same size. ValueError: not the file, or not two such steps."""
@@ -3862,7 +3955,7 @@ def settings(game):
            "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
            "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0, "rando_open_door": 0,
            "rando_ammo_pickups": 0, "rando_rupee_fill": 0, "rando_skulltulas_day": 0,
-           "rando_ganon_bridge": 0, "rando_hints": 0, "rando_ageless": 0, "rando_letter": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
+           "rando_ganon_bridge": 0, "rando_hints": 0, "rando_ageless": 0, "rando_letter": 0, "rando_magic": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -3986,7 +4079,8 @@ CHECK_CODES = collections.OrderedDict((
     ("Item_Gauntlet_Goron", "GB"), ("Item_Scale_Silver", "SS"), ("Item_Wallet_Medium", "AW"), ("Item_Wallet_Large", "GW"),
     ("Item_Melody_ZeldaLullaby", "ZL"), ("Item_Melody_EponaSong", "EP"), ("Item_Melody_SariaSong", "SR"), ("Item_Melody_TimeSong", "ST"),
     ("Item_Melody_StormSong", "SO"), ("Item_Melody_SpiritRequiem", "RQ"), ("Item_Melody_ShadowNocturne", "NC"),
-    ("Obj_Armor_Goron", "GT"), ("Obj_Armor_Zora", "ZT"), (BOTTLE, "BO"), ("Item_ZeldaLetter", "LE"), ("Item_Ocarina_Fairy", "FO")))   # (the tunics, placement 12: TUNICS)
+    ("Obj_Armor_Goron", "GT"), ("Obj_Armor_Zora", "ZT"), (BOTTLE, "BO"), ("Item_ZeldaLetter", "LE"), ("Item_Ocarina_Fairy", "FO"),
+    ("Item_FairyBless_MPDouble", "MG")))   # (the tunics, placement 12: TUNICS)
 
 
 def token_codes(way):
@@ -4046,6 +4140,9 @@ GIFT_PLACES = {
     "fairy_din": ("CA", (-34.0, 211.2, -189.2)),          # (the fountains' marks, Obj_TriForcePoint_A_02, _03, _05:
     "fairy_farore": ("CA", (62.5, 104.3, 99.2)),          #  where the Lullaby is played)
     "fairy_nayru": ("A", (-49.1, 101.5, -77.9)),
+    "fairy_power": ("C", (118.5, 108.8, -76.8)),          # (Obj_TriForcePoint_A_01, A_04, A_06: Magic and the fairies'
+    "fairy_wisdom": ("A", (-76.6, 122.2, 46.6)),          #  gifts, MAGIC_GIFTS)
+    "fairy_courage": ("A", (139.2, 85.2, 312.5)),
     "song_zelda": ("C", (5.1, 126.8, -236.4)),             # (DoorOfTime_MeetImpa_StartPos: before Impa, in the castle's courtyard)
     "song_epona": ("C", (-91.9, 150.6, 247.0)),            # (Npc_Hylia_Malon_Child at z 245.4, Lon Lon Ranch)
     "song_saria": ("C", (-6.9, 114.4, -85.2)),             # (Dm_MelodyGet_Saria_Start)
@@ -4208,7 +4305,8 @@ SONG_ADULT = ADULT | {ZL, SARIA, TIME}              # (what an adult's lesson as
 SONG_AREAS = {"ZoraDomain": {ZL}, "ZoraFountain": {ZL}, "InsideJabuJabuBelly": {ZL}, "BottomOfTheWell": {STORMS}, "ShadowTemple": {NOCTURNE},
               "SpiritTemple": {REQUIEM}, "DesertColossus": {REQUIEM}, "InsideGanonCastle": set(SONG_GATES)}
 SONG_GIFTS = {"darunia": {ZL, SARIA}, "skull_kid_song": {SARIA}, "archery_heart": {EPONA}, "archery_quiver": {EPONA},
-              "fairy_din": {ZL}, "fairy_farore": {ZL}, "fairy_nayru": {ZL}}
+              "fairy_din": {ZL}, "fairy_farore": {ZL}, "fairy_nayru": {ZL}, "fairy_power": {ZL}, "fairy_wisdom": {ZL},
+              "fairy_courage": {ZL}}
 # Malon's lesson (child, Epona's Song) is shut for good once the Epona quest has moved past its step
 # ReadyForGetEponaSong: the ranch's logic (LonLonRanch_Child_NoTerrain_Prefab_5286, Area_9a63) clears the lesson's block
 # only at that very step (the other randomizer's finding, OOTRR 856b011, 2026-11-19). With Songs: Anywhere, Epona's Song can
@@ -5266,6 +5364,7 @@ def main():
     a.skulltulas = a.skulltulas if a.skulltulas is not None else ini["rando_skulltulas"]
     a.skulltulas = a.skulltulas if 0 <= a.skulltulas <= 3 else 0
     a.quests = a.quests or ini["rando_quests"] != 0
+    a.magic = ini["rando_magic"] == 1 and a.quests   # (Magic and the fairies' gifts: with Quest rewards)
     a.frogs = a.quests   # (no longer a choice of its own: the frogs take part whenever Quest rewards is on; rando_frogs and --frogs are read and not used)
     a.light_arrows = a.quests and (a.light_arrows or ini["rando_light_arrows"] != 0)
     # A test: <game folder>\rando\test_drops.txt, lines of "<an actor's hash> <an item>": that actor (a Gold Skulltula,
@@ -5317,7 +5416,7 @@ def main():
     # (the open ways are only named when one is open: the seeds made before them keep their stamp)
     rest = " seed %d chests %d keys %d major %d logic %d%s\n" % (seed, which, min(keys_mode, 1), a.event_chests, logic_now,
                                                                (" open %d%d flags" % (a.open_deku, a.open_forest) if flags else "") + (" door 7" if a.open_door else "") + (" door song 1" if a.door_song else "") + (" intro skipped" if a.skip_intro else "") + (" talks skipped" if a.skip_cutscenes else "") + (" rupees %d" % START_RUPEES if a.start_rupees else "") + ((" skulltulas %d" + " gated all" * logic_now) % a.skulltulas if a.skulltulas else "") +
-                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" scrubs cheap" if a.scrubs_cheap else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s%s" % (" anywhere 2" if a.songs == 2 else "", " ocarina 1" if a.ocarina else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + (" skulltulas by day" if a.skulltulas_day else "") + (" letter 1" if a.letter else "") + " checks 10" +
+                                                               (" quests 1%s%s" % (" frogs" * a.frogs, " light" * a.light_arrows) if a.quests else "") + (" scrubs 1 words 2" if a.scrubs else "") + (" scrubs cheap" if a.scrubs_cheap else "") + (" shops %d prices 5" % a.shops if a.shops else "") + (" shelves all" if a.shop_shelves else "") + (" sword and shield 1" if a.sword_shield else "") + (" progressive 1" if a.progressive else "") + (" songs 2%s%s" % (" anywhere 2" if a.songs == 2 else "", " ocarina 1" if a.ocarina else "") if a.songs else "") + (" rewards 1" if a.dungeon_rewards else "") + (" hearts 2" if a.heart_pieces else "") + (" skulltulas by day" if a.skulltulas_day else "") + (" letter 1" if a.letter else "") + (" magic 1" if a.magic else "") + " checks 10" +
                                                                (" test drops %08x" % (zlib.crc32(repr(sorted(drops.items())).encode()) & 0xffffffff) if drops else "") +
                                                                (" test pickups " + ",".join(pickups) if pickups else "") +
                                                                (" test chests %08x" % (zlib.crc32(repr(sorted(test_chests.items())).encode()) & 0xffffffff) if test_chests else "") +
@@ -5498,6 +5597,15 @@ def main():
         spots[gift_hash(OCARINA_GIFT.key)] = [OCARINA_GIFT.area, OCARINA_GIFT.item, None, None, "gift", OCARINA_GIFT.name, ""]
         gifts[gift_hash(OCARINA_TIME_GIFT.key)] = OCARINA_TIME_GIFT   # (not a gating item: OCARINA_TIME)
         spots[gift_hash(OCARINA_TIME_GIFT.key)] = [OCARINA_TIME_GIFT.area, OCARINA_TIME, None, None, "gift", OCARINA_TIME_GIFT.name, ""]
+    if a.magic:   # (Magic and the fairies' gifts: the other three fountains, and magic twice in the pool)
+        PROGRESSION = PROGRESSION | {MAGIC_DOUBLE}
+        for g in MAGIC_GIFTS:
+            gifts[gift_hash(g.key)] = g
+            spots[gift_hash(g.key)] = [g.area, g.item, None, None, "gift", g.name, ""]
+        junk = next((h for h in sorted(spots) if spots[h][1] == MAGIC_JUNK and spots[h][3] is None and h not in gifts), None)
+        if junk is None:
+            sys.exit("Magic and the fairies' gifts: no chest of a blue rupee that takes part to hold the second magic. Nothing written.")
+        spots[junk][1] = MAGIC_DOUBLE
     if a.letter:   # (Zelda's Letter: with or without Quest rewards, letter_need)
         PROGRESSION = PROGRESSION | {LETTER}
         gifts[gift_hash(LETTER_GIFT.key)] = LETTER_GIFT
@@ -5560,6 +5668,8 @@ def main():
         needs = {h: frozenset(PROGRESSION) if malon_hard and h in lessons and gifts[h].key in MALON_HARD else
                  n if h in lessons else frozenset(PROGRESSION) if h in gifts and gifts[h].key in SONGS_HARD else
                  song_need(n, spots[h][0], gifts[h].key if h in gifts else None) for h, n in needs.items()}
+    if a.magic:   # (magic where the Lens of Truth is asked for: magic_need)
+        needs = {h: each(magic_need, n) for h, n in needs.items()}
     if placement >= 5:   # (Zora's Domain by the river or by the lake, zora_ways)
         needs = {h: zora_ways(n, spots[h][0]) for h, n in needs.items()}
     gear = shield_need if shield_shelf and not a.open_deku else (lambda need: need)   # (the shield with the sword: Mido)
@@ -5607,7 +5717,7 @@ def main():
     # (Songs: Anywhere: what the lessons asked about by name may hold, by this seed's items and the game's flags; the
     #  Great Fairies of the spells the same, FAIRY_GIFTS)
     lesson_safe, lesson_only = frozenset(), {}
-    fairies = [h for h, g in gifts.items() if g.key in FAIRY_GIFTS]
+    fairies = [h for h, g in gifts.items() if g.key in FAIRY_GIFTS or g in MAGIC_GIFTS]
     if a.songs == 2 or fairies:
         try:
             folder = os.path.join(romfs, FLAG_LIST)
@@ -5660,6 +5770,15 @@ def main():
     except ValueError as e:
         sys.exit("%s. Nothing written. Try Chests: All, or --no-logic." % e)
     unknown = sorted({s[0] for h, s in spots.items() if s[0] not in RULES and h not in gifts and h not in joined})
+    if a.magic:   # (no magic on a shop's shelf: its "You got" words are the shelf's own, the doubled magic's, not the meter's)
+        for h in [h for h in shelves if gives.get(h) == MAGIC_DOUBLE]:
+            ways = list(needs[h]) if isinstance(needs.get(h), Either) else [needs.get(h, frozenset())]   # (every way of the shelf's rule)
+            mate = next((m for m in sorted(gives) if m not in shelves and m not in lesson_only and m not in joined and m not in holds
+                         and gives[m] not in PROGRESSION and isinstance(needs.get(m), frozenset)
+                         and all(needs[m] <= way for way in ways)), None)   # (a place no harder than any of the shelf's ways)
+            if mate is None:
+                sys.exit("Magic and the fairies' gifts: magic on a shelf, and no place to trade it with. Nothing written.")
+            gives[h], gives[mate] = gives[mate], gives[h]
 
     # (the game's own count of each item is kept: every item given was some chest's)
     before = collections.Counter(spots[h][1] for h in gives)
@@ -6222,6 +6341,44 @@ def main():
         except (OSError, ValueError, KeyError, struct.error, IndexError) as e:
             sys.exit("either age's items: %s. Nothing written." % e)
         print("Either age's items: %s usable by both ages (%d marks set)" % ("the swords" if a.ageless == 1 else "the swords and the age-only items", count))
+
+    # ---- Magic and the fairies' gifts: the first magic as an item of our own, no free magic (MAGIC_ITEM, magic_free) ----
+    if a.magic:
+        try:
+            rel = "Pack/Actor/%s.pack.zs" % MAGIC_PARENT
+            new, parts = custom_pack(MAGIC_ITEM, MAGIC_PARENT, unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts))
+            shop_files["Pack/Actor/%s.pack.zs" % MAGIC_ITEM] = new
+            shop_packs["Pack/Actor/%s.pack" % MAGIC_ITEM] = len(new)
+            shop_new.update(parts)
+            folder = os.path.join(romfs, "RSDB")
+            for kind in SHOP_TABLES:
+                n = next(n for n in sorted(os.listdir(folder)) if n.startswith(kind + ".") and ".byml" in n.lower())
+                table = shop_files.get("RSDB/" + n) or unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
+                fields = ({"MPMax": (0xD1, struct.pack("<i", 24)), "PouchSpecialDeal": ("string", "None")} if kind == "PouchActorInfo" else
+                          {"ActorName": ("string", MAGIC_ITEM)} if kind == "ActorInfo" else None)   # (its own name: the words looked up by it)
+                table = custom_rows(table, kind, MAGIC_ITEM, MAGIC_PARENT, fields)
+                if kind == "PouchActorInfo":
+                    table, freed = magic_free(table)
+                shop_files["RSDB/" + n] = table
+                shop_sizes["RSDB/" + (n[:-3] if n.lower().endswith(".zs") else n)] = len(table)
+            worded = 0
+            folder = os.path.join(romfs, "Mals")   # (its words, in every language: the English ones)
+            for n in sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if n.endswith(".sarc.zs")):
+                rel = "Mals/" + n
+                parts = sarc_read(gift_files[rel] if rel in gift_files else unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts))
+                text = parts.get(CUSTOM_TEXT)
+                if text is None:
+                    continue
+                for word, words in MAGIC_WORDS.items():
+                    text = msbt_add(text, MAGIC_ITEM + word, words.encode("utf-8"))
+                parts[CUSTOM_TEXT] = text
+                gift_files[rel] = sarc_write(parts)
+                shop_sizes[rel[:-3]] = len(gift_files[rel])
+                worded += 1
+        except (OSError, ValueError, KeyError, StopIteration, struct.error) as e:
+            sys.exit("Magic and the fairies' gifts: %s. Nothing written." % e)
+        print("Magic and the fairies' gifts: %s made (its words in %d languages), %d items no longer give magic, the second magic "
+              "in a blue rupee's chest" % (MAGIC_ITEM, worded, freed))
 
     # ---- Open Door of Time: the door out of the way, in the child's Market and the adult's (DOOR_SONG: Sheik alone) ----
     if a.open_door or a.door_song:
