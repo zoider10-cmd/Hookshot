@@ -3290,6 +3290,9 @@ static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {
 #define OOT_MAGIC_DOUBLED 480   /* (the doubled meter: the gift's MPMax 48) */
 #define OOT_MP_HASH 0x76b18200u   /* PlayerStatus.MP: the magic Link has now, in the same tenths */
 static int oot_magic_fill_frames;   /* (frames left to keep the meter full: a magic found, oot_magic_meter) */
+/* (frames left to keep the magic Link had, and that magic: another item found. The owner's test 2026-11-20: Din's Fire,
+   its magic mark taken out of its row (magic_free), emptied the meter as it was got) */
+static int oot_magic_keep_frames, oot_magic_keep;
 static int oot_magic_family(const char *name) {
     int hos_rando_magic(void);   /* host/oot_rando.c */
     return hos_rando_magic() && (!strcmp(name, OOT_MAGIC_DOUBLE) || !strcmp(name, OOT_MAGIC_SPIN) || !strcmp(name, OOT_MAGIC_ITEM));
@@ -3317,8 +3320,25 @@ static void oot_magic_meter(Ctx *c) {
     __atomic_store_n(&oot_magic_fill_frames, 150, __ATOMIC_RELEASE);
     hos_log("rando: magic: PlayerStatus.MPMax %d -> %d, the meter to be filled", (int)most, (int)want);
 }
-/* (each frame, while a magic found asks it: PlayerStatus.MP made PlayerStatus.MPMax) */
+/* (another item found with the magic setting: the magic Link has now kept through its get, oot_magic_fill_tick) */
+static void oot_magic_keep_now(Ctx *c) {
+    int32_t now = 0;
+    if (!oot_gamedata_int(c, OOT_MP_HASH, &now, 0)) return;
+    __atomic_store_n(&oot_magic_keep, (int)now, __ATOMIC_RELAXED);
+    __atomic_store_n(&oot_magic_keep_frames, 300, __ATOMIC_RELEASE);   /* (about 5 s: the get's scene) */
+}
+/* (each frame, while a magic found asks it: PlayerStatus.MP made PlayerStatus.MPMax; while another item's get may take
+   magic away, the magic from before it put back) */
 static void oot_magic_fill_tick(Ctx *c) {
+    int kept = __atomic_load_n(&oot_magic_keep_frames, __ATOMIC_ACQUIRE);
+    if (kept > 0) {
+        __atomic_store_n(&oot_magic_keep_frames, kept - 1, __ATOMIC_RELEASE);
+        int32_t now = 0, was = __atomic_load_n(&oot_magic_keep, __ATOMIC_RELAXED);
+        if (oot_gamedata_int(c, OOT_MP_HASH, &now, 0) && now < was) {
+            oot_gamedata_int(c, OOT_MP_HASH, &was, 1);
+            hos_log("rando: magic: an item's get took magic (%d -> %d): put back", (int)was, (int)now);
+        }
+    }
     int left = __atomic_load_n(&oot_magic_fill_frames, __ATOMIC_ACQUIRE);
     if (left <= 0) return;
     __atomic_store_n(&oot_magic_fill_frames, left - 1, __ATOMIC_RELEASE);
@@ -4031,6 +4051,10 @@ int hos_oot_pouch_add(Ctx *c) {
     }
     oot_pickup_qol(c, name);   /* (Ammo pick-ups, Rupees fill the wallet) */
     if ((int32_t)c->x[3] <= 0) return 0;
+    if (!oot_magic_family(name)) {
+        int hos_rando_magic(void);
+        if (hos_rando_magic()) oot_magic_keep_now(c);   /* (its get must not empty the meter: oot_magic_keep_now) */
+    }
     if (oot_magic_family(name)) {   /* (rando_magic: the first magic found is the meter, oot_magic_give) */
         if (!strcmp(name, OOT_MAGIC_ITEM)) {
             oot_magic_meter(c);
