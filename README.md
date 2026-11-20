@@ -21,8 +21,8 @@ from the other ports of the game as they come.
 
 ## Install
 
-1. Download **`HookshotBuilder.exe`** from the [latest release](https://github.com/zoider10-cmd/LostWoods/releases/latest)
-   and run it (the Lost Woods Builder).
+1. Download **`LostWoodsBuilder.zip`** from the [latest release](https://github.com/zoider10-cmd/LostWoods/releases/latest),
+   unzip it (right-click > Extract All) and run **`HookshotBuilder.exe`** inside (the Lost Woods Builder).
 2. Pick your game file (the builder lists the `.nup` files it finds; or **Browse…**), choose where the game goes and its
    language.
 3. Press **Build the game**: around 45 minutes, depending on your CPU. You can use your PC meanwhile.

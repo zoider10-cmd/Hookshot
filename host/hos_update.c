@@ -91,7 +91,7 @@ static char *https_get(const wchar_t *host, const wchar_t *path, const wchar_t *
     char *body = NULL;
     size_t have = 0;
     int ok = 0;
-    HINTERNET s = WinHttpOpen(L"Lost Woods-update", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET s = WinHttpOpen(L"LostWoods-update", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!s) return NULL;
     WinHttpSetTimeouts(s, timeout, timeout, timeout, timeout);
     HINTERNET c = WinHttpConnect(s, host, INTERNET_DEFAULT_HTTPS_PORT, 0);

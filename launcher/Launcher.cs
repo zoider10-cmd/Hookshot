@@ -3508,7 +3508,7 @@ class LauncherForm : Form {
 
     static WebClient Client() {
         var c = new WebClient();
-        c.Headers[HttpRequestHeader.UserAgent] = "Lost Woods-launcher";
+        c.Headers[HttpRequestHeader.UserAgent] = "LostWoods-launcher";
         c.Headers[HttpRequestHeader.Accept] = "application/vnd.github+json";
         return c;
     }
@@ -3539,7 +3539,7 @@ class LauncherForm : Form {
                         // (Mako 3.3: the new names first; the old ones are what releases up to 3.0.2 have)
                         if (u.EndsWith("/mako_vk_update.txt") || (manifest == null && u.EndsWith("/hookshot_vk_update.txt"))) manifest = u;
                         if (u.EndsWith("/mako_vk.dll") || (dll == null && u.EndsWith("/hookshot_vk.dll"))) dll = u;
-                        if (u.EndsWith("/Lost WoodsBuilder.zip") || (zip == null && u.EndsWith("/HookshotBuilder.zip"))) zip = u;
+                        if (u.EndsWith("/LostWoodsBuilder.zip") || (zip == null && u.EndsWith("/HookshotBuilder.zip"))) zip = u;
                     }
                     if (zip != null) {
                         var zm = Regex.Match(json, "\"size\"\\s*:\\s*(\\d+)[^{}]*?\"browser_download_url\"\\s*:\\s*\"" + Regex.Escape(zip) + "\"");
@@ -4227,7 +4227,7 @@ class LauncherForm : Form {
                     string part = Path.Combine(dir, f[0] + ".download");
                     tmp.Add(part);
                     using (var c = new WebClient()) {
-                        c.Headers[HttpRequestHeader.UserAgent] = "Lost Woods-launcher";
+                        c.Headers[HttpRequestHeader.UserAgent] = "LostWoods-launcher";
                         long before = got;
                         var ev = new ManualResetEvent(false); Exception err = null;
                         c.DownloadProgressChanged += (s, e) => {
@@ -4378,7 +4378,7 @@ class LauncherForm : Form {
                 body = ms.ToArray();
             }
             var req = (HttpWebRequest)WebRequest.Create(hook);
-            req.Method = "POST"; req.ContentType = "multipart/form-data; boundary=" + boundary; req.UserAgent = "Lost Woods-launcher"; req.Timeout = 30000;
+            req.Method = "POST"; req.ContentType = "multipart/form-data; boundary=" + boundary; req.UserAgent = "LostWoods-launcher"; req.Timeout = 30000;
             req.ContentLength = body.Length;
             using (var rs = req.GetRequestStream()) rs.Write(body, 0, body.Length);
             using (var resp = (HttpWebResponse)req.GetResponse()) { }
@@ -4521,7 +4521,7 @@ class LauncherForm : Form {
         // the Saves and Save copies buttons showing the normal game's folder, its list of copies empty. A second start
         // brings the first one's window to the front and ends)
         bool first;
-        var once = new Mutex(true, "Lost WoodsLauncher_" + OnceName(dir), out first);
+        var once = new Mutex(true, "LostWoodsLauncher_" + OnceName(dir), out first);
         if (!first) {
             try {
                 int me = Process.GetCurrentProcess().Id;
