@@ -1646,6 +1646,9 @@ BOOTS_CHILD_HOOK = " c->x[0] = hos_oot_boots_child(c->x[0], %s);   /* (nx2/oot_p
 #  +0x13a0) before the actor is made; its kind in x20 too. Traced the same day: the third stop)
 BOOTS_CHILD_CALLS = (("c->x[30] = 0x82e16d88ULL; f_804d6db0(c);", BOOTS_CHILD_HOOK % "c->x[20]"),
                      ("c->x[30] = 0x82e22294ULL; f_804d6db0(c);", BOOTS_CHILD_HOOK % "c->x[20]"),
+                     # (and f_81033f20, which hands the made actor to the equipment: a child with kinds 8 to 10 returned 0;
+                     #  its kind in x20 too. The fourth stop)
+                     ("c->x[30] = 0x81034014ULL; f_804d6db0(c);", BOOTS_CHILD_HOOK % "c->x[20]"),
                      ("c->x[30] = 0x804d6ed8ULL; f_804d6db0(c);", BOOTS_CHILD_HOOK % "9"))
 
 
