@@ -5886,19 +5886,22 @@ void draw_startup(ui::Ctx& c) {
         v = startup;
     }
     const float s = c.s, w = c.w, h = c.h, cx = w * 0.5f, k = s * 0.86f;   // (k: the scale of what is under the logo)
-    c.d->AddRectFilled(ImVec2(0, 0), ImVec2(w, h), ui::rgba(5, 9, 18));
-    const float lh = 112 * s, top = h * 0.5f - 176 * s;
-    for (int i = 40; i >= 1; i--) c.d->AddCircleFilled(ImVec2(cx, top + lh * 0.5f + 70 * s), h * 0.021f * i, ui::rgba(20, 60, 120, 4), 128);
+    // (Willow Woods: the launcher's forest colours, dark moss with a green glow behind the tree; the logo is
+    //  assets/willowwoods.png, nx2/logo_rgba.py)
+    const ImU32 leaf = ui::rgba(150, 206, 96), line = ui::rgba(120, 190, 80);
+    c.d->AddRectFilled(ImVec2(0, 0), ImVec2(w, h), ui::rgba(7, 11, 6));
+    const float lh = 150 * s, top = h * 0.5f - 210 * s;
+    for (int i = 40; i >= 1; i--) c.d->AddCircleFilled(ImVec2(cx, top + lh * 0.5f + 70 * s), h * 0.021f * i, ui::rgba(40, 92, 30, 4), 128);
     float aspect = 1;
     ImTextureData* logo = ui::logo(&aspect);
     if (logo) c.d->AddImage(logo->GetTexRef(), ImVec2(cx - lh * aspect * 0.5f, top), ImVec2(cx + lh * aspect * 0.5f, top + lh));
     float y = top + lh + 16 * s;
-    ui::spaced(c, c.f.heading, 42 * k, ImVec2(cx, y), ui::kInkBright, "MAKO", 14 * k);
-    {   // (a thin cyan line under the wordmark, fading at its ends)
+    ui::spaced(c, c.f.heading, 42 * k, ImVec2(cx, y), ui::kInkBright, "WILLOW WOODS", 8 * k);
+    {   // (a thin green line under the wordmark, fading at its ends)
         const float ly = y + 66 * k, t = std::max(1.0f, 1.5f * k);
-        const ImU32 a0 = ui::alpha(ui::kAccent, 0);
-        c.d->AddRectFilledMultiColor(ImVec2(cx - 150 * k, ly), ImVec2(cx, ly + t), a0, ui::kAccent, ui::kAccent, a0);
-        c.d->AddRectFilledMultiColor(ImVec2(cx, ly), ImVec2(cx + 150 * k, ly + t), ui::kAccent, a0, a0, ui::kAccent);
+        const ImU32 a0 = ui::alpha(line, 0);
+        c.d->AddRectFilledMultiColor(ImVec2(cx - 190 * k, ly), ImVec2(cx, ly + t), a0, line, line, a0);
+        c.d->AddRectFilledMultiColor(ImVec2(cx, ly), ImVec2(cx + 190 * k, ly + t), line, a0, a0, line);
     }
     ui::text_centre(c, c.f.body, 14.5f * k, ImVec2(cx, y + 78 * k), ui::kDim, v.version.c_str());
     if (!v.title.empty()) {
@@ -5906,7 +5909,7 @@ void draw_startup(ui::Ctx& c) {
         if (!v.step.empty()) {   // ("STEP 2 OF 2" as "Step 2 of 2")
             std::string step = v.step;
             for (size_t i = 1; i < step.size(); i++) step[i] = (char)tolower((unsigned char)step[i]);
-            ui::text_centre(c, c.f.body, 15 * k, ImVec2(cx, y), ui::kAccent, step.c_str());
+            ui::text_centre(c, c.f.body, 15 * k, ImVec2(cx, y), leaf, step.c_str());
         }
         ui::text_centre(c, c.f.heading, 24 * k, ImVec2(cx, y + 20 * k), ui::kInk, v.title.c_str());
         const float x0 = cx - 270 * k, x1 = cx + 270 * k, by = y + 64 * k;
@@ -5915,7 +5918,9 @@ void draw_startup(ui::Ctx& c) {
             const float bh = 26 * k, in = 4 * k, fx = x0 + in + (x1 - x0 - 2 * in) * (float)std::min(v.fraction, 1.0);
             c.d->AddRectFilled(ImVec2(x0, by), ImVec2(x1, by + bh), ui::kCellDark, ui::kRound * k);
             c.d->AddRect(ImVec2(x0, by), ImVec2(x1, by + bh), ui::kEdge, ui::kRound * k, 0, std::max(1.0f, s));
-            if (fx > x0 + in) ui::gold(c, ImVec2(x0 + in, by + in), ImVec2(fx, by + bh - in));
+            if (fx > x0 + in)   // (Willow Woods: a leaf-green fill, lighter at its top)
+                c.d->AddRectFilledMultiColor(ImVec2(x0 + in, by + in), ImVec2(fx, by + bh - in), ui::rgba(96, 160, 64), ui::rgba(96, 160, 64),
+                                             ui::rgba(46, 98, 34), ui::rgba(46, 98, 34));
             // (the percentage in the middle of the whole bar, drawn twice: dark ink where the gold is under it, light where the
             // empty bar is, each clipped to its part, so every letter keeps its contrast as the edge passes through it)
             const float split = std::max(fx, x0 + in);

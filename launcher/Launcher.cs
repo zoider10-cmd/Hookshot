@@ -1898,10 +1898,10 @@ static class RandoLayout {
     public static readonly RandoSection[] Sections = {
         new RandoSection { Title = "TESTED IN PLAY", Sub = "played and confirmed", Accent = Tested,
             Rows = new[] { "rando_on", "rando_chests", "rando_skulltulas", "rando_skulltulas_day", "+quests", "rando_songs", "rando_heart_pieces",
-                           "+shops", "rando_scrubs", "rando_major", "rando_progressive", "rando_sword_shield", "+forest", "rando_open_door",
+                           "+shops", "rando_scrubs", "rando_major", "rando_progressive", "rando_sword_shield", "+forest", "rando_open_door", "rando_ageless", "rando_letter",
                            "+skips", "+rupees", "rando_ammo_pickups" } },
         new RandoSection { Title = "SHOULD WORK", Sub = "made and checked, not yet played through", Accent = ShouldWork,
-            Rows = new[] { "rando_ageless", "rando_letter", "rando_ganon_bridge", "rando_hints", "rando_magic" } },
+            Rows = new[] { "rando_ganon_bridge", "rando_hints", "rando_magic" } },
         new RandoSection { Title = "DOES NOT WORK YET", Sub = "not made yet: leave these off, they can break a seed", Accent = Experimental,
             Rows = new[] { "rando_keys", "rando_dungeon_rewards", "rando_ageless_items" } },
     };

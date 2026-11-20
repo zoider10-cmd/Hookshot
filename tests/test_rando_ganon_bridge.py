@@ -48,9 +48,13 @@ static int oot_gamedata_enum(Ctx *c, uint32_t hash, uint32_t *value, int set) {
     return 1;
 }
 static int oot_gamedata_bool(Ctx *c, uint32_t hash, int *value) {
-    (void)c;
-    if (hash != 0x55c35e21u) return 0;
+    (void)c, (void)hash;
     *value = played;
+    return 1;
+}
+static int oot_gamedata_set_bool(Ctx *c, uint32_t hash, int value) {   /* (the bridge's scene marked played) */
+    (void)c, (void)hash;
+    played = value;
     return 1;
 }
 static int oot_pouch_count(Ctx *c, const char *name) {
@@ -74,25 +78,24 @@ int main(void) {
     /* As the game has it: nothing */
     quest = NOTREADY, mode = 0;
     second(&c), second(&c);
-    CHECK(quest == NOTREADY && sets == 0);
-    /* Open: Ready at once */
+    CHECK(quest == NOTREADY && sets == 0 && !played);
+    /* Open: the bridge made at once, as its scene leaves it: the scene played, the quest at Step01 (2026-11-20: Ready
+       alone never brought the scene) */
     mode = 1;
     second(&c);
-    CHECK(quest == READY && sets == 1 && logs == 1);
+    CHECK(quest == STEP01 && played && sets == 1 && logs == 2);   /* (the step read, then the bridge made) */
     /* once a second: a call in the same second does nothing, even with the quest put back */
-    quest = NOTREADY;
+    quest = NOTREADY, played = 0;
     oot_ganon_bridge(&c, t + 1);
     CHECK(quest == NOTREADY && sets == 1);
+    /* Ready with the scene not played (a save from before): made too */
+    quest = READY;
     second(&c);
-    CHECK(quest == READY && sets == 2);
-    /* Ready before the bridge's scene: left alone (the scene plays) */
-    second(&c);
-    CHECK(quest == READY && sets == 2);
-    /* the scene moved it on, then further: left alone */
-    quest = STEP01, second(&c);
+    CHECK(quest == STEP01 && played && sets == 2);
+    /* past it, further: left alone */
     quest = STEP06, second(&c);
     CHECK(quest == STEP06 && sets == 2);
-    /* the game sets it back to Ready: the step it had is put back */
+    /* the game sets it back to Ready after the scene: the step it had is put back */
     quest = READY, played = 1;
     second(&c);
     CHECK(quest == STEP06 && sets == 3);
@@ -101,10 +104,14 @@ int main(void) {
     quest = NOTREADY, played = 0;
     for (int i = 0; i < 5; i++) held[i] = 1;
     second(&c);
-    CHECK(quest == NOTREADY && sets == 3);
+    CHECK(quest == NOTREADY && sets == 3 && !played);
     held[5] = 1;
     second(&c);
-    CHECK(quest == READY && sets == 4);
+    CHECK(quest == STEP01 && played && sets == 4);
+    /* (the owner's test 2026-11-19) a new game's quest holds no step yet (0): Open still makes the bridge */
+    mode = 1, quest = 0, played = 0;
+    second(&c);
+    CHECK(quest == STEP01 && played && sets == 5);
     printf("PASS: Ganon's Castle bridge\n");
     return 0;
 }

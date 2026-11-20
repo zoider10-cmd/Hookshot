@@ -1583,6 +1583,11 @@ static void oot_ganon_bridge(Ctx *c, int64_t now) {
     next_at = now + 1000000000LL;   /* (each second) */
     uint32_t step = 0;
     if (!oot_gamedata_enum(c, OOT_STEP_DEFEAT_GANON, &step, 0)) return;
+    /* (Willow Woods, the owner's test 2026-11-19: Open set no step in a new game. A quest the story has not touched may
+       hold 0, no step yet: it is NotReady. What was read is logged once a session, to see it in play) */
+    static uint32_t logged = 1;
+    if (step != logged) { hos_log("rando: Ganon's quest's step read as %08x (Ganon's Castle bridge)", step); logged = step; }
+    if (step == 0) step = OOT_STEP_NOTREADY;
     if (step != OOT_STEP_NOTREADY && step != OOT_STEP_READY) {
         later = step;
         return;
@@ -1594,16 +1599,21 @@ static void oot_ganon_bridge(Ctx *c, int64_t now) {
             if (oot_gamedata_enum(c, OOT_STEP_DEFEAT_GANON, &back, 1))
                 hos_log("rando: Ganon's quest was set back to Ready after the bridge's scene: its step %08x is put back (Ganon's Castle bridge)",
                         back);
+            return;
         }
-        return;
+        /* (Ready with the scene not played: the bridge is made below, as from NotReady) */
     }
     int held = 0;
     if (mode == 2)
         for (int i = 0; i < 6; i++) held += oot_pouch_count(c, oot_medallions[i]) > 0;
     if (mode == 1 || held == 6) {
-        uint32_t ready = OOT_STEP_READY;
-        if (oot_gamedata_enum(c, OOT_STEP_DEFEAT_GANON, &ready, 1))
-            hos_log("rando: Ganon's quest set to Ready: the bridge's scene plays at the castle's edge (Ganon's Castle bridge, %s)",
+        /* (Willow Woods, the owner's test 2026-11-19, then without a window 2026-11-20: with the quest at Ready, Link
+           stood at the castle's edge and the bridge's scene never played: he fell. So the bridge is made as its scene
+           leaves it: the scene marked played (the bridge is there from the map's next load) and the quest at Step01) */
+        oot_gamedata_set_bool(c, OOT_RAINBOW_FLAG, 1);
+        uint32_t next = OOT_STEP_01;
+        if (oot_gamedata_enum(c, OOT_STEP_DEFEAT_GANON, &next, 1))
+            hos_log("rando: Ganon's Castle's bridge made: its scene marked played, the quest at Step01 (Ganon's Castle bridge, %s)",
                     mode == 1 ? "Open" : "6 medallions");
     }
 }
@@ -3275,6 +3285,8 @@ static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {
 #define OOT_MAGIC_SPIN "Item_FairyBless_MP"
 #define OOT_MPMAX_HASH 0x12d63a97u   /* PlayerStatus.MPMax */
 #define OOT_MAGIC_FIRST 240   /* (the first meter, in tenths: the list of pouch actors' MPMax 24) */
+#define OOT_MAGIC_DOUBLED 480   /* (the doubled meter: the gift's MPMax 48) */
+#define OOT_MP_HASH 0x76b18200u   /* PlayerStatus.MP: the magic Link has now, in the same tenths */
 static int oot_magic_family(const char *name) {
     int hos_rando_magic(void);   /* host/oot_rando.c */
     return hos_rando_magic() && (!strcmp(name, OOT_MAGIC_DOUBLE) || !strcmp(name, OOT_MAGIC_SPIN) || !strcmp(name, OOT_MAGIC_ITEM));
@@ -3285,16 +3297,21 @@ static const char *oot_magic_give(Ctx *c, const char *name) {   /* (what is give
     if (!oot_gamedata_int(c, OOT_MPMAX_HASH, &most, 0)) return NULL;
     return most < OOT_MAGIC_FIRST ? OOT_MAGIC_ITEM : NULL;
 }
-static void oot_magic_meter(Ctx *c) {   /* (Item_MagicMeter added: the meter to 24 at least) */
+/* (a magic found: the meter's next tier, and the meter filled (the owner's test 2026-11-19: the first came empty). No
+   meter: the first, 24. The first: doubled, 48, whichever of the two items it is (two magics in one room are both made
+   Item_MagicMeter when the room loads, oot_magic_give asked before either is opened: the second then did nothing).
+   Doubled: filled only) */
+static void oot_magic_meter(Ctx *c) {
     int32_t most = 0;
     if (!oot_gamedata_int(c, OOT_MPMAX_HASH, &most, 0)) {
         hos_log("rando: magic: PlayerStatus.MPMax not found: no meter given");
         return;
     }
-    if (most >= OOT_MAGIC_FIRST) return;
-    int32_t want = OOT_MAGIC_FIRST;
-    oot_gamedata_int(c, OOT_MPMAX_HASH, &want, 1);
-    hos_log("rando: magic: the magic meter given (PlayerStatus.MPMax %d -> %d)", (int)most, (int)want);
+    int32_t want = most < OOT_MAGIC_FIRST ? OOT_MAGIC_FIRST : most < OOT_MAGIC_DOUBLED ? OOT_MAGIC_DOUBLED : most;
+    if (want != most) oot_gamedata_int(c, OOT_MPMAX_HASH, &want, 1);
+    int32_t full = want;
+    oot_gamedata_int(c, OOT_MP_HASH, &full, 1);
+    hos_log("rando: magic: PlayerStatus.MPMax %d -> %d, the meter filled", (int)most, (int)want);
 }
 
 static const char *oot_progressive_give(Ctx *c, const char *name) {
@@ -4010,6 +4027,8 @@ int hos_oot_pouch_add(Ctx *c) {
             hos_log("rando: magic: %s found: %s given", name, give);
             oot_magic_meter(c);
             oot_pouch_name(c, view, give);
+        } else if (!strcmp(name, OOT_MAGIC_DOUBLE)) {
+            oot_magic_meter(c);   /* (the second magic, as the gift: doubled and filled) */
         }
         return 0;
     }

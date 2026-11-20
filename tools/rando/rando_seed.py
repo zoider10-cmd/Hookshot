@@ -60,7 +60,7 @@ ZSTD = b"\x28\xb5\x2f\xfd"
 MOD = "rando-seed"
 # (raised whenever the same settings would place something else than before: the launcher's run at Play, --if-changed,
 # then makes the seed again. A seed being played changes under its save when that happens, so not lightly)
-PLACEMENT = 15  # 15: the Deku Tree's third floor (room 3: a chest and a Gold Skulltula) asks for the Slingshot (DEKU_THIRD_FLOOR); 14: the Great Fairies of the three spells are gifts of the shuffle with Quest rewards, each holding what a lesson asked about by name may (FAIRY_GIFTS); 13: a bottle is a gating item where the bottles are shuffled (Quest rewards), and a Gold Skulltula in bean soil asks for one, its bugs (BOTTLE, soil_need: bug 84); 12: the Goron and Zora Tunics are gifts of the shuffle, and the rules ask for them (TUNICS); the chests with a substitute take part (SUBSTITUTE_CHESTS); the Gold Skulltulas and the Pieces of Heart lying in the world take part as chests do (SHUFFLED_FROM), and the Skulltula house's rewards, with the 40 tokens' one, ask for their tokens, counted (HOUSE_TOKENS); 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
+PLACEMENT = 16  # 16: the Great Fairies' offerings are rolled as the shops' prices are, and a fairy whose price needs a bigger wallet asks for it (FAIRY_PRICES); 15: the Deku Tree's third floor (room 3: a chest and a Gold Skulltula) asks for the Slingshot (DEKU_THIRD_FLOOR); 14: the Great Fairies of the three spells are gifts of the shuffle with Quest rewards, each holding what a lesson asked about by name may (FAIRY_GIFTS); 13: a bottle is a gating item where the bottles are shuffled (Quest rewards), and a Gold Skulltula in bean soil asks for one, its bugs (BOTTLE, soil_need: bug 84); 12: the Goron and Zora Tunics are gifts of the shuffle, and the rules ask for them (TUNICS); the chests with a substitute take part (SUBSTITUTE_CHESTS); the Gold Skulltulas and the Pieces of Heart lying in the world take part as chests do (SHUFFLED_FROM), and the Skulltula house's rewards, with the 40 tokens' one, ask for their tokens, counted (HOUSE_TOKENS); 2: the chests of LOCKED_ROOMS kept their items; 3: they take part again, their rooms opened by FIXES;
                 # 4: the Market's shops ask for nothing with Open forest exit, the Bombchu Shop not for Dodongo's Cavern (shop_need);
                 # 5: rules with alternatives (Either): Zora's Domain by the river or by the lake, and Open forest exit not
                 #    asking for the forest's way out (forest_open)
@@ -97,7 +97,7 @@ DAMPE_RACE_CHESTS = frozenset((0x4ccffbd5778b67e2,))
 # The Stalfos room's shutter (opened by an eye switch, so by the Bow) no longer turns saving and the warp songs off
 # while it is shut: without the Bow the room is left by a warp song, as any other. Nothing new to learn for a player.
 FIXES = {0x74fb0489585fe0e2: {"IsDisableSaveAndWarp": False}}
-FIXES_VERSION = 49   # (49: before the first Deku Nut and Deku Stick bags had "You got" words, FIRST_BAG_WORDS, bug 48. 48: before a shield's pick-up (a Skulltula's drop) had a model file of its own, bug 78, and King Zora's move aside was kept with Skip cutscenes, bug 88. 47: before the Gold Skulltulas by day had their AI never told it is day, bug 82. 46: before a Heart Container on a shelf was made a piece's size, bug 72. 45: before the empty bottle stood up on its shelf, and Kakariko's Potion Shop had its own turns and sizes, SHELF_TURN_SHOP. 44: before the royal tomb's opening, the Sun's Song's lesson and its sunrise were skipped, SCENE_SILENT. 43: before the cucco lady's game wanted one cucco, CUCCO_LOGIC. 42: before Death Mountain Trail's and Goron City's intros were left to play (their arrivals take the Fire quest a step), and an adult's first visit to Goron City went on to the rolling Goron, goron_arrival_fix. 41: before an empty child's sword slot was given the Kokiri Sword on the way back, era_sword_fix. 40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
+FIXES_VERSION = 50   # (50: before every Great Fairy's fountain answered Zelda's Lullaby from the start, FOUNTAIN_FLOW. 49: before the first Deku Nut and Deku Stick bags had "You got" words, FIRST_BAG_WORDS, bug 48. 48: before a shield's pick-up (a Skulltula's drop) had a model file of its own, bug 78, and King Zora's move aside was kept with Skip cutscenes, bug 88. 47: before the Gold Skulltulas by day had their AI never told it is day, bug 82. 46: before a Heart Container on a shelf was made a piece's size, bug 72. 45: before the empty bottle stood up on its shelf, and Kakariko's Potion Shop had its own turns and sizes, SHELF_TURN_SHOP. 44: before the royal tomb's opening, the Sun's Song's lesson and its sunrise were skipped, SCENE_SILENT. 43: before the cucco lady's game wanted one cucco, CUCCO_LOGIC. 42: before Death Mountain Trail's and Goron City's intros were left to play (their arrivals take the Fire quest a step), and an adult's first visit to Goron City went on to the rolling Goron, goron_arrival_fix. 41: before an empty child's sword slot was given the Kokiri Sword on the way back, era_sword_fix. 40: before the areas' first-visit intros were marked played with Skip cutscenes, AREA_INTROS. 39: before a map with two shops' shelves of a family had one list of tiers, and the tiers' maps kept its other edits (the Market went black). 38: before a shelf of a family showed the item Link would get, SHELF_FAMILIES (Progressive items). 37: before Hyrule Field's Piece of Heart chest was a child's on the Tracker tab, CHEST_AGES. 36: before the Tracker tab had the directions to a check, CHECK_WAYS. 35: before an adult had the sword's prompt with Open Door of Time, SWORD_PROMPT_LOGIC. 34: before the Potion Shop keeper's calm schedule's mark was set with his errand skipped. 33: before the bug of the Potion Shop keeper's errand was taken away too. 32: before the Potion Shop keeper's errand of the bug was passed over. 31: before a shelf's shield had a model file of its own (SHELF_OWN_MODEL) and a song's harp faced out. 30: before a shelf item the game never sells kept its capitals in the keeper's line, SHOP_NAME_CAPS. 29: before the empty bottle stood clear of its shelf's price board. 28: before the Kokiri girl in front of the shop was quieted, SCENE_STOPS. 27: before a song's harp stood up on its shelf. 26: before a song looked like Sheik's harp, SONG_LOOK. 25: before Hyrule Castle's drawbridge had three red rupees, DRAWBRIDGE_RUPEES. 24: before the stump chest by the bridge was an adult's on the Tracker tab, CHEST_AGES. 23: before Go there to the stump chest by the bridge went to the bridge's forest end, CHEST_GO. 22: before the minimap was there from a new game's start, MINIMAP. 21: before the Bombchu Shop's keeper was there from the start, BOMBCHU_ACTORS. 20: before the Bombchu Shop's door opened at night from the start, BOMBCHU_DOOR_LOGIC. 19: before Link's door was open from the start with Skip opening, LINK_DOOR. 18: before a gift's scene without talk was quieted, SCENE_GIFTS. 17: before the story's flows a lesson calls were quieted. 16: before a fork kept only the branches left, and counted them. 15: before the song lessons went to their gift, SCENE_LESSON. 14: before Zelda's last line, EventTalkIgnoreSameTalkAS, was passed over. 13: before a question whose answers all come to the same step was passed over. 12: before the story's videos were left out, SCENE_VIDEOS. 11: before Zelda's questions of three and four answers were passed over. 10: before the d-pad's HUD was there from a new game's start, DPAD_HUD. 9: before the smallest arrows' bundle lay across its shelf and the bracelet stood over the price board. 8: before the bomb's file was changed in the bomb flowers' packs too. 7: before the bomb's file was changed in place: written anew, the game fell reading it. 6: before bombs were lifted without the Goron's Bracelet, bomb_lift. 1: the eye switch took the Hookshot. 2: before the Kokiri Sword's chest's own cutscene was left out. 4: before Hyrule Field's clock ran from a new game's start, FIELD_CLOCK)
 # The forest's two closed ways. Each is a flag of the game that starts set and is put out by the story: Mido stands in
 # the way to the Deku Tree until Link has a sword and a shield (KokiriForest_Npc_Kokiri_Mido_Child_Blocker), and a
 # Kokiri in the forest's way out until the Deku Tree is done (KokiriForest_Npc_Kokiri_007_Child_Blocker_00). An
@@ -773,6 +773,88 @@ SHOP_CHILD, SHOP_CHILD_MORE = 200, 0.15
 # is gentler (its owner's word, 2026-11-13): 1 rupee on one shelf in 25, six in ten within the child's wallet.
 SHOP_LOW_POWER = 2
 SHOP_TENS_FROM = 12      # (the placement from which prices are in tens: shop_price)
+# ---- The Great Fairies' offerings (asked for 2026-11-19: rolled as the shops' prices are) ----
+# Each fountain's scene asks EventQueryHasRuppe for its price and calls Dm_FairyFountain_Din:Pay with minus it; the fairy's
+# words name it by a tag (GreatFairy_Price1 to 6), a number the game's code fills in, not in any file, so the tag is
+# replaced by the number in each language's words (EventFlowMsg/Dm_FairyFountain_Din.msbt, FAIRY_PRICE_TEXT). With Shops,
+# from placement FAIRY_PRICES_FROM: the price is shop_price's, and a fairy of the shuffle whose price is past the child's
+# wallet asks for the wallet that holds it (wallet_need). The game's prices: {scene: (its tag's number, its price, gift)}.
+FAIRY_PRICES = {"Dm_FairyFountain_Din": (1, 25, "fairy_din"), "Dm_FairyFountain_Power": (2, 50, "fairy_power"),
+                "Dm_FairyFountain_Frore": (3, 100, "fairy_farore"), "Dm_FairyFountain_Wisdom": (4, 200, "fairy_wisdom"),
+                "Dm_FairyFountain_Nayru": (5, 300, "fairy_nayru"), "Dm_FairyFountain_Courage": (6, 500, "fairy_courage")}
+FAIRY_PRICES_FROM = 16
+FAIRY_PRICE_TEXT = "EventFlowMsg/Dm_FairyFountain_Din.msbt"
+
+
+def fairy_prices(seed, mode):
+    """{scene: the price its fairy asks}: shop_price's, one roll of its own a fountain"""
+    return {flow: shop_price(random.Random("fairy price:%d:%s" % (seed, flow)), mode) for flow in FAIRY_PRICES}
+
+
+def fairy_price_flow(data, price):
+    """A fountain's scene with its price made `price`: the one EventQueryHasRuppe's Value and the one call of Pay's Value
+    (its minus): the new bytes, of the same size. ValueError: not one of each."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+    if data[:6] != b"BFEVFL" or u16(0x20) != 1:
+        raise ValueError("not an event flow file of one flowchart")
+    chart = u64(u64(0x28))
+    actors, count, events = u64(chart + 0x28), u16(chart + 0x16), u64(chart + 0x30)
+    text = lambda ptr: bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if 0 < ptr < len(data) - 2 else ""
+    out, asks, pays = bytearray(data), 0, 0
+    for i in range(count):
+        e = events + 0x30 * i
+        kind, at = data[e + 8], u64(e + 0x10)
+        if kind == 1:
+            actor = actors + 0x38 * u16(e + 0x0c)
+            what = text(u64(u64(actor + 0x20) + 8 * u16(e + 0x0e)))
+        elif kind == 4:
+            what = "call " + text(u64(e + 0x20))
+        else:
+            continue
+        if what not in ("EventQueryHasRuppe", "call Pay"):
+            continue
+        keys = u64(at + 8) if at else 0
+        for k in range(u16(at + 2) if at and keys else 0):
+            item = u64(at + 0x10 + 8 * k)
+            if text(u64(keys + 8 + 16 * (k + 1) + 8)) == "Value" and data[item] == 2:
+                struct.pack_into("<i", out, item + 0x10, price if what == "EventQueryHasRuppe" else -price)
+                if what == "EventQueryHasRuppe":
+                    asks += 1
+                else:
+                    pays += 1
+    if asks != 1 or pays != 1:
+        raise ValueError("%d price questions and %d payments where one of each was expected" % (asks, pays))
+    return bytes(out)
+
+
+def fairy_price_words(data, prices):
+    """The fairies' words (FAIRY_PRICE_TEXT, one language) with each GreatFairy_Price<n> tag made the number `prices[n]`:
+    (the file written anew, how many lines changed). A tag: 0x0E, its group, type and size (16 bits each), then its
+    parameters, the tag's name among them."""
+    lines = 0
+    for label in msbt_labels(data):
+        start, end = msbt_text(data, label)
+        raw = bytes(data[start:end]).rstrip(b"\0")
+        new, at = bytearray(), 0
+        while True:
+            found = raw.find(b"GreatFairy_Price", at)
+            if found < 0:
+                new += raw[at:]
+                break
+            tag = found - 9   # (0x0E, group, type, size, then the name's length before it)
+            if tag < at or raw[tag] != 0x0E or raw[found - 2:found] != b"\x11\x00":
+                raise ValueError("%s: a price tag not as expected" % label)
+            size = struct.unpack_from("<H", raw, tag + 5)[0]
+            n = raw[found + 16] - 0x30
+            if n not in prices:
+                raise ValueError("%s: GreatFairy_Price%d is not a fountain's" % (label, n))
+            new += raw[at:tag] + str(prices[n]).encode()
+            at = tag + 7 + size
+        if bytes(new) != raw:
+            data = msbt_set(data, label, bytes(new))
+            lines += 1
+    return data, lines
 SHOP_AFFORDABLE = 10     # (Shops: Affordable, every shelf's price)
 WALLETS = ((200, NONE), (500, frozenset((WM,))), (SHOP_PRICE_MAX, frozenset((WL,))))
 
@@ -3337,6 +3419,45 @@ def cucco_flow_one(data, want=CUCCOS):
     return bytes(out)
 
 
+# ---- Every Great Fairy from the start (asked for 2026-11-19) ----
+# Zelda's Lullaby on a fountain's Triforce mark plays TriForcePoint (FOUNTAIN_FLOW). For every fountain but one it then
+# asks IsGet.Item_DinFire and sends one answer to Navi's lines ("It doesn't seem like anything happened... Let's come
+# back later", Dm_FairyFountain_Power:Talk_00 to _02, by the Fire quest's step) and the other on to the fairy, so the
+# fountains wait for the first one. Both answers are made to go on to the fairy. NOT SEEN IN PLAY.
+FOUNTAIN_FLOW = "Event/EventFlow/TriForcePoint.bfevfl.zs"
+
+
+def fountains_open(data):
+    """The fountains' flow (FOUNTAIN_FLOW) with the question the fountain's choice (EventQueryFairyFountainSelectSpecialAbility)
+    leads to, a yes-or-no one (IsGet of the Din fairy's gift: its name is the seed's item there, FAIRY_WORDS), sending
+    both answers where its "no" goes: the new bytes, of the same size. ValueError: not the file, or not one such question."""
+    u16 = lambda at: struct.unpack_from("<H", data, at)[0]
+    u32 = lambda at: struct.unpack_from("<I", data, at)[0]
+    u64 = lambda at: struct.unpack_from("<Q", data, at)[0]
+    if data[:6] != b"BFEVFL" or u16(0x20) != 1:
+        raise ValueError("not an event flow file of one flowchart")
+    chart = u64(u64(0x28))
+    actors, count, events = u64(chart + 0x28), u16(chart + 0x16), u64(chart + 0x30)
+    text = lambda ptr: bytes(data[ptr + 2:ptr + 2 + u16(ptr)]).decode("utf-8", "replace") if 0 < ptr < len(data) - 2 else ""
+    query = lambda e: text(u64(u64(actors + 0x38 * u16(e + 0x0c) + 0x20) + 8 * u16(e + 0x0e)))
+    cases = lambda e: {u32(u64(e + 0x18) + 8 * c): u64(e + 0x18) + 8 * c + 4 for c in range(u16(e + 0x0a))}
+    hits = set()
+    for i in range(count):
+        e = events + 0x30 * i
+        if data[e + 8] != 1 or query(e) != "EventQueryFairyFountainSelectSpecialAbility":
+            continue
+        for place in cases(e).values():
+            g = events + 0x30 * u16(place)
+            if data[g + 8] == 1 and query(g) == "EventQueryIsGameDataBool" and set(cases(g)) == {0, 1}:
+                hits.add(g)
+    if len(hits) != 1:
+        raise ValueError("%d yes-or-no questions after the fountain's choice where one was expected" % len(hits))
+    pairs = cases(hits.pop())
+    out = bytearray(data)
+    struct.pack_into("<H", out, pairs[1], u16(pairs[0]))
+    return bytes(out)
+
+
 def sword_prompt_open(data):
     """The adult's Master Sword logic (SWORD_PROMPT_LOGIC) with its attention's Logic_Delete input unlinked: the new
     bytes, of the same size. The input (name, node, its output, flags, default) took node 1, InvBool of the Forest
@@ -5654,6 +5775,11 @@ def main():
     shelf_start = {} if os.environ.get("RANDO_TEST_SHELF_FLAGS") == "0" else {name: True for name in shelf_flag.values()}
     # (the Skulltula house's rewards ask for their tokens from placement 12: house_need)
     gifts.update((h, g._replace(need=house_need(g.key, g.need, placement))) for h, g in list(gifts.items()) if g.key in HOUSE_TOKENS)
+    # (the Great Fairies' offerings: rolled with Shops, and a fairy past the child's wallet asks for its wallet: FAIRY_PRICES)
+    fairy_cost = fairy_prices(seed, a.shops) if a.shops and placement >= FAIRY_PRICES_FROM else {}
+    by_gift = {FAIRY_PRICES[flow][2]: price for flow, price in fairy_cost.items()}
+    gifts.update((h, g._replace(need=frozenset(g.need) | wallet_need(by_gift[g.key]))) for h, g in list(gifts.items())
+                 if g.key in by_gift and isinstance(g.need, (set, frozenset)))
     if placement >= BOTTLE_FROM and any(g.item == BOTTLE for g in gifts.values()):   # (a bottle shuffled: a gating item, bug 84)
         PROGRESSION = PROGRESSION | {BOTTLE}
     # (a string seed: the same on every Python 3. The seeds made before --event-chests keep their shuffle without it)
@@ -6067,6 +6193,35 @@ def main():
         gift_sizes[CUCCO_FLOW[:-3]] = len(gift_files[CUCCO_FLOW])
     except (OSError, ValueError, struct.error) as e:
         sys.exit("%s: %s. Nothing written." % (CUCCO_FLOW, e))
+    try:   # (every Great Fairy answers Zelda's Lullaby from the start: FOUNTAIN_FLOW)
+        was = gift_files[FOUNTAIN_FLOW] if FOUNTAIN_FLOW in gift_files else unpack(open(os.path.join(romfs, *FOUNTAIN_FLOW.split("/")), "rb").read(), zs, dicts)
+        gift_files[FOUNTAIN_FLOW] = fountains_open(was)
+        gift_sizes[FOUNTAIN_FLOW[:-3]] = len(gift_files[FOUNTAIN_FLOW])
+    except (OSError, ValueError, struct.error) as e:
+        sys.exit("%s: %s. Nothing written." % (FOUNTAIN_FLOW, e))
+    print("the Great Fairies' fountains: every one answers Zelda's Lullaby from the start")
+    if fairy_cost:   # (the offerings: FAIRY_PRICES)
+        try:
+            for flow, price in fairy_cost.items():
+                rel = "Event/EventFlow/%s.bfevfl.zs" % flow
+                was = gift_files[rel] if rel in gift_files else unpack(open(os.path.join(romfs, *rel.split("/")), "rb").read(), zs, dicts)
+                gift_files[rel] = fairy_price_flow(was, price)
+                gift_sizes[rel[:-3]] = len(gift_files[rel])
+            numbers = {FAIRY_PRICES[flow][0]: price for flow, price in fairy_cost.items()}
+            folder, word_lines = os.path.join(romfs, "Mals"), 0
+            for n in sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if n.endswith(".sarc.zs")):
+                rel = "Mals/" + n
+                parts = sarc_read(gift_files[rel] if rel in gift_files else unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts))
+                if FAIRY_PRICE_TEXT not in parts:
+                    continue
+                parts[FAIRY_PRICE_TEXT], done = fairy_price_words(parts[FAIRY_PRICE_TEXT], numbers)
+                if done:
+                    gift_files[rel] = sarc_write(parts)
+                    gift_sizes[rel[:-3]] = len(gift_files[rel])
+                    word_lines += done
+        except (OSError, KeyError, ValueError, struct.error, IndexError) as e:
+            sys.exit("the Great Fairies' offerings: %s. Nothing written." % e)
+        print("the Great Fairies' offerings: %s (%d lines of words)" % (", ".join("%s %d" % (flow.split("_")[-1], p) for flow, p in fairy_cost.items()), word_lines))
     # ---- the songs: each lesson gives the song the shuffle put there, and who asks about a lesson asks for that song ----
     song_parts = set()
     if lessons:
@@ -6134,7 +6289,7 @@ def main():
         folder = os.path.join(romfs, "Mals")
         for n in sorted(n for n in (os.listdir(folder) if os.path.isdir(folder) else []) if n.startswith(lang + ".") and n.endswith(".sarc.zs")):
             try:
-                was = unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)
+                was = gift_files["Mals/" + n] if "Mals/" + n in gift_files else unpack(open(os.path.join(folder, n), "rb").read(), zs, dicts)   # (an earlier edit's first: the fairies' offerings)
                 parts = sarc_read(was)
                 text = parts[SCRUB_TEXT]
                 for label in lines:
