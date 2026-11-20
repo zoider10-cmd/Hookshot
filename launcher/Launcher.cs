@@ -2469,9 +2469,10 @@ class LauncherForm : Form {
     readonly List<TabW> tabs = new List<TabW>();
     Selector langSel;
     Btn updateButton, playButton, fsrButton, benchButton;
-    const bool UpdatesOn = false;
+    const bool UpdatesOn = false;   // (the Update button and the check at start; see where updateButton is made)
     // (Willow Woods: Master Quest and the Mods tab are Mako's and untested here: hidden, their code kept)
-    internal const bool MasterQuestOn = false, ModsOn = false;   // (the Update button and the check at start; see where updateButton is made)
+    internal const bool MasterQuestOn = false, ModsOn = false;
+    const int SendLogsRow = 4;   // (FileRows' Send logs: Mako's report to its own Discord; left out, the owner's choice 2026-11-20)
     Bench bench; bool benchBusy;   // (Mako 4.0: Test my PC, its last result)
     string fsrLine = ""; Color fsrLineColor = Theme.Dim; bool fsrBusy;
     Image logo, mqLogo;
@@ -2933,7 +2934,7 @@ class LauncherForm : Form {
                               () => OpenFolder(dir), OnSendLogs, () => OpenUrl(Fork.Home + "/issues"),
                               () => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } };
             for (int i = 0, at = 0; i < FileRows.Length; i++) {
-                if (i == 2 && !MasterQuestOn) continue;   // (Master Quest saves)
+                if ((i == 2 && !MasterQuestOn) || i == SendLogsRow) continue;   // (Master Quest saves; Send logs: none in Willow Woods)
                 widgets.Add(new Btn { Text = FileRows[i][0], Page = 8, Click = acts[i], R = new RectangleF(cx + at % 2 * (fw + 14), 150 + at / 2 * 112, fw, 44) });
                 at++;
             }
@@ -3490,7 +3491,7 @@ class LauncherForm : Form {
     void PaintFiles(Graphics g, float x) {
         float cw = W - LeftW - 72, fw = (cw - 14) / 2;
         for (int i = 0, at = 0; i < FileRows.Length; i++) {
-            if (i == 2 && !MasterQuestOn) continue;   // (Master Quest saves: no button)
+            if ((i == 2 && !MasterQuestOn) || i == SendLogsRow) continue;   // (Master Quest saves: no button; Send logs: none in Willow Woods)
             Theme.Text_(g, FileRows[i][1], Theme.Small, Theme.Dim, new RectangleF(x + at % 2 * (fw + 14) + 4, 150 + at / 2 * 112 + 50, fw - 8, 54),
                         StringAlignment.Near, StringAlignment.Near);
             at++;
