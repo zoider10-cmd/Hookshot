@@ -3929,6 +3929,7 @@ class LauncherForm : Form {
     string Installed() {
         string p = Path.Combine(dir, "user", "hookshot_vk_version.txt");
         string v = File.Exists(p) ? ValueIn(File.ReadAllText(p), "version") : "";
+        if (v.StartsWith("mako-")) v = "";   // (Willow Woods: a renderer update of Mako's, left in an older folder, is not a version of ours)
         return v.Length > 0 && !Older(v, Fork.Version) ? v : Fork.Version;
     }
 
