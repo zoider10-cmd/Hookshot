@@ -53,7 +53,7 @@ Updates: the launcher and the builder check this repository's releases.
 
 ## Reporting a problem
 
-Open an issue on this repository with what happened, where, and the seed's ID. The game's log is in the game folder's
+Join the **[Willow Woods Discord](https://discord.gg/NvrtcfgACm)** for help (#install-help), bug reports and sharing seeds. Or open an issue on this repository with what happened, where, and the seed's ID. The game's log is in the game folder's
 `logs/` (it names no user folder).
 
 ## Credits
