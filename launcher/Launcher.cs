@@ -5044,7 +5044,8 @@ class LauncherForm : Form {
         // the Saves and Save copies buttons showing the normal game's folder, its list of copies empty. A second start
         // brings the first one's window to the front and ends)
         bool first;
-        var once = new Mutex(true, "WillowWoodsLauncher_" + OnceName(dir), out first);
+        // (Willow Woods: one launcher window at all, whatever its folder: a second start brings the first to the front)
+        var once = new Mutex(true, "WillowWoodsLauncher", out first);
         if (!first) {
             try {
                 int me = Process.GetCurrentProcess().Id;
