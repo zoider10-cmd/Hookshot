@@ -1229,6 +1229,23 @@ static int oot_gamedata_string(Ctx *c, uint32_t hash, char *buf, size_t size) {
     return 1;
 }
 
+/* (Willow Woods) Where a game-data string's text lives (its getter's answer, f_80cd0ea0): 0 when it is not there. */
+static uint64_t oot_gamedata_string_at(Ctx *c, uint32_t hash) {
+    const uint64_t mgr = oot_singleton(c, OOT_GAMEDATA_SLOT);
+    A64Fn get = a64_lookup(0x80cd0ea0ULL);
+    if (!mgr || !get) return 0;
+    const Ctx saved = *c;
+    const uint64_t out = (c->x[31] - 0x40) & ~0xfULL;
+    recomp_store64_sp(c, out, 0);
+    c->x[31] = out;
+    c->x[0] = mgr, c->x[1] = out, c->x[2] = hash;
+    get(c);
+    const int found = (int)(c->x[0] & 1);
+    const uint64_t text = recomp_load64(c, out);
+    *c = saved;
+    return found ? text : 0;
+}
+
 /* One argument of an EventRequestArg: the array of 200-byte entries at arg+8, capacity arg+0, count arg+16.
    Entry: +0 type (1 string pointer, 4 bool), +8 name buffer, +16 its capacity, +152 the value. As
    QueryBancChangeEventRequestArg (f_829df380) fills them. A string value is a pointer the request does not copy. */
@@ -2452,6 +2469,20 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
                 item[length] = 0;
                 const int result = oot_pouch_change(c, item, 1);
                 hos_log("test: %s given (event status %d): Link has %d", item, result, oot_pouch_count(c, item));
+            }
+            {   /* (a test's: HOS_OOT_TEST_BOOTS=<boots actor> logs the boots wanted (game data EquipBoot, a string the
+                   player's boots code, f_80a98d40, compares with the boots worn) each second, and at the 25th writes it there) */
+                const char *boots = getenv("HOS_OOT_TEST_BOOTS");
+                if (boots && turn < 60) {
+                    char now[80];
+                    const int have = oot_gamedata_string(c, 0x6aa85ab3u, now, sizeof now);   /* (EquipBoot) */
+                    hos_log("test: EquipBoot %s\"%s\"", have ? "" : "(not found) ", now);
+                    if (turn == 25 && *boots) {
+                        const uint64_t at = oot_gamedata_string_at(c, 0x6aa85ab3u);
+                        if (at > 0xffffffffULL) { for (size_t i = 0; i <= strlen(boots) && i < 64; i++) recomp_store8(c, at + i, (uint8_t)boots[i]); }   /* (a heap buffer only: not the image's own empty text) */
+                        hos_log("test: EquipBoot written \"%s\" (%#llx)", boots, (unsigned long long)at);
+                    }
+                }
             }
             int32_t mp = -1, most = -1;   /* (what the magic is a second after each, for a test of a refill) */
             oot_gamedata_live_int(c, 0x76b18200u, &mp, 0, NULL);   /* PlayerStatus.MP */
