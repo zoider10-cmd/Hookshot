@@ -1638,9 +1638,9 @@ def patch_trace(source):
 # where it puts the saved boots (EquipBoot) in his boots slot (f_82e16c80, kinds 8 to 10 of its requests skipped for a child: 9
 # is the boots') and each frame where it gives their effect (f_804d6eb0), and a child stops there: his boots slot stayed empty
 # and the d-pad did nothing (traced 2026-11-20 on the owner's saves "Adult Boots Test" and "Child Boots Test"). The answers at
-# those calls go through hos_oot_boots_child (host/oot_rando.c): no child with the setting on, at the first for the boots' kind
-# only (x20, the request's kind; 8 and 10 are other adult things, left). (Kind 14 of f_82e16c80 also asks, and is the child's
-# own: left.) Each: (the call as lifted, the hook after it).
+# those calls go through hos_oot_boots_child (host/oot_rando.c): no child with the setting on, for the boots' kind and the
+# tunics' (x20, the request's kind: 9 EquipBoot, 8 EquipArmor; 10 EquipHandArmor, the gauntlets, left). (Kind 14 of f_82e16c80
+# also asks, and is the child's own: left.) Each: (the call as lifted, the hook after it).
 BOOTS_CHILD_HOOK = " c->x[0] = hos_oot_boots_child(c->x[0], %s);   /* (nx2/oot_patches.py patch_boots_child) */"
 # (and f_82e21a90, which makes the request's actor: for kinds whose (kind & 10) == 8 a child goes to its failure (0x200000 set in
 #  +0x13a0) before the actor is made; its kind in x20 too. Traced the same day: the third stop)

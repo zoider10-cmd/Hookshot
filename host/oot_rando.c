@@ -36,10 +36,12 @@ int hos_rando_magic(void) { return rando_active && rando.v[OOT_RANDO_MAGIC] != 0
 /* (Either age's items: young Link's boots. The game asks the player's PlayerGameParam IsChild (f_804d6db0) where it puts boots on
    (f_82e16c80, as a save loads: its requests of kinds 8 to 10, kind 9 the boots') and each frame where it gives their effect
    (f_804d6eb0), and stops for a child. With the setting on, the boots' kind (9: the per-frame call passes 9) is told no child;
-   kinds 8 and 10 keep the game's answer. nx2/oot_patches.py patch_boots_child) */
+   and the tunics' (8, EquipArmor: the Goron and Zora Tunics; the normal one takes the tunic off, f_810cceb0); kind 10, the
+   gauntlets' (EquipHandArmor), keeps the game's answer. nx2/oot_patches.py patch_boots_child) */
 int hos_rando_ageless_items(void) { return rando_active && rando.v[OOT_RANDO_AGELESS_ITEMS] != 0; }
 unsigned long long hos_oot_boots_child(unsigned long long is_child, unsigned long long kind) {
-    return (kind & 0xffffffffULL) == 9 && hos_rando_ageless_items() ? 0 : is_child;
+    const unsigned k = (unsigned)(kind & 0xffffffffULL);
+    return (k == 8 || k == 9) && hos_rando_ageless_items() ? 0 : is_child;
 }
 /* Open Door of Time: on with the randomizer (hos_main.c oot_time_door) */
 /* (a test's: HOS_OOT_OPEN_DOOR=1 is the setting on, whatever the options say) */
