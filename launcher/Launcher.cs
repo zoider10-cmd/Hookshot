@@ -202,7 +202,7 @@ public static class SaveSlots {
     // (the randomizer's settings that move no item: changed on a save being played, its seed is written again as it was,
     // tools/rando/rando_seed.py QOL_STAMP and the stamp's second line; the others are the game's side's alone)
     static readonly HashSet<string> NoItemKeys = new HashSet<string> { "rando_skip_intro", "rando_skip_cutscenes", "rando_start_rupees",
-        "rando_skulltulas_day", "rando_hints", "rando_ageless", "rando_ageless_items", "rando_chest_size", "rando_ammo_pickups", "rando_rupee_fill", "rando_ganon_bridge" };
+        "rando_skulltulas_day", "rando_hints", "rando_ageless", "rando_ageless_items", "rando_chest_size", "rando_bridge_medallions", "rando_ammo_pickups", "rando_rupee_fill", "rando_ganon_bridge" };
     static bool MovesNoItem(string line) { int eq = line.IndexOf('='); return eq > 0 && NoItemKeys.Contains(line.Substring(0, eq).Trim()); }
 
     // (the seed there is now is not the one that save was last played on: settings that move no item aside. A line one
@@ -1977,7 +1977,7 @@ static class RandoLayout {
                            "+shops", "rando_scrubs", "rando_major", "rando_progressive", "rando_sword_shield", "+forest", "rando_open_door", "rando_ageless", "rando_letter",
                            "+skips", "+rupees", "rando_ammo_pickups" } },
         new RandoSection { Title = "SHOULD WORK", Sub = "made and checked, not yet played through", Accent = ShouldWork,
-            Rows = new[] { "rando_ganon_bridge", "rando_hints", "rando_magic", "rando_ageless_items", "rando_chest_size" } },
+            Rows = new[] { "rando_ganon_bridge", "rando_bridge_medallions", "rando_hints", "rando_magic", "rando_ageless_items", "rando_chest_size" } },
         new RandoSection { Title = "DOES NOT WORK YET", Sub = "not made yet: leave these off, they can break a seed", Accent = Experimental,
             Rows = new[] { "rando_keys", "rando_dungeon_rewards" } },
     };
@@ -2690,8 +2690,8 @@ class LauncherForm : Form {
             "A rupee lying in the world or dropped by grass, pots and enemies fills the wallet to what it holds. Not chests, shops or prizes." },
         new object[] { "rando_skulltulas_day", "Gold Skulltulas by day", new[] { "Off", "On" }, new[] { 0, 1 },
             "The 30 Gold Skulltulas that come out only at night are there by day too. Moves no item." },
-        new object[] { "rando_ganon_bridge", "Ganon's Castle bridge", new[] { "As the game has it", "Open", "6 medallions" }, new[] { 0, 1, 2 },
-            "The rainbow bridge to Ganon's Castle. As the game has it: after the Shadow and Spirit Temples' sages wake. Open: from the start. 6 medallions: once Link holds all six. Its own scene plays when Link next stands at the castle's edge." },
+        new object[] { "rando_ganon_bridge", "Ganon's Castle bridge", new[] { "As the game has it", "Open", "Medallions" }, new[] { 0, 1, 2 },
+            "The rainbow bridge to Ganon's Castle. As the game has it: after the Shadow and Spirit Temples' sages wake. Open: from the start. Medallions: once Link holds as many medallions as Bridge medallions says (six unless changed). The bridge appears when Link next stands at the castle's edge." },
         new object[] { "rando_hints", "Gossip Stone hints", new[] { "Off", "On" }, new[] { 0, 1 },
             "Talking to a Gossip Stone gives one of the seed's hints, each said by two stones: where a needed item is, an area on the way of the hero (it holds a needed item), or a foolish one (it holds none). No Mask of Truth needed. Moves no item: it can be turned on for a seed being played." },
         new object[] { "rando_ageless", "Either age's swords", new[] { "Off", "On" }, new[] { 0, 1 },
@@ -2703,7 +2703,9 @@ class LauncherForm : Form {
         new object[] { "rando_ageless_items", "Either age's items", new[] { "Off", "On" }, new[] { 0, 1 },
             "Each age can use the other's items: young Link the Bow with its arrows, fire, ice and light arrows too (held like the Slingshot), the Hammer, the Hookshots and the Iron and Hover Boots; adult Link the Slingshot, the Boomerang and Deku Sticks; both the Kokiri and Mirror Shields. Tested in play: young Link's Bow, fire arrows, Hammer, Longshot and boots, adult Link's Deku Sticks, Slingshot and Boomerang. Known quirks: adult Link's Boomerang stops in front of him on its way back (equip another item and back to throw again); the shot's prompt may name the other age's ammo; young Link's boots don't show on the d-pad. Young Link can't use the Biggoron's Sword: it stays adult Link's. Harmless: Link's model may look stretched or wrong in some cutscenes and for a moment while he uses the other age's item, as it does whenever a cutscene plays at the age it was not made for. The logic does not count on it. Moves no item." },
         new object[] { "rando_chest_size", "Chest size matches contents", new[] { "Off", "On" }, new[] { 0, 1 },
-            "A chest holding a major item (one the seed's logic needs, a song or magic) is a big chest; any other is a small chest, so a chest's size tells you whether it is worth opening. Moves no item: it can be turned on for a seed being played. Big chests keep their long opening." }
+            "A chest holding a major item (one the seed's logic needs, a song or magic) is a big chest; any other is a small chest, so a chest's size tells you whether it is worth opening. Moves no item: it can be turned on for a seed being played. Big chests keep their long opening." },
+        new object[] { "rando_bridge_medallions", "Bridge medallions", new[] { "6", "5", "4", "3" }, new[] { 0, 1, 2, 3 },
+            "With Ganon's Castle bridge at Medallions: how many of the six medallions Link must hold for the bridge to appear. Moves no item. The logic still asks for every progression item for the castle." }
     };
     // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and

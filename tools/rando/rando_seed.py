@@ -4160,7 +4160,7 @@ def settings(game):
            "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
            "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0, "rando_open_door": 0,
            "rando_ammo_pickups": 0, "rando_rupee_fill": 0, "rando_skulltulas_day": 0,
-           "rando_ganon_bridge": 0, "rando_hints": 0, "rando_ageless": 0, "rando_letter": 0, "rando_magic": 0, "rando_ageless_items": 0, "rando_chest_size": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
+           "rando_ganon_bridge": 0, "rando_hints": 0, "rando_ageless": 0, "rando_letter": 0, "rando_magic": 0, "rando_ageless_items": 0, "rando_chest_size": 0, "rando_bridge_medallions": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:

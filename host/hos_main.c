@@ -1661,17 +1661,19 @@ static void oot_ganon_bridge(Ctx *c, int64_t now) {
         /* (Ready with the scene not played: the bridge is made below, as from NotReady) */
     }
     int held = 0;
+    int hos_rando_bridge_medallions(void);   /* host/oot_rando.c: 6 to 3 (the setting Bridge medallions) */
+    const int need = hos_rando_bridge_medallions();
     if (mode == 2)
         for (int i = 0; i < 6; i++) held += oot_pouch_count(c, oot_medallions[i]) > 0;
-    if (mode == 1 || held == 6) {
+    if (mode == 1 || (mode == 2 && held >= need)) {
         /* (Willow Woods, the owner's test 2026-11-19, then without a window 2026-11-20: with the quest at Ready, Link
            stood at the castle's edge and the bridge's scene never played: he fell. So the bridge is made as its scene
            leaves it: the scene marked played (the bridge is there from the map's next load) and the quest at Step01) */
         oot_gamedata_set_bool(c, OOT_RAINBOW_FLAG, 1);
         uint32_t next = OOT_STEP_01;
         if (oot_gamedata_enum(c, OOT_STEP_DEFEAT_GANON, &next, 1))
-            hos_log("rando: Ganon's Castle's bridge made: its scene marked played, the quest at Step01 (Ganon's Castle bridge, %s)",
-                    mode == 1 ? "Open" : "6 medallions");
+            hos_log("rando: Ganon's Castle's bridge made: its scene marked played, the quest at Step01 (Ganon's Castle bridge, %s, %d held)",
+                    mode == 1 ? "Open" : "medallions", held);
     }
 }
 

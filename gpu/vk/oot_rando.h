@@ -116,8 +116,8 @@
       "The 30 Gold Skulltulas that come out only at night are there by day too. Moves no item.", \
       "Off", "On") \
     X(GANON_BRIDGE, "Ganon's Castle bridge", "rando_ganon_bridge", \
-      "The rainbow bridge to Ganon's Castle. As the game has it: after the Shadow and Spirit Temples' sages wake. Open: from the start. 6 medallions: once Link holds all six. Its own scene plays when Link next stands at the castle's edge.", \
-      "As the game has it", "Open", "6 medallions") \
+      "The rainbow bridge to Ganon's Castle. As the game has it: after the Shadow and Spirit Temples' sages wake. Open: from the start. Medallions: once Link holds as many medallions as Bridge medallions says (six unless changed). The bridge appears when Link next stands at the castle's edge.", \
+      "As the game has it", "Open", "Medallions") \
     X(HINTS, "Gossip Stone hints", "rando_hints", \
       "Talking to a Gossip Stone gives one of the seed's hints, each said by two stones: where a needed item is, an area on the way of the hero (it holds a needed item), or a foolish one (it holds none). No Mask of Truth needed. Moves no item: it can be turned on for a seed being played.", \
       "Off", "On") \
@@ -135,7 +135,10 @@
       "Off", "On") \
     X(CHEST_SIZE, "Chest size matches contents", "rando_chest_size", \
       "A chest holding a major item (one the seed's logic needs, a song or magic) is a big chest; any other is a small chest, so a chest's size tells you whether it is worth opening. Moves no item: it can be turned on for a seed being played. Big chests keep their long opening.", \
-      "Off", "On")
+      "Off", "On") \
+    X(BRIDGE_MEDALLIONS, "Bridge medallions", "rando_bridge_medallions", \
+      "With Ganon's Castle bridge at Medallions: how many of the six medallions Link must hold for the bridge to appear. Moves no item. The logic still asks for every progression item for the castle.", \
+      "6", "5", "4", "3")
 
 enum {
 #define OOT_RANDO_ENUM(NAME, label, key, help, ...) OOT_RANDO_##NAME,

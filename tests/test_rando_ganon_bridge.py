@@ -6,7 +6,8 @@
 - oot_ganon_bridge compiled alone against a fake list of flags and pouch:
   - As the game has it: the quest Step_Defeat_Ganon is never touched;
   - Open: NotReady becomes Ready (the bridge's own scene then plays at the castle's edge and moves it on);
-  - 6 medallions: Ready only once all six are held, not with five;
+  - Medallions: the bridge made once as many are held as the setting Bridge medallions asks (6 by default; 4 tried),
+    not with one fewer;
   - a step past Ready is left alone, and if the game sets it back to Ready after the bridge's scene has played (the
     sages' scene would), the step it had is put back (or Step01 when none was seen this session);
   - the quest is looked at once a second, not every frame.
@@ -36,9 +37,10 @@ FIXTURE = r'''#include <stdint.h>
 #include <string.h>
 #define CHECK(x) do { if (!(x)) { fprintf(stderr, "FAIL:%d %s\n", __LINE__, #x); exit(1); } } while (0)
 typedef struct { int unused; } Ctx;
-static int mode, played, held[6], sets, logs;
+static int mode, played, held[6], sets, logs, need = 6;
 static uint32_t quest;
 int hos_rando_ganon_bridge(void) { return mode; }
+int hos_rando_bridge_medallions(void) { return need; }
 static void hos_log(const char *fmt, ...) { (void)fmt; logs++; }
 static int oot_gamedata_enum(Ctx *c, uint32_t hash, uint32_t *value, int set) {
     (void)c;
@@ -99,7 +101,7 @@ int main(void) {
     quest = READY, played = 1;
     second(&c);
     CHECK(quest == STEP06 && sets == 3);
-    /* 6 medallions: not with five, yes with six */
+    /* Medallions at six: not with five, yes with six */
     mode = 2;
     quest = NOTREADY, played = 0;
     for (int i = 0; i < 5; i++) held[i] = 1;
@@ -112,6 +114,14 @@ int main(void) {
     mode = 1, quest = 0, played = 0;
     second(&c);
     CHECK(quest == STEP01 && played && sets == 5);
+    /* Medallions at four (Bridge medallions): not with three, yes with four */
+    mode = 2, need = 4, quest = NOTREADY, played = 0;
+    for (int i = 0; i < 6; i++) held[i] = i < 3;
+    second(&c);
+    CHECK(quest == NOTREADY && sets == 5 && !played);
+    held[3] = 1;
+    second(&c);
+    CHECK(quest == STEP01 && played && sets == 6);
     printf("PASS: Ganon's Castle bridge\n");
     return 0;
 }
@@ -125,19 +135,23 @@ def main():
     header = (ROOT / "gpu" / "vk" / "oot_rando.h").read_text(encoding="utf-8")
     rows = header[header.index("#define OOT_RANDO_SETTINGS(X)"):header.index("enum {")]
     check(rows.index("X(SKULLTULAS_DAY,") < rows.index("X(GANON_BRIDGE,") and
-          '"As the game has it", "Open", "6 medallions")' in rows,
+          '"As the game has it", "Open", "Medallions")' in rows and
+          rows.index("X(CHEST_SIZE,") < rows.index("X(BRIDGE_MEDALLIONS,") and '"6", "5", "4", "3")' in rows,
           "the bridge's setting is not appended after the others, or has not its three choices")
     launcher = (ROOT / "launcher" / "Launcher.cs").read_text(encoding="utf-8")
-    check('"rando_ganon_bridge", "Ganon\'s Castle bridge", new[] { "As the game has it", "Open", "6 medallions" }, new[] { 0, 1, 2 }'
-          in launcher, "the launcher has no row for the bridge's setting")
+    check('"rando_ganon_bridge", "Ganon\'s Castle bridge", new[] { "As the game has it", "Open", "Medallions" }, new[] { 0, 1, 2 }'
+          in launcher and '"rando_bridge_medallions", "Bridge medallions", new[] { "6", "5", "4", "3" }, new[] { 0, 1, 2, 3 }' in launcher,
+          "the launcher has no row for the bridge's settings")
     seed = (ROOT / "tools" / "rando" / "rando_seed.py").read_text(encoding="utf-8")
     check('"rando_ganon_bridge": 0' in seed, "the seed tool does not know the setting's key")
     rando = (ROOT / "host" / "oot_rando.c").read_text(encoding="utf-8")
-    check("rando.v[OOT_RANDO_GANON_BRIDGE]" in rando and 'getenv("HOS_OOT_GANON_BRIDGE")' in rando,
+    check("rando.v[OOT_RANDO_GANON_BRIDGE]" in rando and 'getenv("HOS_OOT_GANON_BRIDGE")' in rando and
+          "rando.v[OOT_RANDO_BRIDGE_MEDALLIONS]" in rando,
           "the game's side does not read the setting")
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
     fn = block(host, "static void oot_ganon_bridge(Ctx *c, int64_t now) {")
     fn = fn.replace("    int hos_rando_ganon_bridge(void);   /* host/oot_rando.c */\n", "")
+    fn = fn.replace("    int hos_rando_bridge_medallions(void);   /* host/oot_rando.c: 6 to 3 (the setting Bridge medallions) */\n", "")
     defines = between(host, "#define OOT_STEP_DEFEAT_GANON", "static void oot_ganon_bridge(")
     check("    oot_time_door(c, now, actor);\n    oot_ganon_bridge(c, now);\n" in host,
           "the bridge is not looked at with the Door of Time, each frame of play")

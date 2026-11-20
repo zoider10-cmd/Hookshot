@@ -38,6 +38,9 @@ int hos_rando_magic(void) { return rando_active && rando.v[OOT_RANDO_MAGIC] != 0
    (f_804d6eb0), and stops for a child. With the setting on, the boots' kind (9: the per-frame call passes 9) is told no child;
    and the tunics' (8, EquipArmor: the Goron and Zora Tunics; the normal one takes the tunic off, f_810cceb0); kind 10, the
    gauntlets' (EquipHandArmor), keeps the game's answer. nx2/oot_patches.py patch_boots_child) */
+/* (Bridge medallions: how many medallions Ganon's bridge asks for with the bridge at Medallions; 0 the six, 1 five, 2 four,
+   3 three. hos_main.c oot_ganon_bridge) */
+int hos_rando_bridge_medallions(void) { return 6 - (rando_active ? rando.v[OOT_RANDO_BRIDGE_MEDALLIONS] & 3 : 0); }
 int hos_rando_ageless_items(void) { return rando_active && rando.v[OOT_RANDO_AGELESS_ITEMS] != 0; }
 unsigned long long hos_oot_boots_child(unsigned long long is_child, unsigned long long kind) {
     const unsigned k = (unsigned)(kind & 0xffffffffULL);
