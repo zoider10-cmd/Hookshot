@@ -381,6 +381,10 @@ HLE(_ZN2nn2fs8OpenFileEPNS0_10FileHandleEPKci) {
         RET(R_PATH_NOT_FOUND);
         return;
     }
+    { /* (a test's: HOS_FS_LOG_OPEN=<text> logs each file opened whose name holds it, e.g. the animation files a Link loads) */
+        const char *w = getenv("HOS_FS_LOG_OPEN");
+        if (w && *w && strstr(g, w)) hos_log("fs: OpenFile(%s)", g);
+    }
     int want_write = (ARG(2) & 6) != 0;
     if (want_write && !writable) { if (away) hos_vcore_back(); RET(R_PATH_NOT_FOUND); return; }
     /* (mkw-recomp) HOS_NO_MOVIES=1: MKW's WebM movies (cup openings, billboards, emblems) are not found, and the
