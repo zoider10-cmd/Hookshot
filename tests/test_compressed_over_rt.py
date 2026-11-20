@@ -3,7 +3,7 @@
 texture_touch skips the upload of a new texture whose storage the GPU rendered into since the CPU last wrote it: the image
 already holds what the GPU drew there. The GPU cannot render into a compressed format, so for ASTC, BC and ETC textures
 that storage only means render targets used it before; skipped, a boss or a new enemy whose textures were loaded there was
-drawn with an empty texture, all blue, for its first cutscene (from Shakoquo/Mako ff479e988d). Cuts texture_touch's decision
+drawn with an empty texture, all blue, for its first cutscene (from zoider10-cmd/LostWoods ff479e988d). Cuts texture_touch's decision
 out of the source as it is and checks it for each kind of format, with and without RX_VK_SKIP_COMPRESSED_OVER_RT=1 (with
 gpu_owned_since stubbed: the decision alone). Then gpu_owned_since itself, cut out the same way: overlapping render-target
 ranges count their bytes once, so memory with a gap the GPU never drew is not taken as the GPU's.

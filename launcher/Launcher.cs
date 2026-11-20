@@ -17,8 +17,8 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 
-[assembly: System.Reflection.AssemblyTitle("Mako Launcher")]
-[assembly: System.Reflection.AssemblyProduct("Mako")]
+[assembly: System.Reflection.AssemblyTitle("Lost Woods Launcher")]
+[assembly: System.Reflection.AssemblyProduct("Lost Woods")]
 [assembly: System.Reflection.AssemblyCompany("sharkiix")]
 [assembly: System.Reflection.AssemblyVersion("3.3.0.0")]
 
@@ -1580,7 +1580,7 @@ static class ReportSummary {
         L(problem);
         L("");
         L("== PC");
-        L("Mako        " + ver + (Fork.Label.Length > 0 ? "  (launcher " + Fork.Label + ")" : ""));
+        L("Lost Woods        " + ver + (Fork.Label.Length > 0 ? "  (launcher " + Fork.Label + ")" : ""));
         L("Windows     " + WindowsVersion());
         L("GPU         " + (pc.Gpu.Length > 0 ? pc.Gpu : "?") + (pc.VramMB > 0 ? "  " + pc.VramMB + " MB" : "") + (pc.Integrated ? "  (integrated)" : ""));
         L("Driver      " + (pc.Driver.Length > 0 ? pc.Driver : "?") + (pc.DriverDate.Length > 0 ? "  (" + pc.DriverDate + ")" : ""));
@@ -1714,7 +1714,7 @@ static class ReportSummary {
               .Append(", over 250 ms: ").Append(over250).Append("\r\n  Video memory at its highest: ").Append(vramHi.ToString("0.0", Ci)).Append(" of ")
               .Append(vramOf.ToString("0.0", Ci)).Append(" GB").Append(vramOf > 0 && vramHi >= vramOf * 0.95 ? "  (FULL)" : "").Append("\r\n");
         if (wsPeak > 0) sb.Append("  Game's RAM at its highest: ").Append(wsPeak.ToString("0", Ci)).Append(" MB\r\n");
-        if (statusN > 0) sb.Append("  Stutters: ").Append(stut40).Append(" frames over 40 ms, ").Append(stut100).Append(" over 100 ms (Mako 4.1.1 and later)\r\n");
+        if (statusN > 0) sb.Append("  Stutters: ").Append(stut40).Append(" frames over 40 ms, ").Append(stut100).Append(" over 100 ms (Lost Woods 4.1.1 and later)\r\n");
         sb.Append("  Slow submits: ").Append(slowSubmits).Append(" · slow texture uploads: ").Append(slowUploads).Append("\r\n");
         if (problems.Count > 0) {
             sb.Append("  Problems (the first of each kind):\r\n");
@@ -1773,17 +1773,17 @@ class RecRow {
 }
 
 static class Fork {
-    public const string Name = "Mako";
+    public const string Name = "Lost Woods";
     // (the update check compares the first number of the tags: the first Mako release must be numbered above amd-fix-2.1, or the
     // 2.x launchers players have would think it older and never offer it)
-    public const string Base = "mako-4.2";       // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
-    public const string Version = "mako-4.2";    // (HOOKSHOT_FORK_VERSION)
+    public const string Base = "v0.1.0";       // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
+    public const string Version = "v0.1.0";    // (HOOKSHOT_FORK_VERSION)
     public const int Api = 30;                  // (gpu/vk/vk_api.h MKWVK_API_VERSION)
-    public const string Api_Url = "https://api.github.com/repos/Shakoquo/Mako/releases/latest";
-    public const string Page = "https://github.com/Shakoquo/Mako/releases/latest";
-    public const string Home = "https://github.com/Shakoquo/Mako";
+    public const string Api_Url = "https://api.github.com/repos/zoider10-cmd/LostWoods/releases/latest";
+    public const string Page = "https://github.com/zoider10-cmd/LostWoods/releases/latest";
+    public const string Home = "https://github.com/zoider10-cmd/LostWoods";
     public const string GameExe = "hookshot.exe";
-    public const string Label = "v4.1 EXPERIMENTAL";                  // (a test build's own name, e.g. "v4.1 TEST": shown instead of the version)
+    public const string Label = "";                  // (a test build's own name, e.g. "v4.1 TEST": shown instead of the version)
     public static string Me(string installed) { return Label.Length > 0 ? Label : Shown(installed); }
     public static string Shown(string v) { var m = Regex.Match(v ?? "", @"\d+(\.\d+)*"); return m.Success ? "v" + m.Value : v; }
 }
@@ -2281,7 +2281,7 @@ class LauncherForm : Form {
         new object[] { "sharpness", "Sharpness", new[] { "0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%" }, new[] { 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 },
             "Sharpens the picture on its way to the screen. Too much shows halos around edges." },
         new object[] { "frame_generation", "Frame generation", new[] { "Off", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "AMD Redstone 2x" }, new[] { 0, 2, 3, 4, 5, 6, 7, 8, 2 },
-            "Shows extra in-between frames for smoother motion. AMD Redstone 2x: AMD's AI frame generation instead of Mako's, for RX 9000 cards with AMD's files (More > AMD FSR) and FSR 4. Best with 12 GB+." },
+            "Shows extra in-between frames for smoother motion. AMD Redstone 2x: AMD's AI frame generation instead of Lost Woods's, for RX 9000 cards with AMD's files (More > AMD FSR) and FSR 4. Best with 12 GB+." },
         new object[] { "frame_rate_cap", "Frame rate cap", new[] { "60 (the console's)", "90", "120", "144", "165", "240" }, new[] { 0, 1, 2, 3, 4, 5 },
             "The most frames per second the game runs at. Above 60 needs a screen that shows them." },
         new object[] { "amd_anti-lag_2", "AMD Anti-Lag 2", new[] { "Off", "On" }, new[] { 0, 1 },
@@ -2493,8 +2493,8 @@ class LauncherForm : Form {
         new[] { "Saves", "Your saves (user\\save). Copy this folder to keep them safe." },
         new[] { "Import saves", "Bring in saves from another copy of the game or an emulator." },
         new[] { "Master Quest saves", "Master Quest keeps its own saves, apart (user\\save_mq)." },
-        new[] { "Game folder", "Where Mako, its settings and its logs are." },
-        new[] { "Send logs", "Something went wrong? Send the game's last logs and a few words to the Mako team." },
+        new[] { "Game folder", "Where Lost Woods, its settings and its logs are." },
+        new[] { "Send logs", "Something went wrong? Send the game's last logs and a few words to the Lost Woods team." },
         new[] { "Report on GitHub", "Open the project's issue page, to report a bug with screenshots." },
         new[] { "Save copies", "Kept copies of your saves: more than the game's one save of your own." },
     };
@@ -2509,7 +2509,7 @@ class LauncherForm : Form {
         // (Mako) Ducky's controller workaround: HOS_NO_SDL=1 leaves SDL out (host/pad_sdl.c), pads only through XInput
         new[] { "HOS_NO_SDL", "1", "Basic controller mode (tip by Ducky)", "Controller not detected, double inputs or wrong buttons? Reads only Xbox-style (XInput) pads: a PlayStation pad then needs Steam or DS4Windows. No motion aiming.", "" },
         // (Mako) the predicted pipelines behind the game (gpu/vk/vk_draw.cpp predict_background); off: all before the title
-        new[] { "RX_VK_PREDICT_BG", "1", "Quick first start", "Off (recommended): effects are prepared the first time they appear, as in Mako 3.3 (short hitches the first time only). On: they are also prepared behind the game while you play, which costs some fps for a while.", "" },
+        new[] { "RX_VK_PREDICT_BG", "1", "Quick first start", "Off (recommended): effects are prepared the first time they appear, as in Lost Woods 3.3 (short hitches the first time only). On: they are also prepared behind the game while you play, which costs some fps for a while.", "" },
         // (Mako) AMD FSR Redstone frame generation (gpu/vk/vk_redstone.h), off unless switched on: it takes video memory
     };
 
@@ -2528,7 +2528,7 @@ class LauncherForm : Form {
         envPath = Path.Combine(dir, "hookshot_env.txt");
         langPath = Path.Combine(dir, "language.txt");
 
-        Text = "Mako";
+        Text = "Lost Woods";
         FormBorderStyle = FormBorderStyle.None;
         ClientSize = new Size(W, H);
         StartPosition = FormStartPosition.CenterScreen;
@@ -2992,12 +2992,12 @@ class LauncherForm : Form {
                 using (var b = new SolidBrush(Theme.Card)) g.FillPath(b, p);
                 using (var pen = new Pen(Theme.Line)) g.DrawPath(pen, p);
             }
-            Theme.Text_(g, "Mako", Theme.Pick(26f, FontStyle.Bold, "Bahnschrift", "Segoe UI"), Color.White, new RectangleF(r.X + 24, r.Y + 20, 400, 34), StringAlignment.Near, StringAlignment.Near);
+            Theme.Text_(g, "Lost Woods", Theme.Pick(26f, FontStyle.Bold, "Bahnschrift", "Segoe UI"), Color.White, new RectangleF(r.X + 24, r.Y + 20, 400, 34), StringAlignment.Near, StringAlignment.Near);
             Theme.Text_(g, Fork.Me(Installed()) + "  ·  made by sharkiix", Theme.Body, Theme.Cyan, new RectangleF(r.X + 24, r.Y + 58, 500, 22), StringAlignment.Near, StringAlignment.Near);
             Theme.Text_(g,
                 "A native PC version of The Legend of Zelda: Ocarina of Time, tuned for AMD graphics cards: steadier frame times, " +
                 "fixed lighting and textures, and its own launcher.\n\n" +
-                "Mako is based on Hookshot, the open-source recompilation project, and is free software under the GNU GPL version 3. " +
+                "Lost Woods is based on Hookshot, the open-source recompilation project, and is free software under the GNU GPL version 3. " +
                 "It contains no game data: you need your own copy of the game.\n\n" +
                 "Thanks to the Hookshot authors and everyone who tests and reports.",
                 Theme.Body, Theme.Text, new RectangleF(r.X + 24, r.Y + 96, r.Width - 48, r.Height - 110), StringAlignment.Near, StringAlignment.Near);
@@ -3508,7 +3508,7 @@ class LauncherForm : Form {
 
     static WebClient Client() {
         var c = new WebClient();
-        c.Headers[HttpRequestHeader.UserAgent] = "Mako-launcher";
+        c.Headers[HttpRequestHeader.UserAgent] = "Lost Woods-launcher";
         c.Headers[HttpRequestHeader.Accept] = "application/vnd.github+json";
         return c;
     }
@@ -3539,7 +3539,7 @@ class LauncherForm : Form {
                         // (Mako 3.3: the new names first; the old ones are what releases up to 3.0.2 have)
                         if (u.EndsWith("/mako_vk_update.txt") || (manifest == null && u.EndsWith("/hookshot_vk_update.txt"))) manifest = u;
                         if (u.EndsWith("/mako_vk.dll") || (dll == null && u.EndsWith("/hookshot_vk.dll"))) dll = u;
-                        if (u.EndsWith("/MakoBuilder.zip") || (zip == null && u.EndsWith("/HookshotBuilder.zip"))) zip = u;
+                        if (u.EndsWith("/Lost WoodsBuilder.zip") || (zip == null && u.EndsWith("/HookshotBuilder.zip"))) zip = u;
                     }
                     if (zip != null) {
                         var zm = Regex.Match(json, "\"size\"\\s*:\\s*(\\d+)[^{}]*?\"browser_download_url\"\\s*:\\s*\"" + Regex.Escape(zip) + "\"");
@@ -3609,14 +3609,14 @@ class LauncherForm : Form {
         } catch { }
         if (!Directory.Exists(Path.Combine(dir, ".hookshot_exefs"))) {
             MessageBox.Show(this, "This game folder has no copy of the game files to update from (it was built before updates came in).\n\n" +
-                            "Open the Mako builder, choose your game files and build into this same folder once: your saves are kept.",
+                            "Open the Lost Woods builder, choose your game files and build into this same folder once: your saves are kept.",
                             Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
             OpenUrl(Fork.Page);
             return;
         }
         if (builder.Length > 0 && File.Exists(builder)) { RunBuilder(builder, tag); return; }
         if (builderZip == null) { OpenUrl(Fork.Page); return; }
-        SetUpdate(Theme.Blue, "Getting the Mako builder…", "", "Update", true, false);
+        SetUpdate(Theme.Blue, "Getting the Lost Woods builder…", "", "Update", true, false);
         updProgress = 0;
         string url = builderZip; long size = builderZipSize;
         var t = new Thread(() => {
@@ -3635,7 +3635,7 @@ class LauncherForm : Form {
     }
 
     string FetchBuilder(string url, string tag, long size) {
-        string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Mako", "builders");
+        string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lost Woods", "builders");
         string safe = Regex.Replace(tag, "[^A-Za-z0-9._-]", "_");
         string target = Path.Combine(root, safe);
         string exe = Path.Combine(target, "HookshotBuilder", "HookshotBuilder.exe");
@@ -3758,13 +3758,13 @@ class LauncherForm : Form {
         string card = pc.Gpu.Length > 0 ? pc.Gpu : "your graphics card";
 
         // (the verdict)
-        if (pc.Integrated) recVerdict = "A graphics chip built into the processor: Mako runs, at the lightest settings. Expect around 30 fps.";
+        if (pc.Integrated) recVerdict = "A graphics chip built into the processor: Lost Woods runs, at the lightest settings. Expect around 30 fps.";
         else if (!knownVram) recVerdict = "The graphics card's memory could not be read: these are middle settings. Lower the Quality preset if it stutters.";
-        else if (v >= 14) recVerdict = "A strong PC for Mako: high settings, with room for AMD FSR 4 and frame generation.";
-        else if (v >= 13) recVerdict = "A good PC for Mako: high settings at your screen's resolution.";
-        else if (v >= 10) recVerdict = "A good PC for Mako. With " + v + " GB of video memory the settings stay one step lighter: the game's textures fill it during long sessions.";
-        else if (v >= 7) recVerdict = "A solid PC for Mako: balanced settings. 8 GB of video memory is the limit to watch.";
-        else recVerdict = "A light PC for Mako: low settings keep it smooth. Video memory is the limit here.";
+        else if (v >= 14) recVerdict = "A strong PC for Lost Woods: high settings, with room for AMD FSR 4 and frame generation.";
+        else if (v >= 13) recVerdict = "A good PC for Lost Woods: high settings at your screen's resolution.";
+        else if (v >= 10) recVerdict = "A good PC for Lost Woods. With " + v + " GB of video memory the settings stay one step lighter: the game's textures fill it during long sessions.";
+        else if (v >= 7) recVerdict = "A solid PC for Lost Woods: balanced settings. 8 GB of video memory is the limit to watch.";
+        else recVerdict = "A light PC for Lost Woods: low settings keep it smooth. Video memory is the limit here.";
 
         // (Quality preset: from the video memory, as its own names say)
         int preset = low ? 1 : !knownVram ? 3 : v < 7 ? 2 : v <= 12 ? 3 : v < 14 ? 4 : 5;   // (12 GB or less: Balanced, a step lighter)
@@ -3843,7 +3843,7 @@ class LauncherForm : Form {
         else if (pc.RamMB > 0) recNotes.Add(new[] { "Memory: " + pc.RamGB + " GB", "Plenty: nothing to do." });
         if (pc.Threads > 0 && pc.Threads < 8) recNotes.Add(new[] { "Processor: " + pc.Threads + " threads", "The first start after each update takes longer here: let it finish once, the next starts are quick." });
         if (pc.Integrated) recNotes.Add(new[] { "Laptop or built-in graphics", "Keep it plugged in. If the PC also has a graphics card, in Windows Settings > System > Display > Graphics set hookshot.exe to High performance." });
-        if (pc.Nvidia) recNotes.Add(new[] { "NVIDIA card", "Mako is tuned and tested on AMD cards first. NVIDIA works; tell us on GitHub if something looks wrong." });
+        if (pc.Nvidia) recNotes.Add(new[] { "NVIDIA card", "Lost Woods is tuned and tested on AMD cards first. NVIDIA works; tell us on GitHub if something looks wrong." });
         if (knownVram && v <= 12) recNotes.Add(new[] { "Video memory: " + v + " GB", "The limit to watch: the settings here are a step lighter for it. If the game starts to stutter after a while, lower the Quality preset one more step. Leave Native AA and Redstone off." });
         recNotes.Add(new[] { "After every update", "The first start prepares the game's effects (up to about 40 minutes on AMD cards, once). Let it finish: the following starts are quick." });
         recNotes.Add(new[] { "Graphics driver", "Keep it up to date: AMD Software: Adrenalin Edition, the NVIDIA App or Intel Graphics Software." });
@@ -4227,7 +4227,7 @@ class LauncherForm : Form {
                     string part = Path.Combine(dir, f[0] + ".download");
                     tmp.Add(part);
                     using (var c = new WebClient()) {
-                        c.Headers[HttpRequestHeader.UserAgent] = "Mako-launcher";
+                        c.Headers[HttpRequestHeader.UserAgent] = "Lost Woods-launcher";
                         long before = got;
                         var ev = new ManualResetEvent(false); Exception err = null;
                         c.DownloadProgressChanged += (s, e) => {
@@ -4285,7 +4285,7 @@ class LauncherForm : Form {
     void OnSendLogs() {
         string hook = ReportHook();
         if (hook.Length == 0) {
-            MessageBox.Show(this, "Sending logs is not set up in this build. Open the game folder and send logs\\hookshot_log.txt on the Mako Discord.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, "Sending logs is not set up in this build. Open the game folder and send logs\\hookshot_log.txt on the Lost Woods Discord.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         string stamp = Path.Combine(dir, "user", "report_last.txt");
@@ -4315,8 +4315,8 @@ class LauncherForm : Form {
             var box = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, MaxLength = 1500, Bounds = new Rectangle(16, 40, 488, 150),
                                     BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle };
             var what = new Label { AutoSize = false, Bounds = new Rectangle(16, 198, 488, 74), ForeColor = Theme.Dim,
-                                   Text = "Sent to the Mako team's private channel: your text, the game's last logs (" + string.Join(", ", logs) + "), " +
-                                          "your graphics card, processor, memory, Windows and driver versions, Mako version and settings. Your Windows account name is removed from the logs. " +
+                                   Text = "Sent to the Lost Woods team's private channel: your text, the game's last logs (" + string.Join(", ", logs) + "), " +
+                                          "your graphics card, processor, memory, Windows and driver versions, Lost Woods version and settings. Your Windows account name is removed from the logs. " +
                                           "Nothing else: no saves, no game files." };
             var send = new Button { Text = "Send", Bounds = new Rectangle(300, 284, 100, 32), FlatStyle = FlatStyle.Flat, BackColor = Theme.Blue, ForeColor = Color.White };
             var cancel = new Button { Text = "Cancel", Bounds = new Rectangle(404, 284, 100, 32), FlatStyle = FlatStyle.Flat, BackColor = Theme.Card, ForeColor = Theme.Text, DialogResult = DialogResult.Cancel };
@@ -4331,9 +4331,9 @@ class LauncherForm : Form {
             string err = SendReport(hook, problem, logs);
             if (err == null) {
                 try { Directory.CreateDirectory(Path.Combine(dir, "user")); File.WriteAllText(stamp, DateTime.UtcNow.ToString("o")); } catch { }
-                MessageBox.Show(this, "Sent. Thank you: the Mako team will read it.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, "Sent. Thank you: the Lost Woods team will read it.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Information);
             } else
-                MessageBox.Show(this, "The report could not be sent:\n" + err + "\n\nYou can send logs\\hookshot_log.txt (game folder) on the Mako Discord instead.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "The report could not be sent:\n" + err + "\n\nYou can send logs\\hookshot_log.txt (game folder) on the Lost Woods Discord instead.", Fork.Name, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -4361,7 +4361,7 @@ class LauncherForm : Form {
                 zip = ms.ToArray();
             }
             string clean = Scrub(problem).Replace("```", "` ` `");
-            string content = "**Report** · Mako " + ver + (Fork.Label.Length > 0 ? " (launcher " + Fork.Label + ")" : "") + "\n" +
+            string content = "**Report** · Lost Woods " + ver + (Fork.Label.Length > 0 ? " (launcher " + Fork.Label + ")" : "") + "\n" +
                              "GPU: " + (pc.Gpu.Length > 0 ? pc.Gpu : "?") + (pc.VramMB > 0 ? " (" + pc.VramGB + " GB)" : "") +
                              " · CPU: " + (pc.Cpu.Length > 0 ? pc.Cpu : "?") + " (" + pc.Threads + " threads) · RAM: " + pc.RamGB + " GB · Screen: " +
                              pc.ScreenW + "x" + pc.ScreenH + " " + pc.Hz + " Hz\n```\n" + clean + "\n```";
@@ -4378,7 +4378,7 @@ class LauncherForm : Form {
                 body = ms.ToArray();
             }
             var req = (HttpWebRequest)WebRequest.Create(hook);
-            req.Method = "POST"; req.ContentType = "multipart/form-data; boundary=" + boundary; req.UserAgent = "Mako-launcher"; req.Timeout = 30000;
+            req.Method = "POST"; req.ContentType = "multipart/form-data; boundary=" + boundary; req.UserAgent = "Lost Woods-launcher"; req.Timeout = 30000;
             req.ContentLength = body.Length;
             using (var rs = req.GetRequestStream()) rs.Write(body, 0, body.Length);
             using (var resp = (HttpWebResponse)req.GetResponse()) { }
@@ -4521,7 +4521,7 @@ class LauncherForm : Form {
         // the Saves and Save copies buttons showing the normal game's folder, its list of copies empty. A second start
         // brings the first one's window to the front and ends)
         bool first;
-        var once = new Mutex(true, "MakoLauncher_" + OnceName(dir), out first);
+        var once = new Mutex(true, "Lost WoodsLauncher_" + OnceName(dir), out first);
         if (!first) {
             try {
                 int me = Process.GetCurrentProcess().Id;

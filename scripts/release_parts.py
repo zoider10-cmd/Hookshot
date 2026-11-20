@@ -196,8 +196,11 @@ def package(a):
     copy(a.setup, os.path.join(out, "HookshotBuilder-Setup.exe"))   # (the builder's Repair runs it)
     copy(os.path.join(ROOT, "LICENSE"), os.path.join(out, "LICENSE"))
     tools = os.path.join(out, "tools")
-    for f in tracked("gpu", "host", "nx2", "scripts", "third_party"):
+    # (Lost Woods: tools/rando too, the randomizer and its cosmetics, which nx2/make_game.py puts in a game folder's rando/)
+    for f in tracked("gpu", "host", "nx2", "scripts", "third_party", "tools/rando"):
         copy(os.path.join(ROOT, f), os.path.join(tools, *f.split("/")))
+    if a.launcher:   # (the launcher, built from launcher/ by the workflow: make_game.py copies tools/launcher/<it> beside the game)
+        copy(a.launcher, os.path.join(tools, "launcher", "Lost Woods Launcher.exe"))
     if a.list:
         if not profile(argparse.Namespace(list=a.list, work=os.path.join(tools, "work"))) == 0:
             return 1
@@ -313,6 +316,7 @@ def main():
     s.add_argument("--list")
     s.add_argument("--python-packages")
     s.add_argument("--cpm-add")
+    s.add_argument("--launcher", help="the built launcher (launcher/build.ps1), put in the package's tools/launcher/")
     a = p.parse_args()
     return {"previous": previous, "profile": profile, "llvm-mingw": llvm_mingw, "package": package}[a.cmd](a)
 

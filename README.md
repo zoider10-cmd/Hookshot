@@ -1,3 +1,70 @@
+<h1 align="center">LOST WOODS</h1>
+
+<p align="center">
+  <b>A randomizer for the Ocarina of Time remake on PC, built on your own copy of the game.</b><br>
+  <a href="#install">Install</a> ·
+  <a href="#the-randomizer">The randomizer</a> ·
+  <a href="#what-you-need">What you need</a> ·
+  <a href="#reporting-a-problem">Reporting a problem</a> ·
+  <a href="#credits">Credits</a>
+</p>
+
+Lost Woods is a randomizer for the native PC build of Ocarina of Time (Nintendo Switch 2): every new seed shuffles where
+the items are, with logic that keeps the game beatable, and a Tracker in the game's menu that knows where everything is.
+It is built on [Mako](https://github.com/Shakoquo/Mako) (a fork of Hookshot), and takes the engine's fixes and speed-ups
+from the other ports of the game as they come.
+
+> [!IMPORTANT]
+> This repository **does not contain the game, keys or an executable**, and it does not explain how to get them. Lost
+> Woods is built **on your PC, from your own copy of the game**. Everything the build makes (`hookshot.exe`, the seed's
+> files, shader caches, saves) stays on your PC: never share those files.
+
+## Install
+
+1. Download **`HookshotBuilder.exe`** from the [latest release](https://github.com/zoider10-cmd/LostWoods/releases/latest)
+   and run it (the Lost Woods Builder).
+2. Pick your game file (the builder lists the `.nup` files it finds; or **Browse…**), choose where the game goes and its
+   language.
+3. Press **Build the game**: around 45 minutes, depending on your CPU. You can use your PC meanwhile.
+4. Start the game from the **Lost Woods** shortcut on your desktop. In the launcher, open **Randomizer**, press **New
+   seed**, pick the settings (or a preset) and press **Play**.
+
+Updates: the launcher and the builder check this repository's releases.
+
+## The randomizer
+
+- **What can be shuffled:** chests, Gold Skulltulas, Pieces of Heart and Heart Containers, quest rewards (Darunia, the
+  mini-games, the Skulltula house, the Great Fairies), songs (at the lessons or anywhere, with the ocarinas too), shop
+  shelves, Deku Scrubs, dungeon rewards and keys, Zelda's Letter, magic (two progressive magic items).
+- **Open world:** Deku Tree, forest exit, Door of Time (open, or by the Song of Time), Kakariko's gate, Ganon's bridge.
+- **Quality of life (moves no item, can be changed on a save being played):** skip the opening and cutscenes, starting
+  rupees, Gold Skulltulas by day, Gossip Stone hints, either age's swords, ammo and rupee pick-ups.
+- **The Tracker** (the in-game menu): every check, what is in logic, what is collected, "Go there" and junk marks.
+- **Seed IDs:** copy a seed's ID from the launcher and share it: the same ID makes the same seed.
+
+## What you need
+
+- Your copy of the game at the supported version: program `0400486024DEC000`, update v131072, build `e0f3ccfa`.
+- Windows 10 or 11 (64-bit), a CPU with AVX2, 16 GB of RAM, about 60 GB free while building.
+- A graphics card with Vulkan 1.3 and mesh shaders: AMD Radeon RX 6000 or newer, NVIDIA RTX 20 or newer, Intel Arc.
+
+## Reporting a problem
+
+Open an issue on this repository with what happened, where, and the seed's ID. The game's log is in the game folder's
+`logs/` (it names no user folder).
+
+## Credits
+
+Lost Woods is built on [Mako](https://github.com/Shakoquo/Mako) by sharkiix, itself a fork of Hookshot, the static
+recompilation of Ocarina of Time; engine fixes come from Longshot, ProjectReLink, HeyListen, Triforce and Reborn. The
+randomizer's Tracker directions come from Ocarina-Atlas (MIT). License: GPL-3.0 (see LICENSE).
+
+---
+
+# The engine: Mako
+
+What follows is Mako's own README, the engine Lost Woods is built on.
+
 <p align="center">
   <img src="launcher/mako_logo.png" alt="Mako" width="420">
 </p>

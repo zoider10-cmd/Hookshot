@@ -39,7 +39,7 @@ if (-not (Test-Path (Join-Path $Game "hookshot.exe"))) { Stop-With "hookshot.exe
 if (-not (Test-Path (Join-Path $Game ".hookshot_exefs")) -or -not (Test-Path (Join-Path $Game "romfs"))) {
     Stop-With "This folder does not keep its game files (.hookshot_exefs, romfs), so it cannot be built again.`nBuild Mako into a folder once with the Mako builder first, then run this."
 }
-if (Get-Process -Name "hookshot", "Mako Launcher" -ErrorAction SilentlyContinue) { Stop-With "Close the game and the Mako launcher first." }
+if (Get-Process -Name "hookshot", "Lost Woods Launcher", "Mako Launcher" -ErrorAction SilentlyContinue) { Stop-With "Close the game and the Mako launcher first." }
 $Game = (Resolve-Path $Game).Path
 
 # ---- the tools: the Mako builder's, else the source folder's own ----
@@ -104,9 +104,9 @@ if ($LASTEXITCODE -ne 0) { Stop-With "The build failed (exit code $LASTEXITCODE)
 # ---- the launcher ----
 Say "Building the launcher..."
 & (Join-Path $src "launcher\build.ps1") | Out-Null
-$launcher = Join-Path $src "launcher\Mako Launcher.exe"
+$launcher = Join-Path $src "launcher\Lost Woods Launcher.exe"
 if (-not (Test-Path $launcher)) { Stop-With "The launcher was not built." }
-Copy-Item $launcher (Join-Path $Game "Mako Launcher.exe") -Force
+Copy-Item $launcher (Join-Path $Game "Lost Woods Launcher.exe") -Force
 
 # ---- what the randomizer needs at Play ----
 $note = ""
@@ -118,7 +118,7 @@ else {
 }
 if (-not $Source -and (Test-Path $work)) { Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue }
 Write-Host ""
-Write-Host "Done. Start the game with Mako Launcher.exe in:" -ForegroundColor Green
+Write-Host "Done. Start the game with Lost Woods Launcher.exe in:" -ForegroundColor Green
 Write-Host "  $Game"
 if ($note) { Write-Host $note -ForegroundColor Yellow }
 Write-Host "Do not press the launcher's Update button: it installs the original Mako over this fork." -ForegroundColor Yellow

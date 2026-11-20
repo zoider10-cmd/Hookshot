@@ -74,8 +74,8 @@ static class Finder
 
     // ---- shortcuts to the built game ----
 
-    public static string DesktopLink => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Mako.lnk");
-    public static string StartLink => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Mako.lnk");
+    public static string DesktopLink => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Lost Woods.lnk");
+    public static string StartLink => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Lost Woods.lnk");
     // (the amd-fix 2.x shortcuts, named Hookshot: replaced by Mako's when they open this folder)
     static string OldDesktopLink => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Hookshot.lnk");
     static string OldStartLink => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Hookshot.lnk");
@@ -113,7 +113,8 @@ static class Finder
         var exe = Path.Combine(gameFolder, "hookshot.exe");
         var icon = File.Exists(Path.Combine(gameFolder, "bin", "hookshot.exe")) ? Path.Combine(gameFolder, "bin", "hookshot.exe") : exe;
         // (sharkiix version: the launcher beside the game, when there is one: update check, settings, saves, then the game)
-        var launcher = Path.Combine(gameFolder, "Mako Launcher.exe");
+        var launcher = Path.Combine(gameFolder, "Lost Woods Launcher.exe");
+        if (!File.Exists(launcher)) launcher = Path.Combine(gameFolder, "Mako Launcher.exe");   // (a folder built before Lost Woods)
         if (!File.Exists(launcher)) launcher = Path.Combine(gameFolder, "Hookshot Launcher.exe");
         if (File.Exists(launcher)) { exe = launcher; icon = launcher; }   // (Mako's shark)
         foreach (var (link, want) in new[] { (DesktopLink, desktop), (StartLink, start) })
@@ -132,7 +133,7 @@ static class Finder
                 sl.SetPath(exe);
                 sl.SetWorkingDirectory(gameFolder);
                 sl.SetIconLocation(icon, 0);
-                sl.SetDescription("Mako: The Legend of Zelda: Ocarina of Time on PC");
+                sl.SetDescription("Lost Woods: The Legend of Zelda: Ocarina of Time on PC");
                 Directory.CreateDirectory(Path.GetDirectoryName(link)!);
                 ((System.Runtime.InteropServices.ComTypes.IPersistFile)sl).Save(link, true);
             }

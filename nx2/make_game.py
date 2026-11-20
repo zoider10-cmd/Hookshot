@@ -3236,13 +3236,15 @@ def main(a=None):
     seed_pipelines(out)
     # (Mako: the launcher, tools/launcher/Mako Launcher.exe, beside the game; the builder's shortcuts open it. The Hookshot-named
     # launcher of the amd-fix 2.x folders goes: an update from one of them leaves only Mako's)
-    launcher = os.path.join(ROOT, "launcher", "Mako Launcher.exe")
+    # (Lost Woods: its launcher, Lost Woods Launcher.exe; the Mako-named one of a folder built before goes)
+    launcher = os.path.join(ROOT, "launcher", "Lost Woods Launcher.exe")
     if os.path.isfile(launcher):
         try:
-            shutil.copy2(launcher, os.path.join(out, "Mako Launcher.exe"))
-            old_launcher = os.path.join(out, "Hookshot Launcher.exe")
-            if os.path.isfile(old_launcher):
-                os.remove(old_launcher)
+            shutil.copy2(launcher, os.path.join(out, "Lost Woods Launcher.exe"))
+            for old in ("Hookshot Launcher.exe", "Mako Launcher.exe"):
+                old_launcher = os.path.join(out, old)
+                if os.path.isfile(old_launcher):
+                    os.remove(old_launcher)
         except OSError as e:
             print("the launcher was not copied (%s): start hookshot.exe directly" % e, flush=True)
     # (the randomizer: the launcher runs <game folder>/rando/rando_seed.py at Play; tools/rando/README.md)

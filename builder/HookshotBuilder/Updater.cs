@@ -14,9 +14,9 @@ namespace HookshotBuilder;
 /// folder keeps).
 static class Updater
 {
-    const string Latest = "https://api.github.com/repos/Shakoquo/Mako/releases/latest";
+    const string Latest = "https://api.github.com/repos/zoider10-cmd/LostWoods/releases/latest";
     const string Asset = "HookshotBuilder.zip";
-    const string MakoAsset = "MakoBuilder.zip";                 // (Mako 3.3: the new name, taken first; releases up to 3.0.2 have the old one)
+    const string MakoAsset = "Lost WoodsBuilder.zip";                 // (Mako 3.3: the new name, taken first; releases up to 3.0.2 have the old one)
     const string SetupAsset = "HookshotBuilder.exe";            // (the setup, builder/setup/setup.c: a release holds it and its list)
     const string SetupList = "hookshot-setup.txt";              // (scripts/make_setup_parts.py)
     static readonly TimeSpan[] RetryDelays = { TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(12), TimeSpan.FromSeconds(20) };
@@ -39,7 +39,7 @@ static class Updater
     // ---- the update tracks (the Track menu; by default the track of these tools). host/hos_update.c and
     // builder/linux/linux_update.py have the same rules ----
     public const string Release = "release", Candidate = "rc", Nightly = "nightly";
-    const string Releases = "https://api.github.com/repos/Shakoquo/Mako/releases";   // (Mako: its own releases, never upstream's)
+    const string Releases = "https://api.github.com/repos/zoider10-cmd/LostWoods/releases";   // (Mako: its own releases, never upstream's)
     static readonly System.Text.RegularExpressions.Regex NightlyName = new(@"-\d+-g[0-9a-f]+(-dirty)?$");
     static readonly System.Text.RegularExpressions.Regex ReleaseName = new(@"^v(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$");
 
@@ -110,7 +110,7 @@ static class Updater
             {
                 try
                 {
-                    var list = await http.GetStringAsync("https://github.com/Shakoquo/Mako/releases/download/nightly/" + SetupList);
+                    var list = await http.GetStringAsync("https://github.com/zoider10-cmd/LostWoods/releases/download/nightly/" + SetupList);
                     foreach (var line in list.Split('\n'))
                         if (line.StartsWith("tag ")) return line[4..].Trim();
                 }
@@ -169,7 +169,7 @@ static class Updater
         {
             try
             {
-                var list = await http.GetStringAsync("https://github.com/Shakoquo/Mako/releases/latest/download/" + SetupList);
+                var list = await http.GetStringAsync("https://github.com/zoider10-cmd/LostWoods/releases/latest/download/" + SetupList);
                 foreach (var line in list.Split('\n'))
                     if (line.StartsWith("tag ")) return line[4..].Trim();
             }
@@ -207,7 +207,7 @@ static class Updater
         var cache = Path.Combine(BuilderHome.Base, "update");
         Directory.CreateDirectory(cache);
         var setup = Path.Combine(cache, SetupAsset);
-        w.Note("Downloading the new Mako Builder");
+        w.Note("Downloading the new Lost Woods Builder");
         await DownloadWithRetries(w, http, setupUrl, setupApiUrl, setup, setupSize, setupDigest, token);
         var si = new ProcessStartInfo(setup) { UseShellExecute = false, WorkingDirectory = cache };
         foreach (var arg in args) si.ArgumentList.Add(arg);
@@ -224,7 +224,7 @@ static class Updater
         var tools = Tools.Find();
         if (tools == null)
         {
-            w.DownloadFailed("The Mako tools were not found next to this app.");
+            w.DownloadFailed("The Lost Woods tools were not found next to this app.");
             return;
         }
         // (just downloaded, but another release than asked for: the setup installed the release before it (GitHub's latest link lags

@@ -1,4 +1,4 @@
-/* (amd-fix, sharkiix version) The update check: at start, the latest release of github.com/Shakoquo/Mako is asked for (a few
+/* (amd-fix, sharkiix version) The update check: at start, the latest release of github.com/zoider10-cmd/LostWoods is asked for (a few
    seconds at most, nothing when offline). The official updater (NotRexed's builder --update) is not used: it would build the folder
    again without the AMD fixes.
 
@@ -47,11 +47,11 @@ static int not_newer(const char *tag, const char *have) {
 
 #include "../gpu/vk/vk_api.h"   /* (MKWVK_API_VERSION) */
 
-#define HOOKSHOT_FORK_BASE "mako-4.2"       /* (the exe: which graphics patches fit it) */
-#define HOOKSHOT_FORK_VERSION "mako-4.2"      /* (the release this folder was built from) */
+#define HOOKSHOT_FORK_BASE "v0.1.0"       /* (the exe: which graphics patches fit it) */
+#define HOOKSHOT_FORK_VERSION "v0.1.0"      /* (the release this folder was built from) */
 #define UPDATE_HOST L"api.github.com"
-#define UPDATE_PATH L"/repos/Shakoquo/Mako/releases/latest"
-#define RELEASES_PAGE L"https://github.com/Shakoquo/Mako/releases/latest"
+#define UPDATE_PATH L"/repos/zoider10-cmd/LostWoods/releases/latest"
+#define RELEASES_PAGE L"https://github.com/zoider10-cmd/LostWoods/releases/latest"
 
 /* (a line "name=value" of a text buffer: its value, trimmed) */
 static int value_in(const char *text, const char *name, char *out, size_t cap) {
@@ -91,7 +91,7 @@ static char *https_get(const wchar_t *host, const wchar_t *path, const wchar_t *
     char *body = NULL;
     size_t have = 0;
     int ok = 0;
-    HINTERNET s = WinHttpOpen(L"Mako-update", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET s = WinHttpOpen(L"Lost Woods-update", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!s) return NULL;
     WinHttpSetTimeouts(s, timeout, timeout, timeout, timeout);
     HINTERNET c = WinHttpConnect(s, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
@@ -270,31 +270,31 @@ void hos_update_check(void) {
     MultiByteToWideChar(CP_UTF8, 0, have, -1, whave, 128);
     if (patch) {
         _snwprintf(text, 2048,
-                   L"A graphics update for Mako is out: %ls (this game is %ls).\n\n"
+                   L"A graphics update for Lost Woods is out: %ls (this game is %ls).\n\n"
                    L"It is a small download (about 3 MB) and needs NO rebuild. The previous version is kept as a backup.\n"
                    L"The first start after it prepares the shaders again (a few minutes): that is normal.\n\n"
                    L"Yes: update now\nNo: not now (asked again next time)\nCancel: skip this version",
                    wtag, whave);
-        const int answer = MessageBoxW(NULL, text, L"Mako update", MB_YESNOCANCEL | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
+        const int answer = MessageBoxW(NULL, text, L"Lost Woods update", MB_YESNOCANCEL | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
         if (answer == IDCANCEL) skip_release(dir, tag);
         if (answer != IDYES) return;
         if (install_patch(dir, dll_url, _atoi64(size), tag)) {
             fprintf(stderr, "update: graphics patch %s installed\n", tag);
-            MessageBoxW(NULL, L"The update is installed. The game starts now.", L"Mako update", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
+            MessageBoxW(NULL, L"The update is installed. The game starts now.", L"Lost Woods update", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
         } else {
             fprintf(stderr, "update: graphics patch %s could not be installed\n", tag);
-            MessageBoxW(NULL, L"The update could not be downloaded or installed. The game starts as it was.", L"Mako update",
+            MessageBoxW(NULL, L"The update could not be downloaded or installed. The game starts as it was.", L"Lost Woods update",
                         MB_OK | MB_ICONWARNING | MB_TOPMOST);
         }
         return;
     }
     _snwprintf(text, 2048,
-               L"A new version of Mako is out: %ls (this game is %ls).\n\n"
+               L"A new version of Lost Woods is out: %ls (this game is %ls).\n\n"
                L"This one changes the game itself, so it needs a rebuild with the Hookshot Builder from the release page. "
                L"Your saves and settings stay.\n\n"
                L"Yes: open the release page\nNo: not now (asked again next time)\nCancel: skip this version",
                wtag, whave);
-    const int answer = MessageBoxW(NULL, text, L"Mako update", MB_YESNOCANCEL | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
+    const int answer = MessageBoxW(NULL, text, L"Lost Woods update", MB_YESNOCANCEL | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
     if (answer == IDCANCEL) skip_release(dir, tag);
     if (answer == IDYES) ShellExecuteW(NULL, L"open", RELEASES_PAGE, NULL, NULL, SW_SHOWNORMAL);
 }

@@ -10540,7 +10540,7 @@ bool predict_skipped() {
     return !e || (atoi(e) != 1 && atoi(e) != 2);
 }
 void predict_skip_log() {
-    logf("vk: the predicted pipelines are not built ahead: each is built in play when first drawn, as in Mako 3.3 "
+    logf("vk: the predicted pipelines are not built ahead: each is built in play when first drawn, as in Lost Woods 3.3 "
          "(RX_VK_PREDICT_BG=1: behind the game; =2: all before the title, hours on most PCs)");
 }
 void predict_defer() {

@@ -8,7 +8,7 @@ GAME="${GAME:-/f/Games/OOT Remake Rando}"
 WORK="${WORK:-${TEMP:-/tmp}/rando-test}"
 WORK="$(cygpath -u "$WORK" 2>/dev/null || echo "$WORK")"
 mkdir -p "$WORK"
-if tasklist 2>/dev/null | grep -qi "hookshot.exe\|Mako Launcher"; then echo "the game or the launcher is running: not built"; exit 1; fi
+if tasklist 2>/dev/null | grep -qi "hookshot.exe\|Mako Launcher\|Lost Woods Launcher"; then echo "the game or the launcher is running: not built"; exit 1; fi
 root="$(cd "$(dirname "$0")/../../../.." && pwd)"
 cd "$root" || exit 1
 HOOKSHOT_KEEP_BUILD_FILES=1 PATH="$root/llvm-mingw/bin:$PATH" py -I nx2/make_game.py --update "$(cygpath -w "$GAME")" > "$WORK/build.log" 2>&1

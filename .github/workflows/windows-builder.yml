@@ -106,10 +106,19 @@ jobs:
           dotnet publish builder/HookshotBuilder/HookshotBuilder.csproj --configuration Release
           -p:Version="$VERSION" -p:NuGetAudit=false --output "$RUNNER_TEMP/publish"
 
+      # (Lost Woods: the launcher, which the builder puts beside the game; launcher/build.ps1 builds it with the .NET
+      #  Framework's csc, which the Windows runner has)
+      - name: The launcher
+        shell: pwsh
+        run: |
+          ./launcher/build.ps1
+          Copy-Item "launcher/Lost Woods Launcher.exe" "$env:RUNNER_TEMP/Lost Woods Launcher.exe"
+
       - name: Package folder
         run: >-
           python -I scripts/release_parts.py package "$RUNNER_TEMP/package"
           --publish "$RUNNER_TEMP/publish" --setup "$RUNNER_TEMP/HookshotBuilder-Setup.exe"
+          --launcher "$RUNNER_TEMP/Lost Woods Launcher.exe"
           ${PREVIOUS:+--list "$PREVIOUS" --python-packages nx2/prompt_requirements.txt}
 
       - name: Setup parts

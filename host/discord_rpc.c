@@ -42,7 +42,7 @@
 #define HOOKSHOT_DISCORD_LARGE_IMAGE_DEFAULT "ocarina-title-new-960x540"
 #define HOOKSHOT_DISCORD_LARGE_TEXT_DEFAULT "The Legend of Zelda: Ocarina of Time"
 #define HOOKSHOT_DISCORD_SMALL_IMAGE_DEFAULT "a59d076a-8dfa-4d04-8580-fb17ae4784df"
-#define HOOKSHOT_DISCORD_SMALL_TEXT_DEFAULT "Mako Emulator"
+#define HOOKSHOT_DISCORD_SMALL_TEXT_DEFAULT "Lost Woods Emulator"
 
 void hos_log(const char *fmt, ...);
 int rx_option(int id, int otherwise);
