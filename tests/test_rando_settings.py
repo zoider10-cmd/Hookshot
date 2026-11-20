@@ -79,12 +79,31 @@ def sources(rows):
           "if (!hidden) place++;" in launcher and "section.Value.FindAll(r => !LauncherForm.RandoHidden.Contains((string)r[0]))" in launcher and
           "the frogs of Zora's River among them" in launcher,
           "the Frogs row is still shown on the page or in the New seed window, or Quest rewards does not name the frogs")
-    # (the New seed window shows the rows in sections: each shown key in one section at most, and the rest under Other)
-    sections = re.search(r"string\[\]\[\] Sections = \{(.*?)\n    \};", launcher, re.S)
-    named = re.findall(r'"(rando_\w+)"', sections.group(1)) if sections else []
-    check(sections and len(named) == len(set(named)) and set(named) <= {f[0] for f in found} and
+    # (Lost Woods: the Randomizer page and the New seed window show RandoLayout's sections, a merged row (a combo, "+id")
+    #  standing for its settings. The page shows nothing else: every row but the hidden frogs is named once, and only rows)
+    layout = launcher[launcher.index("static class RandoLayout {"):launcher.index("public static RandoCombo Combo(string entry)")]
+    combos = dict((cid, re.findall(r'"(rando_\w+)"', keys)) for cid, keys in
+                  re.findall(r'Id = "(\w+)", Label = "[^"]*", Keys = new\[\] \{ ([^}]*) \}', layout))
+    named = []
+    for rows_ in re.findall(r"Rows = new\[\] \{ (.*?) \} \}", layout, re.S):
+        for entry in re.findall(r'"([+\w]+)"', rows_):
+            named += combos.get(entry[1:], ["?" + entry]) if entry.startswith("+") else [entry]
+    check(len(named) == len(set(named)) and set(named) == {f[0] for f in found} - {"rando_frogs"} and
+          "internal static readonly string[][] Sections = RandoLayout.KeySections();" in launcher and
           'order.Add(new KeyValuePair<string, List<object[]>>("Other", rest));' in launcher,
-          "the New seed window's sections name a key twice or one that is not a row, or lose the rows they do not name")
+          "the Randomizer page's sections name a setting twice, one that is not a row, or leave a setting off the page")
+    # (a merged row's choices each give every setting under it one of that setting's own values, and no two the same)
+    rows_by_key = {g[0]: g for g in got}
+    for cid, keys in combos.items():
+        block = layout[layout.index('Id = "%s"' % cid):]
+        block = block[:block.index("Help =")]
+        items = re.search(r"Items = new\[\] \{ ([^}]*) \}", block)
+        vals = block[block.index("Values = "):] if "Values = " in block else ""
+        choices = [[int(v) for v in c.split(",")] for c in re.findall(r"new\[\] \{ ([\d, ]+) \}", vals)]
+        check(items and len(choices) == len(re.findall(r'"([^"]*)"', items.group(1))) and
+              all(len(c) == len(keys) and all(v in rows_by_key[k][3] for v, k in zip(c, keys)) for c in choices) and
+              len({tuple(c) for c in choices}) == len(choices),
+              "the merged row %s has a choice that is not its settings' values, or two choices that are the same" % cid)
     check("Most of the logic (what each place asks for) is taken from the original game's" in launcher,
           "the Randomizer switch no longer says where the logic is from")
     check(all(key in {f[0] for f in found} for key in limits), "a setting listed as not available yet is not a row of the page")
@@ -97,8 +116,8 @@ def sources(rows):
           "Dungeon rewards' Anywhere is made now: take it off the launcher's list of settings not available yet")
     check("a.songs = (a.songs if SONGS_ANYWHERE else 1) if a.songs in (1, 2) else 0" in rando_seed,
           "the script makes Songs' Anywhere though it is held off, or no longer reads the setting")
-    check("AddSelectors(RandoRows, RandoPage, cx, colW, null, 47, 45, true);" in launcher and
-          '"Home", "Graphics", "Game", "Randomizer", "Cosmetics", "Mods", "More"' in launcher and "int[] firstPage = { 0, 1, 2, RandoPage, CosmeticPage, 7, 3 };" in launcher and
+    check("BuildRandoPage(cx, colW);" in launcher and "s.Changed = OnSetting; settings[s.Key] = s; widgets.Add(s);" in launcher and
+          '"Home", "Graphics", "Game", "Randomizer", "Cosmetics", "More"' in launcher and "new[] { 0, 1, 2, RandoPage, CosmeticPage, 3 }" in launcher and
           "public const int RandoPage = 9, CosmeticPage = 10;" in launcher and
           # (Mako 4.1's Mods tab renames every mod's folder: the seed's and the colours' are the launcher's own, and not in its list)
           'public static readonly string[] Own = { "rando-seed", "cosmetics" };' in (ROOT / "launcher" / "Mods.cs").read_text(encoding="utf-8"),

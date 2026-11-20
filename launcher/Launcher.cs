@@ -539,15 +539,15 @@ class SaveNameForm : Form {
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(400, 150);
-        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        BackColor = Color.FromArgb(28, 43, 22); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
         var top = new Label { Text = asks, AutoSize = true, Location = new Point(16, 16) };
         name.SetBounds(16, 46, 368, 26); name.MaxLength = 40; name.Text = start; name.SelectAll();
-        name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
+        name.BackColor = Color.FromArgb(40, 60, 32); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         var ok = new Button { Text = go, DialogResult = DialogResult.None };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
         foreach (var b in new[] { ok, cancel }) {
-            b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White;
-            b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+            b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(52, 78, 41); b.ForeColor = Color.White;
+            b.FlatAppearance.BorderColor = Color.FromArgb(101, 150, 80);
         }
         ok.SetBounds(158, 100, 110, 30); cancel.SetBounds(274, 100, 110, 30); ok.BackColor = Theme.Blue;
         Controls.AddRange(new Control[] { top, name, ok, cancel });
@@ -612,10 +612,10 @@ class SaveSlotsForm : Form {
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(520, 430);
-        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        BackColor = Color.FromArgb(28, 43, 22); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
         var top = new Label { Text = "The save the game plays. Each keeps its own progress:", AutoSize = true, Location = new Point(16, 14) };
         list.SetBounds(16, 40, 488, 212); list.IntegralHeight = false;
-        list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
+        list.BackColor = Color.FromArgb(40, 60, 32); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
         list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (playing)", n => SaveSlots.Shown(n, empty.Contains(n)),
                                                            n => saveFolder == "save_rando" && !empty.Contains(n) ? SaveSlots.SeedTag(dir, n) : "");
@@ -623,7 +623,7 @@ class SaveSlotsForm : Form {
         Style(close, "Close", 394, 264, 110);
         var mid = new Label { Text = "A name (or none), for a new save or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 312) };
         name.SetBounds(16, 338, 248, 26); name.MaxLength = 80;
-        name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
+        name.BackColor = Color.FromArgb(40, 60, 32); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         Style(add, "New save", 274, 336, 110); Style(rename, "Rename", 394, 336, 110);
         var foot = new Label { Text = "A new save starts a new game. Save copies keeps snapshots of the save being played. Close the game first.",
                                AutoSize = false, ForeColor = Theme.Dim, Location = new Point(16, 384), Size = new Size(488, 38), Font = new Font("Segoe UI", 8.5f) };
@@ -642,7 +642,7 @@ class SaveSlotsForm : Form {
 
     static void Style(Button b, string text, int x, int y, int w) {
         b.Text = text; b.SetBounds(x, y, w, 30); b.FlatStyle = FlatStyle.Flat;
-        b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+        b.BackColor = Color.FromArgb(52, 78, 41); b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Color.FromArgb(101, 150, 80);
     }
 
     void Buttons() {
@@ -739,12 +739,12 @@ class AskForm : Form {
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(470, 170);
-        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        BackColor = Color.FromArgb(28, 43, 22); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
         var says = new Label { Text = text, AutoSize = false, Location = new Point(16, 14), Size = new Size(438, 96) };
         var a = new Button { Text = first }; var b = new Button { Text = second }; var c = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
         foreach (var x in new[] { a, b, c }) {
-            x.FlatStyle = FlatStyle.Flat; x.BackColor = Color.FromArgb(30, 46, 78); x.ForeColor = Color.White;
-            x.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+            x.FlatStyle = FlatStyle.Flat; x.BackColor = Color.FromArgb(52, 78, 41); x.ForeColor = Color.White;
+            x.FlatAppearance.BorderColor = Color.FromArgb(101, 150, 80);
         }
         a.SetBounds(16, 122, 170, 32); b.SetBounds(194, 122, 160, 32); c.SetBounds(362, 122, 92, 32); a.BackColor = Theme.Blue;
         Controls.AddRange(new Control[] { says, a, b, c });
@@ -764,14 +764,8 @@ class RandoSeedForm : Form {
     bool presetting;
 
     // (the sections the settings are shown in, by key; a key not named here goes to the last, "Other")
-    internal static readonly string[][] Sections = {
-        new[] { "Shuffle", "rando_chests", "rando_skulltulas", "rando_heart_pieces", "rando_quests", "rando_light_arrows",
-                "rando_songs", "rando_shops", "rando_shop_shelves", "rando_scrubs", "rando_dungeon_rewards", "rando_keys",
-                "rando_major", "rando_sword_shield", "rando_progressive", "rando_magic" },
-        new[] { "Open world", "rando_open_deku", "rando_open_forest", "rando_open_door", "rando_letter", "rando_ganon_bridge" },
-        new[] { "Quality of life (moves no item)", "rando_skip_intro", "rando_skip_cutscenes", "rando_start_rupees",
-                "rando_ammo_pickups", "rando_rupee_fill", "rando_skulltulas_day", "rando_hints", "rando_ageless" },
-    };
+    // (Lost Woods: the Randomizer page's sections, by how far each setting is tested, merged rows opened up)
+    internal static readonly string[][] Sections = RandoLayout.KeySections();
     // (the presets: each a setting's choice by its place in the row's choices, clamped to the choices available. A key
     // not named keeps its first choice, Off)
     internal static readonly string[] PresetNames = { "Last used", "Beginner", "Standard", "Everything shuffled" };
@@ -802,13 +796,13 @@ class RandoSeedForm : Form {
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(600, 660);
-        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        BackColor = Color.FromArgb(28, 43, 22); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
         var top = new Label { Text = "The randomizer's settings for this save. A new seed is made of them.", AutoSize = true, Location = new Point(16, 14) };
         var pl = new Label { Text = "Preset:", AutoSize = true, Location = new Point(16, 46) };
         preset.DropDownStyle = ComboBoxStyle.DropDownList; preset.FlatStyle = FlatStyle.Flat; preset.SetBounds(80, 42, 240, 26);
-        preset.BackColor = Color.FromArgb(24, 36, 60); preset.ForeColor = Theme.Text;
+        preset.BackColor = Color.FromArgb(40, 60, 32); preset.ForeColor = Theme.Text;
         foreach (string p in PresetNames) preset.Items.Add(p);
-        var panel = new Panel { Location = new Point(16, 78), Size = new Size(568, 528), AutoScroll = true, BackColor = Color.FromArgb(20, 30, 50) };
+        var panel = new Panel { Location = new Point(16, 78), Size = new Size(568, 528), AutoScroll = true, BackColor = Color.FromArgb(34, 50, 27) };
         var small = new Font("Segoe UI", 8.5f);
         // (what the save has now: its own seed's settings; for a save with none, the last seed's made, else the ones set)
         var has = new Dictionary<string, int>();
@@ -845,7 +839,7 @@ class RandoSeedForm : Form {
                 var values = (int[])row[3];
                 var label = new Label { Text = (string)row[1], AutoSize = false, Location = new Point(14, y + 3), Size = new Size(240, 24) };
                 var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat, Location = new Point(262, y), Size = new Size(270, 26),
-                                         BackColor = Color.FromArgb(24, 36, 60), ForeColor = Theme.Text };
+                                         BackColor = Color.FromArgb(40, 60, 32), ForeColor = Theme.Text };
                 // (the choices not available yet are left out; with only Off left the row says so and cannot be changed)
                 var names = (string[])row[2];
                 int choices = LauncherForm.RandoChoices(key, names.Length);
@@ -874,8 +868,8 @@ class RandoSeedForm : Form {
         var ok = new Button { Text = "Create seed" };
         var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
         foreach (var b in new[] { ok, cancel }) {
-            b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White;
-            b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+            b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(52, 78, 41); b.ForeColor = Color.White;
+            b.FlatAppearance.BorderColor = Color.FromArgb(101, 150, 80);
         }
         ok.SetBounds(338, 616, 130, 30); cancel.SetBounds(474, 616, 110, 30); ok.BackColor = Theme.Blue;
         var foot = new Label { Text = "A preset sets every row; change any row after.", AutoSize = false, ForeColor = Theme.Dim,
@@ -922,12 +916,12 @@ class PlayChoiceForm : Form {
     string current;
 
     public PlayChoiceForm(string dir, int mode) {
-        this.dir = dir; Mode = mode;
+        this.dir = dir; Mode = LauncherForm.MasterQuestOn ? mode : Math.Min(mode, 1);
         Text = "Choose the game and the save";
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(520, 492);
-        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        BackColor = Color.FromArgb(28, 43, 22); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
         var top = new Label { Text = "The game:", AutoSize = true, Location = new Point(16, 14) };
         Controls.Add(top);
         for (int i = 0; i < 3; i++) {
@@ -935,17 +929,18 @@ class PlayChoiceForm : Form {
             modes[i] = new Button();
             Style(modes[i], Modes[i], 16 + i * 166, 40, 156); modes[i].Height = 36;
             modes[i].Click += (o, e) => { Mode = at; Fill(null); };
+            modes[i].Visible = i < 2 || LauncherForm.MasterQuestOn;
             Controls.Add(modes[i]);
         }
         var mid = new Label { Text = "Its save. Each keeps its own progress:", AutoSize = true, Location = new Point(16, 92) };
         list.SetBounds(16, 118, 450, 230); list.IntegralHeight = false;
-        list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
+        list.BackColor = Color.FromArgb(40, 60, 32); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         list.DrawMode = DrawMode.OwnerDrawFixed; list.ItemHeight = 22;
         list.DrawItem += (o, e) => SaveCopiesForm.DrawCopy(list, e, current, 0, "   (last played)", n => SaveSlots.Shown(n, empty.Contains(n)),
                                                            n => Mode == 1 ? SaveSlots.SeedTag(dir, n) : "");
         var low = new Label { Text = "A name (or none), for one more save or a copy of the chosen one:", AutoSize = true, Location = new Point(16, 360) };
         name.SetBounds(16, 386, 170, 26); name.MaxLength = 80;
-        name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
+        name.BackColor = Color.FromArgb(40, 60, 32); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         Style(add, "New save", 196, 384, 100); Style(copy, "Copy save", 302, 384, 100); Style(rename, "Rename", 408, 384, 96);
         Style(play, "Play", 354, 444, 76); Style(cancel, "Cancel", 436, 444, 68); Style(delete, "Delete", 16, 444, 84);
         Style(seed, "New seed...", 106, 444, 112);
@@ -980,14 +975,14 @@ class PlayChoiceForm : Form {
 
     static void Style(Button b, string text, int x, int y, int w) {
         b.Text = text; b.SetBounds(x, y, w, 30); b.FlatStyle = FlatStyle.Flat;
-        b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+        b.BackColor = Color.FromArgb(52, 78, 41); b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Color.FromArgb(101, 150, 80);
     }
 
     void Fill(string select) {
         for (int i = 0; i < 3; i++) {
             bool on = i == Mode;
-            modes[i].BackColor = on ? (i == 2 ? Color.FromArgb(150, 110, 46) : Theme.Blue) : Color.FromArgb(30, 46, 78);
-            modes[i].FlatAppearance.BorderColor = on ? Color.White : Color.FromArgb(60, 90, 150);
+            modes[i].BackColor = on ? (i == 2 ? Color.FromArgb(150, 110, 46) : Theme.Blue) : Color.FromArgb(52, 78, 41);
+            modes[i].FlatAppearance.BorderColor = on ? Color.White : Color.FromArgb(101, 150, 80);
         }
         seed.Visible = Mode == 1;
         list.Items.Clear(); empty.Clear();
@@ -1298,17 +1293,17 @@ class SaveCopiesForm : Form {
         FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(520, 498);
-        BackColor = Color.FromArgb(16, 25, 43); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        BackColor = Color.FromArgb(28, 43, 22); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
         // (whose saves: the game the launcher is set to play is chosen first, and any of the three can be)
         var whose = new Label { Text = "Saves of:", AutoSize = true, Location = new Point(16, 17) };
         which.SetBounds(90, 13, 294, 26); which.DropDownStyle = ComboBoxStyle.DropDownList; which.FlatStyle = FlatStyle.Flat;
-        which.BackColor = Color.FromArgb(24, 36, 60); which.ForeColor = Theme.Text;
+        which.BackColor = Color.FromArgb(40, 60, 32); which.ForeColor = Theme.Text;
         which.Items.AddRange(SaveCopies.Names);
         which.SelectedIndex = Math.Max(0, Array.IndexOf(SaveCopies.Folders, saveFolder));
         which.SelectedIndexChanged += (o, e) => { this.saveFolder = SaveCopies.Folders[which.SelectedIndex]; Fill(null); };
         var top = new Label { Text = "Keep the saves you have now under a name:", AutoSize = true, Location = new Point(16, 54) };
         name.SetBounds(16, 80, 368, 26); name.MaxLength = 80;
-        name.BackColor = Color.FromArgb(24, 36, 60); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
+        name.BackColor = Color.FromArgb(40, 60, 32); name.ForeColor = Theme.Text; name.BorderStyle = BorderStyle.FixedSingle;
         Style(keep, "Keep a copy", 394, 78, 110);
         var mid = new Label { Text = "Kept copies, the newest first:", AutoSize = true, Location = new Point(16, 124) };
         list.SetBounds(16, 150, 488, 232); list.IntegralHeight = false;
@@ -1319,7 +1314,7 @@ class SaveCopiesForm : Form {
         keepFirst.SetBounds(16, 434, 488, 24); keepFirst.ForeColor = Theme.Text; keepFirst.FlatStyle = FlatStyle.Flat;
         keepFirst.Checked = SaveCopies.KeepBefore(dir);
         keepFirst.CheckedChanged += (o, e) => SaveCopies.SetKeepBefore(dir, keepFirst.Checked);
-        list.BackColor = Color.FromArgb(24, 36, 60); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
+        list.BackColor = Color.FromArgb(40, 60, 32); list.ForeColor = Theme.Text; list.BorderStyle = BorderStyle.FixedSingle;
         Style(restore, "Restore", 16, 394, 110); Style(update, "Update", 136, 394, 110); Style(delete, "Delete", 256, 394, 110);
         Style(close, "Close", 394, 394, 110);
         var foot = new Label { Text = "Update: the copy becomes the saves you have now. Close the game before a restore.",
@@ -1338,7 +1333,7 @@ class SaveCopiesForm : Form {
 
     static void Style(Button b, string text, int x, int y, int w) {
         b.Text = text; b.SetBounds(x, y, w, 30); b.FlatStyle = FlatStyle.Flat;
-        b.BackColor = Color.FromArgb(30, 46, 78); b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Color.FromArgb(60, 90, 150);
+        b.BackColor = Color.FromArgb(52, 78, 41); b.ForeColor = Color.White; b.FlatAppearance.BorderColor = Color.FromArgb(101, 150, 80);
     }
 
     void Buttons() { restore.Enabled = update.Enabled = delete.Enabled = list.SelectedIndex >= 0; }
@@ -1788,18 +1783,93 @@ static class Fork {
     public static string Shown(string v) { var m = Regex.Match(v ?? "", @"\d+(\.\d+)*"); return m.Success ? "v" + m.Value : v; }
 }
 
+// (Lost Woods) the Randomizer page's layout: sections by how far each setting has been tested, and related settings
+// merged into one row (RandoCombo). The settings themselves, their order and values stay RandoRows' (a seed's ID); a merged
+// row only sets several at once. As a setting is tested in play it moves up a section here.
+class RandoCombo {
+    public string Id, Label, Help; public string[] Keys, Items; public int[][] Values;
+}
+class RandoSection { public string Title, Sub; public Color Accent; public string[] Rows; }
+static class RandoLayout {
+    public static readonly Color Tested = Color.FromArgb(124, 210, 104), ShouldWork = Color.FromArgb(232, 190, 96),
+                                 Experimental = Color.FromArgb(240, 112, 86);
+    public static readonly RandoCombo[] Combos = {
+        new RandoCombo { Id = "quests", Label = "Quest rewards", Keys = new[] { "rando_quests", "rando_light_arrows" },
+            Items = new[] { "Off", "On", "On, Light Arrows too" }, Values = new[] { new[] { 0, 0 }, new[] { 1, 0 }, new[] { 1, 1 } },
+            Help = "What some characters give takes part with the chests: Darunia, mini-games (the frogs of Zora's River among them), side quests, the Gold Skulltula family and the three Great Fairies of the spells. Light Arrows too: the Light Arrows Zelda gives can be anywhere as well. Needs Chests." },
+        new RandoCombo { Id = "shops", Label = "Shops", Keys = new[] { "rando_shops", "rando_shop_shelves" },
+            Items = new[] { "Off", "Low prices", "Low prices, every shelf", "Any price", "Any price, every shelf", "10 rupees each", "10 rupees each, every shelf" },
+            Values = new[] { new[] { 0, 0 }, new[] { 1, 0 }, new[] { 1, 1 }, new[] { 2, 0 }, new[] { 2, 1 }, new[] { 3, 0 }, new[] { 3, 1 } },
+            Help = "Shop shelves sell shuffled items, once each. Low prices: gentler rolled prices. Any price: rolled from 10 to 750 rupees. 10 rupees each: every one costs 10. The wallets are shuffled too: a price asks for a wallet that holds it. Every shelf: all the shelves of the six shops take part, and supplies (bombs, arrows, nuts, potions, shields, tunics) then come from grass, pots and enemies; without it, four shelves of each shop do and the supplies stay for sale. Needs Chests." },
+        new RandoCombo { Id = "forest", Label = "Kokiri Forest", Keys = new[] { "rando_open_deku", "rando_open_forest" },
+            Items = new[] { "As the game has it", "Deku Tree open", "Forest exit open", "Deku Tree and exit open" },
+            Values = new[] { new[] { 0, 0 }, new[] { 1, 0 }, new[] { 0, 1 }, new[] { 1, 1 } },
+            Help = "From a new game's start. Deku Tree open: Mido lets Link by without a sword and a shield. Forest exit open: Link can leave the forest before the Deku Tree is done." },
+        new RandoCombo { Id = "skips", Label = "Skip scenes", Keys = new[] { "rando_skip_intro", "rando_skip_cutscenes" },
+            Items = new[] { "Off", "The opening", "Cutscenes", "Opening and cutscenes" },
+            Values = new[] { new[] { 0, 0 }, new[] { 1, 0 }, new[] { 0, 1 }, new[] { 1, 1 } },
+            Help = "The opening: a new game starts in Link's house, without the narration and Navi's flight. Cutscenes: passed over as they start; scenes made of talk keep only what they do, and song lessons go straight to the song. Chests, item scenes, the Great Fairies and the Royal Family's Tomb still play. Moves no item." },
+        new RandoCombo { Id = "rupees", Label = "Rupees", Keys = new[] { "rando_start_rupees", "rando_rupee_fill" },
+            Items = new[] { "As the game has it", "Start with 200", "Pick-ups fill the wallet", "200, and pick-ups fill it" },
+            Values = new[] { new[] { 0, 0 }, new[] { 1, 0 }, new[] { 0, 1 }, new[] { 1, 1 } },
+            Help = "Start with 200: a new game starts with 200 rupees. Pick-ups fill the wallet: a rupee lying in the world or dropped by grass, pots and enemies fills the wallet to what it holds (not chests, shops or prizes). Moves no item." },
+    };
+    public static readonly RandoSection[] Sections = {
+        new RandoSection { Title = "TESTED IN PLAY", Sub = "played and confirmed", Accent = Tested,
+            Rows = new[] { "rando_on", "rando_chests", "rando_skulltulas", "rando_skulltulas_day", "+quests", "rando_songs", "rando_heart_pieces",
+                           "+shops", "rando_scrubs", "rando_major", "rando_progressive", "+forest", "+skips", "+rupees", "rando_ammo_pickups" } },
+        new RandoSection { Title = "SHOULD WORK", Sub = "made and checked, not yet played through", Accent = ShouldWork,
+            Rows = new[] { "rando_sword_shield", "rando_open_door", "rando_letter", "rando_ganon_bridge", "rando_hints", "rando_magic", "rando_keys" } },
+        new RandoSection { Title = "EXPERIMENTAL", Sub = "not finished: may not work, or may break a seed", Accent = Experimental,
+            Rows = new[] { "rando_dungeon_rewards", "rando_ageless" } },
+    };
+    public static RandoCombo Combo(string entry) {
+        if (!entry.StartsWith("+")) return null;
+        foreach (var c in Combos) if (c.Id == entry.Substring(1)) return c;
+        throw new ArgumentException("no merged row " + entry);
+    }
+    // (the sections with their settings' keys, merged rows opened up, for the New seed window: { title, key, key, ... })
+    public static string[][] KeySections() {
+        var all = new List<string[]>();
+        foreach (var s in Sections) {
+            var keys = new List<string> { s.Title.Substring(0, 1) + s.Title.Substring(1).ToLowerInvariant() };
+            foreach (string e in s.Rows) {
+                var c = Combo(e);
+                if (c != null) keys.AddRange(c.Keys); else if (e != "rando_on") keys.Add(e);
+            }
+            all.Add(keys.ToArray());
+        }
+        return all.ToArray();
+    }
+}
+
+// (Lost Woods) a heading over a group of rows in a scrolling list: its name in its colour, a few words after, a line
+class Heading : Widget {
+    public string Text, Sub; public Color Accent;
+    public override bool Hit(PointF p) { return false; }
+    public override void Paint(Graphics g, LauncherForm ui) {
+        using (var b = new SolidBrush(Accent)) g.FillEllipse(b, R.X + 2, R.Y + R.Height / 2 - 5, 8, 8);
+        var size = g.MeasureString(Text, Theme.Caps);
+        using (var b = new SolidBrush(Accent)) g.DrawString(Text, Theme.Caps, b, R.X + 16, R.Y + R.Height / 2 - size.Height / 2 - 1);
+        Theme.Text_(g, Sub, Theme.Small, Theme.Dim, new RectangleF(R.X + 26 + size.Width, R.Y, R.Width - size.Width - 26, R.Height),
+                    StringAlignment.Near, StringAlignment.Center);
+        using (var pen = new Pen(Theme.A(Accent, 70))) g.DrawLine(pen, R.X, R.Bottom - 1, R.Right, R.Bottom - 1);
+    }
+}
+
 static class Theme {
-    public static readonly Color Bg0 = Color.FromArgb(5, 8, 15);
-    public static readonly Color Bg1 = Color.FromArgb(10, 18, 34);
-    public static readonly Color Card = Color.FromArgb(14, 22, 38);
-    public static readonly Color CardHi = Color.FromArgb(20, 32, 54);
-    public static readonly Color Line = Color.FromArgb(32, 48, 78);
-    public static readonly Color Text = Color.FromArgb(234, 241, 255);
-    public static readonly Color Dim = Color.FromArgb(132, 148, 178);
-    public static readonly Color Faint = Color.FromArgb(78, 92, 120);
-    public static readonly Color Blue = Color.FromArgb(46, 123, 255);
-    public static readonly Color Cyan = Color.FromArgb(56, 200, 255);
-    public static readonly Color Green = Color.FromArgb(61, 220, 151);
+    // (Lost Woods: the forest's colours, dark moss and bark, leaf greens for the accents. The names stay Mako's)
+    public static readonly Color Bg0 = Color.FromArgb(7, 10, 6);
+    public static readonly Color Bg1 = Color.FromArgb(13, 19, 11);
+    public static readonly Color Card = Color.FromArgb(19, 27, 16);
+    public static readonly Color CardHi = Color.FromArgb(28, 40, 23);
+    public static readonly Color Line = Color.FromArgb(46, 62, 38);
+    public static readonly Color Text = Color.FromArgb(238, 244, 228);
+    public static readonly Color Dim = Color.FromArgb(152, 168, 134);
+    public static readonly Color Faint = Color.FromArgb(94, 108, 82);
+    public static readonly Color Blue = Color.FromArgb(84, 156, 62);
+    public static readonly Color Cyan = Color.FromArgb(172, 214, 98);
+    public static readonly Color Green = Color.FromArgb(112, 214, 112);
     public static readonly Color Amber = Color.FromArgb(255, 181, 71);
     public static readonly Color Red = Color.FromArgb(255, 90, 106);
 
@@ -1848,7 +1918,7 @@ static class Theme {
         var fmt = StringFormat.GenericTypographic;
         float total = 0;
         var w = new float[s.Length];
-        for (int i = 0; i < s.Length; i++) { w[i] = g.MeasureString(s[i].ToString(), f, 1000, fmt).Width; total += w[i]; }
+        for (int i = 0; i < s.Length; i++) { w[i] = s[i] == ' ' ? f.Size * 0.32f : g.MeasureString(s[i].ToString(), f, 1000, fmt).Width; total += w[i]; }   // (a space measures 0 typographically)
         total += spacing * (s.Length - 1);
         float x = cx - total / 2;
         for (int i = 0; i < s.Length; i++) { g.DrawString(s[i].ToString(), f, b, x, y, fmt); x += w[i] + spacing; }
@@ -1890,7 +1960,7 @@ class Btn : Widget {
         if (Style == Kind.Play) { PaintPlay(g, ui); return; }
         using (var path = Theme.Round(R, 10)) {
             if (Style == Kind.Primary && Enabled) {
-                using (var br = new LinearGradientBrush(R, Theme.Mix(Theme.Blue, Theme.Cyan, h * 0.5f), Theme.Mix(Color.FromArgb(28, 92, 220), Theme.Blue, h),
+                using (var br = new LinearGradientBrush(R, Theme.Mix(Theme.Blue, Theme.Cyan, h * 0.5f), Theme.Mix(Color.FromArgb(100, 176, 68), Theme.Blue, h),
                                                         LinearGradientMode.ForwardDiagonal)) g.FillPath(br, path);
                 using (var pen = new Pen(Theme.A(Color.White, 40 + (int)(50 * h)), 1f)) g.DrawPath(pen, path);
             } else {
@@ -1912,8 +1982,8 @@ class Btn : Widget {
             using (var b = new SolidBrush(Theme.A(Gold ? Theme.Amber : Theme.Blue, (int)((5 + 6 * pulse + 8 * h) * (Enabled ? 1 : 0.2f))))) g.FillPath(b, p);
         }
         using (var path = Theme.Round(R, 16)) {
-            Color top0 = Gold ? Color.FromArgb(232, 168, 52) : Color.FromArgb(30, 110, 255), top1 = Gold ? Color.FromArgb(255, 214, 120) : Theme.Cyan;
-            Color bot0 = Gold ? Color.FromArgb(150, 92, 18) : Color.FromArgb(22, 70, 200), bot1 = Gold ? Theme.Amber : Theme.Blue;
+            Color top0 = Gold ? Color.FromArgb(232, 168, 52) : Color.FromArgb(117, 204, 78), top1 = Gold ? Color.FromArgb(255, 214, 120) : Theme.Cyan;
+            Color bot0 = Gold ? Color.FromArgb(150, 92, 18) : Color.FromArgb(99, 200, 61), bot1 = Gold ? Theme.Amber : Theme.Blue;
             using (var br = new LinearGradientBrush(R, Theme.Mix(top0, top1, h * 0.4f), Theme.Mix(bot0, bot1, h),
                                                     LinearGradientMode.Vertical)) g.FillPath(br, path);
             // (a shine sweeping across now and then)
@@ -2039,7 +2109,7 @@ class Toggle : Widget {
         Theme.Text_(g, HelpText, Theme.Small, Theme.Dim, new RectangleF(R.X + 20, R.Y + 40, R.Width - 110, R.Height - 46), StringAlignment.Near, StringAlignment.Near);
         var sw = new RectangleF(R.Right - 74, R.Y + R.Height / 2 - 13, 52, 26);
         using (var p = Theme.Round(sw, 13)) {
-            using (var b = new SolidBrush(Theme.Mix(Color.FromArgb(34, 44, 66), Theme.Blue, knob))) g.FillPath(b, p);
+            using (var b = new SolidBrush(Theme.Mix(Color.FromArgb(48, 66, 41), Theme.Blue, knob))) g.FillPath(b, p);
             using (var pen = new Pen(Theme.Mix(Theme.Line, Theme.Cyan, knob * 0.6f), 1f)) g.DrawPath(pen, p);
         }
         float kx = sw.X + 3 + (sw.Width - 26) * knob;
@@ -2163,7 +2233,7 @@ class VramSlider : Widget {
         Theme.Text_(g, "VIDEO MEMORY FOR TEXTURES", Theme.Label, Theme.Dim, new RectangleF(R.X + 16, R.Y + 9, 230, 18), StringAlignment.Near, StringAlignment.Near);
         Theme.Text_(g, ValueMB > 0 ? "At most " + Gb(ValueMB) : "Auto", Theme.Value, Theme.Text, new RectangleF(R.X + 16, R.Y + 27, 230, 24), StringAlignment.Near, StringAlignment.Near);
         var t = Track;
-        using (var p = Theme.Round(t, 2)) using (var b = new SolidBrush(Color.FromArgb(34, 44, 66))) g.FillPath(b, p);
+        using (var p = Theme.Round(t, 2)) using (var b = new SolidBrush(Color.FromArgb(48, 66, 41))) g.FillPath(b, p);
         if (RecMB > 0) {   // (the recommended size: a tick and its label under the track)
             float rx = XOf(RecMB);
             using (var b = new SolidBrush(Theme.Green)) g.FillRectangle(b, rx - 1, t.Y - 7, 2, 18);
@@ -2204,7 +2274,7 @@ class TitleBtn : Widget {
 // (the drop-down list in the theme)
 class DarkMenu : ToolStripProfessionalRenderer {
     protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e) {
-        using (var b = new SolidBrush(Color.FromArgb(16, 25, 43))) e.Graphics.FillRectangle(b, e.AffectedBounds);
+        using (var b = new SolidBrush(Color.FromArgb(28, 43, 22))) e.Graphics.FillRectangle(b, e.AffectedBounds);
     }
     protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e) {
         using (var p = new Pen(Theme.Line)) e.Graphics.DrawRectangle(p, 0, 0, e.AffectedBounds.Width - 1, e.AffectedBounds.Height - 1);
@@ -2235,7 +2305,9 @@ class LauncherForm : Form {
     readonly List<TabW> tabs = new List<TabW>();
     Selector langSel;
     Btn updateButton, playButton, fsrButton, benchButton;
-    const bool UpdatesOn = false;   // (the Update button and the check at start; see where updateButton is made)
+    const bool UpdatesOn = false;
+    // (Lost Woods: Master Quest and the Mods tab are Mako's and untested here: hidden, their code kept)
+    internal const bool MasterQuestOn = false, ModsOn = false;   // (the Update button and the check at start; see where updateButton is made)
     Bench bench; bool benchBusy;   // (Mako 4.0: Test my PC, its last result)
     string fsrLine = ""; Color fsrLineColor = Theme.Dim; bool fsrBusy;
     Image logo, mqLogo;
@@ -2537,7 +2609,7 @@ class LauncherForm : Form {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
         try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
         try {
-            using (var s = typeof(LauncherForm).Assembly.GetManifestResourceStream("mako_logo.png"))
+            using (var s = typeof(LauncherForm).Assembly.GetManifestResourceStream("lostwoods_logo.png"))
                 if (s != null) logo = Image.FromStream(s);
         } catch { }
 
@@ -2571,16 +2643,17 @@ class LauncherForm : Form {
             string mqPath = Path.Combine(dir, "prompts", "mq", "logo.png");
             if (File.Exists(mqPath)) mqLogo = Image.FromStream(new MemoryStream(File.ReadAllBytes(mqPath)));
         } catch { }
-        try { mqMode = File.ReadAllText(ModeFile).Trim() == "mq"; } catch { }
+        try { mqMode = MasterQuestOn && File.ReadAllText(ModeFile).Trim() == "mq"; } catch { }
         SyncPlay();
-        widgets.Add(new Btn { Text = "Made by sharkiix  ·  based on Hookshot", Style = Btn.Kind.Link, R = new RectangleF(32, 648, 300, 24),
+        widgets.Add(new Btn { Text = "Lost Woods  ·  built on Mako by sharkiix", Style = Btn.Kind.Link, R = new RectangleF(32, 648, 300, 24),
                               Click = () => OpenUrl(Fork.Home) });
 
         // (tabs)
         // (Mako 4.1: five tabs, the rarely used pages under More with their own row: fewer buttons on every page. The
         //  randomizer's two pages are tabs of their own between Game and Mods, with page numbers of their own)
-        string[] names = { "Home", "Graphics", "Game", "Randomizer", "Cosmetics", "Mods", "More" };
-        int[] firstPage = { 0, 1, 2, RandoPage, CosmeticPage, 7, 3 };
+        string[] names = ModsOn ? new[] { "Home", "Graphics", "Game", "Randomizer", "Cosmetics", "Mods", "More" }
+                                : new[] { "Home", "Graphics", "Game", "Randomizer", "Cosmetics", "More" };
+        int[] firstPage = ModsOn ? new[] { 0, 1, 2, RandoPage, CosmeticPage, 7, 3 } : new[] { 0, 1, 2, RandoPage, CosmeticPage, 3 };
         float tx = LeftW + 36;
         using (var g = CreateGraphics()) {
             // (nine tabs with the randomizer's two and Master Quest: the room around each name is made smaller until they fit the page's width)
@@ -2620,14 +2693,12 @@ class LauncherForm : Form {
         }
         AddSelectors(GameRows, 2, cx, colW);
         // (more of them than fit over the seed's buttons: closer lines, and the list scrolls by the wheel inside RandoView)
-        AddSelectors(RandoRows, RandoPage, cx, colW, null, 47, 45, true);
-        randoHeight = 112 + (RandoRows.Length - RandoHidden.Count + 1) / 2 * 47 - 2 - RandoView.Y;
+        // (Lost Woods: in sections by how far each is tested, related settings merged into one row: RandoLayout)
+        BuildRandoPage(cx, colW);
         // (fourteen of them: the closer lines of the Randomizer page. The shields' looks follow the colours)
         // (the colours, the shields' looks and the characters' looks: a list that scrolls in RandoView, as the Randomizer page's)
-        AddSelectors(CosmeticRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true);
-        AddSelectors(ShieldRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true, CosmeticRows.Length);
-        AddSelectors(CharacterRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true, CosmeticRows.Length + ShieldRows.Length);
-        cosmeticHeight = 112 + CosmeticLines * 47 - 2 - RandoView.Y;
+        // (Lost Woods: colours, shields, then the characters' looks under an experimental switch)
+        BuildCosmeticPage(cx, colW);
         // (under the list, over the page's note)
         widgets.Add(new Btn { Text = "Randomize all", R = new RectangleF(cx, 542, 160, 36), Page = CosmeticPage, Click = OnRandomCosmetics });
         // (under the selectors: the seed's three buttons, and its ID beside them)
@@ -2655,12 +2726,12 @@ class LauncherForm : Form {
 
         // (Mako) the Master Quest page: its logo (PaintMasterQuest), its Play button, the damage, its saves
         // (Mako 4.1) Master Quest: no page of its own (its Play is on the left); its damage is a Game setting
-        AddSelectors(MqRows, 2, cx, colW, null, 70, 62, false, GameRows.Length + 1);
+        if (MasterQuestOn) AddSelectors(MqRows, 2, cx, colW, null, 70, 62, false, GameRows.Length + 1);
 
         // (Mako 4.1) the Mods tab (Mods.cs): the drop zone, the list; a mod dropped anywhere on the window is installed
         widgets.Add(new ModDrop { R = new RectangleF(cx, 108, cw, 76), Page = 7, Click = ModsPick });
         widgets.Add(new ModListW { R = new RectangleF(cx, 228, cw - 14, 370), Page = 7 });
-        AllowDrop = true;
+        AllowDrop = ModsOn;
         DragEnter += (s, e) => {
             bool files = e.Data.GetDataPresent(DataFormats.FileDrop);
             e.Effect = files && !ModBusy ? DragDropEffects.Copy : DragDropEffects.None;
@@ -2684,8 +2755,11 @@ class LauncherForm : Form {
                               () => { Directory.CreateDirectory(Path.Combine(dir, "user", "save_mq")); OpenFolder(Path.Combine(dir, "user", "save_mq")); },
                               () => OpenFolder(dir), OnSendLogs, () => OpenUrl(Fork.Home + "/issues"),
                               () => { using (var f = new SaveCopiesForm(dir, SaveFolder())) f.ShowDialog(this); } };
-            for (int i = 0; i < FileRows.Length; i++)
-                widgets.Add(new Btn { Text = FileRows[i][0], Page = 8, Click = acts[i], R = new RectangleF(cx + i % 2 * (fw + 14), 150 + i / 2 * 112, fw, 44) });
+            for (int i = 0, at = 0; i < FileRows.Length; i++) {
+                if (i == 2 && !MasterQuestOn) continue;   // (Master Quest saves)
+                widgets.Add(new Btn { Text = FileRows[i][0], Page = 8, Click = acts[i], R = new RectangleF(cx + at % 2 * (fw + 14), 150 + at / 2 * 112, fw, 44) });
+                at++;
+            }
         }
 
         // (the save the next Play plays is named under the left panel's second button, which opens the window to choose it:
@@ -2720,7 +2794,7 @@ class LauncherForm : Form {
         timer.Tick += (s, e) => Step();
         timer.Start();
         if (UpdatesOn) CheckUpdate();
-        else SetUpdate(Theme.Faint, Fork.Shown(Fork.Version), "Updates are merged by hand for this build", "Check again", false, false);
+        else SetUpdate(Theme.Faint, Fork.Shown(Fork.Version), "A test release: new ones are on the GitHub page", "Check again", false, false);
     }
 
     protected override void OnHandleCreated(EventArgs e) {
@@ -2758,6 +2832,116 @@ class LauncherForm : Form {
             else { s.Changed = OnCosmetic; into[s.Key] = s; }
             widgets.Add(s);
         }
+    }
+
+    // (Lost Woods) the Randomizer page. Every setting's own selector is made, as before (settings[key]: what is saved and
+    // what a seed's ID holds), but the page shows RandoLayout's sections: a heading, then rows, a row being a setting's own
+    // selector or a merged one (RandoCombo) that sets several settings at once.
+    readonly Dictionary<Selector, RandoCombo> combos = new Dictionary<Selector, RandoCombo>();
+    void BuildRandoPage(float x0, float colW) {
+        foreach (var row in RandoRows) {
+            var s = new Selector { Key = (string)row[0], Label = (string)row[1], Items = (string[])row[2], Values = (int[])row[3],
+                                   HelpText = (string)row[4], Page = NoPage };
+            if (RandoNotYet.ContainsKey(s.Key)) s.Limit = RandoNotYet[s.Key];
+            s.Changed = OnSetting; settings[s.Key] = s; widgets.Add(s);
+        }
+        float y = 112;
+        foreach (var section in RandoLayout.Sections) {
+            widgets.Add(new Heading { Text = section.Title, Sub = section.Sub, Accent = section.Accent, Page = RandoPage, Scrolls = true,
+                                      R = new RectangleF(x0, y, colW * 2 + 14, 28), HomeY = y });
+            y += 34;
+            int place = 0;
+            foreach (string entry in section.Rows) {
+                Selector s;
+                var combo = RandoLayout.Combo(entry);
+                if (combo != null) {
+                    var vals = new int[combo.Items.Length];
+                    for (int i = 0; i < vals.Length; i++) vals[i] = i;
+                    s = new Selector { Key = "combo_" + combo.Id, Label = combo.Label, Items = combo.Items, Values = vals, HelpText = combo.Help };
+                    s.Changed = OnCombo; combos[s] = combo; widgets.Add(s);
+                } else s = settings[entry];
+                float ry = y + place / 2 * 47;
+                s.Page = RandoPage; s.Scrolls = true; s.HomeY = ry;
+                s.R = new RectangleF(x0 + place % 2 * (colW + 14), ry, colW, 45);
+                place++;
+            }
+            y += (place + 1) / 2 * 47 + 12;
+        }
+        randoHeight = y - 14 - RandoView.Y;
+    }
+    // (a merged row chosen: each setting under it set, then saved as a row of its own would be)
+    void OnCombo(Selector c) {
+        if (loading) return;
+        var combo = combos[c];
+        loading = true;
+        for (int k = 0; k < combo.Keys.Length; k++) {
+            var s = settings[combo.Keys[k]];
+            s.Set(Math.Max(0, Array.IndexOf(s.Values, combo.Values[c.Index][k])), false);
+        }
+        loading = false;
+        foreach (string key in combo.Keys) OnSetting(settings[key]);
+    }
+    // (each merged row shows the choice its settings make; when none does (settings from elsewhere), the nearest, the
+    // first setting's own value counted first)
+    void SyncCombos() {
+        foreach (var kv in combos) {
+            var combo = kv.Value; int best = 0, bestScore = -1;
+            for (int i = 0; i < combo.Items.Length; i++) {
+                int score = 0;
+                for (int k = 0; k < combo.Keys.Length; k++)
+                    if (settings[combo.Keys[k]].Value == combo.Values[i][k]) score += k == 0 ? 10 : 1;
+                if (score > bestScore) { bestScore = score; best = i; }
+            }
+            kv.Key.Index = best;
+        }
+    }
+
+    // (Lost Woods) the Cosmetics page: colours, shields' looks, and the characters' looks, which mostly do not work yet,
+    // behind a switch of their own. Off sets them all back to their own looks; the switch is the launcher's only (on at
+    // start when any of them is set).
+    Selector modelsSwitch;
+    readonly List<Selector> modelRows = new List<Selector>();
+    float cosmeticsBase;   // (the list's height without the characters' rows)
+    void BuildCosmeticPage(float x0, float colW) {
+        float y = 112;
+        y = CosmeticSection(x0, colW, y, "COLOURS", "tunics, hearts, magic, shields and swords", Theme.Cyan, CosmeticRows);
+        y = CosmeticSection(x0, colW, y, "SHIELDS", "one shield shown as another", Theme.Cyan, ShieldRows);
+        widgets.Add(new Heading { Text = "EXPERIMENTAL", Sub = "the characters' looks: most of them do not work yet", Accent = RandoLayout.Experimental,
+                                  Page = CosmeticPage, Scrolls = true, R = new RectangleF(x0, y, colW * 2 + 14, 28), HomeY = y });
+        y += 34;
+        modelsSwitch = new Selector { Key = "models_experimental", Label = "Character model swaps", Items = new[] { "Off", "On" }, Values = new[] { 0, 1 },
+                                      HelpText = "Shows Link, Zelda, Malon and the others as other characters. Experimental: most swaps do not work yet and can look broken. Off puts every character back to its own look.",
+                                      Page = CosmeticPage, Scrolls = true, HomeY = y, R = new RectangleF(x0, y, colW, 45) };
+        modelsSwitch.Changed = s => { ShowModels(); if (!loading && s.Index == 0) { foreach (var m in modelRows) m.Set(0, false); SaveCosmetics(); } };
+        widgets.Add(modelsSwitch);
+        y += 47;
+        cosmeticsBase = y - 2;
+        AddSelectors(CharacterRows, CosmeticPage, x0, colW, cosmetics, 47, 45, true);
+        for (int i = 0; i < CharacterRows.Length; i++) {
+            var s = cosmetics[(string)CharacterRows[i][0]];
+            float ry = y + i / 2 * 47;
+            s.HomeY = ry; s.R = new RectangleF(x0 + i % 2 * (colW + 14), ry, colW, 45);
+            modelRows.Add(s);
+        }
+        ShowModels();
+    }
+    float CosmeticSection(float x0, float colW, float y, string title, string sub, Color accent, object[][] rows) {
+        widgets.Add(new Heading { Text = title, Sub = sub, Accent = accent, Page = CosmeticPage, Scrolls = true,
+                                  R = new RectangleF(x0, y, colW * 2 + 14, 28), HomeY = y });
+        y += 34;
+        AddSelectors(rows, CosmeticPage, x0, colW, cosmetics, 47, 45, true);
+        for (int i = 0; i < rows.Length; i++) {
+            var s = cosmetics[(string)rows[i][0]];
+            float ry = y + i / 2 * 47;
+            s.HomeY = ry; s.R = new RectangleF(x0 + i % 2 * (colW + 14), ry, colW, 45);
+        }
+        return y + (rows.Length + 1) / 2 * 47 + 12;
+    }
+    void ShowModels() {
+        bool on = modelsSwitch.Index == 1;
+        foreach (var s in modelRows) s.Page = on ? CosmeticPage : NoPage;
+        cosmeticHeight = (on ? cosmeticsBase + (modelRows.Count + 1) / 2 * 47 : cosmeticsBase) - RandoView.Y;
+        ScrollCosmetics(0);
     }
 
     Bubble NewBubble() {
@@ -2809,19 +2993,19 @@ class LauncherForm : Form {
             using (var b = new LinearGradientBrush(new Rectangle(0, 0, W, H), Theme.Bg1, Theme.Bg0, 60f)) g.FillRectangle(b, 0, 0, W, H);
             // (the left panel: deeper, with a blue light from below)
             var left = new RectangleF(0, 0, LeftW, H);
-            using (var b = new LinearGradientBrush(left, Color.FromArgb(7, 12, 24), Color.FromArgb(4, 7, 14), LinearGradientMode.Vertical)) g.FillRectangle(b, left);
+            using (var b = new LinearGradientBrush(left, Color.FromArgb(15, 24, 11), Color.FromArgb(8, 14, 6), LinearGradientMode.Vertical)) g.FillRectangle(b, left);
             using (var p = new GraphicsPath()) {
                 p.AddEllipse(-160, H - 300, LeftW + 320, 520);
-                using (var pb = new PathGradientBrush(p) { CenterColor = Color.FromArgb(70, 30, 100, 255), SurroundColors = new[] { Color.FromArgb(0, 30, 100, 255) } })
+                using (var pb = new PathGradientBrush(p) { CenterColor = Color.FromArgb(70, 115, 204, 78), SurroundColors = new[] { Color.FromArgb(0, 115, 204, 78) } })
                     g.FillPath(pb, p);
             }
             using (var p = new GraphicsPath()) {
                 p.AddEllipse(LeftW + 200, -260, 700, 520);
-                using (var pb = new PathGradientBrush(p) { CenterColor = Color.FromArgb(26, 56, 200, 255), SurroundColors = new[] { Color.FromArgb(0, 56, 200, 255) } })
+                using (var pb = new PathGradientBrush(p) { CenterColor = Color.FromArgb(26, 144, 204, 92), SurroundColors = new[] { Color.FromArgb(0, 144, 204, 92) } })
                     g.FillPath(pb, p);
             }
-            using (var pen = new Pen(Color.FromArgb(28, 120, 170, 255), 1f)) g.DrawLine(pen, LeftW, 0, LeftW, H);
-            using (var pen = new Pen(Color.FromArgb(40, 120, 170, 255), 1f)) g.DrawRectangle(pen, 0, 0, W - 1, H - 1);
+            using (var pen = new Pen(Color.FromArgb(28, 152, 204, 128), 1f)) g.DrawLine(pen, LeftW, 0, LeftW, H);
+            using (var pen = new Pen(Color.FromArgb(40, 152, 204, 128), 1f)) g.DrawRectangle(pen, 0, 0, W - 1, H - 1);
         }
     }
 
@@ -2836,14 +3020,14 @@ class LauncherForm : Form {
 
         PaintLeft(g);
         // (title)
-        using (var b = new SolidBrush(Theme.A(Theme.Dim, 160))) Theme.Spaced(g, "MAKO LAUNCHER", Theme.Caps, b, LeftW + (W - LeftW) / 2f, 13, 4);
+        using (var b = new SolidBrush(Theme.A(Theme.Dim, 160))) Theme.Spaced(g, "LOST WOODS LAUNCHER", Theme.Caps, b, LeftW + (W - LeftW) / 2f, 13, 4);
 
         // (tabs underline and the page)
         if (PageNow == 6) PaintMqScene(g);
         using (var b = new LinearGradientBrush(new RectangleF(tabX, 88, Math.Max(1, tabW), 3), PageNow == 6 ? Color.FromArgb(196, 150, 70) : Theme.Blue,
                                                PageNow == 6 ? Color.FromArgb(232, 196, 128) : Theme.Cyan, 0f))
             using (var p = Theme.Round(new RectangleF(tabX + 10, 88, Math.Max(1, tabW - 20), 3), 1.5f)) g.FillPath(b, p);
-        using (var pen = new Pen(Color.FromArgb(24, 120, 170, 255))) g.DrawLine(pen, LeftW + 36, 92, W - 36, 92);
+        using (var pen = new Pen(Color.FromArgb(24, 152, 204, 128))) g.DrawLine(pen, LeftW + 36, 92, W - 36, 92);
 
         var state = g.Save();
         float slide = (1 - Ease(pageFade)) * 14;
@@ -2896,7 +3080,7 @@ class LauncherForm : Form {
         foreach (var b in bubbles) {
             float x = b.X + (float)Math.Sin(t * 0.8 + b.P) * 6;
             int a = (int)(40 + 50 * Math.Sin(t + b.P) * Math.Sin(t + b.P));
-            using (var pen = new Pen(Color.FromArgb(Math.Min(255, a), 120, 200, 255), 1f)) g.DrawEllipse(pen, x, b.Y, b.R * 2, b.R * 2);
+            using (var pen = new Pen(Color.FromArgb(Math.Min(255, a), 206, 232, 128), 1f)) g.DrawEllipse(pen, x, b.Y, b.R * 2, b.R * 2);
         }
         // (light streaks sweeping like the logo's, slowly drifting)
         var clip0 = g.Save(); g.SetClip(new RectangleF(0, 0, LeftW, H));
@@ -2916,13 +3100,13 @@ class LauncherForm : Form {
         }
         g.Restore(clip0);
         // (the logo with a soft glow behind it, breathing)
-        var lr = new RectangleF(30, 64, 340, 340f * 660 / 1375);
+        var lr = new RectangleF(40, 56, 320, 320f * 400 / 680);   // (Lost Woods: the tree, launcher/make_tree_logo.py)
         if (logo != null) lr.Height = lr.Width * logo.Height / logo.Width;
         float pulse = 0.5f + 0.5f * (float)Math.Sin(t * 1.4);
         using (var p = new GraphicsPath()) {
             var gr = RectangleF.Inflate(lr, 10, 26);
             p.AddEllipse(gr);
-            using (var pb = new PathGradientBrush(p) { CenterColor = Color.FromArgb((int)(40 + 30 * pulse), 40, 130, 255), SurroundColors = new[] { Color.FromArgb(0, 40, 130, 255) } })
+            using (var pb = new PathGradientBrush(p) { CenterColor = Color.FromArgb((int)(40 + 30 * pulse), 96, 168, 60), SurroundColors = new[] { Color.FromArgb(0, 96, 168, 60) } })
                 g.FillPath(pb, p);
         }
         if (logo != null) {
@@ -2931,8 +3115,8 @@ class LauncherForm : Form {
         }
         // (wordmark)
         float my = lr.Bottom + 16;
-        using (var b = new LinearGradientBrush(new RectangleF(0, my, LeftW, 60), Color.White, Color.FromArgb(170, 200, 240), LinearGradientMode.Vertical))
-            Theme.Spaced(g, "MAKO", Theme.Mark, b, LeftW / 2f, my, 16);
+        using (var b = new LinearGradientBrush(new RectangleF(0, my, LeftW, 60), Color.White, Color.FromArgb(204, 240, 185), LinearGradientMode.Vertical))
+            Theme.Spaced(g, "LOST WOODS", Theme.Mark, b, LeftW / 2f, my, 3);
         using (var b = new SolidBrush(Theme.Dim)) Theme.Spaced(g, "OCARINA OF TIME  ·  PC", Theme.Caps, b, LeftW / 2f, my + 66, 3.5f);
         // (version pill)
         string v = Fork.Me(Installed());
@@ -2947,7 +3131,7 @@ class LauncherForm : Form {
         // (update card)
         var card = new RectangleF(32, 398, 336, 94);
         using (var p = Theme.Round(card, 14)) {
-            using (var b = new SolidBrush(Color.FromArgb(200, 12, 20, 36))) g.FillPath(b, p);
+            using (var b = new SolidBrush(Color.FromArgb(200, 23, 36, 17))) g.FillPath(b, p);
             using (var pen = new Pen(Theme.Line)) g.DrawPath(pen, p);
         }
         float dp = 0.5f + 0.5f * (float)Math.Sin(t * 3);
@@ -2957,11 +3141,30 @@ class LauncherForm : Form {
         Theme.Text_(g, updLine, Theme.Small, Theme.Dim, new RectangleF(card.X + 38, card.Y + 34, card.Width - 50, 18), StringAlignment.Near, StringAlignment.Near);
         if (updProgress >= 0) {
             var bar = new RectangleF(card.X + 16, card.Bottom - 26, card.Width - 32, 8);
-            using (var p = Theme.Round(bar, 4)) using (var b = new SolidBrush(Color.FromArgb(30, 42, 66))) g.FillPath(b, p);
+            using (var p = Theme.Round(bar, 4)) using (var b = new SolidBrush(Color.FromArgb(46, 66, 38))) g.FillPath(b, p);
             var fill = new RectangleF(bar.X, bar.Y, Math.Max(8, bar.Width * updProgress), bar.Height);
             using (var p = Theme.Round(fill, 4)) using (var b = new LinearGradientBrush(bar, Theme.Blue, Theme.Cyan, 0f)) g.FillPath(b, p);
             updateButton.Enabled = false;
         }
+    }
+
+    // (Lost Woods) under the Randomizer and Cosmetics pages: a new seed or a changed look makes the next start longer
+    void PaintSlowStart(Graphics g, float x) {
+        var r = new RectangleF(x, 610, W - LeftW - 72, 50);
+        using (var p = Theme.Round(r, 12)) {
+            using (var b = new SolidBrush(Theme.A(Theme.Amber, 26))) g.FillPath(b, p);
+            using (var pen = new Pen(Theme.A(Theme.Amber, 150))) g.DrawPath(pen, p);
+        }
+        using (var b = new SolidBrush(Theme.Amber)) {
+            var tri = new[] { new PointF(r.X + 26, r.Y + 13), new PointF(r.X + 37, r.Y + 34), new PointF(r.X + 15, r.Y + 34) };
+            g.FillPolygon(b, tri);
+        }
+        using (var b = new SolidBrush(Theme.Bg0)) {
+            g.FillRectangle(b, r.X + 25, r.Y + 19, 2, 8);
+            g.FillRectangle(b, r.X + 25, r.Y + 29, 2, 2);
+        }
+        Theme.Text_(g, "After a new seed or a change on this page, the next start of the game takes longer, sometimes several minutes: the seed and the game's files are written again. Let it finish.",
+                    Theme.Small, Theme.Text, new RectangleF(r.X + 48, r.Y + 4, r.Width - 60, r.Height - 8), StringAlignment.Near, StringAlignment.Center);
     }
 
     void PaintPageExtras(Graphics g) {
@@ -2976,6 +3179,7 @@ class LauncherForm : Form {
             Theme.Text_(g, "Placed when Play is pressed. The seed's ID holds the seed and every setting above: the same ID is the same seed.",
                         Theme.Small, Theme.Faint, new RectangleF(x, 584, W - LeftW - 72, 18), StringAlignment.Near, StringAlignment.Near);
         }
+        if (PageNow == RandoPage || PageNow == CosmeticPage) PaintSlowStart(g, x);
         if (PageNow == CosmeticPage)
             Theme.Text_(g, "Written when Play is pressed (about half a minute after a change). The equipment menu's pictures keep the game's own.",
                         Theme.Small, Theme.Faint, new RectangleF(x + 172, 540, W - LeftW - 72 - 172, 40), StringAlignment.Near, StringAlignment.Near);
@@ -3175,7 +3379,7 @@ class LauncherForm : Form {
     }
 
     public void ShowList(Selector s) {
-        var m = new ContextMenuStrip { Renderer = new DarkMenu(), ShowImageMargin = true, Font = new Font("Segoe UI", 10f), BackColor = Color.FromArgb(16, 25, 43) };
+        var m = new ContextMenuStrip { Renderer = new DarkMenu(), ShowImageMargin = true, Font = new Font("Segoe UI", 10f), BackColor = Color.FromArgb(28, 43, 22) };
         for (int i = 0; i <= s.Last; i++) {   // (not the choices that are not available yet)
             int k = i;
             var it = new ToolStripMenuItem(s.Items[i]) { Checked = i == s.Index, ForeColor = Theme.Text, Padding = new Padding(4, 3, 4, 3) };
@@ -3247,6 +3451,8 @@ class LauncherForm : Form {
             settings["frame_generation"].Index = settings["frame_generation"].Items.Length - 1;
         string lang = ReadLanguage();
         for (int i = 0; i < Languages.Length; i++) if (string.Equals(Languages[i][0], lang, StringComparison.OrdinalIgnoreCase)) langSel.Index = i;
+        SyncCombos();
+        if (modelsSwitch != null) { modelsSwitch.Index = modelRows.Exists(m => m.Index > 0) ? 1 : 0; ShowModels(); }
         loading = false;
     }
 

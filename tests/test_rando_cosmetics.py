@@ -249,7 +249,7 @@ def mod_and_sources():
     rows = rows[:rows.index("\n    };")]
     check(re.findall(r'new object\[\] \{ "(\w+)", "([^"]*)", TunicColours, TunicValues,', rows) == [(key, label) for _, key, label, _, _, _ in t.COSMETICS],
           "the launcher's Cosmetics page and the script's tunics differ")
-    check("AddSelectors(CosmeticRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true);" in launcher and '"hookshot_cosmetics.ini"' in launcher and
+    check('CosmeticSection(x0, colW, y, "COLOURS"' in launcher and '"hookshot_cosmetics.ini"' in launcher and
           "void SaveCosmetics()" in launcher, "the launcher does not show or keep its Cosmetics page")
     check('Text = "Randomize all"' in launcher and "Click = OnRandomCosmetics" in launcher and "s.Set(r.Next(1, s.Items.Length), false);" in launcher,
           "the launcher's Cosmetics page has no Randomize all button, or it can pick the game's own colour")
@@ -326,7 +326,7 @@ def characters():
     check(young and [int(v) for v in young.group(1).split(",")] == [0, 3, 6] and adult and [int(v) for v in adult.group(1).split(",")] == [0, 4, 5, 7, 8, 9],
           "Link's looks in the launcher are not the other characters of his age")
     check('if (!s.Key.StartsWith("cosmetic_model_")) s.Set(r.Next(1, s.Items.Length), false);' in launcher and
-          "AddSelectors(CharacterRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true, CosmeticRows.Length + ShieldRows.Length);" in launcher and
+          "AddSelectors(CharacterRows, CosmeticPage, x0, colW, cosmetics, 47, 45, true);" in launcher and
           "if (PageNow == CosmeticPage) ScrollCosmetics(" in launcher, "the characters' rows are not on the page, it does not scroll, or Randomize all sets them")
     patches = (ROOT / "nx2" / "oot_patches.py").read_text(encoding="utf-8")
     check("def patch_model_swap(source):" in patches and "swap = patch_model_swap(out) if protect_hearts else None" in patches,
@@ -426,10 +426,11 @@ def shields():
         check(abs(colorsys.rgb_to_hsv(*(c / 255.0 for c in got))[0] * 360.0 - 172.0) < 3.0 and
               change(tuple(c * 255.0 for c in far)) == tuple(c * 255.0 for c in far),
               "%s: its own colour is not changed, or one opposite it is" % row[2])
-    check("AddSelectors(CosmeticRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true);" in launcher and
-          "AddSelectors(ShieldRows, CosmeticPage, cx, colW, cosmetics, 47, 45, true, CosmeticRows.Length);" in launcher and
-          "int place = first;" in launcher and "int col = place % 2, line = place / 2;" in launcher,
-          "the launcher does not show the shields' looks on its Cosmetics page, after the colours")
+    # (Lost Woods: colours, then shields, then the characters' looks behind their experimental switch)
+    at = [launcher.find(s) for s in ('CosmeticSection(x0, colW, y, "COLOURS", ', 'CosmeticSection(x0, colW, y, "SHIELDS", ', 'modelsSwitch = new Selector')]
+    check(all(i > 0 for i in at) and at == sorted(at) and "foreach (var s in modelRows) s.Page = on ? CosmeticPage : NoPage;" in launcher and
+          "foreach (var m in modelRows) m.Set(0, false); SaveCosmetics();" in launcher,
+          "the launcher does not show the shields' looks after the colours, or the characters' looks are not behind their switch")
 
 
 def main():

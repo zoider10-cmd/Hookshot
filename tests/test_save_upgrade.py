@@ -113,7 +113,7 @@ def main():
     check(len(opening) == 1, "the launcher changes saves as it opens, otherwise than for a randomizer's save with progress: %d" % len(opening))
     check('if (!SaveSlots.SeedKept(dir, had) && !SaveSlots.IsEmpty(dir, "save_rando", had)) SaveSlots.SeedKeep(dir, had);' in launcher,
           "the seed kept when the launcher opens is kept for a save without progress too")
-    check("void OnPlay() { OnPlay(mqMode); }" in launcher and "try { mqMode = File.ReadAllText(ModeFile).Trim() == \"mq\"; } catch { }" in launcher,
+    check("void OnPlay() { OnPlay(mqMode); }" in launcher and "try { mqMode = MasterQuestOn && File.ReadAllText(ModeFile).Trim() == \"mq\"; } catch { }" in launcher,
           "with no game chosen yet, Continue does not play the normal game (or the randomizer's, by its switch)")
     csc = Path(os.environ.get("WINDIR", "")) / "Microsoft.NET" / "Framework64" / "v4.0.30319" / "csc.exe"
     if os.name != "nt" or not csc.is_file():
