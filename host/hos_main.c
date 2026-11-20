@@ -3084,6 +3084,16 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
             check.waiting = 0, go = 1;
         }
     }
+    {   /* (a test's: HOS_OOT_TEST_EVENT=<event> asks for that event once, 30 s after Link is first seen, as a map's
+           starter would: a scene tried without playing up to it) */
+        static int64_t first; static int sent;
+        const char *test_event = getenv("HOS_OOT_TEST_EVENT");
+        if (!first) first = now;
+        if (test_event && *test_event && !sent && now - first > 30000000000LL && !oot_event_playing(c)) {
+            sent = 1;
+            hos_log("test: the event %s %s", test_event, oot_event_request(c, actor, test_event) ? "asked for" : "NOT SENT");
+        }
+    }
     if (boss_event && boss_event_at && now >= boss_event_at && !oot_event_playing(c)) {   /* (a boss room's fight: above) */
         hos_log("cheats: boss room: the fight's event %s %s", boss_event, oot_event_request(c, actor, boss_event) ? "asked for" : "NOT SENT");
         boss_event = NULL, boss_event_at = 0;
