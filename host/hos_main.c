@@ -2453,6 +2453,10 @@ static void oot_tracker_refresh(Ctx *c, int64_t now, uint64_t actor) {
                 const int result = oot_pouch_change(c, item, 1);
                 hos_log("test: %s given (event status %d): Link has %d", item, result, oot_pouch_count(c, item));
             }
+            int32_t mp = -1, most = -1;   /* (what the magic is a second after each, for a test of a refill) */
+            oot_gamedata_live_int(c, 0x76b18200u, &mp, 0, NULL);   /* PlayerStatus.MP */
+            oot_gamedata_live_int(c, 0x12d63a97u, &most, 0, NULL);   /* PlayerStatus.MPMax */
+            if (turn < 40) hos_log("test: magic %d of %d", (int)mp, (int)most);
         }
     }
     {   /* (the randomizer's fork) Hyrule Field's clock. Until the owl's first cutscene there the field's sky stays the
@@ -3321,10 +3325,10 @@ static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {
 #define OOT_MAGIC_FIRST 240   /* (the first meter, in tenths: the list of pouch actors' MPMax 24) */
 #define OOT_MAGIC_DOUBLED 480   /* (the doubled meter: the gift's MPMax 48) */
 #define OOT_MP_HASH 0x76b18200u   /* PlayerStatus.MP: the magic Link has now, in the same tenths */
-static int oot_magic_fill_frames;   /* (frames left to keep the meter full: a magic found, oot_magic_meter) */
-/* (frames left to keep the magic Link had, and that magic: another item found. The owner's test 2026-11-20: Din's Fire,
-   its magic mark taken out of its row (magic_free), emptied the meter as it was got) */
-static int oot_magic_keep_frames, oot_magic_keep;
+#define OOT_MAGIC_JAR 120   /* (what a large magic jar fills, in tenths: a test's run 2026-11-20) */
+#define OOT_MAGIC_FILL_FRAMES 3600   /* (the most a fill waits for the get's scene to end, about a minute) */
+/* (frames left to fill the meter, a magic found: oot_magic_meter, oot_magic_fill_tick) */
+static int oot_magic_fill_frames;
 static int oot_magic_family(const char *name) {
     int hos_rando_magic(void);   /* host/oot_rando.c */
     return hos_rando_magic() && (!strcmp(name, OOT_MAGIC_DOUBLE) || !strcmp(name, OOT_MAGIC_SPIN) || !strcmp(name, OOT_MAGIC_ITEM));
@@ -3347,52 +3351,34 @@ static void oot_magic_meter(Ctx *c) {
     }
     int32_t want = most < OOT_MAGIC_FIRST ? OOT_MAGIC_FIRST : most < OOT_MAGIC_DOUBLED ? OOT_MAGIC_DOUBLED : most;
     if (want != most) oot_gamedata_int(c, OOT_MPMAX_HASH, &want, 1);
-    /* (the fill: written in the item's add it was the game's own again after (the owner's test 2026-11-20: the doubling
-       stayed, neither meter was filled), so it is written by the frame's tick for a while after: oot_magic_fill_tick) */
-    __atomic_store_n(&oot_magic_fill_frames, 150, __ATOMIC_RELEASE);
+    /* (the fill: the game's own magic jars, given by the frame's tick once the get's scene is over: oot_magic_fill_tick) */
+    __atomic_store_n(&oot_magic_fill_frames, OOT_MAGIC_FILL_FRAMES, __ATOMIC_RELEASE);
     hos_log("rando: magic: PlayerStatus.MPMax %d -> %d, the meter to be filled", (int)most, (int)want);
 }
-/* (another item found with the magic setting: the magic Link has now kept through its get, oot_magic_fill_tick) */
-static void oot_magic_keep_now(Ctx *c) {
-    int32_t now = 0;
-    if (!oot_gamedata_live_int(c, OOT_MP_HASH, &now, 0, NULL)) return;
-    __atomic_store_n(&oot_magic_keep, (int)now, __ATOMIC_RELAXED);
-    __atomic_store_n(&oot_magic_keep_frames, 300, __ATOMIC_RELEASE);   /* (about 5 s: the get's scene) */
-}
-/* (each frame, while a magic found asks it: PlayerStatus.MP made PlayerStatus.MPMax; while another item's get may take
-   magic away, the magic from before it put back) */
+/* (each frame after a magic found: the meter filled with the game's own large magic jars (Tbox_MagicJar_Large, 12 of
+   magic each), one every 15 frames, as many as it lacks when the get's scene is over. PlayerStatus.MP written directly
+   showed on the meter and was the game's again the next frame: what Link really has is kept elsewhere and copied there
+   each frame (the owner's tests 2026-11-20: filled, then emptied a moment after). A jar put in the pouch fills what he
+   really has (a test's run 2026-11-20: 0, 120, 240 of 480 after two, and kept). The tick waits while an event plays,
+   at most OOT_MAGIC_FILL_FRAMES) */
 static void oot_magic_fill_tick(Ctx *c) {
-    /* (the owner's test 2026-11-20: Din's Fire's get, and the doubled magic's, emptied the meter at their scene's end,
-       which waits on the player's button: not given directly, without a scene. So both hold while an event plays, and
-       about 2 s after it) */
-    const int scene = oot_event_playing(c);
-    int kept = __atomic_load_n(&oot_magic_keep_frames, __ATOMIC_ACQUIRE);
-    if (kept > 0 && scene && kept < 120) kept = 120;
-    if (kept > 0) {
-        __atomic_store_n(&oot_magic_keep_frames, kept - 1, __ATOMIC_RELEASE);
-        int32_t now = 0, was = __atomic_load_n(&oot_magic_keep, __ATOMIC_RELAXED);
-        if (oot_gamedata_live_int(c, OOT_MP_HASH, &now, 0, NULL) && now < was) {
-            oot_gamedata_live_int(c, OOT_MP_HASH, &was, 1, NULL);
-            hos_log("rando: magic: an item's get took magic (%d -> %d): put back", (int)was, (int)now);
-        }
-    }
+    static int jars;   /* (jars left to give for this fill; -1: not counted yet) */
     int left = __atomic_load_n(&oot_magic_fill_frames, __ATOMIC_ACQUIRE);
-    if (left > 0 && scene && left < 120) left = 120;
     if (left <= 0) return;
     __atomic_store_n(&oot_magic_fill_frames, left - 1, __ATOMIC_RELEASE);
-    int32_t most = 0, now = 0;
-    int live = 0;
-    if (!oot_gamedata_live_int(c, OOT_MPMAX_HASH, &most, 0, NULL) || most <= 0 || !oot_gamedata_live_int(c, OOT_MP_HASH, &now, 0, &live)) return;
-    static int filled;   /* (the fill was written once: a fall after it is the game's, logged) */
-    if (left == 150) filled = 0;
-    if (now < most) {
-        if (filled) hos_log("rando: magic: the meter fell to %d of %d after the fill (%s): filled again", (int)now, (int)most,
-                            scene ? "a scene playing" : "no scene");
-        oot_gamedata_live_int(c, OOT_MP_HASH, &most, 1, NULL);
-        filled = 1;
+    if (left == OOT_MAGIC_FILL_FRAMES) jars = -1;
+    if (jars == 0 || (oot_event_playing(c) && jars < 0)) return;
+    if (jars < 0) {
+        int32_t most = 0, now = 0;
+        if (!oot_gamedata_live_int(c, OOT_MPMAX_HASH, &most, 0, NULL) || most <= 0 || !oot_gamedata_live_int(c, OOT_MP_HASH, &now, 0, NULL)) return;
+        jars = now < most ? (most - now + OOT_MAGIC_JAR - 1) / OOT_MAGIC_JAR : 0;
+        hos_log("rando: magic: %d of %d: %d large magic jar(s) to fill it", (int)now, (int)most, jars);
+        left = 15;
     }
-    if (left == 150 || left == 1)
-        hos_log("rando: magic: the meter filled (PlayerStatus.MP %d of %d, %s)", (int)now, (int)most, live ? "the player's own" : "the Ints only");
+    if (jars > 0 && left % 15 == 0) {
+        oot_pouch_change(c, "Tbox_MagicJar_Large", 1);
+        jars--;
+    }
 }
 
 static const char *oot_progressive_give(Ctx *c, const char *name) {
@@ -4098,10 +4084,6 @@ int hos_oot_pouch_add(Ctx *c) {
     }
     oot_pickup_qol(c, name);   /* (Ammo pick-ups, Rupees fill the wallet) */
     if ((int32_t)c->x[3] <= 0) return 0;
-    if (!oot_magic_family(name)) {
-        int hos_rando_magic(void);
-        if (hos_rando_magic()) oot_magic_keep_now(c);   /* (its get must not empty the meter: oot_magic_keep_now) */
-    }
     if (oot_magic_family(name)) {   /* (rando_magic: the first magic found is the meter, oot_magic_give) */
         if (!strcmp(name, OOT_MAGIC_ITEM)) {
             oot_magic_meter(c);
