@@ -871,6 +871,7 @@ static int oot_item_count(Ctx *c, const char *name);
 static int oot_gamedata_int(Ctx *c, uint32_t hash, int32_t *value, int set);
 static int oot_gamedata_bool(Ctx *c, uint32_t hash, int *value);
 static int oot_gamedata_set_bool(Ctx *c, uint32_t hash, int value);
+static void oot_magic_fill_tick(Ctx *c);   /* (a magic found: its meter filled, below) */
 static int oot_gamedata_string(Ctx *c, uint32_t hash, char *buf, size_t size);
 
 static void oot_family_levels_refresh(Ctx *c);   /* (below: the shelves of a family, hos_oot_shelf_map) */
@@ -2854,6 +2855,7 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
             hos_log("rando: the Piece of Heart counted with the seed's item is taken out (%d)", result);
         }
     }
+    oot_magic_fill_tick(c);   /* (a magic found: its meter filled, oot_magic_meter) */
     {   /* (bug 31: Link's max life followed, and a boss container's heart taken back: oot_container_back) */
         int32_t max;
         if (oot_gamedata_int(c, OOT_MAX_LIFE, &max, 0)) {
@@ -3287,6 +3289,7 @@ static uint64_t oot_pouch_name(Ctx *c, uint64_t view, const char *give) {
 #define OOT_MAGIC_FIRST 240   /* (the first meter, in tenths: the list of pouch actors' MPMax 24) */
 #define OOT_MAGIC_DOUBLED 480   /* (the doubled meter: the gift's MPMax 48) */
 #define OOT_MP_HASH 0x76b18200u   /* PlayerStatus.MP: the magic Link has now, in the same tenths */
+static int oot_magic_fill_frames;   /* (frames left to keep the meter full: a magic found, oot_magic_meter) */
 static int oot_magic_family(const char *name) {
     int hos_rando_magic(void);   /* host/oot_rando.c */
     return hos_rando_magic() && (!strcmp(name, OOT_MAGIC_DOUBLE) || !strcmp(name, OOT_MAGIC_SPIN) || !strcmp(name, OOT_MAGIC_ITEM));
@@ -3309,9 +3312,20 @@ static void oot_magic_meter(Ctx *c) {
     }
     int32_t want = most < OOT_MAGIC_FIRST ? OOT_MAGIC_FIRST : most < OOT_MAGIC_DOUBLED ? OOT_MAGIC_DOUBLED : most;
     if (want != most) oot_gamedata_int(c, OOT_MPMAX_HASH, &want, 1);
-    int32_t full = want;
-    oot_gamedata_int(c, OOT_MP_HASH, &full, 1);
-    hos_log("rando: magic: PlayerStatus.MPMax %d -> %d, the meter filled", (int)most, (int)want);
+    /* (the fill: written in the item's add it was the game's own again after (the owner's test 2026-11-20: the doubling
+       stayed, neither meter was filled), so it is written by the frame's tick for a while after: oot_magic_fill_tick) */
+    __atomic_store_n(&oot_magic_fill_frames, 150, __ATOMIC_RELEASE);
+    hos_log("rando: magic: PlayerStatus.MPMax %d -> %d, the meter to be filled", (int)most, (int)want);
+}
+/* (each frame, while a magic found asks it: PlayerStatus.MP made PlayerStatus.MPMax) */
+static void oot_magic_fill_tick(Ctx *c) {
+    int left = __atomic_load_n(&oot_magic_fill_frames, __ATOMIC_ACQUIRE);
+    if (left <= 0) return;
+    __atomic_store_n(&oot_magic_fill_frames, left - 1, __ATOMIC_RELEASE);
+    int32_t most = 0, now = 0;
+    if (!oot_gamedata_int(c, OOT_MPMAX_HASH, &most, 0) || most <= 0 || !oot_gamedata_int(c, OOT_MP_HASH, &now, 0)) return;
+    if (now < most) oot_gamedata_int(c, OOT_MP_HASH, &most, 1);
+    if (left == 1) hos_log("rando: magic: the meter filled (PlayerStatus.MP %d of %d)", (int)now, (int)most);
 }
 
 static const char *oot_progressive_give(Ctx *c, const char *name) {

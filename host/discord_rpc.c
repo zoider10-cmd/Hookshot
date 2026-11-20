@@ -38,11 +38,11 @@
 
 #define HOOKSHOT_DISCORD_APP_ID_DEFAULT "1569877496780947547"   /* Mako/OoT Discord application id */
 #define HOOKSHOT_DISCORD_DETAILS_DEFAULT "The Legend of Zelda: Ocarina of Time"
-#define HOOKSHOT_DISCORD_STATE_DEFAULT "Exploring Hyrule"
+#define HOOKSHOT_DISCORD_STATE_DEFAULT "Playing a randomizer seed"
 #define HOOKSHOT_DISCORD_LARGE_IMAGE_DEFAULT "ocarina-title-new-960x540"
 #define HOOKSHOT_DISCORD_LARGE_TEXT_DEFAULT "The Legend of Zelda: Ocarina of Time"
 #define HOOKSHOT_DISCORD_SMALL_IMAGE_DEFAULT "a59d076a-8dfa-4d04-8580-fb17ae4784df"
-#define HOOKSHOT_DISCORD_SMALL_TEXT_DEFAULT "Willow Woods Emulator"
+#define HOOKSHOT_DISCORD_SMALL_TEXT_DEFAULT "Willow Woods randomizer"
 
 void hos_log(const char *fmt, ...);
 int rx_option(int id, int otherwise);
