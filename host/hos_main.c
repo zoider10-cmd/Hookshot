@@ -1677,6 +1677,38 @@ static int oot_gamedata_int(Ctx *c, uint32_t hash, int32_t *value, int set) {
     return 0;
 }
 
+/* (Willow Woods) A whole number as the game reads it: GameDataMgr's second table first, its "live" entries (+0x140 the
+   (hash, index) table, +0x14c its size, +0x130 how many, +0x138 the entries of 64 bytes: +0x28 a pointer to the number
+   where it really lives, the player's own for PlayerStatus.MP), then the Ints (oot_gamedata_int). Found in the game's code
+   2026-11-20 (f_805a7e80, f_8049b390 read PlayerStatus.MP so): the magic written in the Ints alone showed on the meter and
+   was the player's own again at the end of an item's scene. Written: both. *live: 1 when a live entry was there. */
+static int oot_gamedata_live_int(Ctx *c, uint32_t hash, int32_t *value, int set, int *live) {
+    if (live) *live = 0;
+    const uint64_t mgr = oot_singleton(c, OOT_GAMEDATA_SLOT);
+    if (!mgr) return 0;
+    const uint64_t table = recomp_load64(c, mgr + 0x140);
+    const uint32_t size = recomp_load32(c, mgr + 0x14c);
+    uint64_t where = 0;
+    for (uint32_t probe = 0, slot = size ? hash % size : 0; table && size && probe < size; probe++, slot = (slot + 1) % size) {
+        const uint32_t key = recomp_load32(c, table + slot * 8ULL);
+        if (!key) break;
+        if (key != hash) continue;
+        const uint32_t index = recomp_load32(c, table + slot * 8ULL + 4), count = recomp_load32(c, mgr + 0x130);
+        if (index < count) where = recomp_load64(c, recomp_load64(c, mgr + 0x138) + index * 64ULL + 0x28);
+        break;
+    }
+    if (where && live) *live = 1;
+    if (!set) {
+        if (where) {
+            *value = (int32_t)recomp_load32(c, where);
+            return 1;
+        }
+        return oot_gamedata_int(c, hash, value, 0);
+    }
+    if (where) recomp_store32(c, where, (uint32_t)*value);
+    return oot_gamedata_int(c, hash, value, 1) || where;
+}
+
 /* What the game knows by an actor's hash (the list of flags' Bool64bitKey: a chest, a shelf that sells out): found in
    the running game by looking for known hashes in its memory. GameDataMgr+0xc58 is how many there are, +0xc60 their
    table, sorted by the hash, of 16 bytes each (the hash, then its reset type in the low half of the next word), and
@@ -3323,29 +3355,44 @@ static void oot_magic_meter(Ctx *c) {
 /* (another item found with the magic setting: the magic Link has now kept through its get, oot_magic_fill_tick) */
 static void oot_magic_keep_now(Ctx *c) {
     int32_t now = 0;
-    if (!oot_gamedata_int(c, OOT_MP_HASH, &now, 0)) return;
+    if (!oot_gamedata_live_int(c, OOT_MP_HASH, &now, 0, NULL)) return;
     __atomic_store_n(&oot_magic_keep, (int)now, __ATOMIC_RELAXED);
     __atomic_store_n(&oot_magic_keep_frames, 300, __ATOMIC_RELEASE);   /* (about 5 s: the get's scene) */
 }
 /* (each frame, while a magic found asks it: PlayerStatus.MP made PlayerStatus.MPMax; while another item's get may take
    magic away, the magic from before it put back) */
 static void oot_magic_fill_tick(Ctx *c) {
+    /* (the owner's test 2026-11-20: Din's Fire's get, and the doubled magic's, emptied the meter at their scene's end,
+       which waits on the player's button: not given directly, without a scene. So both hold while an event plays, and
+       about 2 s after it) */
+    const int scene = oot_event_playing(c);
     int kept = __atomic_load_n(&oot_magic_keep_frames, __ATOMIC_ACQUIRE);
+    if (kept > 0 && scene && kept < 120) kept = 120;
     if (kept > 0) {
         __atomic_store_n(&oot_magic_keep_frames, kept - 1, __ATOMIC_RELEASE);
         int32_t now = 0, was = __atomic_load_n(&oot_magic_keep, __ATOMIC_RELAXED);
-        if (oot_gamedata_int(c, OOT_MP_HASH, &now, 0) && now < was) {
-            oot_gamedata_int(c, OOT_MP_HASH, &was, 1);
+        if (oot_gamedata_live_int(c, OOT_MP_HASH, &now, 0, NULL) && now < was) {
+            oot_gamedata_live_int(c, OOT_MP_HASH, &was, 1, NULL);
             hos_log("rando: magic: an item's get took magic (%d -> %d): put back", (int)was, (int)now);
         }
     }
     int left = __atomic_load_n(&oot_magic_fill_frames, __ATOMIC_ACQUIRE);
+    if (left > 0 && scene && left < 120) left = 120;
     if (left <= 0) return;
     __atomic_store_n(&oot_magic_fill_frames, left - 1, __ATOMIC_RELEASE);
     int32_t most = 0, now = 0;
-    if (!oot_gamedata_int(c, OOT_MPMAX_HASH, &most, 0) || most <= 0 || !oot_gamedata_int(c, OOT_MP_HASH, &now, 0)) return;
-    if (now < most) oot_gamedata_int(c, OOT_MP_HASH, &most, 1);
-    if (left == 1) hos_log("rando: magic: the meter filled (PlayerStatus.MP %d of %d)", (int)now, (int)most);
+    int live = 0;
+    if (!oot_gamedata_live_int(c, OOT_MPMAX_HASH, &most, 0, NULL) || most <= 0 || !oot_gamedata_live_int(c, OOT_MP_HASH, &now, 0, &live)) return;
+    static int filled;   /* (the fill was written once: a fall after it is the game's, logged) */
+    if (left == 150) filled = 0;
+    if (now < most) {
+        if (filled) hos_log("rando: magic: the meter fell to %d of %d after the fill (%s): filled again", (int)now, (int)most,
+                            scene ? "a scene playing" : "no scene");
+        oot_gamedata_live_int(c, OOT_MP_HASH, &most, 1, NULL);
+        filled = 1;
+    }
+    if (left == 150 || left == 1)
+        hos_log("rando: magic: the meter filled (PlayerStatus.MP %d of %d, %s)", (int)now, (int)most, live ? "the player's own" : "the Ints only");
 }
 
 static const char *oot_progressive_give(Ctx *c, const char *name) {
