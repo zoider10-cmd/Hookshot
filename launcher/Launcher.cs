@@ -1771,8 +1771,8 @@ static class Fork {
     public const string Name = "Willow Woods";
     // (the update check compares the first number of the tags: the first Mako release must be numbered above amd-fix-2.1, or the
     // 2.x launchers players have would think it older and never offer it)
-    public const string Base = "v0.1.0";       // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
-    public const string Version = "v0.1.0";    // (HOOKSHOT_FORK_VERSION)
+    public const string Base = "v0.1.1";       // (host/hos_update.c HOOKSHOT_FORK_BASE: the exe this launcher ships with)
+    public const string Version = "v0.1.1";    // (HOOKSHOT_FORK_VERSION)
     public const int Api = 30;                  // (gpu/vk/vk_api.h MKWVK_API_VERSION)
     public const string Api_Url = "https://api.github.com/repos/zoider10-cmd/WillowWoods/releases/latest";
     public const string Page = "https://github.com/zoider10-cmd/WillowWoods/releases/latest";
