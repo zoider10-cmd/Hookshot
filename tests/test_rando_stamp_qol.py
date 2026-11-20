@@ -51,7 +51,7 @@ def main():
     keys = set(re.findall(r'"(rando_\w+)"', launcher[launcher.index("NoItemKeys = new HashSet<string> {"):launcher.index("static bool MovesNoItem")]))
     check({"rando_skip_intro", "rando_skip_cutscenes", "rando_start_rupees", "rando_skulltulas_day", "rando_hints", "rando_ageless"} <= keys and
           not keys & {"rando_chests", "rando_songs", "rando_letter", "rando_shops", "rando_open_door"} and
-          "was.RemoveAll(MovesNoItem); now.RemoveAll(MovesNoItem);" in launcher,
+          'if ((a ?? "0") == (b ?? "0") || MovesNoItem(k + "=")) continue;' in launcher and "SeedChanges(dir, name).Count > 0" in launcher,
           "the launcher asks about another seed when only a setting that moves no item changed, or skips one that moves items")
     # (the game's side holds the stamp's whole first line: cut at 200 it never matched a record written with all of it)
     host = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")

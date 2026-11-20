@@ -205,17 +205,44 @@ public static class SaveSlots {
         "rando_skulltulas_day", "rando_hints", "rando_ageless", "rando_ageless_items", "rando_ammo_pickups", "rando_rupee_fill", "rando_ganon_bridge" };
     static bool MovesNoItem(string line) { int eq = line.IndexOf('='); return eq > 0 && NoItemKeys.Contains(line.Substring(0, eq).Trim()); }
 
-    // (the seed there is now is not the one that save was last played on: settings that move no item aside)
+    // (the seed there is now is not the one that save was last played on: settings that move no item aside. A line one
+    //  side leaves out is 0, as the seed tool reads it: the owner was asked 2026-11-20 for "rando_frogs=0" in the options
+    //  file against none in the save's, the same seed)
     public static bool SeedDiffers(string dir, string name) {
+        try { return SeedKept(dir, name) && SeedChanges(dir, name).Count > 0; } catch { return false; }
+    }
+
+    // (Willow Woods: what differs between that save's seed and the settings now, in the Randomizer page's words, e.g.
+    //  "Chests: Overworld -> All"; settings that move no item left out, as SeedDiffers does)
+    public static List<string> SeedChanges(string dir, string name) {
+        var said = new List<string>();
         try {
-            if (!SeedKept(dir, name)) return false;
-            var was = new List<string>();
-            foreach (string l in File.ReadAllLines(Path.Combine(SeedRoot(dir), name) + ".txt")) if (l.Trim().Length > 0) was.Add(l.Trim());
-            var now = SeedLines(dir);
-            was.RemoveAll(MovesNoItem); now.RemoveAll(MovesNoItem);   // (a setting that moves no item may change on a save being played)
-            was.Sort(StringComparer.Ordinal); now.Sort(StringComparer.Ordinal);
-            return string.Join("\n", was.ToArray()) != string.Join("\n", now.ToArray());
-        } catch { return false; }
+            var was = new Dictionary<string, string>(); var now = new Dictionary<string, string>();
+            foreach (string l in File.ReadAllLines(Path.Combine(SeedRoot(dir), name) + ".txt")) Put(was, l);
+            foreach (string l in SeedLines(dir)) Put(now, l);
+            var keys = new SortedSet<string>(was.Keys, StringComparer.Ordinal); keys.UnionWith(now.Keys);
+            foreach (string k in keys) {
+                string a, b;
+                was.TryGetValue(k, out a); now.TryGetValue(k, out b);
+                if ((a ?? "0") == (b ?? "0") || MovesNoItem(k + "=")) continue;   // (a line left out is 0)
+                if (k == "rando_seed") { said.Add("Seed number:  " + (a ?? "none") + "  →  " + (b ?? "none")); continue; }
+                string label = k; string[] choices = null; int[] values = null;
+                foreach (var row in LauncherForm.RandoRows)
+                    if ((string)row[0] == k) { label = (string)row[1]; choices = (string[])row[2]; values = (int[])row[3]; }
+                said.Add(label + ":  " + Choice(a, choices, values) + "  →  " + Choice(b, choices, values));
+            }
+        } catch { }
+        return said;
+    }
+    static void Put(Dictionary<string, string> into, string line) {
+        line = line.Trim(); int eq = line.IndexOf('=');
+        if (eq > 0 && SeedLine(line)) into[line.Substring(0, eq).Trim()] = line.Substring(eq + 1).Trim();
+    }
+    static string Choice(string value, string[] choices, int[] values) {
+        int v;
+        if (value == null || !int.TryParse(value, out v)) v = 0;   // (a line not written: the setting's first choice, 0)
+        if (choices != null && values != null) for (int i = 0; i < values.Length && i < choices.Length; i++) if (values[i] == v) return choices[i];
+        return value ?? "0";
     }
 
     // That save's seed made the one there is: its settings in the options file, its files in mods\rando-seed. It stays
@@ -784,6 +811,50 @@ class AskForm : Form {
         AcceptButton = a; CancelButton = c;
         a.Click += (o, e) => { Answer = 0; DialogResult = DialogResult.OK; Close(); };
         b.Click += (o, e) => { Answer = 1; DialogResult = DialogResult.OK; Close(); };
+    }
+}
+
+// (Willow Woods: asked at Play when the save chosen was last played on another seed: what changed, and the two ways,
+// said plainly. The owner, 2026-11-20: Windows' own Yes/No box was unclear and did not look like the launcher's)
+class SeedDiffForm : Form {
+    public int Answer = -1;   // (0 its own seed, 1 the settings now)
+    public SeedDiffForm(string save, List<string> changes) {
+        Text = "This save was played on another seed";
+        FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false;
+        StartPosition = FormStartPosition.CenterParent;
+        BackColor = Color.FromArgb(28, 43, 22); ForeColor = Theme.Text; Font = new Font("Segoe UI", 10f);
+        int y = 16;
+        var head = new Label { Text = "\"" + save + "\" was last played with other randomizer settings", AutoSize = false,
+                               Location = new Point(18, y), Size = new Size(500, 26), Font = new Font("Segoe UI", 11.5f, FontStyle.Bold) };
+        y += 32;
+        var why = new Label { Text = "These changes move items, so its chests and rewards would not hold what they held when you played it:",
+                              AutoSize = false, Location = new Point(18, y), Size = new Size(500, 40), ForeColor = Theme.Dim };
+        y += 44;
+        if (changes.Count == 0) changes = new List<string> { "(its settings could not be read)" };
+        var list = new Label { Text = "•  " + string.Join("\n•  ", changes.ToArray()), AutoSize = false, Location = new Point(18, y),
+                               Size = new Size(500, 22 * changes.Count + 12), BackColor = Color.FromArgb(40, 60, 32), Padding = new Padding(8, 6, 8, 6),
+                               ForeColor = Theme.Text };
+        y += list.Height + 16;
+        var keep = new Button { Text = "Play on its own seed" }; var use = new Button { Text = "Play with the new settings" };
+        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel };
+        foreach (var x in new[] { keep, use, cancel }) {
+            x.FlatStyle = FlatStyle.Flat; x.BackColor = Color.FromArgb(52, 78, 41); x.ForeColor = Color.White;
+            x.FlatAppearance.BorderColor = Color.FromArgb(101, 150, 80);
+        }
+        keep.BackColor = Theme.Blue;
+        keep.SetBounds(18, y, 190, 34); use.SetBounds(216, y, 210, 34); cancel.SetBounds(434, y, 84, 34);
+        y += 44;
+        var keepSays = new Label { Text = "Play on its own seed (recommended): the save plays exactly as before. The Randomizer page goes back to that save's settings.",
+                                   AutoSize = false, Location = new Point(18, y), Size = new Size(500, 40), ForeColor = Theme.Dim };
+        y += 42;
+        var useSays = new Label { Text = "Play with the new settings: the save keeps its progress, but items move, and places you already checked may now hold something else.",
+                                  AutoSize = false, Location = new Point(18, y), Size = new Size(500, 40), ForeColor = Theme.Dim };
+        y += 48;
+        ClientSize = new Size(536, y);
+        Controls.AddRange(new Control[] { head, why, list, keep, use, cancel, keepSays, useSays });
+        AcceptButton = keep; CancelButton = cancel;
+        keep.Click += (o, e) => { Answer = 0; DialogResult = DialogResult.OK; Close(); };
+        use.Click += (o, e) => { Answer = 1; DialogResult = DialogResult.OK; Close(); };
     }
 }
 
@@ -4943,12 +5014,10 @@ class LauncherForm : Form {
         // (a randomizer's save with progress, and a seed now that is not the one it was last played on: its chests would not be
         //  the ones it was played with. Asked, with its own seed the answer offered)
         if (rando && !SaveSlots.IsEmpty(dir, "save_rando", played) && SaveSlots.SeedDiffers(dir, played)) {
-            var answer = MessageBox.Show(this, "\"" + played + "\" was last played on another seed (or other randomizer settings) than the ones set now.\n\n" +
-                                         "Yes: play it on its own seed, as it was (the Randomizer page goes back to that seed).\n" +
-                                         "No: play it on the seed set now. Its chests will not be the ones it was played with.",
-                                         Fork.Name, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-            if (answer == DialogResult.Cancel) return;
-            if (answer == DialogResult.Yes) { try { SaveSlots.SeedIn(dir, played); } catch { } LoadAll(); Invalidate(); }
+            int answer;
+            using (var ask = new SeedDiffForm(played, SaveSlots.SeedChanges(dir, played))) { ask.ShowDialog(this); answer = ask.Answer; }
+            if (answer < 0) return;   // (Cancel, or the window closed)
+            if (answer == 0) { try { SaveSlots.SeedIn(dir, played); } catch { } LoadAll(); Invalidate(); }
         }
         if (!RunRandomizer()) return;
         if (rando) SaveSlots.SeedKeep(dir, played);   // (the seed this save is played on, from now: SaveSlots)
