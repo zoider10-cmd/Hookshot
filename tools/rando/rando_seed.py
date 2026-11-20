@@ -2064,6 +2064,80 @@ def rewrite(data, gives):
     return bytes(out)
 
 
+# ---- Chest size matches contents (rando_chest_size, asked 2026-11-18) ----
+# A chest of the shuffle holding a major item is made a big chest, any other a small one: the map actor's Gyaml swapped
+# between these pairs (the NoBake twins kept NoBake). Its hash, Dynamic (the item, its flags), place and links stay, and
+# the logic files' names follow: a logic module names a chest (Obj_TBox_A_01_435b) only as a label, and the map's
+# AiGroups tie each name to the chest by its hash (References: Id, Path, Reference = the actor's Hash; found 2026-11-20 in
+# FireTemple_Static, AiGroups[119]). Moves no item. Not swapped: the special kinds (A_03, A_04, A_06, the Lens's, the
+# pedestals, memo11), which are their own puzzles.
+CHEST_SIZES = {"Obj_TBox_A_01": "Obj_TBox_A_02", "Obj_TBox_A_01_NoBake": "Obj_TBox_A_02_NoBake"}
+CHEST_SMALL = {big: small for small, big in CHEST_SIZES.items()}
+
+
+def chest_major(item):
+    """whether a chest holding `item` is made big: a gating item of the seed's rules (PROGRESSION, with what main adds),
+    a song, or magic"""
+    return item in PROGRESSION or item.startswith("Item_Melody_") or item in ("Item_MagicMeter", "Item_FairyBless_MPDouble")
+
+
+def chest_kinds(data, gives):
+    """data (a BYML map file) with each chest of `gives` ({hash: item}) of a kind of CHEST_SIZES made big for a major item
+    and small for any other: the new bytes, or None when none changes. Read back before it is returned."""
+    found, keys, strings = chests(data)
+    want = {}
+    for c in found:
+        if c.hash is None or c.hash not in gives:
+            continue
+        big = chest_major(gives[c.hash])
+        kind = CHEST_SIZES.get(c.gyaml, c.gyaml) if big else CHEST_SMALL.get(c.gyaml, c.gyaml)
+        if kind != c.gyaml:
+            want[c.hash] = kind
+    if not want:
+        return None
+    out = bytearray(data)
+    out += b"\0" * (-len(out) % 4)
+    names = list(strings)
+    for kind in want.values():
+        if kind not in names:
+            names.append(kind)
+    if len(names) > len(strings):
+        at = len(out)
+        out += string_table(names)
+        struct.pack_into("<I", out, 8, at)
+    _, _, root = struct.unpack_from("<III", data, 4)
+    done = 0
+    for name, kind, value, _ in entries(data, root, keys):
+        if name != "Actors" or kind != 0xC0:
+            continue
+        n = int.from_bytes(data[value + 1:value + 4], "little")
+        vals = value + 4 + (n + 3 & ~3)
+        for i in range(n):
+            if data[value + 4 + i] != 0xC1:
+                continue
+            actor = struct.unpack_from("<I", data, vals + 4 * i)[0]
+            ident, gyaml_at = None, None
+            for k, ty, v, where in entries(data, actor, keys):
+                if k == "Hash" and ty == 0xD5:
+                    ident = struct.unpack_from("<Q", data, v)[0]
+                elif k == "Hash" and ty == 0xD3:
+                    ident = v
+                elif k == "Gyaml" and ty == 0xA0:
+                    gyaml_at = where
+            if ident in want and gyaml_at is not None:
+                struct.pack_into("<I", out, gyaml_at, names.index(want[ident]))
+                done += 1
+    if done != len(want):
+        raise ValueError("chest sizes: %d of %d chests found to change" % (done, len(want)))
+    again, _, _ = chests(bytes(out))
+    if len(again) != len(found):
+        raise ValueError("chest sizes: did not read back with the same actors")
+    for was, now in zip(found, again):
+        if now.item != was.item or now.hash != was.hash or now.params != was.params or now.gyaml != want.get(was.hash, was.gyaml):
+            raise ValueError("chest sizes: did not read back as written (%r)" % (now.hash,))
+    return bytes(out)
+
+
 def fix(data, fixes=None):
     """data (a BYML map file) with the truth values of `fixes` ({hash: {Dynamic key: value}}) set: the new bytes, or
     None when the file has none of those actors or they already say so. Each actor gets a Dynamic block of its own
@@ -4086,7 +4160,7 @@ def settings(game):
            "rando_start_rupees": 0, "rando_scrubs": 0, "rando_shops": 0, "rando_progressive": 0, "rando_songs": 0, "rando_heart_pieces": 0,
            "rando_shop_shelves": 0, "rando_sword_shield": 0, "rando_dungeon_rewards": 0, "rando_open_door": 0,
            "rando_ammo_pickups": 0, "rando_rupee_fill": 0, "rando_skulltulas_day": 0,
-           "rando_ganon_bridge": 0, "rando_hints": 0, "rando_ageless": 0, "rando_letter": 0, "rando_magic": 0, "rando_ageless_items": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
+           "rando_ganon_bridge": 0, "rando_hints": 0, "rando_ageless": 0, "rando_letter": 0, "rando_magic": 0, "rando_ageless_items": 0, "rando_chest_size": 0}   # (ammo, rupees and the bridge: the game's side's alone, host/hos_main.c oot_pickup_qol and oot_ganon_bridge)
     try:
         with open(os.path.join(game, "hookshot_options.ini"), encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -5565,6 +5639,7 @@ def main():
     p.add_argument("--sword-shield", type=int, choices=(0, 1), help="in place of rando_sword_shield: 0 the Kokiri Sword stays in its chest and the Deku Shield on "
                                                                      "its shelf, 1 both take part (the chest with Major items, the shelf with Shops)")
     p.add_argument("--ageless", type=int, choices=(0, 1, 2, 3), help="1 the swords for both ages, 2 the age-only items, 3 both (as rando_ageless and rando_ageless_items)")
+    p.add_argument("--chest-size", action="store_true", help="as rando_chest_size=1: a chest holding a major item is a big chest, any other a small one (CHEST_SIZES); moves no item")
     p.add_argument("--letter", action="store_true", help="as rando_letter=1, Kakariko gate: Letter shuffled (letter_need)")
     p.add_argument("--hints", action="store_true", help="as rando_hints=1: the Gossip Stones give hints (choose_hints)")
     p.add_argument("--skulltulas-day", action="store_true", help="as rando_skulltulas_day=1: the night-only Gold Skulltulas are out by day too (NOCTURNAL)")
@@ -5611,6 +5686,7 @@ def main():
     a.heart_pieces = a.heart_pieces or ini["rando_heart_pieces"] != 0
     a.skulltulas_day = a.skulltulas_day or ini["rando_skulltulas_day"] != 0
     a.hints = a.hints or ini["rando_hints"] != 0
+    a.chest_size = a.chest_size or ini["rando_chest_size"] != 0
     a.letter = a.letter or ini["rando_letter"] == 1   # (Kakariko gate: 1 the letter shuffled, 2 open: the game's side's,
     #  host/hos_main.c oot_open_death_mountain, and the letter stays Zelda's)
     # (two settings since 2026-11-19: rando_ageless the swords, rando_ageless_items the age-only items; an older seed's
@@ -5719,6 +5795,8 @@ def main():
             print("the Tracker's records of this seed kept: %d moved to its stamp without the settings that move no item" % moved)
     if a.hints:   # (the hints move no item: on the fixes' line, so a seed's shuffle stays as it was with them turned on)
         stamp = stamp[:-1] + " hints %d\n" % HINTS_VERSION
+    if a.chest_size:   # (moves no item: the same line)
+        stamp = stamp[:-1] + " chests sized\n"
     if a.ageless:   # (moves no item either: the same line)
         stamp = stamp[:-1] + " ageless %d\n" % a.ageless
     print("randomizer %s, seed %d, chests %s, dungeon keys %s, major items %s" % (
@@ -6128,10 +6206,14 @@ def main():
             len(test_chests), "" if len(test_chests) == 1 else "s", ", ".join("%s in %s" % (i, spots[h][0]) for h, i in sorted(test_chests.items()))))
 
     # ---- the map files ----
-    changed, sizes, fixes_done, drops_done = collections.OrderedDict(), {}, 0, 0
+    changed, sizes, fixes_done, drops_done, sized_files = collections.OrderedDict(), {}, 0, 0, 0
     for rel, (data, found) in files.items():
         try:
             new = rewrite(data, gives)
+            if a.chest_size:   # (Chest size matches contents: CHEST_SIZES)
+                sized = chest_kinds(new if new is not None else data, gives)
+                if sized is not None:
+                    new, sized_files = sized, sized_files + 1
             fixed = fix(new if new is not None else data)
             dropped = add_drop(fixed if fixed is not None else new if new is not None else data, drops,
                                anew=bool(os.environ.get("RANDO_DROPS_ANEW")))   # (a test: every file with a drop written anew)
@@ -6144,6 +6226,8 @@ def main():
         if new is not None:
             changed[rel] = new
             sizes[rel[:-3] if rel.lower().endswith(".zs") else rel] = len(new)
+    if a.chest_size:
+        print("Chest size matches contents: %d map files' chests resized" % sized_files)
     moved = sum(1 for h, item in gives.items() if item != spots[h][1] and h not in gifts)
     print("%d chests take part, %d now hold another chest's item; %d map files change" % (len(gives) - len(gifts), moved, len(changed)))
     if a.quests:
