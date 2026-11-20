@@ -1057,6 +1057,47 @@ static void oot_inventory_edit(Ctx *c, int action) {
     hos_log("cheats: inventory %s %+d (had %d, now %d, event status %d)", name, delta, have, oot_item_count(c, name), result);
 }
 
+/* (Willow Woods) The Inventory page's Add all (OOT_CHEAT_ADD_ALL, asked 2026-11-20): one change a frame, so the game is
+   not handed every item at once. First every item Link lacks (the equipment, the items, the upgrades with the bags and
+   quivers, the quest's: oot_inventory_edit's unlock, songs by their flags), then every amount filled to the largest bag's
+   (the holders are there by then). Left out, as asked: the masks, the Biggoron's Sword and the Giant's Knife; and the Gold
+   Skulltula tokens, a count the Skulltula house's rewards ask for, not an item. */
+static int oot_add_all_at = -1;   /* (the next of 2 * OOT_ITEM_COUNT: the unlocks, then the amounts; -1 none) */
+static int oot_add_all_full(const char *name) {   /* (an amount's fill: the largest bag's; 0 not filled) */
+    static const struct { const char *name; int full; } fills[] = {
+        {"Item_DekuStick", 30}, {"Item_DekuNut", 40}, {"Item_Bomb", 40}, {"Item_Bombchu", 50}, {"Item_DekuSeed", 50},
+        {"Item_Arrow_Normal", 50}, {"Item_MagicBean", 10}, {"Item_Bottle", 4},
+    };
+    for (unsigned i = 0; i < sizeof fills / sizeof fills[0]; i++)
+        if (!strcmp(name, fills[i].name)) return fills[i].full;
+    return 0;
+}
+static void oot_add_all_tick(Ctx *c) {
+    while (oot_add_all_at >= 0 && oot_add_all_at < 2 * (int)OOT_ITEM_COUNT) {
+        const unsigned i = (unsigned)oot_add_all_at % OOT_ITEM_COUNT;
+        const int amounts = oot_add_all_at >= (int)OOT_ITEM_COUNT;
+        oot_add_all_at++;
+        const char *name = oot_item_names[i];
+        if (!strncmp(name, "Armor_Child_Mask_", 17) || !strcmp(name, "Weapon_Sword_Biggoron") || !strcmp(name, "Weapon_Sword_Giant"))
+            continue;
+        const int have = oot_item_count(c, name);
+        if (have < 0 || (oot_item_kinds[i] != 0) != amounts) continue;
+        if (!amounts) {
+            if (have > 0) continue;
+            oot_inventory_edit(c, OOT_CHEAT_ITEM_ACTION + (int)i * 256 + 200);   /* (unlock) */
+            return;
+        }
+        const int full = oot_add_all_full(name), delta = full - have;
+        if (delta <= 0) continue;
+        oot_inventory_edit(c, OOT_CHEAT_ITEM_ACTION + (int)i * 256 + 64 + (delta > 63 ? 63 : delta));
+        return;
+    }
+    if (oot_add_all_at >= 0) {
+        hos_log("cheats: inventory: Add all done");
+        oot_add_all_at = -1;
+    }
+}
+
 static void oot_set_time(Ctx *c, unsigned hour) {
     // ExecuteWmSetTime passes seconds since midnight to the world manager.
     const uint64_t singleton = recomp_load64(c, 0x84c9e898ULL);
@@ -3051,6 +3092,11 @@ static void oot_update_player_cheats(Ctx *c, uint64_t actor, uint64_t components
             hos_log("test: Link at %.1f %.1f %.1f", oot_link_place[0], oot_link_place[1], oot_link_place[2]);   /* (to go back there) */
         }
     }
+    if (action == OOT_CHEAT_ADD_ALL) {   /* (the Inventory page's Add all: one change a frame, oot_add_all_tick) */
+        hos_log("cheats: inventory: Add all");
+        oot_add_all_at = 0;
+    }
+    oot_add_all_tick(c);
     if (action >= OOT_CHEAT_ITEM_ACTION && action < OOT_CHEAT_ITEM_ACTION + 256 * (int)OOT_ITEM_COUNT) {
         oot_inventory_edit(c, action);
     } else if (action == OOT_AGE_ACTION) {

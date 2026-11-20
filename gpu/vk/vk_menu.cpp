@@ -4942,9 +4942,10 @@ void draw_inventory(ui::Ctx& c) {
     const float hh = title_banner(c, "Inventory", count_text);
     const int have = item_counts[item_choice].load(std::memory_order_relaxed);
     const char* edit = item_kinds[item_choice] ? (inventory_amount ? "Done" : "Edit amount") : (have ? "Relock" : "Unlock");
-    ui::Prompt prompts[5] = {{ui::kUpDown, "Move"}, {ui::kLeftRight, inventory_amount ? "Amount" : "Move"}, {ui::kTabs, "Section"}};
+    ui::Prompt prompts[6] = {{ui::kUpDown, "Move"}, {ui::kLeftRight, inventory_amount ? "Amount" : "Move"}, {ui::kTabs, "Section"}};
     int prompts_n = 3;
     if (have >= 0) prompts[prompts_n++] = {ui::kConfirm, edit};
+    if (loaded && !inventory_amount) prompts[prompts_n++] = {ui::kExtra, "Add all", "J"};   // (Willow Woods: OOT_CHEAT_ADD_ALL)
     prompts[prompts_n++] = {ui::kBack, inventory_amount ? "Done" : "Back"};
     float cx0, cx1, hx0, hx1;
     bool narrow;
@@ -5059,6 +5060,12 @@ void draw_inventory(ui::Ctx& c) {
             const ImVec2 a(right - bw, my - 17 * s), b(right, my + 17 * s);
             ui::button(c, a, b, edit, false);
             hits.add(a.x, a.y, b.x, b.y, menu_hit::kButton, 0);
+            if (!inventory_amount) {   // (Willow Woods: Add all, left of it: every item but the masks and the two-handed swords)
+                const float aw = ui::size_of(c.f.strong, 18 * s, "Add all").x + 36 * s;
+                const ImVec2 aa(a.x - 10 * s - aw, a.y), ab(a.x - 10 * s, b.y);
+                ui::button(c, aa, ab, "Add all", false);
+                hits.add(aa.x, aa.y, ab.x, ab.y, menu_hit::kButton, 4);
+            }
             if (inventory_amount) {
                 char amount[32];
                 snprintf(amount, sizeof amount, "%d", have);
@@ -6618,6 +6625,7 @@ void inventory_mouse(const MkwVkPointer& ptr, int mx, int my, bool* press, bool&
         else if (hit.part == menu_hit::kButton && hit.index == 1 && hit.side) press[hit.side < 0 ? 3 : 4] = true;
         else if (hit.part == menu_hit::kButton && (hit.index == 2 || hit.index == 3))   // (the page arrows)
             press[hit.index == 2 ? 13 : 14] = true, inventory_amount = false;
+        else if (hit.part == menu_hit::kButton && hit.index == 4) press[kTrackerJunkPress] = true;   // (Add all)
     }
     if (ptr.pressed & HOS_MOUSE_RIGHT) press[5] = true;
     if (ptr.wheel) {
@@ -7223,6 +7231,11 @@ void menu_tick() {
         if (mouse) inventory_mouse(ptr, mx, my, press, changed);
         if (press[5] && inventory_amount) inventory_amount = false, changed = true;   // (back: out of the amount first)
         else if (press[5]) page = 0, changed = true;   // (to the Debug tab, Inventory still selected)
+        else if (press[kTrackerJunkPress] && !inventory_amount) {   // (Willow Woods: Add all, J or the button: host/hos_main.c)
+            cheat_action.store(OOT_CHEAT_ADD_ALL);
+            logf("menu: inventory: add all");
+            changed = true;
+        }
         else if (tab_left || tab_right) {   // (another section, from editing an amount too: that ends)
             const int filters = kItemSections + 1;
             choose_inventory_filter((inventory_filter + filters + (tab_left ? -1 : 1)) % filters);

@@ -118,4 +118,7 @@
 #define OOT_TRACKER_HERE 8190
 #define OOT_TRACKER_MAX 512
 #define OOT_CHEAT_AGE_ID 4090      /* rx_option_set(OOT_CHEAT_AGE_ID, age) from the game side: 0 child, 1 adult, -1 unknown */
+/* (Willow Woods, asked 2026-11-20) the Inventory page's Add all: every item Link lacks given and every amount filled, but
+   the masks, the Biggoron's Sword, the Giant's Knife and the Gold Skulltula tokens (host/hos_main.c oot_add_all_tick) */
+#define OOT_CHEAT_ADD_ALL 8
 #define OOT_CHEAT_ITEM_ACTION 3000 /* + item * 256 + op: op 0..127 adds op - 64; op 200 unlocks (1) or relocks (all) */
