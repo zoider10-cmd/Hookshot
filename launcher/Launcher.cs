@@ -1902,7 +1902,7 @@ static class RandoLayout {
                            "+skips", "+rupees", "rando_ammo_pickups" } },
         new RandoSection { Title = "SHOULD WORK", Sub = "made and checked, not yet played through", Accent = ShouldWork,
             Rows = new[] { "rando_ageless", "rando_letter", "rando_ganon_bridge", "rando_hints", "rando_magic" } },
-        new RandoSection { Title = "EXPERIMENTAL", Sub = "not finished: may not work, or may break a seed", Accent = Experimental,
+        new RandoSection { Title = "DOES NOT WORK YET", Sub = "not made yet: leave these off, they can break a seed", Accent = Experimental,
             Rows = new[] { "rando_keys", "rando_dungeon_rewards", "rando_ageless_items" } },
     };
     public static RandoCombo Combo(string entry) {
@@ -1963,7 +1963,7 @@ class WelcomeForm : Form {
         var title = new Label { Text = "Welcome to " + Fork.Name, AutoSize = true, Location = new Point(24, 20),
                                 Font = new Font("Segoe UI", 16f, FontStyle.Bold), ForeColor = Theme.Cyan };
         string[] steps = {
-            "1.  Randomizer tab: pick a preset (Beginner is a good start) or set each setting. They are sorted by how tested they are: the experimental ones may not work yet.",
+            "1.  Randomizer tab: pick a preset (Beginner is a good start) or set each setting. They are sorted by how tested they are: the ones under \"Does not work yet\" are not made yet: leave them off.",
             "2.  Cosmetics tab, if you like: colours for the tunics, the hearts, the shields and more.",
             "3.  Press Continue. A new seed makes the first start take a few minutes: let it finish.",
             "Tip: click the seed's ID to copy it. A friend who pastes it plays the very same seed.",
@@ -2624,7 +2624,7 @@ class LauncherForm : Form {
         new object[] { "rando_magic", "Magic and the fairies' gifts", new[] { "Off", "On" }, new[] { 0, 1 },
             "The Great Fairies of the improved spin attack, doubled magic and halved damage join the shuffle (as the spell fairies do with Quest rewards), and magic becomes two items of the shuffle: the first gives the magic meter, the second doubles it. The Lens of Truth, the spells and the magic arrows no longer give magic by themselves. Needs Quest rewards." },
         new object[] { "rando_ageless_items", "Either age's items", new[] { "Off", "On" }, new[] { 0, 1 },
-            "The age-only items can be set by both ages: the shields, the boots, the Biggoron's Sword, the Slingshot, the Boomerang, Deku Sticks, the Hammer, the Hookshots and the Bow with its arrows. Experimental: the other age can set them to a button but the game does not let him use them yet (seen with the Bow and the Hammer for young Link; the shields and boots not tried). The logic does not count on it. Moves no item." },
+            "The age-only items can be set by both ages: the shields, the boots, the Biggoron's Sword, the Slingshot, the Boomerang, Deku Sticks, the Hammer, the Hookshots and the Bow with its arrows. Does not work yet: the other age can set them to a button but the game does not let him use them yet (seen with the Bow and the Hammer for young Link; the shields and boots not tried). The logic does not count on it. Moves no item." },
     };
     // (cosmetics: the colours of the tunics, the hearts and the magic meter, kept in hookshot_cosmetics.ini beside the options (the game's menu writes the options file
     // whole and would drop lines it does not know). tools/rando/rando_cosmetics.py reads them at Play: the same keys, and
@@ -3123,7 +3123,7 @@ class LauncherForm : Form {
     void ApplyRandoPreset(int p) {
         string[] names = { "", "Beginner", "Standard", "Everything" };
         if (MessageBox.Show(this, "Set every randomizer setting to the " + names[p] + " preset?\n\nYour current choices on this page are replaced; " +
-                            "the experimental settings are left off. You can change any of them after.", Fork.Name,
+                            "the settings that do not work yet are left off. You can change any of them after.", Fork.Name,
                             MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
         var experimental = new HashSet<string>(RandoLayout.Sections[RandoLayout.Sections.Length - 1].Rows);
         loading = true;

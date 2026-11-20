@@ -131,7 +131,7 @@
       "The Great Fairies of the improved spin attack, doubled magic and halved damage join the shuffle (as the spell fairies do with Quest rewards), and magic becomes two items of the shuffle: the first gives the magic meter, the second doubles it. The Lens of Truth, the spells and the magic arrows no longer give magic by themselves. Needs Quest rewards.", \
       "Off", "On") \
     X(AGELESS_ITEMS, "Either age's items", "rando_ageless_items", \
-      "The age-only items can be set by both ages: the shields, the boots, the Biggoron's Sword, the Slingshot, the Boomerang, Deku Sticks, the Hammer, the Hookshots and the Bow with its arrows. Experimental: the other age can set them to a button but the game does not let him use them yet (seen with the Bow and the Hammer for young Link; the shields and boots not tried). The logic does not count on it. Moves no item.", \
+      "The age-only items can be set by both ages: the shields, the boots, the Biggoron's Sword, the Slingshot, the Boomerang, Deku Sticks, the Hammer, the Hookshots and the Bow with its arrows. Does not work yet: the other age can set them to a button but the game does not let him use them yet (seen with the Bow and the Hammer for young Link; the shields and boots not tried). The logic does not count on it. Moves no item.", \
       "Off", "On")
 
 enum {
