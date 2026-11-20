@@ -65,6 +65,12 @@
     OOT_ITEM("Bullet Bag", "Item_BulletBag_Small", 0) \
     OOT_ITEM("Big Bullet Bag", "Item_BulletBag_Medium", 0) \
     OOT_ITEM("Biggest Bullet Bag", "Item_BulletBag_Large", 0) \
+    OOT_ITEM("Deku Stick Bag", "Item_StickBag_Small", 0) \
+    OOT_ITEM("Bigger Stick Bag", "Item_StickBag_Medium", 0) \
+    OOT_ITEM("Biggest Stick Bag", "Item_StickBag_Large", 0) \
+    OOT_ITEM("Deku Nut Bag", "Item_NutBag_Small", 0) \
+    OOT_ITEM("Bigger Nut Bag", "Item_NutBag_Medium", 0) \
+    OOT_ITEM("Biggest Nut Bag", "Item_NutBag_Large", 0) \
     OOT_ITEM("Adult's Wallet", "Item_Wallet_Medium", 0) \
     OOT_ITEM("Giant's Wallet", "Item_Wallet_Large", 0) \
     OOT_ITEM("Improved Spin", "Item_FairyBless_MP", 0) \

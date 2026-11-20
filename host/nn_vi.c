@@ -346,7 +346,11 @@ volatile int hos_scene_rgba16f = 0;   /* (the scene buffer RGBA16F, not R11G11B1
    with the game in front and the menu closed, the game takes its 15-a-second step on every frame (realtime_step): a
    cutscene goes by four times as fast. Nothing of the game is skipped, so its events still happen in order */
 static int fast_forward_was, fast_forward_reset;
+/* (Willow Woods) the game's side asks for the fast forward until this time (hos_now_ns): a big chest's opening with Skip
+   cutscenes (hos_main.c oot_skip_cutscene_locked) */
+volatile int64_t hos_auto_fast_until = 0;
 static int fast_forward_held(void) {
+    if (hos_auto_fast_until && hos_now_ns() < hos_auto_fast_until) return 1;
     int rx_option(int id, int otherwise);
     uint32_t hos_pad_raw(void);   /* nn_hid.c */
     static int env = -1;

@@ -2900,6 +2900,7 @@ static int oot_cutscene_kept(const char *name) {
 }
 
 static void oot_skip_cutscene_locked(Ctx *c);
+#define OOT_BIG_CHEST_FAST_NS 1700000000LL   /* (the big chest's opening fast forwarded this long: oot_skip_cutscene_locked) */
 /* (asked from Link's update and from the gameplay camera's view each frame, hos_oot_free_view: a cutscene without Link,
    the Deku Tree's story of Ganondorf after Gohma (Dm_Kokiri_0090), was asked once at its start and played its 45 s,
    bug 30: Link's update did not run again until it ended. One caller at a time) */
@@ -2946,6 +2947,16 @@ static void oot_skip_cutscene_locked(Ctx *c) {
                      (unsigned long long)recomp_load64(c, player));
     }
     was_event = event, was_player = player;
+    /* (Willow Woods, asked 2026-11-18: the big chest's long opening. Link's heave of the lid is his own sequence for a big
+       chest (Dm_SY_Treasurebox; a small chest's is Dm_SY_TreasureboxSmall), not the chest's, and no step of its flowchart
+       chooses it (tried 2026-11-19: the chest's AI, AS and animations pointed at the small chest's changed nothing of its
+       length). So with Skip cutscenes it plays at the fast forward's speed (host/nn_vi.c, four times) for its first
+       OOT_BIG_CHEST_FAST_NS: about 6.8 s of the game's time, the heave and the rise, before the "You got" window) */
+    if (is_new && !strcmp(name, "Dm_SY_Treasurebox") && hos_rando_skip_cutscenes()) {
+        extern volatile int64_t hos_auto_fast_until;   /* host/nn_vi.c */
+        hos_auto_fast_until = hos_now_ns() + OOT_BIG_CHEST_FAST_NS;
+        hos_log("rando: a big chest opens: its opening at fast forward's speed");
+    }
     if (env == 2 || !cutscene || oot_cutscene_kept(name)) return;
     const int64_t now = hos_now_ns();
     if (!is_new && now - asked_at < 500000000LL) return;
